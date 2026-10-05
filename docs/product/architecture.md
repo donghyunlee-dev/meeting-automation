@@ -84,7 +84,7 @@ configuration/
 
 ### 회의 생성부터 검토까지
 
-1. Frontend가 활성 Participant와 Template을 조회하고 Session을 생성한다.
+1. Frontend가 Participant roster와 Template을 조회하고 Session을 생성한다.
 2. Backend는 `CREATED` Session을 메모리에 만들고 upload policy를 반환한다.
 3. Browser는 녹음 데이터를 순서 번호가 있는 chunk로 임시 저장하고 업로드한다. ACK 받은 chunk만 로컬 재전송 대기열에서 제거한다.
 4. 종료 시 Frontend는 expected chunk 수와 녹음 정보를 보내 processing을 시작한다.

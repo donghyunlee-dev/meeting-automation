@@ -34,8 +34,8 @@ DocumentProvider Port의 Provider-neutral 구조 탐색, 표준 문서 읽기/�
 - 기대 결과: 상세는 API-018 필드에 맞고 Provider 원본 JSON은 DTO에 나타나지 않는다.
 - 생성 입력: Meeting document의 제목, meetingAt, 참여자, Structured Minutes/Transcript와 필수 metadata를 포함한다.
 - 기대 결과: 생성된 `MeetingDocumentRef`에 표준 `documentId`, `documentUrl`이 있으며 Provider Page ID/응답은 밖으로 전달되지 않는다.
-- Participant 입력: 생성 `{name,email}`, 수정 `{name,email,active}` 중 일부 필드.
-- 기대 결과: 표준 `{id,name,email,active}` 모델을 반환하고 비활성화는 `active=false`다.
+- Participant 입력: 생성 `{name,email}`, 수정 `{name,email}` 중 하나 이상.
+- 기대 결과: 표준 `{id,name,email}` roster 모델을 반환한다.
 - 증거: 필드 assertion과 민감 원문 부재 assertion.
 
 ### Provider 오류 변환 및 민감 정보 경계

@@ -1,7 +1,7 @@
 # Meeting Automation Product Requirements Document
 
 > **문서 ID:** PRD-MA-001\
-> **버전:** 1.6.2\
+> **버전:** 1.7.0\
 > **기준일:** 2026-10-05\
 > **상태:** Approved Baseline Candidate\
 > **문서 역할:** Meeting Automation V1의
@@ -30,6 +30,7 @@
 > **변경 이력 v1.6.0:** 상세 설계 문서와 PRD 상태를 기본 브랜치에 커밋·푸시한 뒤에만 설계 완료로 처리\
 > **변경 이력 v1.6.1:** Confluence Cloud Basic 인증과 Backend 계정 이메일 설정을 확정\
 > **변경 이력 v1.6.2:** Document Provider 미선택 상태와 공통 Integration Health 응답 규칙을 확정\
+> **변경 이력 v1.7.0:** Participant를 회의 작성자 지정형 `{id,name,email}` roster로 정의\
 > **변경 이력 v1.1.0:** Technology Baseline 확정, Monorepo/Node.js/React/Spring Boot 역할 명시, 실제 모바일·회의실 품질 검증을 개발 선행 Gate에서 Phase 8로 이동
 
 ------------------------------------------------------------------------
@@ -649,8 +650,7 @@ V1 Participant는 다음만 가진다.
 {
   "id": "pt_001",
   "name": "김동현",
-  "email": "user@example.com",
-  "active": true
+  "email": "user@example.com"
 }
 ```
 
@@ -846,7 +846,7 @@ Backend가 Template에 렌더링한다.
                                       제공한다.
 
   `FR-024`                            Participants를
-                                      조회/추가/수정/비활성화한다.
+                                      조회/추가/수정한다.
 
   `FR-025`                            Root에서 Meetings/Participants
                                       구조를 탐색한다.
@@ -1254,9 +1254,9 @@ Secret 원문은 표시하지 않는다.
 
 ## SCR-012 Participants
 
-기능: - 목록 - 검색 - 추가 - 이름 수정 - Email 수정 - 비활성화
+기능: - 목록 - 검색 - 추가 - 이름 수정 - Email 수정
 
-필드: - name - email - active
+필드: - name - email
 
 ------------------------------------------------------------------------
 
@@ -1486,7 +1486,7 @@ Response:
 
 ## API-003 Participants List
 
-`GET /api/v1/participants?includeInactive=false`
+`GET /api/v1/participants`
 
 Response:
 
@@ -1497,8 +1497,7 @@ Response:
       {
         "id":"pt_001",
         "name":"김동현",
-        "email":"user@example.com",
-        "active":true
+        "email":"user@example.com"
       }
     ]
   }
@@ -1531,8 +1530,7 @@ Response `201`:
   "data": {
     "id":"pt_002",
     "name":"홍길동",
-    "email":"hong@example.com",
-    "active":true
+    "email":"hong@example.com"
   }
 }
 ```
@@ -1548,8 +1546,7 @@ Request:
 ``` json
 {
   "name":"홍길동",
-  "email":"new@example.com",
-  "active":false
+  "email":"new@example.com"
 }
 ```
 
@@ -1560,8 +1557,7 @@ Response:
   "data": {
     "id":"pt_002",
     "name":"홍길동",
-    "email":"new@example.com",
-    "active":false
+    "email":"new@example.com"
   }
 }
 ```
@@ -2216,7 +2212,7 @@ Meeting UI
 
 각 세부 TASK 표의 `설계 상태 / 문서` 열은 **설계 진행 상태**를 기록한다. 구현 진행 상태는 계속 GitHub Issue의 상태 라벨과 종료 상태가 기준이며, 두 상태를 혼합하지 않는다.
 
-**다음 설계 대상 커서: `TASK-003.01`** — TASK-002.04의 네 문서와 Issue #9를 master 원격 경로에서 확인했다. TASK-003.01의 Participant Page 필드 저장 방식과 기존 Page 해석 규칙은 Issue #10에서 결정 대기 중이며, 답변 후 같은 커서에서 재개한다. TASK-001.02~001.05와 TASK-002.01~002.04도 문서와 Issue가 등록된 것으로 확인했다.
+**다음 설계 대상 커서: `TASK-003.01`** — TASK-002.04의 네 문서와 Issue #9를 master 원격 경로에서 확인했다. Participant는 회의 작성자가 고르는 `{id,name,email}` roster record로 확정했다. Issue #10에서 결정 내용을 반영해 TASK-003.01 설계를 재개한다. TASK-001.02~001.05와 TASK-002.01~002.04도 문서와 Issue가 등록된 것으로 확인했다.
 
 | 설계 상태 | 의미 |
 |---|---|
@@ -2309,10 +2305,10 @@ Backend API 작업은 정상 응답뿐 아니라 명세된 검증 오류, 없는
 
 | 세부 작업 / 영역 | 선행 작업 | Related IDs | 완료 및 검증 조건 | 설계 상태 / 문서 |
 |---|---|---|------|---|
-| `TASK-003.01` 참가자 목록 GET / BE | TASK-002.02 또는 TASK-002.03, TASK-001.04 | FR-024, API-003 | 활성 참가자와 빈 목록이 명세된 응답으로 반환된다. Provider 오류도 표준 오류로 매핑되는 Controller/Service 테스트 통과 | 결정대기 · — |
+| `TASK-003.01` 참가자 목록 GET / BE | TASK-002.02 또는 TASK-002.03, TASK-001.04 | FR-024, API-003 | 참가자 목록과 빈 목록이 명세된 응답으로 반환된다. Provider 오류도 표준 오류로 매핑되는 Controller/Service 테스트 통과 | 설계중 · `docs/specs/phase-02-documents/TASK-003.01/` |
 | `TASK-003.02` 참가자 생성 POST / BE | TASK-003.01 | FR-024, API-004 | 유효한 name/email은 생성되고 필수값 누락·잘못된 email은 거부된다. 생성 결과 및 중복 처리 테스트 통과 | 미설계 · — |
-| `TASK-003.03` 참가자 수정·비활성화 PUT / BE | TASK-003.02 | FR-024, API-005 | name/email 수정과 비활성화 규칙이 적용된다. 없는 참가자·잘못된 입력·비활성 참가자 테스트 통과 | 미설계 · — |
-| `TASK-003.04` 참가자 관리 화면과 API 연결 / FE, INTEGRATION | TASK-003.01~TASK-003.03 | SCR-012, API-003~005 | 목록·빈 상태·생성·수정·비활성화가 화면에서 동작하고 Loading/Error 상태를 테스트한다. | 미설계 · — |
+| `TASK-003.03` 참가자 정보 수정 PATCH / BE | TASK-003.02 | FR-024, API-005 | name/email 수정 규칙이 적용된다. 없는 참가자·잘못된 입력 테스트 통과 | 미설계 · — |
+| `TASK-003.04` 참가자 관리 화면과 API 연결 / FE, INTEGRATION | TASK-003.01~TASK-003.03 | SCR-012, API-003~005 | 목록·빈 상태·생성·수정이 화면에서 동작하고 Loading/Error 상태를 테스트한다. | 미설계 · — |
 
 ## Phase 3 — Meeting UI + Recording
 

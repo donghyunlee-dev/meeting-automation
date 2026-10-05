@@ -4,7 +4,7 @@
 > **기준 문서:** [PRD.md](./PRD.md)
 > **데이터 정의:** [data-spec.md](./data-spec.md)
 > **외부 Provider 계약:** [integrations.md](./integrations.md)
-> **기준일:** 2026-10-04
+> **기준일:** 2026-10-05
 
 ## 공통 HTTP 규칙
 
@@ -60,6 +60,7 @@ Session 상태와 전이 규칙은 [architecture.md](./architecture.md)의 상�
 | `AUDIO_CHUNK_CONFLICT` | 409 | N | 같은 sequence가 다른 bytes로 이미 저장됨 |
 | `AUDIO_CHUNKS_INCOMPLETE` | 409 | Y | 누락 chunk가 있어 처리 시작 불가 |
 | `DOCUMENT_STRUCTURE_NOT_FOUND` | 422 | N | Root/Meetings/Participants 구조 오류 |
+| `PARTICIPANT_LIST_FAILED` | 502 | 조건부 | Provider 참가자 목록 조회 실패 (`DOCUMENT_FAILURE`) |
 | `PROCESSING_FAILED` | 502 | 조건부 | Audio/STT/Minutes 처리 실패 |
 | `DOCUMENT_FAILED` | 502 | 조건부 | Document Provider 실패 |
 | `EMAIL_FAILED` | 502 | Y | 개별 Email delivery 실패 |
@@ -75,7 +76,7 @@ Session 상태와 전이 규칙은 [architecture.md](./architecture.md)의 상�
 | API-002 | `GET /templates` | Template 목록 |
 | API-003 | `GET /participants` | Participant 목록 |
 | API-004 | `POST /participants` | 생성 |
-| API-005 | `PATCH /participants/{participantId}` | 수정/비활성화 |
+| API-005 | `PATCH /participants/{participantId}` | 수정 |
 | API-006 | `POST /meeting-sessions` | Session 생성 |
 | API-007 | `PUT /meeting-sessions/{sessionId}/audio/chunks/{sequence}` | Chunk 업로드 |
 | API-008 | `GET /meeting-sessions/{sessionId}/audio` | 업로드 현황 |
@@ -115,9 +116,9 @@ Session 상태와 전이 규칙은 [architecture.md](./architecture.md)의 상�
 
 ### API-003 Participants List
 
-`GET /api/v1/participants?includeInactive=false` → `200`
+`GET /api/v1/participants` → `200`
 
-응답 item은 `{id,name,email,active}`다. `includeInactive` 기본값은 false다. Provider 구조가 없으면 `DOCUMENT_STRUCTURE_NOT_FOUND`, 조회 실패 시 `PARTICIPANT_LIST_FAILED`.
+응답 item은 `{id,name,email}`다. 결과가 없으면 `{data:{items:[]}}`를 반환한다. 필수 Participants 구조가 없으면 `DOCUMENT_STRUCTURE_NOT_FOUND`(422, 재시도 불가), 목록을 읽지 못하면 `PARTICIPANT_LIST_FAILED`(502, 일시적 네트워크/Provider 오류에 한해 재시도 가능)다. 오류 응답과 로그에는 Provider 원문을 포함하지 않는다.
 
 ### API-004 Participant Create
 
@@ -125,13 +126,13 @@ Session 상태와 전이 규칙은 [architecture.md](./architecture.md)의 상�
 
 Request: `{ "name": "홍길동", "email": "hong@example.com" }`
 
-응답은 생성된 `{id,name,email,active:true}`를 반환한다. 이름/email 형식과 정규화는 서버가 검증한다.
+응답은 생성된 `{id,name,email}`를 반환한다. 이름/email 형식과 정규화는 서버가 검증한다.
 
 ### API-005 Participant Update
 
 `PATCH /api/v1/participants/{participantId}` → `200`
 
-Request는 `name`, `email`, `active` 중 하나 이상. `active:false`는 비활성화이며 hard delete가 아니다. 성공 시 전체 표준 Participant를 반환한다.
+Request는 `name`, `email` 중 하나 이상이다. 성공 시 전체 표준 Participant를 반환한다.
 
 ### API-006 Meeting Session Create
 
@@ -141,7 +142,7 @@ Request는 `name`, `email`, `active` 중 하나 이상. `active:false`는 비활
 {"title":"AX 주간회의","templateId":"default.md","participantIds":["pt_001","pt_002"],"timezone":"Asia/Seoul","recoveryKey":"browser_generated_key"}
 ```
 
-Backend는 Template 존재, Participant 활성 상태, 중복 ID, 제목/timezone을 검증한다. `201` 응답은 `{sessionId,version:1,status:"CREATED",uploadPolicy:{chunkDurationSeconds,maxChunkBytes,acceptedMimeTypes}}`다.
+Backend는 Template 존재, 선택된 Participant ID의 roster 참조와 중복 ID, 제목/timezone을 검증한다. `201` 응답은 `{sessionId,version:1,status:"CREATED",uploadPolicy:{chunkDurationSeconds,maxChunkBytes,acceptedMimeTypes}}`다.
 
 ### API-007 Audio Chunk Upload
 
@@ -173,7 +174,7 @@ Request: `{expectedChunks:number,durationMs:number,mimeType:string}`. Backend는
 
 Request: `{ "mappings": [{"speakerId":"speaker_a","participantId":"pt_001"}] }`
 
-Mapping set은 감지된 각 speaker를 최대 한 Participant에 매핑한다. participant는 Session에 선택됐고 활성 상태여야 한다. null/unmapped는 Confirm 전 허용할 수 있다. 응답은 새 version과 `{speakerId,participantId,participantName}` 목록이다. 매핑은 해당 화자의 모든 Transcript segment 표시 결과에 적용된다.
+Mapping set은 감지된 각 speaker를 최대 한 Participant에 매핑한다. Participant는 Session에 선택된 roster 참조여야 한다. null/unmapped는 Confirm 전 허용할 수 있다. 응답은 새 version과 `{speakerId,participantId,participantName}` 목록이다. 매핑은 해당 화자의 모든 Transcript segment 표시 결과에 적용된다.
 
 ### API-012 Minutes Update
 

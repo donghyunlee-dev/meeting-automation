@@ -49,7 +49,7 @@ A안은 흰색 카드와 옅은 회색 바탕, 선명한 파랑 CTA, 얇은 구�
 | `color-success-soft` | `#F0FDF4` | 완료 상태 배경 |
 | `color-warning` | `#92400E` | 진행 지연, 확인 필요 |
 | `color-warning-soft` | `#FFFBEB` | 경고 배경 |
-| `color-danger` | `#B91C1C` | 녹음 종료, 오류, 비활성화 확인 |
+| `color-danger` | `#B91C1C` | 녹음 종료, 오류 |
 | `color-danger-soft` | `#FEF2F2` | 오류 배경 |
 | `color-focus` | `#1D4ED8` | 키보드 포커스 ring |
 
@@ -349,10 +349,9 @@ font-family:
 
 **목적:** 회의에 사용할 참석자를 관리한다.
 
-- 활성 Participant 목록과 검색 field를 제공한다.
+- Participant name/email 목록과 검색 field를 제공한다.
 - 추가/수정 폼은 name과 email만 받는다.
-- 비활성화는 확인 후 수행하며 실제 삭제와 혼동하지 않게 표현한다.
-- 이름, 이메일, active 상태를 목록에서 구분한다.
+- 이름과 이메일을 목록에서 확인하고 추가/수정할 수 있다.
 - 새 참석자 추가/수정은 Bottom Sheet 또는 간결한 폼 화면으로 처리한다.
 - Bottom Navigation의 Settings 경로로 돌아갈 수 있다.
 

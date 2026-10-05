@@ -3,7 +3,7 @@
 > **문서 역할:** V1의 표준 데이터 모델, 메모리 수명주기, Provider 저장 형태를 정의한다.
 > **기준 문서:** [PRD.md](./PRD.md)
 > **상호 참조:** [architecture.md](./architecture.md), [api-spec.md](./api-spec.md)
-> **기준일:** 2026-10-04
+> **기준일:** 2026-10-05
 
 ## 설계 원칙
 
@@ -21,7 +21,7 @@
 | Company, Provider 설정 | Backend 환경 설정 | 배포 기간 |
 | Secret | Render Secret | 배포 기간, 비응답 |
 | Templates | Backend static resources | 배포 버전 |
-| Participants | Document Provider `Participants` child page | 비활성화 전까지 |
+| Participants | Document Provider `Participants` child page | Provider 정책에 따름. V1 API는 삭제를 제공하지 않음 |
 | 완료 Meeting, Minutes, Transcript | Document Provider `Meetings` child page | Provider 정책에 따름 |
 | 진행 MeetingSession | Backend memory | 완료/실패 또는 프로세스 재시작까지 |
 | 브라우저 대기 Audio chunk | IndexedDB 등 Browser temporary storage | 업로드 ACK/세션 정리까지 |
@@ -85,7 +85,7 @@ Opaque ID의 실제 encoding은 구현 세부사항이다. ID를 순차 수치�
 |---|---|---:|---|
 | `title` | string | Y | 공백 제거 후 비어 있으면 거절 |
 | `templateId` | enum string | Y | `default.md`, `project.md` 중 하나 |
-| `participantIds` | string[] | Y | 선택된 활성 Participant ID, 중복 불가 |
+| `participantIds` | string[] | Y | 회의 작성자가 선택한 Participant roster ID, 중복 불가 |
 | `timezone` | IANA zone string | Y | 브라우저 표시/현지 시간 변환에 사용 |
 | `startedAt`, `endedAt` | offset datetime/null | 조건부 | 녹음 시작/종료 기록. 종료 전에는 null 허용 |
 
@@ -189,10 +189,10 @@ Provider가 허용하는 최소 속성으로 저장한다. `externalSessionId`�
 Participant 표준 모델:
 
 ```json
-{"id":"pt_001","name":"김동현","email":"user@example.com","active":true}
+{"id":"pt_001","name":"김동현","email":"user@example.com"}
 ```
 
-부서, 직급, Slack ID, Voiceprint, Meeting History 필드는 V1 표준 모델에 추가하지 않는다. 비활성화는 삭제 대신 `active=false`로 표현한다.
+부서, 직급, Slack ID, Voiceprint, Meeting History 필드는 V1 표준 모델에 추가하지 않는다. Participant는 회의 작성자가 선택하는 `{id,name,email}` roster record다. Provider page ID를 표준 `id`, page 제목을 `name`, page 본문 첫 `Email: <address>` 항목을 `email`로 매핑한다. 생성/수정 시 같은 표현으로 기록하고, 필수 값이 누락되거나 해석할 수 없으면 목록 전체를 `PARTICIPANT_LIST_FAILED`로 실패시킨다.
 
 ## 목록/캐시
 

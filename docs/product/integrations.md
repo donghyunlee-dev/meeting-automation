@@ -96,7 +96,7 @@ listMeetings(max=100) -> MeetingSummary[]
 getMeeting(documentId) -> MeetingDocument
 findMeetingBySessionId(sessionId) -> Optional<MeetingDocumentRef>
 createMeeting(command) -> MeetingDocumentRef
-listParticipants(includeInactive) -> Participant[]
+listParticipants() -> Participant[]
 createParticipant(command) -> Participant
 updateParticipant(participantId, command) -> Participant
 ```
@@ -143,7 +143,7 @@ validateConnection() -> ProviderHealth
 sendMeetingEmail(command) -> RecipientDeliveryResult[]
 ```
 
-Command는 선택 Participant의 이메일 주소, 제목, 요약/본문, 성공적으로 저장된 Document URL을 포함한다. Provider 호출 직전에 활성 상태와 주소를 검증한다. 수신자마다 독립 성공/실패를 반환하고 성공 수신자에게 재전송하지 않는다.
+Command는 회의 작성자가 선택한 Participant roster record의 이메일 주소, 제목, 요약/본문, 성공적으로 저장된 Document URL을 포함한다. Provider 호출 직전에 이메일 주소 형식을 검증한다. 수신자마다 독립 성공/실패를 반환하고 성공 수신자에게 재전송하지 않는다.
 
 Email은 Document 저장 성공 이후에만 발송한다. 전체 주소는 운영 로그/Admin Slack에 노출하지 않는다. Email provider 종류와 자격 정보는 `EMAIL_PROVIDER`, `EMAIL_*` 환경 설정으로 관리한다.
 
