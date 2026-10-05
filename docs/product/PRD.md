@@ -2233,7 +2233,7 @@ Meeting UI
 
 각 세부 TASK 표의 `설계 상태 / 문서` 열은 **설계 진행 상태**를 기록한다. 구현 진행 상태는 계속 GitHub Issue의 상태 라벨과 종료 상태가 기준이며, 두 상태를 혼합하지 않는다.
 
-**다음 설계 대상 커서: `TASK-010.03`** — TASK-010.02의 네 문서, Issue #44 및 master commit `d414e8b`의 원격 tree 경로를 확인했다. API-015 문서 저장 성공/실패와 Session 단위 중복 방지를 계약화했다. 다음은 저장 전 Review 검증 표시 및 저장 후 document URL 연결 UI다.
+**다음 설계 대상 커서: `TASK-011.01`** — TASK-010.03 네 문서, Issue #45, API-010/015 계약 보완 및 master commit `9e575fe` 원격 경로를 확인했다. API-014 검증에서 API-015 접수, API-010 결과 확인·문서 URL·재시도까지 연결했다. 다음은 Email Provider Adapter다.
 
 | 설계 상태 | 의미 |
 |---|---|
@@ -2404,7 +2404,7 @@ Backend API 작업은 정상 응답뿐 아니라 명세된 검증 오류, 없는
 |---|---|---|------|---|
 | `TASK-010.01` Review 확정 검증 POST / BE | TASK-007.01, TASK-008.01, TASK-008.03 | FR-016, API-014 | 필수 Review 항목과 매핑 완료 여부를 검증하고 오류 항목을 반환한다. 유효/미완료 테스트 통과 | 설계완료 · `docs/specs/phase-06-publish/TASK-010.01/` |
 | `TASK-010.02` Document Publish POST 및 멱등성 / BE | TASK-010.01 | FR-016, API-015, EXT-003 | Meeting 문서를 생성하고 재요청 시 중복 문서를 만들지 않는다. Provider 성공·실패·중복 요청 테스트 통과 | 설계완료 · `docs/specs/phase-06-publish/TASK-010.02/` |
-| `TASK-010.03` 저장 확인 및 문서 링크 표시 / FE, INTEGRATION | TASK-010.02 | SCR-007, API-014,015 | 저장 전 검증 결과를 표시하고 성공 후 유효한 document URL을 제공한다. 실패 시 재시도 가능한 상태를 보인다. | 설계중 · `docs/specs/phase-06-publish/TASK-010.03/` |
+| `TASK-010.03` 저장 확인 및 문서 링크 표시 / FE, INTEGRATION | TASK-010.02 | SCR-007, API-014,015 | 저장 전 검증 결과를 표시하고 성공 후 유효한 document URL을 제공한다. 실패 시 재시도 가능한 상태를 보인다. | 설계완료 · `docs/specs/phase-06-publish/TASK-010.03/` |
 
 ### TASK-011 Email Delivery — 작업 묶음
 
