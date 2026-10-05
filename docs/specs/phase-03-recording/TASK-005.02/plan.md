@@ -5,7 +5,7 @@
 - PRD v1.7.0 (2026-10-05): `FR-003`, `FR-004`, `SCR-003`, `API-006`, `TASK-005.02`
 - 선행 TASK-005.01 Issue [#19](https://github.com/donghyunlee-dev/meeting-automation/issues/19): Recording view state와 callbacks
 - 본 TASK Issue [#20](https://github.com/donghyunlee-dev/meeting-automation/issues/20)
-- 후속 TASK-005.03: `{blob,mimeType,recordedAtMs}`를 Session별 저장·순번 부여·복구
+- 후속 TASK-005.03: `{chunkId,blob,mimeType,recordedAtMs}`를 Session별 저장·순번 부여·복구
 - 후속 TASK-005.06/005.08: 업로드 및 Processing API orchestration
 
 ## 변경 경계

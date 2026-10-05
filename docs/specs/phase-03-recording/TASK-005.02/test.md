@@ -12,7 +12,7 @@
 | REC-CTRL-06 | 시작 성공 후 recorder `start` event | Recording 표시 및 elapsed 시작 | event/controller test |
 | REC-CTRL-07 | Recording에서 pause event | Paused 표시, clock 정지 | fake monotonic clock test |
 | REC-CTRL-08 | Paused에서 resume event | Recording 표시, 이전 elapsed부터 누적 | fake clock/event test |
-| REC-CTRL-09 | 15초 dataavailable Blob | 빈 Blob 제외, 정확한 selected MIME과 기록 시각을 callback에 전달 | recorder adapter test |
+| REC-CTRL-09 | 15초 dataavailable Blob 및 저장 재시도 | 빈 Blob 제외, 안정적인 `chunkId`, selected MIME과 기록 시각을 callback에 전달 | recorder adapter test |
 | REC-CTRL-10 | 종료 확인 후 recorder stop | 최종 Blob callback 뒤 stop 완료 callback, track 정지 및 elapsed 고정 | event-order/cleanup test |
 | REC-CTRL-11 | recorder error 및 unmount | interval/track 모두 정리, 사용자용 오류만 표시 | cleanup test |
 | REC-CTRL-12 | pause/resume/stop 중복 또는 유효하지 않은 상태 명령 | 잘못된 API 호출 없이 상태 일관성 유지 | transition table test |

@@ -24,7 +24,7 @@ Chunk 영속화·순번 부여·재시작 복구(`TASK-005.03`), 업로드·재�
 - `MediaRecorder` 미지원 또는 허용 MIME 중 지원 항목이 없으면 마이크 권한을 요청하지 않고 Ready에 오류 안내를 제공한다.
 - 허용 MIME은 `uploadPolicy.acceptedMimeTypes` 순서를 우선순위로 하여 `MediaRecorder.isTypeSupported`가 참인 첫 값 하나를 고른다. 허용 목록의 정확한 MIME 문자열을 recorder 생성자에 전달하고 후속 Chunk callback에도 전달한다.
 - 선택 MIME이 정해진 뒤 마이크를 요청한다. 권한 거부/장치 오류는 사용자용 안내로 매핑하고 Ready에 머문다. 원시 브라우저 오류나 오디오 데이터는 로그에 남기지 않는다.
-- recorder `start` event에서 UI를 Recording으로 전이한다. PRD/API-006의 `chunkDurationSeconds=15`를 timeslice로 설정하며 각 `dataavailable`의 비어 있지 않은 Blob을 `{blob,mimeType,recordedAtMs}` callback으로 TASK-005.03 경계에 전달한다.
+- recorder `start` event에서 UI를 Recording으로 전이한다. PRD/API-006의 `chunkDurationSeconds=15`를 timeslice로 설정하며 각 `dataavailable`의 비어 있지 않은 Blob을 `{chunkId,blob,mimeType,recordedAtMs}` callback으로 TASK-005.03 경계에 전달한다. `chunkId`는 이벤트마다 한 번 생성해 저장 재시도에서도 동일 값으로 유지한다.
 - `pause`/`resume` event만 UI 상태를 각각 Paused/Recording으로 바꾼다. 지원되지 않는 pause/resume 또는 잘못된 현재 상태 요청은 안전하게 무시하고 오류 안내를 표시한다.
 - 시작은 elapsed를 0으로 초기화한다. `performance.now()` 누적값으로 진행 구간만 더하고 Paused 동안 증가하지 않게 한다. 표시 갱신 주기는 1초이며 각 tick을 screen reader에 반복 공지하지 않는다.
 - Recording/Paused 상태에서 종료 확인이 승인되면 recorder를 한 번만 stop한다. 최종 `dataavailable`을 먼저 전달한 후 `stop`에서 timer를 확정하고 stream track을 종료하며 stop 완료 callback을 보낸다. API 처리/화면 완료 동작은 호출부 책임이다.
