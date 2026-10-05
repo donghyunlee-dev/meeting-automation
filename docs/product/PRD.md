@@ -2337,7 +2337,7 @@ Backend API 작업은 정상 응답뿐 아니라 명세된 검증 오류, 없는
 | `TASK-005.01` Recording 화면 상태와 종료 확인 UI / FE | TASK-004.05 | FR-003, SCR-003,004 | Ready/Recording/Paused 상태 표시 및 종료 확인/취소가 동작한다. MediaRecorder mock 기반 UI 테스트 통과 | 설계완료 · `docs/specs/phase-03-recording/TASK-005.01/` |
 | `TASK-005.02` 녹음 시작·일시정지·재개·종료 제어 / FE | TASK-005.01 | FR-003,004, SCR-003 | MediaRecorder 이벤트에 따라 제어와 경과 시간이 동기화된다. 권한 거부·지원하지 않는 MIME·녹음 상태 전이 테스트 통과 | 설계완료 · `docs/specs/phase-03-recording/TASK-005.02/` |
 | `TASK-005.03` Chunk 로컬 임시 보관과 순번 부여 / FE | TASK-005.02 | FR-005, DEC-020 | Chunk가 Session별 순서로 저장되고 브라우저 재시작 후 미전송 Chunk를 복구한다. 순서·중복·저장 실패 테스트 통과 | 설계완료 · `docs/specs/phase-03-recording/TASK-005.03/` |
-| `TASK-005.04` Chunk Upload PUT / BE | TASK-004.04 | FR-005, API-007 | Session/sequence/크기/형식 검증 후 Chunk를 임시 저장한다. 정상·중복·잘못된 순번·크기 초과 테스트 통과 | 미설계 · — |
+| `TASK-005.04` Chunk Upload PUT / BE | TASK-004.04 | FR-005, API-007 | Session/sequence/크기/형식 검증 후 Chunk를 임시 저장한다. 정상·중복·잘못된 순번·크기 초과 테스트 통과 | 설계중 · `docs/specs/phase-03-recording/TASK-005.04/` |
 | `TASK-005.05` Upload Status GET / BE | TASK-005.04 | FR-005, API-008 | 수신 완료 sequence와 누락 Chunk를 반환한다. 빈 업로드·누락·없는 Session 테스트 통과 | 미설계 · — |
 | `TASK-005.06` 순차 업로드·재시도·복구 / FE, INTEGRATION | TASK-005.03, TASK-005.04, TASK-005.05 | FR-005, SCR-003, API-007,008 | 네트워크 실패 뒤 누락 Chunk만 순서대로 재전송하고 화면에 진행/실패를 표시한다. 재시도·중복 응답 테스트 통과 | 미설계 · — |
 | `TASK-005.07` Processing Start POST / BE | TASK-005.04, TASK-005.05 | FR-006, API-009 | 전체 Chunk 수신 확인 후 처리 시작을 수락하고 중복 시작은 멱등하게 처리한다. 누락 Chunk·중복 요청 Controller 테스트 통과 | 미설계 · — |
