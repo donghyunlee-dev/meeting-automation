@@ -2363,7 +2363,7 @@ Backend API 작업은 정상 응답뿐 아니라 명세된 검증 오류, 없는
 
 | 세부 작업 / 영역 | 선행 작업 | Related IDs | 완료 및 검증 조건 | 설계 상태 / 문서 |
 |---|---|---|------|---|
-| `TASK-007.01` Speaker mapping PUT / BE | TASK-006.06, TASK-003.01 | DEC-009,010, FR-010, API-011 | Speaker ID를 유효 참가자에 연결하고 모든 해당 segment에 반영한다. 없는 Speaker/Participant와 일괄 적용 테스트 통과 | 미설계 · — |
+| `TASK-007.01` Speaker mapping PUT / BE | TASK-006.06, TASK-003.01 | DEC-009,010, FR-010, API-011 | Speaker ID를 유효 참가자에 연결하고 모든 해당 segment에 반영한다. 없는 Speaker/Participant와 일괄 적용 테스트 통과 | 설계중 · `docs/specs/phase-05-review/TASK-007.01/` |
 | `TASK-007.02` Speaker 선택 UI / FE | TASK-006.07, TASK-003.01 | FR-010,011, SCR-006 | 화자별 참가자 Dropdown을 제공하며 segment별 화자 지정 UI는 없다. 기존 매핑 표시 테스트 통과 | 미설계 · — |
 | `TASK-007.03` Mapping 저장 연결 및 Transcript 반영 / INTEGRATION | TASK-007.01, TASK-007.02 | DEC-010, API-011 | 저장 후 모든 해당 Transcript segment에 참가자명이 반영된다. 저장 실패 시 이전 값 유지/오류 표시 테스트 통과 | 미설계 · — |
 
