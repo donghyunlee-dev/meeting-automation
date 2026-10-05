@@ -2341,7 +2341,7 @@ Backend API 작업은 정상 응답뿐 아니라 명세된 검증 오류, 없는
 | `TASK-005.05` Upload Status GET / BE | TASK-005.04 | FR-005, API-008 | 실제 수신 sequence 전체와 byte 집계를 반환한다. 빈 업로드·누락 조회·없는 Session 테스트 통과 | 설계완료 · `docs/specs/phase-03-recording/TASK-005.05/` |
 | `TASK-005.06` 순차 업로드·재시도·복구 / FE, INTEGRATION | TASK-005.03, TASK-005.04, TASK-005.05 | FR-005, SCR-003, API-007,008 | 네트워크 실패 뒤 누락 Chunk만 순서대로 재전송하고 화면에 진행/실패를 표시한다. 재시도·중복 응답 테스트 통과 | 설계완료 · `docs/specs/phase-03-recording/TASK-005.06/` |
 | `TASK-005.07` Processing Start POST / BE | TASK-005.04, TASK-005.05 | FR-006, API-009 | 전체 Chunk 수신 확인 후 처리 시작을 수락하고 중복 시작은 멱등하게 처리한다. 누락 Chunk·중복 요청 Controller 테스트 통과 | 설계완료 · `docs/specs/phase-03-recording/TASK-005.07/` |
-| `TASK-005.08` 종료 화면에서 처리 시작 연결 / FE, INTEGRATION | TASK-005.06, TASK-005.07 | FR-006, SCR-004, API-009 | 종료 확인 후 처리 시작 요청을 한 번 보내고 성공 시 Processing으로 이동한다. 중복 클릭·API 실패 테스트 통과 | 미설계 · — |
+| `TASK-005.08` 종료 화면에서 처리 시작 연결 / FE, INTEGRATION | TASK-005.06, TASK-005.07 | FR-006, SCR-004, API-009 | 종료 확인 후 전체 업로드 완료 뒤 처리 시작을 요청하고 성공 시 Processing으로 이동한다. 중복 클릭·API 실패 테스트 통과 | 설계중 · `docs/specs/phase-03-recording/TASK-005.08/` |
 
 ## Phase 4 — STT / Diarization / Minutes
 
