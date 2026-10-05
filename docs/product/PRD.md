@@ -2399,7 +2399,7 @@ Backend API 작업은 정상 응답뿐 아니라 명세된 검증 오류, 없는
 | 세부 작업 / 영역 | 선행 작업 | Related IDs | 완료 및 검증 조건 | 설계 상태 / 문서 |
 |---|---|---|------|---|
 | `TASK-010.01` Review 확정 검증 POST / BE | TASK-007.01, TASK-008.01, TASK-008.03 | FR-016, API-014 | 필수 Review 항목과 매핑 완료 여부를 검증하고 오류 항목을 반환한다. 유효/미완료 테스트 통과 | 설계완료 · `docs/specs/phase-06-publish/TASK-010.01/` |
-| `TASK-010.02` Document Publish POST 및 멱등성 / BE | TASK-010.01 | FR-016, API-015, EXT-003 | Meeting 문서를 생성하고 재요청 시 중복 문서를 만들지 않는다. Provider 성공·실패·중복 요청 테스트 통과 | 미설계 · — |
+| `TASK-010.02` Document Publish POST 및 멱등성 / BE | TASK-010.01 | FR-016, API-015, EXT-003 | Meeting 문서를 생성하고 재요청 시 중복 문서를 만들지 않는다. Provider 성공·실패·중복 요청 테스트 통과 | 설계중 · `docs/specs/phase-06-publish/TASK-010.02/` |
 | `TASK-010.03` 저장 확인 및 문서 링크 표시 / FE, INTEGRATION | TASK-010.02 | SCR-007, API-014,015 | 저장 전 검증 결과를 표시하고 성공 후 유효한 document URL을 제공한다. 실패 시 재시도 가능한 상태를 보인다. | 미설계 · — |
 
 ### TASK-011 Email Delivery — 작업 묶음
