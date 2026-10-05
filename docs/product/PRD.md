@@ -2050,6 +2050,8 @@ API-019 응답은 `document`, `email`, `notification`, `ai` 네 영역을 항상
 
 Gmail Email contributor는 `EMAIL_PROVIDER=GMAIL_API` 및 OAuth client ID/secret, refresh token, sender address 설정이 존재하면 `configured:true`로 보고한다. `reachable`은 발송 없이 OAuth token refresh 성공 여부만 나타내며 Gmail message send 성공 또는 mailbox delivery를 보장하지 않는다.
 
+Slack Notification contributor는 `NOTIFICATION_PROVIDER=SLACK` 및 유효한 meeting Incoming Webhook 설정이 있으면 `configured:true`로 보고한다. Webhook은 부작용 없는 probe를 제공하지 않으므로 `reachable`은 마지막 실제 알림 POST의 Slack 성공 응답을 나타내고, 초기에는 false다. Health 조회 자체는 message를 게시하지 않는다.
+
 ------------------------------------------------------------------------
 
 # 19. 외부 연동 계약
@@ -2425,7 +2427,7 @@ Backend API 작업은 정상 응답뿐 아니라 명세된 검증 오류, 없는
 
 | 세부 작업 / 영역 | 선행 작업 | Related IDs | 완료 및 검증 조건 | 설계 상태 / 문서 |
 |---|---|---|------|---|
-| `TASK-012.01` Notification Provider Adapter / BE | TASK-010.02 | DEC-015, FR-018, EXT-005 | 문서 URL을 포함해 알림을 전송하고 실패를 독립 결과로 반환한다. Mock Provider 테스트 통과 | 미설계 · — |
+| `TASK-012.01` Notification Provider Adapter / BE | TASK-010.02 | DEC-015, FR-018, EXT-005 | 문서 URL을 포함해 알림을 전송하고 실패를 독립 결과로 반환한다. Mock Provider 테스트 통과 | 설계중 · `docs/specs/phase-06-publish/TASK-012.01/` |
 | `TASK-012.02` Slack 결과 표시 연결 / BE, FE | TASK-012.01 | API-015, SCR-007 | Email 결과와 독립적으로 Slack 성공/실패를 표시한다. Slack 실패가 Email 결과를 덮지 않는 테스트 통과 | 미설계 · — |
 
 ### TASK-013 Complete / Retry — 작업 묶음

@@ -163,7 +163,9 @@ sendAdminIncident(command) -> DeliveryResult
 
 회의 알림 입력은 title, meeting date, document URL이다. Admin incident 입력은 오류 분류, sessionId, stage, traceId, 안전한 오류 요약이다.
 
-Slack은 첫 Adapter일 뿐 Domain Port 이름에 포함하지 않는다. 회의 알림은 Document 저장 성공 뒤 수행하고 Email과 독립 상태로 기록한다. 알림 실패는 Document/Email 성공을 되돌리지 않는다.
+V1 `NotificationProvider` adapter는 `NOTIFICATION_PROVIDER=SLACK`일 때 `SLACK_MEETING_WEBHOOK_URL` Incoming Webhook을 사용한다. 설치 때 webhook에 고정한 Channel로만 메시지를 보내고 payload에서 channel/username/icon을 변경하지 않는다. Meeting message는 title, meeting date, Document URL만 포함한다. Slack HTTP 200 body `ok`를 받으면 요청 수락으로 기록하며 실제 구성원 열람/보관을 보장하지 않는다.
+
+Incoming Webhook URL은 secret이다. `validateConnection()`은 health 조회만으로 test message를 게시하지 않는다. `notification.reachable`은 가장 최근 실제 webhook POST 성공 결과를 뜻하고 아직 발송이 없으면 false다. 회의 알림은 Document 저장 성공 뒤 수행하고 Email과 독립 상태로 기록한다. 알림 실패는 Document/Email 성공을 되돌리지 않는다.
 
 ## Admin Incident 안전 규칙
 

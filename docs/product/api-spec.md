@@ -67,7 +67,7 @@ Session 상태와 전이 규칙은 [architecture.md](./architecture.md)의 상�
 | `PROCESSING_FAILED` | 502 | 조건부 | Audio/STT/Minutes 처리 실패 |
 | `DOCUMENT_FAILED` | 502 | 조건부 | Document Provider 실패 |
 | `EMAIL_FAILED` | 502 | 조건부 | 개별 Email delivery 실패. 재시도 가능 여부는 Delivery별 `retryable`을 따른다. |
-| `NOTIFICATION_FAILED` | 502 | Y | Notification delivery 실패 |
+| `NOTIFICATION_FAILED` | 502 | 조건부 | Notification delivery 실패. 재시도 가능 여부는 Delivery별 `retryable`을 따른다. |
 
 위 세부 HTTP 매핑은 표준 제안이다. 구현 시 Spring 예외 처리기에서 일관되게 매핑하며 PRD 오류 유형 네 가지(`PROCESSING_FAILURE`, `DOCUMENT_FAILURE`, `EMAIL_FAILURE`, `NOTIFICATION_FAILURE`)를 운영 분류로 유지한다.
 
@@ -240,6 +240,8 @@ Request `{ "confirm":true }`. 필수 `Idempotency-Key`와 `If-Match` version, Se
 응답은 `document:{provider,configured,reachable,rootAccessible}`, `email:{configured,reachable}`, `notification:{provider,configured,reachable}`, `ai:{configured,reachable}`를 항상 제공한다. 미선택/미연동 영역은 `configured=false`, `reachable=false`로 응답하며, `document`의 Provider 미선택은 `provider=null`이다. `rootAccessible`은 설정 Root와 필수 child 구조를 탐색할 수 있음을 뜻한다. 자격증명 원문이나 연결 오류의 민감한 응답 본문은 포함하지 않는다. Provider별 Health 구현은 같은 공통 응답에 contributor를 등록해 해당 영역을 갱신한다.
 
 Gmail Email contributor는 `EMAIL_PROVIDER=GMAIL_API` 및 OAuth client/refresh secret과 sender address 설정이 있으면 `configured=true`다. `reachable`은 Gmail message send가 아니라 OAuth token refresh 성공을 뜻한다.
+
+Slack Notification contributor는 `NOTIFICATION_PROVIDER=SLACK` 및 meeting webhook URL이 유효한 설정이면 `configured=true`다. Incoming Webhook에는 무부작용 probe가 없어 `reachable`은 가장 최근 실제 notification POST의 HTTP 200 `ok` 결과를 나타내며, 아직 전송 전이면 false다. Health 조회는 test message를 보내지 않는다.
 
 ## 비동기 처리와 조회
 
