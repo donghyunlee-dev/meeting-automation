@@ -1,7 +1,7 @@
 # Meeting Automation Product Requirements Document
 
 > **문서 ID:** PRD-MA-001\
-> **버전:** 1.6.1\
+> **버전:** 1.6.2\
 > **기준일:** 2026-10-05\
 > **상태:** Approved Baseline Candidate\
 > **문서 역할:** Meeting Automation V1의
@@ -29,6 +29,7 @@
 > **변경 이력 v1.5.0:** 설계 진행 커서를 추가해 다음 문서 작업을 직접 지정하고, 세션별 순차 재탐색을 금지\
 > **변경 이력 v1.6.0:** 상세 설계 문서와 PRD 상태를 기본 브랜치에 커밋·푸시한 뒤에만 설계 완료로 처리\
 > **변경 이력 v1.6.1:** Confluence Cloud Basic 인증과 Backend 계정 이메일 설정을 확정\
+> **변경 이력 v1.6.2:** Document Provider 미선택 상태와 공통 Integration Health 응답 규칙을 확정\
 > **변경 이력 v1.1.0:** Technology Baseline 확정, Monorepo/Node.js/React/Spring Boot 역할 명시, 실제 모바일·회의실 품질 검증을 개발 선행 Gate에서 Phase 8로 이동
 
 ------------------------------------------------------------------------
@@ -1441,8 +1442,8 @@ Response:
       "timezone": "Asia/Seoul"
     },
     "document": {
-      "provider": "NOTION",
-      "configured": true
+      "provider": null,
+      "configured": false
     },
     "email": {
       "enabled": true,
@@ -1459,6 +1460,8 @@ Response:
   }
 }
 ```
+
+`DOCUMENT_PROVIDER`가 없거나 빈 값이면 Provider를 자동 선택하지 않고 `provider:null`, `configured:false`를 반환한다. 유효 Provider가 선택됐지만 credentials가 없거나 형식이 잘못된 경우에는 선택된 `provider`를 유지하고 `configured:false`로 반환한다. 설정값이 지원하지 않는 비어 있지 않은 enum이면 Backend 설정 오류로 처리한다. Secret은 어떤 상태에서도 응답하지 않는다.
 
 ------------------------------------------------------------------------
 
@@ -2001,10 +2004,10 @@ Response:
 {
   "data": {
     "document":{
-      "provider":"NOTION",
-      "configured":true,
-      "reachable":true,
-      "rootAccessible":true
+      "provider":null,
+      "configured":false,
+      "reachable":false,
+      "rootAccessible":false
     },
     "email":{
       "configured":true,
@@ -2022,6 +2025,8 @@ Response:
   }
 }
 ```
+
+API-019 응답은 `document`, `email`, `notification`, `ai` 네 영역을 항상 포함한다. 선택된 document provider가 없거나 Health contributor가 아직 등록되지 않은 영역은 `configured:false`, `reachable:false`를 사용한다. Provider 설정은 유효하나 연결에 실패하면 `reachable:false`; document의 Root/필수 child를 탐색하지 못하면 `rootAccessible:false`다. 미연동 영역 값은 후속 Provider 설계가 동일한 공통 응답에 contributor를 추가하면서 갱신한다. 자격증명과 Provider 오류 원문은 반환하지 않는다.
 
 ------------------------------------------------------------------------
 
@@ -2211,7 +2216,7 @@ Meeting UI
 
 각 세부 TASK 표의 `설계 상태 / 문서` 열은 **설계 진행 상태**를 기록한다. 구현 진행 상태는 계속 GitHub Issue의 상태 라벨과 종료 상태가 기준이며, 두 상태를 혼합하지 않는다.
 
-**다음 설계 대상 커서: `TASK-002.04`** — TASK-002.03의 네 문서와 Issue #8을 master 원격 경로에서 확인했다. TASK-002.04의 미선택 Provider 표현과 API-019 전체 Health 응답 소유 범위는 Issue #9에서 결정 대기 중이며, 답변 후 같은 커서에서 재개한다. TASK-001.02~001.05와 TASK-002.01도 네 문서와 Issue #2~#6이 등록된 것으로 확인했다.
+**다음 설계 대상 커서: `TASK-002.04`** — TASK-002.03의 네 문서와 Issue #8을 master 원격 경로에서 확인했다. TASK-002.04는 Provider 미선택 시 `provider:null`을 반환하고 API-019 공통 Health 응답을 먼저 구성하기로 결정했다. Issue #9에 결정 내용을 기록하고 이 커서에서 설계를 진행한다. TASK-001.02~001.05와 TASK-002.01도 네 문서와 Issue #2~#6이 등록된 것으로 확인했다.
 
 | 설계 상태 | 의미 |
 |---|---|
@@ -2298,7 +2303,7 @@ Backend API 작업은 정상 응답뿐 아니라 명세된 검증 오류, 없는
 | `TASK-002.01` DocumentProvider 계약과 계약 테스트 / BE | TASK-001.05 | DEC-006,013,014, EXT-003 | Root/하위 Page 탐색, 읽기, 생성의 공통 계약 테스트가 Adapter 구현 전에 실패하도록 작성되고 계약 필드·오류가 고정된다. | 설계완료 · `docs/specs/phase-02-documents/TASK-002.01/` |
 | `TASK-002.02` Notion Page hierarchy Adapter / BE | TASK-002.01 | DEC-013,014, API-019, EXT-003 | 설정된 Root에서 Meetings/Participants를 Database 없이 탐색한다. 성공·빈 계층·권한 오류 Adapter 테스트 통과 | 설계완료 · `docs/specs/phase-02-documents/TASK-002.02/` |
 | `TASK-002.03` Confluence Page hierarchy Adapter / BE | TASK-002.01 | DEC-013,014, API-019, EXT-003 | 동일한 공통 계약을 만족하며 Page hierarchy만 사용한다. 성공·빈 계층·권한 오류 Adapter 테스트 통과 | 설계완료 · `docs/specs/phase-02-documents/TASK-002.03/` |
-| `TASK-002.04` Provider 선택 및 연결 Health / BE | TASK-002.02, TASK-002.03 | FR-025,026, API-001,019 | 활성 Provider의 연결 상태가 반환되고 Secret 값은 응답에서 제외된다. 정상·연결 실패·미설정 테스트 통과 | 결정대기 · — |
+| `TASK-002.04` Provider 선택 및 연결 Health / BE | TASK-002.02, TASK-002.03 | FR-025,026, API-001,019 | 선택 Provider와 연결 상태가 반환된다. 미선택은 provider null이며 API-019 공통 응답 네 영역을 유지한다. Secret은 제외되고 정상·실패·미설정 테스트를 통과한다. | 설계중 · `docs/specs/phase-02-documents/TASK-002.04/` |
 
 ### TASK-003 Participant Management — 작업 묶음
 

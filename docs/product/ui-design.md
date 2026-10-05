@@ -341,6 +341,7 @@ font-family:
 - 회사 정보, Document Provider, Email, Notification 상태를 읽기 쉬운 설정 row로 표시한다.
 - Participants 관리로 이동하는 항목을 제공한다.
 - `설정됨`, `연결 확인 필요`, `확인 실패` 같은 텍스트와 아이콘을 함께 쓴다.
+- `document.provider=null` 또는 `document.configured=false`이면 Settings의 문서 저장 row에 연결이 필요하다는 안내와 관리자에게 연결 설정을 요청하는 다음 행동을 표시한다. 설정을 자동 선택하거나 화면에서 Secret 입력값을 재노출하지 않는다.
 - API Key, Token, Webhook URL 등 Secret 원문을 표시하지 않는다.
 - Bottom Navigation을 표시한다.
 

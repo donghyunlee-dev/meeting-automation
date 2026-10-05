@@ -184,6 +184,9 @@ Slack은 첫 Adapter일 뿐 Domain Port 이름에 포함하지 않는다. 회의
 - `configured`: 필수 설정값이 존재하고 형식이 유효함.
 - `reachable`: 안전한 확인 요청이 Provider에 도달하고 인증됨.
 - `rootAccessible`: Document root와 필수 child 구조 접근 가능함.
+- `DOCUMENT_PROVIDER`가 비었거나 공백이면 자동 선택하지 않는다. App Config는 `document.provider=null`, `configured=false`를 반환하며 Frontend가 연결 안내를 제공한다. 비어 있지 않은 미지원 enum은 Backend 설정 오류다.
+- Integration Health는 `document`, `email`, `notification`, `ai` 영역을 항상 포함한다. Provider Health contributor가 없는 영역은 `configured=false`, `reachable=false`로 시작하고 해당 Provider 설계/구현이 공통 aggregator에 contributor를 추가한다.
+- Document Health의 `rootAccessible`은 Root와 필수 직속 `Meetings`/`Participants` 구조를 모두 탐색할 수 있을 때만 true다. 구조 누락/중복은 Health 조회를 실패시키지 않고 false 상태로 표현한다.
 - Health endpoint는 key 자체, 외부 상세 오류 본문, 개인정보를 반환하지 않는다.
 - Health 확인 요청은 불필요한 문서/메시지/메일을 생성하지 않는다.
 

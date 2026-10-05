@@ -98,10 +98,12 @@ Session 상태와 전이 규칙은 [architecture.md](./architecture.md)의 상�
 `GET /api/v1/app-config` → `200`
 
 ```json
-{"data":{"company":{"id":"sfood","name":"SFOOD","timezone":"Asia/Seoul"},"document":{"provider":"NOTION","configured":true},"email":{"enabled":true,"configured":true},"notification":{"provider":"SLACK","enabled":true},"recording":{"chunkDurationSeconds":15,"maxMeetingDurationMinutes":60}}}
+{"data":{"company":{"id":"sfood","name":"SFOOD","timezone":"Asia/Seoul"},"document":{"provider":null,"configured":false},"email":{"enabled":true,"configured":true},"notification":{"provider":"SLACK","enabled":true},"recording":{"chunkDurationSeconds":15,"maxMeetingDurationMinutes":60}}}
 ```
 
 공개 설정만 반환한다. Secret, Provider token, root credential은 절대 응답하지 않는다.
+
+`DOCUMENT_PROVIDER`가 없거나 빈 값이면 자동 Provider 선택을 하지 않고 `document.provider=null`, `document.configured=false`를 반환한다. 유효 Provider가 선택됐지만 해당 credentials가 없거나 형식이 잘못되면 선택된 Provider ID와 `configured=false`를 반환한다. 지원하지 않는 비어 있지 않은 enum은 Backend 설정 오류다.
 
 ### API-002 Templates
 
@@ -223,7 +225,7 @@ Request `{ "confirm":true }`. 감지된 모든 Speaker mapping, Minutes 필수 �
 
 `GET /api/v1/integrations/health` → `200`
 
-응답은 `document:{provider,configured,reachable,rootAccessible}`, `email:{configured,reachable}`, `notification:{provider,configured,reachable}`, `ai:{configured,reachable}` 상태를 제공한다. 자격증명 원문이나 연결 오류의 민감한 응답 본문을 포함하지 않는다.
+응답은 `document:{provider,configured,reachable,rootAccessible}`, `email:{configured,reachable}`, `notification:{provider,configured,reachable}`, `ai:{configured,reachable}`를 항상 제공한다. 미선택/미연동 영역은 `configured=false`, `reachable=false`로 응답하며, `document`의 Provider 미선택은 `provider=null`이다. `rootAccessible`은 설정 Root와 필수 child 구조를 탐색할 수 있음을 뜻한다. 자격증명 원문이나 연결 오류의 민감한 응답 본문은 포함하지 않는다. Provider별 Health 구현은 같은 공통 응답에 contributor를 등록해 해당 영역을 갱신한다.
 
 ## 비동기 처리와 조회
 
