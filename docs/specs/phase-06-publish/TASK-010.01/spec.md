@@ -105,7 +105,5 @@ Content-Type: application/json
 - TASK-008.03 Issue #39: versioned API-010 Review snapshot 및 atomic save/requery 관례
 - TASK-007.01 Issue #34: 전체 감지 Speaker mapping 및 Session roster ID 조건
 - TASK-006.06 Issue #32: API-010 `allowedActions`와 Session/status snapshot
-- TASK-007.01 Issue #34: Confirm이 소비하는 완료 Speaker mapping 및 Session roster reference
 - TASK-008.01 Issue #37: Confirm이 재검증하는 StructuredMinutes schema
-- TASK-008.03 Issue #39: 저장 완료한 현재 Review snapshot/version
 - Issue #43 결정 A: incomplete Review의 HTTP/error/details 계약
