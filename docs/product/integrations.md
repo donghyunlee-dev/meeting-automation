@@ -1,0 +1,224 @@
+# Meeting Automation Integration Specification
+
+> **문서 역할:** 외부 시스템 연동 Port, 표준 DTO, Adapter 책임, 오류/보안 규칙을 정의한다.
+> **기준 문서:** [PRD.md](./PRD.md)
+> **시스템 구성:** [architecture.md](./architecture.md)
+> **HTTP 경계:** [api-spec.md](./api-spec.md)
+> **기준일:** 2026-10-04
+
+## 공통 연동 규칙
+
+- Domain과 Application은 Notion, Confluence, OpenAI, Slack 또는 Email Vendor SDK 모델을 참조하지 않는다.
+- 각 외부 Adapter는 provider-specific Request/Response를 내부 표준 DTO로 변환한다.
+- credential은 Backend 런타임 secret에서만 읽고 frontend로 보내지 않는다.
+- 외부 오류 본문을 그대로 사용자 응답, 일반 로그, Admin Slack에 넣지 않는다.
+- timeout, 재시도 횟수, rate limit backoff는 외부 API의 현행 공식 제한 및 배포 설정에 맞춘다. 안전한 멱등성을 확보한 호출만 재시도한다.
+- Provider 변경은 Port 구현 교체로 제한한다. Domain 공통 모델은 provider의 특수 기능을 흡수하지 않는다.
+
+## Port/Adapter 구조
+
+```text
+Application Use Case
+  ├─ TranscriptionProvider
+  ├─ MinutesGenerationProvider
+  ├─ DocumentProvider
+  ├─ EmailProvider
+  └─ NotificationProvider
+       └─ Adapter-specific client and DTO
+```
+
+각 Port는 업무 목적의 명령/응답을 노출하고 HTTP, SDK 타입, 외부 ID 형식을 감춘다. Adapter가 credential 조회, HTTP 호출, 제한 처리, 결과 정규화, 오류 분류를 담당한다.
+
+## EXT-001 Transcription / Speaker Diarization
+
+### Port 계약
+
+```text
+transcribeWithDiarization(TranscriptionCommand) -> TranscriptResult
+```
+
+입력:
+
+```text
+TranscriptionCommand = {
+  audio: assembled temporary bytes or protected file reference,
+  mimeType: string,
+  languageHint?: string,
+  meetingDurationMs: integer
+}
+```
+
+출력:
+
+```text
+TranscriptResult = {
+  speakers: [{providerLabel, speakerId, label}],
+  segments: [{segmentId, speakerId, startMs, endMs, text}]
+}
+```
+
+### 변환/검증 규칙
+
+- 선택된 모델/API는 배포 시 공식 지원되는 speaker diarization 기능을 제공해야 한다. 모델명은 영구 도메인 계약이 아니며 `TRANSCRIPTION_MODEL` 설정으로 선택한다.
+- Provider의 화자 ID가 없거나 불안정하면 단일 transcription 실행 내에서 결정적인 internal `speakerId`로 정규화한다.
+- 모든 segment의 speaker 참조, timestamp 범위, 결과 정렬을 검증한다.
+- Provider 결과에서 자동 실명 인식/voiceprint를 시도하지 않는다.
+- 외부 최대 파일 크기나 duration 제한에 걸리면 처리 실패를 사용자에게 안전한 코드로 표시한다. Audio 장기 보관이나 새 Object Storage는 자동 도입하지 않는다.
+- Transcript 원문 및 Audio를 요청/응답 로그에 남기지 않는다.
+
+## EXT-002 Minutes Generation
+
+### Port 계약
+
+```text
+generateMinutes(MinutesCommand) -> StructuredMinutes
+```
+
+입력에는 `templateId`, `templateVersion`, Template prompt/content, 최소 Participant 참조 목록, Speaker mapping, 표준 Transcript가 들어간다. 출력은 `data-spec.md`의 Structured Minutes와 일치해야 한다.
+
+### 생성 원칙
+
+- 모델명은 `MINUTES_MODEL` 설정이며 배포 시 선택한다.
+- 가능한 경우 Markdown 대신 schema-constrained 구조화 출력을 사용한다.
+- `default.md`와 `project.md`는 Backend static resources로 관리한다.
+- 재생성 요청에는 Transcript와 Speaker mapping만 사용하며 Audio/STT Port를 호출하지 않는다.
+- 근거 없는 결정/담당자/날짜를 만들지 않도록 prompt와 출력 검증에서 제약한다.
+- 모델 출력 parsing 실패, 필수 필드 누락, schema 위반은 `PROCESSING_FAILURE`로 분류한다.
+
+## EXT-003 Document Provider
+
+### 공통 Port
+
+```text
+validateConnection() -> ProviderHealth
+discoverStructure(rootId) -> DocumentStructure
+listMeetings(max=100) -> MeetingSummary[]
+getMeeting(documentId) -> MeetingDocument
+findMeetingBySessionId(sessionId) -> Optional<MeetingDocumentRef>
+createMeeting(command) -> MeetingDocumentRef
+listParticipants(includeInactive) -> Participant[]
+createParticipant(command) -> Participant
+updateParticipant(participantId, command) -> Participant
+```
+
+Provider capability는 root 검증, child page 탐색/생성/읽기, 최소 metadata 갱신, URL 반환이다. 공통 계약은 Page hierarchy/basic CRUD만 사용한다. Database/Data Source, provider 내 검색 서비스, 임의 custom schema 기능은 요구하지 않는다.
+
+### 초기 구조 검사
+
+1. 설정된 root 식별자 접근 가능 여부를 확인한다.
+2. root 직속 `Meetings`, `Participants` child page를 발견한다.
+3. `Meetings` 또는 `Participants` child가 빠졌으면 health를 unhealthy로 보고하고 요청을 `DOCUMENT_STRUCTURE_NOT_FOUND`로 실패시킨다. V1 Adapter는 누락 구조를 묵시적으로 생성하지 않는다.
+4. 새 Participant/Meeting은 각 지정 child 아래에만 생성한다.
+
+### Publish 멱등성
+
+- `externalSessionId`를 Provider metadata/property에 기록한다.
+- Create 전 `findMeetingBySessionId`를 수행한다.
+- 동일 Session의 기존 문서가 있으면 생성 대신 해당 문서 참조를 재사용한다.
+- 검색/metadata 접근은 Adapter에서 숨긴다.
+- 부분 실패 뒤 재시도에서도 중복 Meeting page를 만들지 않도록 create와 metadata 기록 순서를 검증한다.
+
+### Notion Adapter
+
+- Page hierarchy에서 child page를 나열/읽기/생성/갱신한다.
+- Notion Database/Data Source 의존 기능을 사용하지 않는다.
+- 내부 `documentId`와 URL로 변환하며 Page 원본 JSON은 밖으로 내보내지 않는다.
+
+### Confluence Adapter
+
+- Parent/child page 계층을 사용한다.
+- child page 조회/읽기/생성/갱신, 최소 content metadata/property를 처리한다.
+- 내부 `documentId`와 URL로 변환하며 vendor response는 Adapter에 격리한다.
+
+## EXT-004 Email Provider
+
+### Port 계약
+
+```text
+validateConnection() -> ProviderHealth
+sendMeetingEmail(command) -> RecipientDeliveryResult[]
+```
+
+Command는 선택 Participant의 이메일 주소, 제목, 요약/본문, 성공적으로 저장된 Document URL을 포함한다. Provider 호출 직전에 활성 상태와 주소를 검증한다. 수신자마다 독립 성공/실패를 반환하고 성공 수신자에게 재전송하지 않는다.
+
+Email은 Document 저장 성공 이후에만 발송한다. 전체 주소는 운영 로그/Admin Slack에 노출하지 않는다. Email provider 종류와 자격 정보는 `EMAIL_PROVIDER`, `EMAIL_*` 환경 설정으로 관리한다.
+
+## EXT-005 Notification Provider
+
+### Port 계약
+
+```text
+validateConnection() -> ProviderHealth
+sendMeetingPublished(command) -> DeliveryResult
+sendAdminIncident(command) -> DeliveryResult
+```
+
+회의 알림 입력은 title, meeting date, document URL이다. Admin incident 입력은 오류 분류, sessionId, stage, traceId, 안전한 오류 요약이다.
+
+Slack은 첫 Adapter일 뿐 Domain Port 이름에 포함하지 않는다. 회의 알림은 Document 저장 성공 뒤 수행하고 Email과 독립 상태로 기록한다. 알림 실패는 Document/Email 성공을 되돌리지 않는다.
+
+## Admin Incident 안전 규칙
+
+허용 payload:
+
+```json
+{
+  "incidentType": "PROCESSING_FAILURE",
+  "sessionId": "ms_xxx",
+  "stage": "TRANSCRIPTION",
+  "traceId": "tr_xxx",
+  "message": "Transcription failed",
+  "retryable": true,
+  "occurredAt": "2026-10-04T02:16:00Z"
+}
+```
+
+포함 금지: Audio, Transcript, Minutes 본문, Token/Secret, 전체 Email 주소, Provider의 원본 error body. 오류 분류는 `PROCESSING_FAILURE`, `DOCUMENT_FAILURE`, `EMAIL_FAILURE`, `NOTIFICATION_FAILURE` 네 종류만 사용한다.
+
+## Health 확인 의미
+
+- `configured`: 필수 설정값이 존재하고 형식이 유효함.
+- `reachable`: 안전한 확인 요청이 Provider에 도달하고 인증됨.
+- `rootAccessible`: Document root와 필수 child 구조 접근 가능함.
+- Health endpoint는 key 자체, 외부 상세 오류 본문, 개인정보를 반환하지 않는다.
+- Health 확인 요청은 불필요한 문서/메시지/메일을 생성하지 않는다.
+
+## 환경 설정과 Secret
+
+```text
+APP_COMPANY_ID
+APP_COMPANY_NAME
+APP_TIMEZONE
+DOCUMENT_PROVIDER
+DOCUMENT_ROOT_ID
+NOTION_TOKEN
+CONFLUENCE_BASE_URL
+CONFLUENCE_AUTH_TOKEN
+OPENAI_API_KEY
+TRANSCRIPTION_MODEL
+MINUTES_MODEL
+EMAIL_PROVIDER
+EMAIL_*
+NOTIFICATION_PROVIDER
+SLACK_MEETING_WEBHOOK_URL
+SLACK_ADMIN_WEBHOOK_URL
+ALLOWED_ORIGINS
+TEMP_AUDIO_DIR
+```
+
+실제 값은 Render Secret/환경 설정에 저장한다. sample 파일은 값 없는 placeholder만 담는다. Frontend에는 Backend public URL 외 Provider 설정을 넣지 않는다.
+
+## 실패 분류와 재시도
+
+| 연동 | 운영 분류 | 안전한 재시도 조건 |
+|---|---|---|
+| Audio assembly/STT/Minutes | `PROCESSING_FAILURE` | 같은 Session/job에 중복 side effect가 없거나 작업 상태로 보호됨 |
+| Notion/Confluence | `DOCUMENT_FAILURE` | `externalSessionId`로 기존 문서 탐색 가능 |
+| Email | `EMAIL_FAILURE` | 실패한 수신자 delivery만, provider가 성공 수락한 건 제외 |
+| Slack/Notification | `NOTIFICATION_FAILURE` | 성공 delivery는 제외, 명시 실패만 재시도 |
+
+외부 timeout 시 처리 결과가 불명확할 수 있다. Document는 Session ID 조회로 판별한다. Email/Slack의 중복 허용 여부는 Provider의 idempotency capability가 없는 경우 보장할 수 없으므로 응답 불명 timeout은 임의로 반복하지 않고 결과 불명 상태를 노출한다.
+
+## 추적성
+
+PRD 외부 계약 `EXT-001~005`, API-019, FR-007~009, FR-016~019, FR-024~026, FR-029~030, TASK-002, TASK-006, TASK-010~017과 연결된다.

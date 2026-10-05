@@ -1,0 +1,5 @@
+interface:
+  display_name: "PRD Task Planner"
+  short_description: "Plan PRD tasks and register GitHub Issues"
+policy:
+  allow_implicit_invocation: true
