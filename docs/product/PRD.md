@@ -2243,7 +2243,7 @@ Meeting UI
 
 각 세부 TASK 표의 `설계 상태 / 문서` 열은 **설계 진행 상태**를 기록한다. 구현 진행 상태는 계속 GitHub Issue의 상태 라벨과 종료 상태가 기준이며, 두 상태를 혼합하지 않는다.
 
-**다음 설계 대상 커서: `TASK-012.02`** — TASK-012.01 네 문서와 Issue #48을 master commit `f26162a`에서 원격 확인했다. Slack Incoming Webhook Adapter와 공통 Notification Delivery 계약을 확정했다. 다음은 Publish 요청/응답과 SCR-007/Complete 결과 표시 연결이다.
+**다음 설계 대상 커서: `TASK-012.02`** — TASK-012.01 네 문서와 Issue #48을 master commit `f26162a`에서 원격 확인했다. Slack Incoming Webhook Adapter와 공통 Notification Delivery 계약을 확정했다. 다음은 Publish orchestration 및 SCR-007 결과 표시 연결이다.
 
 | 설계 상태 | 의미 |
 |---|---|
