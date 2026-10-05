@@ -2220,7 +2220,7 @@ Meeting UI
 
 각 세부 TASK 표의 `설계 상태 / 문서` 열은 **설계 진행 상태**를 기록한다. 구현 진행 상태는 계속 GitHub Issue의 상태 라벨과 종료 상태가 기준이며, 두 상태를 혼합하지 않는다.
 
-**다음 설계 대상 커서: `TASK-006.04`** — TASK-006.03의 네 문서, Issue #29 및 master 원격 경로를 확인했다. provider label을 deterministic Speaker ID와 표준 segment로 변환하고 overlap·empty·boundary 입력을 정규화했다. 다음은 Processing Pipeline 오케스트레이션이다.
+**다음 설계 대상 커서: `TASK-006.05`** — TASK-006.04의 네 문서, Issue #30 및 master 원격 경로를 확인했다. API-009 job에서 assembly→STT→diarization 순서 실행, stage/progress/failure 기록, Transcript 원자 저장과 Minutes handoff를 설계했다. 다음은 Transcript 기반 Minutes 생성이다.
 
 | 설계 상태 | 의미 |
 |---|---|
@@ -2352,7 +2352,7 @@ Backend API 작업은 정상 응답뿐 아니라 명세된 검증 오류, 없는
 | `TASK-006.01` Chunk 조립 및 임시 Audio 정리 / BE | TASK-005.08 | DEC-020, FR-007, NFR-014 | sequence 순서로 Audio를 조립하고 조립 실패 시 partial 및 조립 성공 후 원본 Chunk를 정리한다. | 설계완료 · `docs/specs/phase-04-processing/TASK-006.01/` |
 | `TASK-006.02` TranscriptionProvider 계약과 STT Adapter / BE | TASK-006.01 | FR-007, EXT-001 | 고정 Audio fixture에 대해 Transcript/시간 정보 계약이 검증된다. Provider timeout·실패 매핑 테스트 통과 | 설계완료 · `docs/specs/phase-04-processing/TASK-006.02/` |
 | `TASK-006.03` Diarization 결과 표준화 Adapter / BE | TASK-006.02 | DEC-008, FR-008, EXT-001 | provider label을 Speaker ID와 시간순 segment로 표준화한다. 겹침·빈 화자·경계값 fixture 테스트 통과 | 설계완료 · `docs/specs/phase-04-processing/TASK-006.03/` |
-| `TASK-006.04` 처리 Pipeline 오케스트레이션 / BE | TASK-006.03 | FR-007~009, API-009 | 조립→STT→Diarization 순으로 실행하고 실패 지점·상태를 보존한다. 각 단계 성공/실패 테스트 통과 | 설계중 · `docs/specs/phase-04-processing/TASK-006.04/` |
+| `TASK-006.04` 처리 Pipeline 오케스트레이션 / BE | TASK-006.03 | FR-007~009, API-009 | 조립→STT→Diarization 순으로 실행하고 실패 지점·상태를 보존한다. 각 단계 성공/실패 테스트 통과 | 설계완료 · `docs/specs/phase-04-processing/TASK-006.04/` |
 | `TASK-006.05` Transcript 기반 Minutes 생성 / BE | TASK-006.04, TASK-004.02 | FR-009, DEC-012, EXT-002 | 기본 Template과 Transcript로 Minutes 초안을 만든다. 빈 Transcript·Provider 오류·출력 구조 테스트 통과 | 미설계 · — |
 | `TASK-006.06` Processing 상태와 Review 데이터 GET / BE | TASK-006.04, TASK-006.05 | SCR-005, API-010 | 처리 중·완료·실패 상태와 완료 시 Transcript/Speaker/Minutes 데이터를 반환한다. 상태별 응답 테스트 통과 | 미설계 · — |
 | `TASK-006.07` Processing 화면과 상태 조회 연결 / FE, INTEGRATION | TASK-006.06 | SCR-005, API-010 | 상태를 갱신해 완료 시 Review로 이동하고 실패 시 재시도 안내를 보인다. 상태 전이 테스트 통과 | 미설계 · — |
