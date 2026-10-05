@@ -58,6 +58,7 @@ Session 상태와 전이 규칙은 [architecture.md](./architecture.md)의 상�
 | `SESSION_STATE_CONFLICT` | 409 | N | 현재 상태에서 요청 불가 |
 | `SESSION_VERSION_CONFLICT` | 412 | 조건부 | If-Match 버전이 오래됨. 최신 상태 조회 후 사용자 수정 반영 |
 | `IDEMPOTENCY_KEY_CONFLICT` | 409 | N | 같은 키로 다른 요청 payload 사용 |
+| `REVIEW_VALIDATION_FAILED` | 422 | N | Review 확정 조건 미충족. `details.issues`에 `{path,code}` 배열 포함 |
 | `AUDIO_CHUNK_INVALID` | 400 | N | MIME, checksum, 길이, 크기 검증 실패 |
 | `AUDIO_CHUNK_CONFLICT` | 409 | N | 같은 sequence가 다른 bytes로 이미 저장됨 |
 | `AUDIO_CHUNKS_INCOMPLETE` | 409 | Y | 누락 chunk가 있어 처리 시작 불가 |
@@ -196,7 +197,11 @@ Request: `{ "templateId":"project.md" }`. Frontend는 편집 중 Minutes가 교�
 
 `POST /api/v1/meeting-sessions/{sessionId}/confirm` (`If-Match`, `Idempotency-Key`) → `200`
 
-Request `{ "confirm":true }`. 감지된 모든 Speaker mapping, Minutes 필수 구조, 상태/version을 검증하고 `CONFIRMED`로 전이한다. 응답 `{status:"CONFIRMED",version}`.
+Request `{ "confirm":true }`. 필수 `Idempotency-Key`와 `If-Match` version, Session의 `REVIEW`/`CONFIRM` action, 모든 detected Speaker가 Session `meeting.participantIds` roster에 매핑된 점, StructuredMinutes 전체 schema를 검증한다. 검증은 Session에 보유한 roster ID만 사용하며 외부 Document Provider를 조회하지 않는다. Empty summary/sections 및 null owner/date는 허용하고, 누락/잘못된 형식·공백 item/task·Session roster 밖 owner·유효하지 않은 calendar date는 거절한다.
+
+불완전 Review는 HTTP 422 `REVIEW_VALIDATION_FAILED` 공통 error envelope와 `details.issues:[{path,code}]` 전체 항목을 반환한다. 예: `speakers[0].participantId`/`SPEAKER_UNMAPPED`; `minutes.actionItems[0].task`/`REQUIRED`. 잘못된 body/header는 400 `VALIDATION_FAILED`; 없는 Session은 404 `SESSION_NOT_FOUND`; Review 이외 상태/action은 409 `SESSION_STATE_CONFLICT`; stale If-Match는 412 `SESSION_VERSION_CONFLICT`; 같은 key의 다른 요청은 409 `IDEMPOTENCY_KEY_CONFLICT`다. 모든 거절은 Session/version/Minutes를 변경하지 않는다.
+
+유효 요청은 version을 한 번 증가시키고 `{data:{status:"CONFIRMED",version}}`를 반환한다. 동일 key/session/request/version 재전송은 최초 성공 응답을 돌려준다. API-014는 Publish나 Document Provider를 호출하지 않는다. Confirm 응답에는 입력값/Transcript/Minutes 내용을 오류 `details`, message 또는 log로 복사하지 않는다.
 
 ### API-015 Publish / Share
 
