@@ -145,7 +145,11 @@ sendMeetingEmail(command) -> RecipientDeliveryResult[]
 
 Command는 회의 작성자가 선택한 Participant roster record의 이메일 주소, 제목, 요약/본문, 성공적으로 저장된 Document URL을 포함한다. Provider 호출 직전에 이메일 주소 형식을 검증한다. 수신자마다 독립 성공/실패를 반환하고 성공 수신자에게 재전송하지 않는다.
 
-Email은 Document 저장 성공 이후에만 발송한다. 전체 주소는 운영 로그/Admin Slack에 노출하지 않는다. Email provider 종류와 자격 정보는 `EMAIL_PROVIDER`, `EMAIL_*` 환경 설정으로 관리한다.
+V1 Email Adapter는 `EMAIL_PROVIDER=GMAIL_API`일 때 Gmail API를 사용한다. Backend runtime secret/config에 `EMAIL_OAUTH_CLIENT_ID`, `EMAIL_OAUTH_CLIENT_SECRET`, `EMAIL_OAUTH_REFRESH_TOKEN`을 주입하고 Gmail `https://www.googleapis.com/auth/gmail.send` scope로 offline OAuth 2.0 access token을 갱신한다. Refresh token은 Google 계정의 최초 사용자 동의로 별도 발급하며 제품이 OAuth 동의/계정 연결 화면을 제공하지 않는다. Service account/domain-wide delegation은 범위에 포함하지 않는다.
+
+Adapter는 Gmail `users.messages.send`와 RFC 2822 MIME/base64url 메시지 형식을 사용한다. 선택된 수신자마다 별도 메시지 한 건을 보내 다른 수신자 주소가 서로에게 노출되지 않도록 한다. Gmail API 성공 응답은 Gmail의 전송 접수를 뜻하며 수신함 도착/열람까지 보장하지 않는다. Empty recipient list는 발송하지 않고 빈 결과를 반환한다.
+
+Email은 Document 저장 성공 이후에만 발송한다. 전체 주소는 운영 로그/Admin Slack에 노출하지 않는다. Gmail OAuth client secret/refresh token은 Render 환경 secret으로만 저장한다. access token과 Authorization 값은 응답/로그에 쓰지 않는다. `validateConnection()`은 설정과 OAuth token refresh를 검증하며 메일을 발송하지 않는다. Gmail `gmail.send` 범위 외 mailbox read/modify scope는 요청하지 않는다.
 
 ## EXT-005 Notification Provider
 
@@ -206,7 +210,10 @@ OPENAI_API_KEY
 TRANSCRIPTION_MODEL
 MINUTES_MODEL
 EMAIL_PROVIDER
-EMAIL_*
+EMAIL_OAUTH_CLIENT_ID
+EMAIL_OAUTH_CLIENT_SECRET
+EMAIL_OAUTH_REFRESH_TOKEN
+EMAIL_SENDER_ADDRESS
 NOTIFICATION_PROVIDER
 SLACK_MEETING_WEBHOOK_URL
 SLACK_ADMIN_WEBHOOK_URL
