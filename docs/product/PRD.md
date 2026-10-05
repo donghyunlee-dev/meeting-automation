@@ -2243,7 +2243,7 @@ Meeting UI
 
 각 세부 TASK 표의 `설계 상태 / 문서` 열은 **설계 진행 상태**를 기록한다. 구현 진행 상태는 계속 GitHub Issue의 상태 라벨과 종료 상태가 기준이며, 두 상태를 혼합하지 않는다.
 
-**다음 설계 대상 커서: `TASK-012.01`** — TASK-011.02 네 문서, Issue #47, API-010/Data Specification 확장 및 master commit `c5135b3` 원격 경로를 확인했다. Session roster 제한 수신자 선택과 generic Delivery projection을 UI까지 연결했다. 다음은 Notification Provider Adapter다.
+**다음 설계 대상 커서: `TASK-012.02`** — TASK-012.01 네 문서와 Issue #48을 master commit `f26162a`에서 원격 확인했다. Slack Incoming Webhook Adapter와 공통 Notification Delivery 계약을 확정했다. 다음은 Publish 요청/응답과 SCR-007/Complete 결과 표시 연결이다.
 
 | 설계 상태 | 의미 |
 |---|---|
@@ -2427,8 +2427,8 @@ Backend API 작업은 정상 응답뿐 아니라 명세된 검증 오류, 없는
 
 | 세부 작업 / 영역 | 선행 작업 | Related IDs | 완료 및 검증 조건 | 설계 상태 / 문서 |
 |---|---|---|------|---|
-| `TASK-012.01` Notification Provider Adapter / BE | TASK-010.02 | DEC-015, FR-018, EXT-005 | 문서 URL을 포함해 알림을 전송하고 실패를 독립 결과로 반환한다. Mock Provider 테스트 통과 | 설계중 · `docs/specs/phase-06-publish/TASK-012.01/` |
-| `TASK-012.02` Slack 결과 표시 연결 / BE, FE | TASK-012.01 | API-015, SCR-007 | Email 결과와 독립적으로 Slack 성공/실패를 표시한다. Slack 실패가 Email 결과를 덮지 않는 테스트 통과 | 미설계 · — |
+| `TASK-012.01` Notification Provider Adapter / BE | TASK-010.02 | DEC-015, FR-018, EXT-005 | 문서 URL을 포함해 알림을 전송하고 실패를 독립 결과로 반환한다. Mock Provider 테스트 통과 | 설계완료 · `docs/specs/phase-06-publish/TASK-012.01/` |
+| `TASK-012.02` Slack 결과 표시 연결 / BE, FE | TASK-012.01 | API-015, SCR-007 | Email 결과와 독립적으로 Slack 성공/실패를 표시한다. Slack 실패가 Email 결과를 덮지 않는 테스트 통과 | 설계중 · `docs/specs/phase-06-publish/TASK-012.02/` |
 
 ### TASK-013 Complete / Retry — 작업 묶음
 
