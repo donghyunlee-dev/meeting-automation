@@ -2371,7 +2371,7 @@ Backend API 작업은 정상 응답뿐 아니라 명세된 검증 오류, 없는
 
 | 세부 작업 / 영역 | 선행 작업 | Related IDs | 완료 및 검증 조건 | 설계 상태 / 문서 |
 |---|---|---|------|---|
-| `TASK-008.01` Minutes 편집 API PUT / BE | TASK-006.06 | FR-012,015, API-012 | 허용된 Minutes 필드만 수정되고 유효성·없는 Session·잘못된 본문 테스트 통과 | 미설계 · — |
+| `TASK-008.01` Minutes 편집 API PUT / BE | TASK-006.06 | FR-012,015, API-012 | 허용된 Minutes 필드만 수정되고 유효성·없는 Session·잘못된 본문 테스트 통과 | 설계중 · `docs/specs/phase-05-review/TASK-008.01/` |
 | `TASK-008.02` Minutes 편집 및 Transcript Drawer UI / FE | TASK-007.03 | SCR-006, FR-012,015 | 초안 수정·저장과 Transcript 열기/닫기가 동작한다. 변경 없음·저장 중·오류 상태 테스트 통과 | 미설계 · — |
 | `TASK-008.03` Review 데이터 저장 통합 / INTEGRATION | TASK-008.01, TASK-008.02 | API-010,012 | 재조회 후 저장값이 유지되고 미저장 변경을 잃지 않도록 동작한다. 왕복 테스트 통과 | 미설계 · — |
 
