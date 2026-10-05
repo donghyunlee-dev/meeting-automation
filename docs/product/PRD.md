@@ -2312,7 +2312,7 @@ Backend API 작업은 정상 응답뿐 아니라 명세된 검증 오류, 없는
 | `TASK-003.01` 참가자 목록 GET / BE | TASK-002.02 또는 TASK-002.03, TASK-001.04 | FR-024, API-003 | 참가자 목록과 빈 목록이 명세된 응답으로 반환된다. Provider 오류도 표준 오류로 매핑되는 Controller/Service 테스트 통과 | 설계완료 · `docs/specs/phase-02-documents/TASK-003.01/` |
 | `TASK-003.02` 참가자 생성 POST / BE | TASK-003.01 | FR-024, API-004 | 유효한 name/email은 생성되고 필수값 누락·잘못된 email은 거부된다. 생성 결과 및 중복 처리 테스트 통과 | 설계완료 · `docs/specs/phase-02-documents/TASK-003.02/` |
 | `TASK-003.03` 참가자 정보 수정 PATCH / BE | TASK-003.02 | FR-024, API-005 | name/email 수정 규칙이 적용된다. 없는 참가자·잘못된 입력 테스트 통과 | 설계완료 · `docs/specs/phase-02-documents/TASK-003.03/` |
-| `TASK-003.04` 참가자 관리 화면과 API 연결 / FE, INTEGRATION | TASK-003.01~TASK-003.03 | SCR-012, API-003~005 | 목록·빈 상태·생성·수정이 화면에서 동작하고 Loading/Error 상태를 테스트한다. | 미설계 · — |
+| `TASK-003.04` 참가자 관리 화면과 API 연결 / FE, INTEGRATION | TASK-003.01~TASK-003.03 | SCR-012, API-003~005 | 목록·빈 상태·생성·수정이 화면에서 동작하고 Loading/Error 상태를 테스트한다. | 설계중 · `docs/specs/phase-02-documents/TASK-003.04/` |
 
 ## Phase 3 — Meeting UI + Recording
 
