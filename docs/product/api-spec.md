@@ -52,6 +52,7 @@ Session 상태와 전이 규칙은 [architecture.md](./architecture.md)의 상�
 | 코드 | HTTP | 재시도 | 의미 |
 |---|---:|---:|---|
 | `VALIDATION_FAILED` | 400 | N | 요청 필드 검증 실패 |
+| `PARTICIPANT_NOT_FOUND` | 404 | N | 존재하지 않는 Participant ID |
 | `SESSION_NOT_FOUND` | 404 | N | 존재하지 않거나 메모리에서 만료된 Session |
 | `SESSION_STATE_CONFLICT` | 409 | N | 현재 상태에서 요청 불가 |
 | `SESSION_VERSION_CONFLICT` | 412 | 조건부 | If-Match 버전이 오래됨. 최신 상태 조회 후 사용자 수정 반영 |
@@ -132,7 +133,7 @@ Request: `{ "name": "홍길동", "email": "hong@example.com" }`
 
 `PATCH /api/v1/participants/{participantId}` → `200`
 
-Request는 `name`, `email` 중 하나 이상이다. 성공 시 전체 표준 Participant를 반환한다.
+Request는 `name`, `email` 중 하나 이상이며 제공된 필드만 수정한다. name은 trim 후 비어 있지 않아야 하고 email은 trim 후 주소 형식이어야 한다. 빈 body 또는 제공 필드가 null/잘못된 형식이면 400 `VALIDATION_FAILED`; 없는 ID는 404 `PARTICIPANT_NOT_FOUND`; Provider 저장 오류는 502 `DOCUMENT_FAILED` (`DOCUMENT_FAILURE`)다. 성공 시 전체 표준 `{id,name,email}`를 반환한다.
 
 ### API-006 Meeting Session Create
 
