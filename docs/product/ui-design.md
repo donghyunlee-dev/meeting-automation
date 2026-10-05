@@ -249,6 +249,7 @@ font-family:
 
 - 회의명 text field, Template select, 참석자 multi-select, 참석자 추가 action을 세로로 배치한다.
 - 회의명과 Template은 필수, 참석자는 최소 1명 선택해야 한다.
+- `참석자 추가`는 API-003 roster에서 미선택 참석자를 multi-select에 추가한다. 새 roster record 관리는 Participants 설정 화면에서 한다.
 - 폼 오류를 해당 필드 근처에 표시하고 입력값을 보존한다.
 - 하단 Primary `회의 시작`을 제공한다. 비활성 사유는 label/help text로 알린다.
 - PRD 범위에 없는 날짜·시작시간·예상시간 입력은 추가하지 않는다.
