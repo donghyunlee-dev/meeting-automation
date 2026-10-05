@@ -2220,7 +2220,7 @@ Meeting UI
 
 각 세부 TASK 표의 `설계 상태 / 문서` 열은 **설계 진행 상태**를 기록한다. 구현 진행 상태는 계속 GitHub Issue의 상태 라벨과 종료 상태가 기준이며, 두 상태를 혼합하지 않는다.
 
-**다음 설계 대상 커서: `TASK-009.02`** — TASK-009.01의 네 문서, Issue #40의 결정 A와 master 원격 경로를 확인했다. 재생성 실패 시 이전 Minutes/provenance를 원자 복구하고 `REVIEW`로 되돌리며 API-010 optional `lastOperation`으로 요청 Template 적용 결과를 전달한다. TASK-009.02의 Template 선택·재생성 UI를 설계 중이다.
+**다음 설계 대상 커서: `TASK-009.03`** — TASK-009.02의 네 문서, Issue #41, 필수 라벨 및 master 원격 경로를 확인했다. Template pending selection, 명시적 확인, dirty draft 저장 장벽, API-013 요청 및 API-010 bounded polling/outcome 반영을 설계했다. 다음은 재생성에서 STT/Diarization을 다시 실행하지 않는 회귀 검증이다.
 
 | 설계 상태 | 의미 |
 |---|---|
@@ -2380,7 +2380,7 @@ Backend API 작업은 정상 응답뿐 아니라 명세된 검증 오류, 없는
 | 세부 작업 / 영역 | 선행 작업 | Related IDs | 완료 및 검증 조건 | 설계 상태 / 문서 |
 |---|---|---|------|---|
 | `TASK-009.01` Minutes 재생성 POST / BE | TASK-008.03 | DEC-011,012, FR-013,014, API-013 | 기존 Transcript와 Speaker mapping으로 선택 Template을 적용해 Minutes만 재생성한다. 입력 누락 및 실패 시 이전 Review 복구 테스트 통과 | 설계완료 · `docs/specs/phase-05-review/TASK-009.01/` |
-| `TASK-009.02` Template 전환·재생성 UI / FE | TASK-004.02, TASK-008.02 | SCR-006, FR-013,014, API-002,010,013 | Template 변경 후 명시적 재생성으로 새 결과를 표시하고 실패 시 기존 편집본을 보존한다. | 설계중 · `docs/specs/phase-05-review/TASK-009.02/` |
+| `TASK-009.02` Template 전환·재생성 UI / FE | TASK-004.02, TASK-008.02 | SCR-006, FR-013,014, API-002,010,013 | Template 변경 후 명시적 재생성으로 새 결과를 표시하고 실패 시 기존 편집본을 보존한다. | 설계완료 · `docs/specs/phase-05-review/TASK-009.02/` |
 | `TASK-009.03` STT 재실행 금지 회귀 검증 / BE, INTEGRATION | TASK-009.01, TASK-009.02 | DEC-011 | 재생성 테스트에서 STT/Diarization Adapter 호출 횟수가 0임을 검증한다. | 미설계 · — |
 
 ## Phase 6 — Document Publish / Email / Slack
