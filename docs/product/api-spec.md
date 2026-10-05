@@ -171,7 +171,7 @@ Request: `{expectedChunks:number,durationMs:number,mimeType:string}`. Backend는
 
 `GET /api/v1/meeting-sessions/{sessionId}` → `200`
 
-응답에는 `{sessionId,version,status,processing,speakers,transcript,minutes,allowedActions}`가 포함된다. `allowedActions`는 현재 상태에서 허용되는 `UPDATE_SPEAKER_MAPPING`, `UPDATE_MINUTES`, `REGENERATE_MINUTES`, `CONFIRM`, `PUBLISH` 등만 포함한다. `PUBLISH`는 `CONFIRMED` 및 문서 저장 실패 `DOCUMENT_FAILED`에서만 제공한다. Document 저장 뒤에는 `document:{documentId,documentUrl}`를 포함한다. Browser는 이를 표시 힌트로 사용하되 서버가 항상 재검증한다.
+응답에는 `{sessionId,version,status,meeting:{participantIds},processing,speakers,transcript,minutes,allowedActions}`가 포함된다. `allowedActions`는 현재 상태에서 허용되는 `UPDATE_SPEAKER_MAPPING`, `UPDATE_MINUTES`, `REGENERATE_MINUTES`, `CONFIRM`, `PUBLISH` 등만 포함한다. `PUBLISH`는 `CONFIRMED` 및 문서 저장 실패 `DOCUMENT_FAILED`에서만 제공한다. Document 저장 뒤에는 `document:{documentId,documentUrl}`를 포함한다. Publish 전에는 `deliveries`를 생략하고 Publish 접수 뒤에는 결과가 없더라도 `deliveries:[]`를 포함하며, 있을 때는 `deliveries:[{deliveryId,channel,recipientParticipantId?,status,attemptCount,lastAttemptAt?,errorCode?,retryable}]` 형식이다. `meeting.participantIds`는 Session 생성 때 회의 작성자가 지정한 roster reference이며 Email 화면의 선택 범위를 제한한다. 응답은 주소/Secret/provider 원문을 노출하지 않는다. Browser는 action을 표시 힌트로 사용하되 서버가 항상 재검증한다.
 
 ### API-011 Speaker Mapping Update
 

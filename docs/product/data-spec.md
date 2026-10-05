@@ -160,6 +160,10 @@ Delivery = {
 
 Email은 수신자별 독립 Delivery다. Notification은 선택된 목적지에 대한 별도 Delivery다. 외부 응답 원문, 인증 값, 전체 이메일 주소는 Session delivery 이력이나 로그에 저장하지 않는다.
 
+API-010은 Publish가 시작된 뒤 이 generic Delivery projection을 제공한다. Email row에는 `recipientParticipantId`만 넣고 recipient address는 반환하지 않는다. Adapter의 `RecipientDeliveryResult`에는 participant ID를 유지하며, `deliveryId` 발급과 `attemptCount` 저장은 orchestration이 담당한다.
+
+`SENT`는 Provider가 전송 요청을 받아들였음을 뜻하며 수신함 도착 또는 읽음 확인을 뜻하지 않는다.
+
 ## 문서 Provider 저장 구조
 
 ```text

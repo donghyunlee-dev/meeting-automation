@@ -1702,6 +1702,7 @@ Response:
   "data": {
     "sessionId":"ms_xxx",
     "version":3,
+    "meeting":{"participantIds":["pt_001","pt_002"]},
     "status":"REVIEW",
     "processing":{
       "stage":"DRAFT_READY",
@@ -1739,6 +1740,8 @@ Response:
 ```
 
 `PUBLISH` action은 `CONFIRMED` 및 문서 저장 실패 `DOCUMENT_FAILED`에서만 허용한다. Document 저장 성공 뒤 응답에는 `document:{documentId,documentUrl}`를 포함한다. 저장 전 및 저장 실패 응답에는 `document`를 포함하지 않는다.
+
+`meeting.participantIds`는 Session 생성 때 회의 작성자가 지정한 roster ID의 immutable reference다. Publish 뒤에는 generic `deliveries:[{deliveryId,channel,recipientParticipantId?,status,attemptCount,lastAttemptAt?,errorCode?,retryable}]`를 포함해 recipient별 결과를 조회할 수 있다. 이 응답에는 이메일 주소나 provider 오류 원문을 포함하지 않는다. Publish 전에는 `deliveries`를 생략한다.
 
 ------------------------------------------------------------------------
 
@@ -2221,7 +2224,7 @@ Meeting UI
 | FR-012,015 | SCR-006 | API-010,012 | TASK-008 |
 | FR-013~014 | SCR-006 | API-013 | TASK-009 |
 | FR-016 | SCR-007 | API-014,015 | TASK-010 |
-| FR-017 | SCR-007 | API-015 | TASK-011 |
+| FR-017 | SCR-007 | API-003,010,015 | TASK-011 |
 | FR-018 | SCR-007 | API-015 | TASK-012 |
 | FR-019,027 | SCR-008 | API-010,016 | TASK-013 |
 | FR-020~023 | SCR-001,009,010 | API-017,018 | TASK-014 |
@@ -2238,7 +2241,7 @@ Meeting UI
 
 각 세부 TASK 표의 `설계 상태 / 문서` 열은 **설계 진행 상태**를 기록한다. 구현 진행 상태는 계속 GitHub Issue의 상태 라벨과 종료 상태가 기준이며, 두 상태를 혼합하지 않는다.
 
-**다음 설계 대상 커서: `TASK-011.02`** — TASK-011.01의 네 문서, Issue #46, Gmail OAuth/API 설정 보완 및 master commit `9caa647` 원격 경로를 확인했다. Gmail `gmail.send` scope와 recipient별 분리 발송을 설계했다. 다음은 선택 수신자·Email 결과 연결이다.
+**다음 설계 대상 커서: `TASK-011.02`** — TASK-011.01 네 문서, Issue #46, Gmail OAuth 설정 보완 및 master commit `9caa647` 원격 경로를 확인했다. TASK-011.02는 Issue #47에서 SCR-007 수신자 선택, API-010 Session roster/Delivery projection과 recipient별 결과 UI를 설계 중이다.
 
 | 설계 상태 | 의미 |
 |---|---|
@@ -2416,7 +2419,7 @@ Backend API 작업은 정상 응답뿐 아니라 명세된 검증 오류, 없는
 | 세부 작업 / 영역 | 선행 작업 | Related IDs | 완료 및 검증 조건 | 설계 상태 / 문서 |
 |---|---|---|------|---|
 | `TASK-011.01` Email Provider Adapter / BE | TASK-010.02 | DEC-015, FR-017, EXT-004 | 정해진 수신자·본문으로 전송하고 수신자별 성공/실패를 반환한다. Mock Provider 테스트 통과 | 설계완료 · `docs/specs/phase-06-publish/TASK-011.01/` |
-| `TASK-011.02` Email 결과와 수신자 선택 연결 / BE, FE | TASK-011.01, TASK-004.03 | API-015, SCR-007 | 선택된 참석자에게만 전달되고 각 결과가 UI에 표시된다. 빈 수신자·개별 실패 테스트 통과 | 미설계 · — |
+| `TASK-011.02` Email 결과와 수신자 선택 연결 / BE, FE | TASK-011.01, TASK-004.03 | API-003,010,015, SCR-007 | 선택된 참석자에게만 전달되고 각 결과가 UI에 표시된다. 빈 수신자·개별 실패 테스트 통과 | 설계중 · `docs/specs/phase-06-publish/TASK-011.02/` |
 
 ### TASK-012 Slack Notification — 작업 묶음
 
