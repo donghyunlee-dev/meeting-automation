@@ -2220,7 +2220,7 @@ Meeting UI
 
 각 세부 TASK 표의 `설계 상태 / 문서` 열은 **설계 진행 상태**를 기록한다. 구현 진행 상태는 계속 GitHub Issue의 상태 라벨과 종료 상태가 기준이며, 두 상태를 혼합하지 않는다.
 
-**다음 설계 대상 커서: `TASK-006.07`** — TASK-006.06의 네 문서, Issue #32 및 master 원격 경로를 확인했다. API-010 `{data}` 응답에서 processing/review 상태를 consistent snapshot으로 제공하고 REVIEW 완료 후에만 full data/allowedActions를 노출하도록 설계했다. 다음은 Processing 화면과 상태 polling 연결이다.
+**다음 설계 대상 커서: `TASK-007.01`** — TASK-006.07의 네 문서, Issue #33 및 master 원격 경로를 확인했다. API-010 polling으로 Processing 단계를 동기화하고 동일 Session의 REVIEW 응답에서만 Review로 이동하도록 설계했다. 다음은 Speaker mapping PUT이다.
 
 | 설계 상태 | 의미 |
 |---|---|
@@ -2355,7 +2355,7 @@ Backend API 작업은 정상 응답뿐 아니라 명세된 검증 오류, 없는
 | `TASK-006.04` 처리 Pipeline 오케스트레이션 / BE | TASK-006.03 | FR-007~009, API-009 | 조립→STT→Diarization 순으로 실행하고 실패 지점·상태를 보존한다. 각 단계 성공/실패 테스트 통과 | 설계완료 · `docs/specs/phase-04-processing/TASK-006.04/` |
 | `TASK-006.05` Transcript 기반 Minutes 생성 / BE | TASK-006.04, TASK-004.02 | FR-009, DEC-012, EXT-002 | 기본 Template과 Transcript로 Minutes 초안을 만든다. 빈 Transcript·Provider 오류·출력 구조 테스트 통과 | 설계완료 · `docs/specs/phase-04-processing/TASK-006.05/` |
 | `TASK-006.06` Processing 상태와 Review 데이터 GET / BE | TASK-006.04, TASK-006.05 | SCR-005, API-010 | 처리 중·완료·실패 상태와 완료 시 Transcript/Speaker/Minutes 데이터를 반환한다. 상태별 응답 테스트 통과 | 설계완료 · `docs/specs/phase-04-processing/TASK-006.06/` |
-| `TASK-006.07` Processing 화면과 상태 조회 연결 / FE, INTEGRATION | TASK-006.06 | SCR-005, API-010 | 상태를 갱신해 완료 시 Review로 이동하고 실패 시 재시도 안내를 보인다. 상태 전이 테스트 통과 | 설계중 · `docs/specs/phase-04-processing/TASK-006.07/` |
+| `TASK-006.07` Processing 화면과 상태 조회 연결 / FE, INTEGRATION | TASK-006.06 | SCR-005, API-010 | 상태를 갱신해 완료 시 Review로 이동하고 실패 시 재시도 안내를 보인다. 상태 전이 테스트 통과 | 설계완료 · `docs/specs/phase-04-processing/TASK-006.07/` |
 
 ## Phase 5 — Review / Speaker Mapping / Regeneration
 
