@@ -2,7 +2,7 @@
 
 ## 목표
 
-API-015가 `CONFIRMED` Session의 Meeting 문서를 생성하거나 동일 Session의 기존 문서를 재사용하도록 한다. Publish 접수는 비동기 `202 PUBLISHING`이며, Document 저장 실패는 `DOCUMENT_FAILED`로 기록하고 Email/Notification을 시작하지 않는다. PRD v1.7.0 (2026-10-05), `FR-016`, `API-015`, `EXT-003`을 구체화한다. Issue [#44](https://github.com/donghyunlee-dev/meeting-automation/issues/44).
+API-015가 `CONFIRMED` Session의 Meeting 문서를 생성하거나 동일 Session의 기존 문서를 재사용하도록 한다. Publish 접수는 비동기 `202 PUBLISHING`이며, Document 저장 실패는 `DOCUMENT_FAILED`로 기록하고 Email/Notification을 시작하지 않는다. 실패 후 새 key/current version으로 문서 단계 재시도를 허용한다. PRD v1.7.0 (2026-10-05), `FR-016`, `API-015`, `EXT-003`을 구체화한다. Issue [#44](https://github.com/donghyunlee-dev/meeting-automation/issues/44).
 
 ## 범위
 
@@ -33,7 +33,7 @@ Content-Type: application/json
 
 두 header는 필수다. body에는 `emailRecipientParticipantIds` 문자열 ID 배열과 `notificationEnabled` boolean이 모두 필요하다. 수신자 배열은 비어 있을 수 있지만 중복 ID는 거절한다. 전달된 모든 ID는 Session에 저장된 `meeting.participantIds`에 있어야 한다. Email 주소 조회/검증과 발송은 후속 Email 작업이 수행한다. 필드 누락, 알 수 없는 필드, null 또는 잘못된 타입은 400 `VALIDATION_FAILED`다.
 
-Session이 없으면 404 `SESSION_NOT_FOUND`, `CONFIRMED`가 아니거나 Publish action이 불가하면 409 `SESSION_STATE_CONFLICT`, version 불일치는 412 `SESSION_VERSION_CONFLICT`다. 정확히 같은 key/session/정규화 request/If-Match fingerprint가 이미 접수되었으면 상태 검사보다 먼저 최초 `202` 응답을 replay한다. 동일 key를 다른 입력에 재사용하면 409 `IDEMPOTENCY_KEY_CONFLICT`다. 성공 접수는 Session을 `PUBLISHING`으로 변경하고 version을 한 번 증가시킨 뒤 HTTP 202 `{data:{sessionId,status:"PUBLISHING"}}`를 반환한다.
+Session이 없으면 404 `SESSION_NOT_FOUND`, 상태가 `CONFIRMED` 또는 직전 문서 저장이 실패한 `DOCUMENT_FAILED`가 아니거나 Publish action이 불가하면 409 `SESSION_STATE_CONFLICT`, version 불일치는 412 `SESSION_VERSION_CONFLICT`다. 정확히 같은 key/session/정규화 request/If-Match fingerprint가 이미 접수되었으면 상태 검사보다 먼저 최초 `202` 응답을 replay한다. 동일 key를 다른 입력에 재사용하면 409 `IDEMPOTENCY_KEY_CONFLICT`다. 성공 접수는 Session을 `PUBLISHING`으로 변경하고 version을 한 번 증가시킨 뒤 HTTP 202 `{data:{sessionId,status:"PUBLISHING"}}`를 반환한다. 새 key로 `DOCUMENT_FAILED`에서 재시도하면 최신 version을 사용하며 문서 provider lookup을 다시 수행한다.
 
 ## Document 작업 계약
 

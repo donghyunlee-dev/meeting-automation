@@ -14,6 +14,8 @@ Backend 구현 시 JUnit 5로 API/application/provider 경계를 검증한다. �
 | PUB-API-06 | 같은 key/session/body/version 재전송 | 최초 202 body replay; version/worker enqueue/provider call 증가 없음 | Idempotency replay test |
 | PUB-API-07 | 같은 key를 다른 body/session/version으로 재사용 | HTTP 409 `IDEMPOTENCY_KEY_CONFLICT`; 상태 unchanged | Fingerprint conflict test |
 | PUB-API-08 | recipient ID가 Session roster 밖이거나 중복됨 | HTTP 400 `VALIDATION_FAILED`; provider 호출 0회 | Roster/body validation test |
+| PUB-API-09 | 문서 저장 실패 상태, 새 key 및 최신 If-Match | API-015 접수 202, version +1, 문서 조회 단계 다시 시작 | Document retry acceptance test |
+| PUB-API-10 | 이전 실패 요청과 같은 key로 재전송 | 최초 202 replay만 수행, 새 worker 실행 없음 | Failed request replay test |
 | PUB-DOC-01 | Provider lookup가 기존 ref 반환 | ref 재사용, create 0회, API-010에 documentId/URL | Provider fake interaction test |
 | PUB-DOC-02 | Provider lookup가 empty 반환 | metadata `externalSessionId=sessionId`인 command로 create 1회 | Command/interaction test |
 | PUB-DOC-03 | 같은 Session, 서로 다른 key의 동시 요청 | 원자적 state gate로 한 작업만 채택; 논리적 Meeting 1개 | Concurrency test |

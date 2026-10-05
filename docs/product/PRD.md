@@ -1738,6 +1738,8 @@ Response:
 }
 ```
 
+`PUBLISH` action은 `CONFIRMED` 및 문서 저장 실패 `DOCUMENT_FAILED`에서만 허용한다. Document 저장 성공 뒤 응답에는 `document:{documentId,documentUrl}`를 포함한다. 저장 전 및 저장 실패 응답에는 `document`를 포함하지 않는다.
+
 ------------------------------------------------------------------------
 
 ## API-011 Speaker Mapping Update
@@ -1929,6 +1931,8 @@ Response `202`:
   }
 }
 ```
+
+Publish는 `CONFIRMED` 또는 문서 저장 실패 상태 `DOCUMENT_FAILED`에서만 접수한다. `DOCUMENT_FAILED` 재시도는 최신 `If-Match`와 새 `Idempotency-Key`를 사용하며 Document Provider의 기존 Session 문서 조회를 다시 수행한다. 같은 key의 재전송은 최초 접수 응답만 replay하고 새 작업을 시작하지 않는다.
 
 ------------------------------------------------------------------------
 
@@ -2400,7 +2404,7 @@ Backend API 작업은 정상 응답뿐 아니라 명세된 검증 오류, 없는
 |---|---|---|------|---|
 | `TASK-010.01` Review 확정 검증 POST / BE | TASK-007.01, TASK-008.01, TASK-008.03 | FR-016, API-014 | 필수 Review 항목과 매핑 완료 여부를 검증하고 오류 항목을 반환한다. 유효/미완료 테스트 통과 | 설계완료 · `docs/specs/phase-06-publish/TASK-010.01/` |
 | `TASK-010.02` Document Publish POST 및 멱등성 / BE | TASK-010.01 | FR-016, API-015, EXT-003 | Meeting 문서를 생성하고 재요청 시 중복 문서를 만들지 않는다. Provider 성공·실패·중복 요청 테스트 통과 | 설계완료 · `docs/specs/phase-06-publish/TASK-010.02/` |
-| `TASK-010.03` 저장 확인 및 문서 링크 표시 / FE, INTEGRATION | TASK-010.02 | SCR-007, API-014,015 | 저장 전 검증 결과를 표시하고 성공 후 유효한 document URL을 제공한다. 실패 시 재시도 가능한 상태를 보인다. | 미설계 · — |
+| `TASK-010.03` 저장 확인 및 문서 링크 표시 / FE, INTEGRATION | TASK-010.02 | SCR-007, API-014,015 | 저장 전 검증 결과를 표시하고 성공 후 유효한 document URL을 제공한다. 실패 시 재시도 가능한 상태를 보인다. | 설계중 · `docs/specs/phase-06-publish/TASK-010.03/` |
 
 ### TASK-011 Email Delivery — 작업 묶음
 

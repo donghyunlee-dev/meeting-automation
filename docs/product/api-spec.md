@@ -171,7 +171,7 @@ Request: `{expectedChunks:number,durationMs:number,mimeType:string}`. Backend는
 
 `GET /api/v1/meeting-sessions/{sessionId}` → `200`
 
-응답에는 `{sessionId,version,status,processing,speakers,transcript,minutes,allowedActions}`가 포함된다. `allowedActions`는 현재 상태에서 허용되는 `UPDATE_SPEAKER_MAPPING`, `UPDATE_MINUTES`, `REGENERATE_MINUTES`, `CONFIRM` 등만 포함한다. Browser는 이를 표시 힌트로 사용하되 서버가 항상 재검증한다.
+응답에는 `{sessionId,version,status,processing,speakers,transcript,minutes,allowedActions}`가 포함된다. `allowedActions`는 현재 상태에서 허용되는 `UPDATE_SPEAKER_MAPPING`, `UPDATE_MINUTES`, `REGENERATE_MINUTES`, `CONFIRM`, `PUBLISH` 등만 포함한다. `PUBLISH`는 `CONFIRMED` 및 문서 저장 실패 `DOCUMENT_FAILED`에서만 제공한다. Document 저장 뒤에는 `document:{documentId,documentUrl}`를 포함한다. Browser는 이를 표시 힌트로 사용하되 서버가 항상 재검증한다.
 
 ### API-011 Speaker Mapping Update
 
@@ -212,6 +212,8 @@ Request `{ "confirm":true }`. 필수 `Idempotency-Key`와 `If-Match` version, Se
 ```
 
 `DOCUMENT SAVE → EMAIL DELIVERY → NOTIFICATION` 순서를 따른다. 문서 저장이 실패하면 Email/Notification을 보내지 않는다. Document 저장 성공 후 채널 결과는 독립적으로 기록한다. 응답은 우선 `{sessionId,status:"PUBLISHING"}`이며 완료/부분 실패 결과는 API-010 상태에서 조회한다.
+
+요청은 `CONFIRMED` 또는 문서 저장 실패 상태 `DOCUMENT_FAILED`에서만 접수한다. `DOCUMENT_FAILED` 재시도는 최신 `If-Match`와 새 `Idempotency-Key`를 요구하고 기존 Session 문서 조회를 다시 수행한다. 동일 키 재전송은 기존 접수 결과를 replay하며 새 작업을 시작하지 않는다.
 
 ### API-016 Delivery Retry
 
