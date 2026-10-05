@@ -2209,7 +2209,7 @@ Meeting UI
 
 각 세부 TASK 표의 `설계 상태 / 문서` 열은 **설계 진행 상태**를 기록한다. 구현 진행 상태는 계속 GitHub Issue의 상태 라벨과 종료 상태가 기준이며, 두 상태를 혼합하지 않는다.
 
-**다음 설계 대상 커서: `TASK-002.02`** — TASK-002.01의 네 문서와 Issue #6 등록 및 기본 브랜치 원격 경로를 확인했다. 다음 문서 설계 요청은 이 커서부터 시작한다. TASK-001.02~001.05도 네 문서와 Issue #2~#5가 등록된 것으로 확인했다.
+**다음 설계 대상 커서: `TASK-002.03`** — TASK-002.02의 네 문서와 Issue #7 등록 및 기본 브랜치 원격 경로를 확인했다. 다음 문서 설계 요청은 이 커서부터 시작한다. TASK-001.02~001.05와 TASK-002.01도 네 문서와 Issue #2~#6이 등록된 것으로 확인했다.
 
 | 설계 상태 | 의미 |
 |---|---|
@@ -2294,7 +2294,7 @@ Backend API 작업은 정상 응답뿐 아니라 명세된 검증 오류, 없는
 | 세부 작업 / 영역 | 선행 작업 | Related IDs | 완료 및 검증 조건 | 설계 상태 / 문서 |
 |---|---|---|------|---|
 | `TASK-002.01` DocumentProvider 계약과 계약 테스트 / BE | TASK-001.05 | DEC-006,013,014, EXT-003 | Root/하위 Page 탐색, 읽기, 생성의 공통 계약 테스트가 Adapter 구현 전에 실패하도록 작성되고 계약 필드·오류가 고정된다. | 설계완료 · `docs/specs/phase-02-documents/TASK-002.01/` |
-| `TASK-002.02` Notion Page hierarchy Adapter / BE | TASK-002.01 | DEC-013,014, API-019, EXT-003 | 설정된 Root에서 Meetings/Participants를 Database 없이 탐색한다. 성공·빈 계층·권한 오류 Adapter 테스트 통과 | 설계중 · `docs/specs/phase-02-documents/TASK-002.02/` |
+| `TASK-002.02` Notion Page hierarchy Adapter / BE | TASK-002.01 | DEC-013,014, API-019, EXT-003 | 설정된 Root에서 Meetings/Participants를 Database 없이 탐색한다. 성공·빈 계층·권한 오류 Adapter 테스트 통과 | 설계완료 · `docs/specs/phase-02-documents/TASK-002.02/` |
 | `TASK-002.03` Confluence Page hierarchy Adapter / BE | TASK-002.01 | DEC-013,014, API-019, EXT-003 | 동일한 공통 계약을 만족하며 Page hierarchy만 사용한다. 성공·빈 계층·권한 오류 Adapter 테스트 통과 | 미설계 · — |
 | `TASK-002.04` Provider 선택 및 연결 Health / BE | TASK-002.02, TASK-002.03 | FR-025,026, API-001,019 | 활성 Provider의 연결 상태가 반환되고 Secret 값은 응답에서 제외된다. 정상·연결 실패·미설정 테스트 통과 | 미설계 · — |
 
