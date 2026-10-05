@@ -146,7 +146,7 @@ Request는 `name`, `email` 중 하나 이상이며 제공된 필드만 수정한
 {"title":"AX 주간회의","templateId":"default.md","participantIds":["pt_001","pt_002"],"timezone":"Asia/Seoul","recoveryKey":"browser_generated_key"}
 ```
 
-Backend는 Template 존재, 선택된 Participant ID의 roster 참조와 중복 ID, 제목/timezone을 검증한다. `201` 응답은 `{sessionId,version:1,status:"CREATED",uploadPolicy:{chunkDurationSeconds,maxChunkBytes,acceptedMimeTypes}}`다.
+Backend는 trim한 title, `default.md`/`project.md` Template, 1개 이상인 중복 없는 Participant roster ID, IANA timezone, 비어 있지 않은 `recoveryKey`를 검증한다. 잘못된 입력은 400 `VALIDATION_FAILED`; Participant 목록 Provider 오류는 502 `PARTICIPANT_LIST_FAILED`다. Session은 memory에 `CREATED`/version 1로 생성한다. 같은 `Idempotency-Key`·동일 payload는 기존 결과를 반환하고 같은 key의 다른 payload는 409 `IDEMPOTENCY_KEY_CONFLICT`다. `recoveryKey`는 Provider 문서에 기록하지 않는다. `201` 응답은 `{sessionId,version:1,status:"CREATED",uploadPolicy:{chunkDurationSeconds,maxChunkBytes,acceptedMimeTypes}}`다. Session/idempotency 결과는 memory-only이며 process restart 이후 복구되지 않는다.
 
 ### API-007 Audio Chunk Upload
 
