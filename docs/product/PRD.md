@@ -2209,7 +2209,7 @@ Meeting UI
 
 각 세부 TASK 표의 `설계 상태 / 문서` 열은 **설계 진행 상태**를 기록한다. 구현 진행 상태는 계속 GitHub Issue의 상태 라벨과 종료 상태가 기준이며, 두 상태를 혼합하지 않는다.
 
-**다음 설계 대상 커서: `TASK-001.05`** — TASK-001.04의 네 문서와 Issue #4 등록을 확인했다. 다음 문서 설계 요청은 이 커서부터 시작한다. TASK-001.02와 TASK-001.03도 네 문서와 Issue #2/#3이 등록된 것으로 확인했다.
+**다음 설계 대상 커서: `TASK-002.01`** — TASK-001.05의 네 문서와 Issue #5 등록 및 기본 브랜치 원격 경로를 확인했다. 다음 문서 설계 요청은 이 커서부터 시작한다. TASK-001.02~001.04도 네 문서와 Issue #2~#4가 등록된 것으로 확인했다.
 
 | 설계 상태 | 의미 |
 |---|---|
@@ -2285,7 +2285,7 @@ Backend API 작업은 정상 응답뿐 아니라 명세된 검증 오류, 없는
 | `TASK-001.02` Frontend toolchain 초기화 / FE | TASK-001.01 | DEC-003, NFR-008 | Node 22, npm, React 19, TypeScript, Vite 기준으로 앱이 생성된다. 기본 렌더 테스트가 먼저 실패 후 통과하고 `npm run build` 통과 | 설계완료 · `docs/specs/phase-01-foundation/TASK-001.02/` |
 | `TASK-001.03` Backend toolchain 초기화 / BE | TASK-001.01 | DEC-004,005, NFR-009 | Java 25, Spring Boot 4.1.x, Gradle 9.x 기준으로 앱이 생성된다. 컨텍스트 로딩 테스트 및 `./gradlew build` 통과 | 설계완료 · `docs/specs/phase-01-foundation/TASK-001.03/` |
 | `TASK-001.04` 공통 오류 응답 및 Health 기반 / BE | TASK-001.03 | API 공통 규칙, ERR-001~ | 오류 응답 필드와 Health 응답이 계약 테스트로 검증되고, Secret이나 내부 예외가 노출되지 않는다. | 설계완료 · `docs/specs/phase-01-foundation/TASK-001.04/` |
-| `TASK-001.05` FE/BE 독립 빌드 및 환경 샘플 / FE, BE | TASK-001.02, TASK-001.03, TASK-001.04 | DEC-017, NFR-004,008,009 | FE/BE 빌드가 서로 독립 실행되고 환경 샘플에 실제 Secret이 없다. 두 빌드와 Secret 검사 통과 | 설계중 · `docs/specs/phase-01-foundation/TASK-001.05/` |
+| `TASK-001.05` FE/BE 독립 빌드 및 환경 샘플 / FE, BE | TASK-001.02, TASK-001.03, TASK-001.04 | DEC-017, NFR-004,008,009 | FE/BE 빌드가 서로 독립 실행되고 환경 샘플에 실제 Secret이 없다. 두 빌드와 Secret 검사 통과 | 설계완료 · `docs/specs/phase-01-foundation/TASK-001.05/` |
 
 ## Phase 2 — Document / Participants
 
