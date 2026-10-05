@@ -2220,7 +2220,7 @@ Meeting UI
 
 각 세부 TASK 표의 `설계 상태 / 문서` 열은 **설계 진행 상태**를 기록한다. 구현 진행 상태는 계속 GitHub Issue의 상태 라벨과 종료 상태가 기준이며, 두 상태를 혼합하지 않는다.
 
-**다음 설계 대상 커서: `TASK-007.03`** — TASK-007.02의 네 문서, Issue #35 및 master 원격 경로를 확인했다. Review UI는 API-010 mapping과 API-003 roster를 ID로 결합해 speaker 단위 draft를 제공하고, `document.provider=null`이면 설정 화면으로 안내하도록 설계했다. 다음은 mapping 저장과 Transcript 반영 통합이다.
+**다음 설계 대상 커서: `TASK-008.01`** — TASK-007.03의 네 문서, Issue #36 및 master 원격 경로를 확인했다. API-011 저장 성공은 API-010 snapshot과 모든 동일 Speaker의 Transcript 표시를 함께 갱신하고, 충돌/응답 유실은 GET reconcile로 복구하도록 설계했다. 다음은 Minutes 편집 PUT API다.
 
 | 설계 상태 | 의미 |
 |---|---|
@@ -2365,7 +2365,7 @@ Backend API 작업은 정상 응답뿐 아니라 명세된 검증 오류, 없는
 |---|---|---|------|---|
 | `TASK-007.01` Speaker mapping PUT / BE | TASK-006.06, TASK-003.01 | DEC-009,010, FR-010, API-011 | Speaker ID를 유효 참가자에 연결하고 모든 해당 segment에 반영한다. 없는 Speaker/Participant와 일괄 적용 테스트 통과 | 설계완료 · `docs/specs/phase-05-review/TASK-007.01/` |
 | `TASK-007.02` Speaker 선택 UI / FE | TASK-006.07, TASK-003.01 | FR-010,011, SCR-006 | 화자별 참가자 Dropdown을 제공하며 segment별 화자 지정 UI는 없다. 기존 매핑 표시 테스트 통과 | 설계완료 · `docs/specs/phase-05-review/TASK-007.02/` |
-| `TASK-007.03` Mapping 저장 연결 및 Transcript 반영 / INTEGRATION | TASK-007.01, TASK-007.02 | DEC-010, API-011 | 저장 후 모든 해당 Transcript segment에 참가자명이 반영된다. 저장 실패 시 이전 값 유지/오류 표시 테스트 통과 | 설계중 · `docs/specs/phase-05-review/TASK-007.03/` |
+| `TASK-007.03` Mapping 저장 연결 및 Transcript 반영 / INTEGRATION | TASK-007.01, TASK-007.02 | DEC-010, API-011 | 저장 후 모든 해당 Transcript segment에 참가자명이 반영된다. 저장 실패 시 이전 값 유지/오류 표시 테스트 통과 | 설계완료 · `docs/specs/phase-05-review/TASK-007.03/` |
 
 ### TASK-008 Minutes Review / Edit — 작업 묶음
 
