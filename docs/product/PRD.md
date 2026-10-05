@@ -2351,7 +2351,7 @@ Backend API 작업은 정상 응답뿐 아니라 명세된 검증 오류, 없는
 |---|---|---|------|---|
 | `TASK-006.01` Chunk 조립 및 임시 Audio 정리 / BE | TASK-005.08 | DEC-020, FR-007, NFR-014 | sequence 순서로 Audio를 조립하고 조립 실패 시 partial 및 조립 성공 후 원본 Chunk를 정리한다. | 설계완료 · `docs/specs/phase-04-processing/TASK-006.01/` |
 | `TASK-006.02` TranscriptionProvider 계약과 STT Adapter / BE | TASK-006.01 | FR-007, EXT-001 | 고정 Audio fixture에 대해 Transcript/시간 정보 계약이 검증된다. Provider timeout·실패 매핑 테스트 통과 | 설계완료 · `docs/specs/phase-04-processing/TASK-006.02/` |
-| `TASK-006.03` Diarization 결과 표준화 Adapter / BE | TASK-006.02 | DEC-008, FR-008, EXT-001 | 화자 구간을 Speaker ID와 시간순 segment로 표준화한다. 겹침·빈 화자·경계값 fixture 테스트 통과 | 미설계 · — |
+| `TASK-006.03` Diarization 결과 표준화 Adapter / BE | TASK-006.02 | DEC-008, FR-008, EXT-001 | provider label을 Speaker ID와 시간순 segment로 표준화한다. 겹침·빈 화자·경계값 fixture 테스트 통과 | 설계중 · `docs/specs/phase-04-processing/TASK-006.03/` |
 | `TASK-006.04` 처리 Pipeline 오케스트레이션 / BE | TASK-006.03 | FR-007~009, API-009 | 조립→STT→Diarization 순으로 실행하고 실패 지점·상태를 보존한다. 각 단계 성공/실패 테스트 통과 | 미설계 · — |
 | `TASK-006.05` Transcript 기반 Minutes 생성 / BE | TASK-006.04, TASK-004.02 | FR-009, DEC-012, EXT-002 | 기본 Template과 Transcript로 Minutes 초안을 만든다. 빈 Transcript·Provider 오류·출력 구조 테스트 통과 | 미설계 · — |
 | `TASK-006.06` Processing 상태와 Review 데이터 GET / BE | TASK-006.04, TASK-006.05 | SCR-005, API-010 | 처리 중·완료·실패 상태와 완료 시 Transcript/Speaker/Minutes 데이터를 반환한다. 상태별 응답 테스트 통과 | 미설계 · — |
