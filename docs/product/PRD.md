@@ -2212,7 +2212,7 @@ Meeting UI
 
 각 세부 TASK 표의 `설계 상태 / 문서` 열은 **설계 진행 상태**를 기록한다. 구현 진행 상태는 계속 GitHub Issue의 상태 라벨과 종료 상태가 기준이며, 두 상태를 혼합하지 않는다.
 
-**다음 설계 대상 커서: `TASK-003.01`** — TASK-002.04의 네 문서와 Issue #9를 master 원격 경로에서 확인했다. Participant는 회의 작성자가 고르는 `{id,name,email}` roster record로 확정했다. Issue #10에서 결정 내용을 반영해 TASK-003.01 설계를 재개한다. TASK-001.02~001.05와 TASK-002.01~002.04도 문서와 Issue가 등록된 것으로 확인했다.
+**다음 설계 대상 커서: `TASK-003.02`** — TASK-003.01의 네 문서와 Issue #10을 master 원격 경로에서 확인했다. Participant는 회의 작성자가 고르는 `{id,name,email}` roster record다. TASK-003.02 참가자 생성 설계를 다음 대상으로 진행한다.
 
 | 설계 상태 | 의미 |
 |---|---|
@@ -2305,7 +2305,7 @@ Backend API 작업은 정상 응답뿐 아니라 명세된 검증 오류, 없는
 
 | 세부 작업 / 영역 | 선행 작업 | Related IDs | 완료 및 검증 조건 | 설계 상태 / 문서 |
 |---|---|---|------|---|
-| `TASK-003.01` 참가자 목록 GET / BE | TASK-002.02 또는 TASK-002.03, TASK-001.04 | FR-024, API-003 | 참가자 목록과 빈 목록이 명세된 응답으로 반환된다. Provider 오류도 표준 오류로 매핑되는 Controller/Service 테스트 통과 | 설계중 · `docs/specs/phase-02-documents/TASK-003.01/` |
+| `TASK-003.01` 참가자 목록 GET / BE | TASK-002.02 또는 TASK-002.03, TASK-001.04 | FR-024, API-003 | 참가자 목록과 빈 목록이 명세된 응답으로 반환된다. Provider 오류도 표준 오류로 매핑되는 Controller/Service 테스트 통과 | 설계완료 · `docs/specs/phase-02-documents/TASK-003.01/` |
 | `TASK-003.02` 참가자 생성 POST / BE | TASK-003.01 | FR-024, API-004 | 유효한 name/email은 생성되고 필수값 누락·잘못된 email은 거부된다. 생성 결과 및 중복 처리 테스트 통과 | 미설계 · — |
 | `TASK-003.03` 참가자 정보 수정 PATCH / BE | TASK-003.02 | FR-024, API-005 | name/email 수정 규칙이 적용된다. 없는 참가자·잘못된 입력 테스트 통과 | 미설계 · — |
 | `TASK-003.04` 참가자 관리 화면과 API 연결 / FE, INTEGRATION | TASK-003.01~TASK-003.03 | SCR-012, API-003~005 | 목록·빈 상태·생성·수정이 화면에서 동작하고 Loading/Error 상태를 테스트한다. | 미설계 · — |
