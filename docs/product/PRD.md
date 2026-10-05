@@ -1461,7 +1461,7 @@ Response:
 }
 ```
 
-`DOCUMENT_PROVIDER`가 없거나 빈 값이면 Provider를 자동 선택하지 않고 `provider:null`, `configured:false`를 반환한다. 유효 Provider가 선택됐지만 credentials가 없거나 형식이 잘못된 경우에는 선택된 `provider`를 유지하고 `configured:false`로 반환한다. 설정값이 지원하지 않는 비어 있지 않은 enum이면 Backend 설정 오류로 처리한다. Secret은 어떤 상태에서도 응답하지 않는다.
+`DOCUMENT_PROVIDER`가 없거나 빈 값이면 Provider를 자동 선택하지 않고 `provider:null`, `configured:false`를 반환한다. 유효 Provider가 선택됐지만 credentials가 없거나 형식이 잘못된 경우에는 선택된 `provider`를 유지하고 `configured:false`로 반환한다. 설정값이 지원하지 않는 비어 있지 않은 enum이면 HTTP 500 `INTERNAL_ERROR`로 변환한다. Secret은 어떤 상태에서도 응답하지 않는다.
 
 ------------------------------------------------------------------------
 
@@ -1481,6 +1481,8 @@ Response:
   }
 }
 ```
+
+`default.md`, `project.md`는 Backend static resources에서 읽는다. 필수 파일이 빠지면 목록 일부를 반환하지 않고 안전한 HTTP 500 `INTERNAL_ERROR`를 반환한다.
 
 ------------------------------------------------------------------------
 
@@ -2321,7 +2323,7 @@ Backend API 작업은 정상 응답뿐 아니라 명세된 검증 오류, 없는
 | 세부 작업 / 영역 | 선행 작업 | Related IDs | 완료 및 검증 조건 | 설계 상태 / 문서 |
 |---|---|---|------|---|
 | `TASK-004.01` Home 기본 화면과 새 미팅 이동 / FE | TASK-001.02 | FR-001, SCR-001 | 화면 제목과 새 미팅 버튼이 렌더링되고 버튼 클릭 시 New Meeting으로 이동한다. 컴포넌트/라우팅 테스트 통과 | 설계완료 · `docs/specs/phase-03-meeting-ui/TASK-004.01/` |
-| `TASK-004.02` App config 및 Template 조회 API / BE | TASK-001.04 | FR-002, API-001,002 | 설정과 `default`/`project` Template 목록이 계약대로 반환된다. 미설정·리소스 누락 테스트 통과 | 미설계 · — |
+| `TASK-004.02` App config 및 Template 조회 API / BE | TASK-001.04 | FR-002, API-001,002 | 설정과 `default`/`project` Template 목록이 계약대로 반환된다. 미설정·리소스 누락 테스트 통과 | 설계중 · `docs/specs/phase-03-meeting-ui/TASK-004.02/` |
 | `TASK-004.03` New Meeting 입력 및 선택 UI / FE | TASK-004.01, TASK-004.02, TASK-003.01 | FR-002, SCR-002, API-002,003 | 제목 입력, Template 선택, 참석자 선택·유효성 검증이 동작한다. API fixture 기반 컴포넌트 테스트 통과 | 미설계 · — |
 | `TASK-004.04` Meeting Session 생성 POST / BE | TASK-004.02, TASK-003.01 | FR-002, API-006 | 제목·Template·참석자를 검증하고 Session ID/상태를 반환한다. 유효 요청, 잘못된 참석자, 누락값 테스트 통과 | 미설계 · — |
 | `TASK-004.05` New Meeting 생성 API 연결 / FE, INTEGRATION | TASK-004.03, TASK-004.04 | SCR-002, API-006 | 제출 시 한 번 Session이 생성되고 성공 시 Recording으로 이동한다. 중복 클릭·검증 오류·서버 오류 테스트 통과 | 미설계 · — |

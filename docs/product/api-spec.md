@@ -52,6 +52,7 @@ Session 상태와 전이 규칙은 [architecture.md](./architecture.md)의 상�
 | 코드 | HTTP | 재시도 | 의미 |
 |---|---:|---:|---|
 | `VALIDATION_FAILED` | 400 | N | 요청 필드 검증 실패 |
+| `INTERNAL_ERROR` | 500 | N | 처리되지 않은 서버 설정 또는 필수 리소스 오류 |
 | `PARTICIPANT_NOT_FOUND` | 404 | N | 존재하지 않는 Participant ID |
 | `SESSION_NOT_FOUND` | 404 | N | 존재하지 않거나 메모리에서 만료된 Session |
 | `SESSION_STATE_CONFLICT` | 409 | N | 현재 상태에서 요청 불가 |
@@ -105,7 +106,7 @@ Session 상태와 전이 규칙은 [architecture.md](./architecture.md)의 상�
 
 공개 설정만 반환한다. Secret, Provider token, root credential은 절대 응답하지 않는다.
 
-`DOCUMENT_PROVIDER`가 없거나 빈 값이면 자동 Provider 선택을 하지 않고 `document.provider=null`, `document.configured=false`를 반환한다. 유효 Provider가 선택됐지만 해당 credentials가 없거나 형식이 잘못되면 선택된 Provider ID와 `configured=false`를 반환한다. 지원하지 않는 비어 있지 않은 enum은 Backend 설정 오류다.
+`DOCUMENT_PROVIDER`가 없거나 빈 값이면 자동 Provider 선택을 하지 않고 `document.provider=null`, `document.configured=false`를 반환한다. 유효 Provider가 선택됐지만 해당 credentials가 없거나 형식이 잘못되면 선택된 Provider ID와 `configured=false`를 반환한다. 지원하지 않는 비어 있지 않은 enum은 HTTP 500 `INTERNAL_ERROR`로 변환한다.
 
 ### API-002 Templates
 
@@ -114,6 +115,8 @@ Session 상태와 전이 규칙은 [architecture.md](./architecture.md)의 상�
 ```json
 {"data":{"items":[{"id":"default.md","name":"기본 회의록","version":"1.0.0"},{"id":"project.md","name":"프로젝트 회의","version":"1.0.0"}]}}
 ```
+
+두 Template은 Backend static resources에서 읽는다. 필수 파일이 빠지면 목록 일부를 반환하지 않고 안전한 HTTP 500 `INTERNAL_ERROR`를 반환한다.
 
 ### API-003 Participants List
 
