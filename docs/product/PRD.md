@@ -2243,7 +2243,7 @@ Meeting UI
 
 각 세부 TASK 표의 `설계 상태 / 문서` 열은 **설계 진행 상태**를 기록한다. 구현 진행 상태는 계속 GitHub Issue의 상태 라벨과 종료 상태가 기준이며, 두 상태를 혼합하지 않는다.
 
-**다음 설계 대상 커서: `TASK-013.01`** — TASK-012.02 네 문서와 Issue #49를 master commit `c7e0894`에서 원격 확인했다. API-015 Notification 실행과 API-010 공통 Notification Delivery의 SCR-007 연결을 확정했다. 다음은 실패 Delivery별 재시도 API다.
+**다음 설계 대상 커서: `TASK-013.01`** — TASK-012.02 네 문서와 Issue #49를 master commit `c7e0894`에서 원격 확인했다. API-016 사용자 재시도 허용 조건과 Provider별 `retryable` 분류의 충돌을 Issue #50에 기록했으며 결정 전까지 이 커서를 유지한다.
 
 | 설계 상태 | 의미 |
 |---|---|
@@ -2434,7 +2434,7 @@ Backend API 작업은 정상 응답뿐 아니라 명세된 검증 오류, 없는
 
 | 세부 작업 / 영역 | 선행 작업 | Related IDs | 완료 및 검증 조건 | 설계 상태 / 문서 |
 |---|---|---|------|---|
-| `TASK-013.01` Delivery 결과·재시도 API / BE | TASK-011.02, TASK-012.02 | FR-019,027, API-016 | 실패한 채널만 재시도하고 성공한 채널은 중복 전달하지 않는다. 채널별 상태 테스트 통과 | 설계중 · `docs/specs/phase-06-publish/TASK-013.01/` |
+| `TASK-013.01` Delivery 결과·재시도 API / BE | TASK-011.02, TASK-012.02 | FR-019,027, API-016 | 실패한 채널만 재시도하고 성공한 채널은 중복 전달하지 않는다. 채널별 상태 테스트 통과 | 결정대기 · Issue #50 |
 | `TASK-013.02` Complete 화면과 실패 채널 재시도 / FE, INTEGRATION | TASK-013.01 | SCR-008, API-016 | 채널별 결과를 표시하고 실패 건만 재시도한다. 재시도 후 결과 갱신 테스트 통과 | 미설계 · — |
 
 ## Phase 7 — History / Settings / Operations
