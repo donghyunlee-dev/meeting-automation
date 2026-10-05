@@ -2285,7 +2285,7 @@ Backend API 작업은 정상 응답뿐 아니라 명세된 검증 오류, 없는
 | `TASK-001.02` Frontend toolchain 초기화 / FE | TASK-001.01 | DEC-003, NFR-008 | Node 22, npm, React 19, TypeScript, Vite 기준으로 앱이 생성된다. 기본 렌더 테스트가 먼저 실패 후 통과하고 `npm run build` 통과 | 설계완료 · `docs/specs/phase-01-foundation/TASK-001.02/` |
 | `TASK-001.03` Backend toolchain 초기화 / BE | TASK-001.01 | DEC-004,005, NFR-009 | Java 25, Spring Boot 4.1.x, Gradle 9.x 기준으로 앱이 생성된다. 컨텍스트 로딩 테스트 및 `./gradlew build` 통과 | 설계완료 · `docs/specs/phase-01-foundation/TASK-001.03/` |
 | `TASK-001.04` 공통 오류 응답 및 Health 기반 / BE | TASK-001.03 | API 공통 규칙, ERR-001~ | 오류 응답 필드와 Health 응답이 계약 테스트로 검증되고, Secret이나 내부 예외가 노출되지 않는다. | 설계완료 · `docs/specs/phase-01-foundation/TASK-001.04/` |
-| `TASK-001.05` FE/BE 독립 빌드 및 환경 샘플 / FE, BE | TASK-001.02, TASK-001.03, TASK-001.04 | DEC-017, NFR-004,008,009 | FE/BE 빌드가 서로 독립 실행되고 환경 샘플에 실제 Secret이 없다. 두 빌드와 Secret 검사 통과 | 미설계 · — |
+| `TASK-001.05` FE/BE 독립 빌드 및 환경 샘플 / FE, BE | TASK-001.02, TASK-001.03, TASK-001.04 | DEC-017, NFR-004,008,009 | FE/BE 빌드가 서로 독립 실행되고 환경 샘플에 실제 Secret이 없다. 두 빌드와 Secret 검사 통과 | 설계중 · `docs/specs/phase-01-foundation/TASK-001.05/` |
 
 ## Phase 2 — Document / Participants
 
