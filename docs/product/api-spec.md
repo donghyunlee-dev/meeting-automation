@@ -23,7 +23,7 @@
 | `Accept: application/json` | 모든 호출 | JSON 응답 요청 |
 | `Content-Type` | body가 있을 때 | JSON 또는 chunk MIME type |
 | `X-Request-Id` | 선택 | trace correlation. 누락 시 서버 생성 |
-| `Idempotency-Key` | 생성/처리/Publish/전송 부작용 요청 | 안전한 동일 요청 중복 방지 |
+| `Idempotency-Key` | 생성/처리/Publish/전송 부작용 요청 | 동일 키·동일 payload는 최초 결과 재사용, 동일 키·상이 payload는 409 충돌 |
 | `If-Match: "<version>"` | Session 변경 요청 | 낙관적 동시성 검사 |
 | `X-Audio-SHA256` | chunk 업로드 | chunk bytes 무결성 |
 | `X-Audio-Byte-Length` | chunk 업로드 | 선언 크기 검증 |
@@ -126,7 +126,7 @@ Session 상태와 전이 규칙은 [architecture.md](./architecture.md)의 상�
 
 Request: `{ "name": "홍길동", "email": "hong@example.com" }`
 
-응답은 생성된 `{id,name,email}`를 반환한다. 이름/email 형식과 정규화는 서버가 검증한다.
+서버는 name/email 앞뒤 공백을 제거하고, name 비어 있음 또는 email 누락/형식 오류를 400 `VALIDATION_FAILED`로 반환한다. 유효 입력은 TASK-003.01 저장 형식으로 Participants child page를 생성하고 `{data:{id,name,email}}`를 반환한다. 동일 Idempotency-Key와 동일 정규화 payload는 최초 결과를 재사용한다. 같은 키의 다른 payload는 409 `IDEMPOTENCY_KEY_CONFLICT`다. 구조 누락은 422 `DOCUMENT_STRUCTURE_NOT_FOUND`, Provider 저장 오류는 502 `DOCUMENT_FAILED` (`DOCUMENT_FAILURE`)다.
 
 ### API-005 Participant Update
 
