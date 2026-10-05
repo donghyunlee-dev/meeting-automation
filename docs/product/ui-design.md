@@ -259,6 +259,8 @@ font-family:
 **목적:** 테이블 중앙에 놓인 모바일을 방해 없이 녹음기로 사용.
 
 - 회의명, Recording indicator, 경과 시간, 큰 종료 버튼만 주요 콘텐츠로 표시한다.
+- Session 생성 직후 Ready에는 `녹음 시작`, Recording에는 `일시정지`와 `회의 종료`, Paused에는 `녹음 재개`와 `회의 종료` action을 표시한다. 화면 표시 state는 녹음 제어기에서 전달받는다.
+- Recording/Paused 상태 문구는 `aria-live="polite"`로 알리되 timer 초 단위 변경은 반복 낭독시키지 않는다.
 - 마이크 권한 거부/미지원, MediaRecorder 오류, 업로드 연결 상태를 사용자에게 식별 가능하게 표시한다.
 - 녹음 중 Bottom Navigation과 설정 진입을 숨긴다.
 - 미전송 chunk가 있으면 종료 후 처리 시작이 안전한 상태가 아님을 명확히 알려준다.
@@ -272,6 +274,7 @@ font-family:
 - 안내는 녹음 종료 후 업로드와 회의록 작성이 시작됨을 설명한다.
 - `계속 녹음`은 Secondary, `회의 종료`는 Danger action이다.
 - 확인 취소 시 현재 녹음 Session을 유지한다.
+- 녹음 확인 route는 `/meetings/{sessionId}/recording`을 사용한다.
 
 ### SCR-005 Processing
 
