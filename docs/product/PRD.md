@@ -2241,7 +2241,7 @@ Meeting UI
 
 각 세부 TASK 표의 `설계 상태 / 문서` 열은 **설계 진행 상태**를 기록한다. 구현 진행 상태는 계속 GitHub Issue의 상태 라벨과 종료 상태가 기준이며, 두 상태를 혼합하지 않는다.
 
-**다음 설계 대상 커서: `TASK-011.02`** — TASK-011.01 네 문서, Issue #46, Gmail OAuth 설정 보완 및 master commit `9caa647` 원격 경로를 확인했다. TASK-011.02는 Issue #47에서 SCR-007 수신자 선택, API-010 Session roster/Delivery projection과 recipient별 결과 UI를 설계 중이다.
+**다음 설계 대상 커서: `TASK-012.01`** — TASK-011.02 네 문서, Issue #47, API-010/Data Specification 확장 및 master commit `c5135b3` 원격 경로를 확인했다. Session roster 제한 수신자 선택과 generic Delivery projection을 UI까지 연결했다. 다음은 Notification Provider Adapter다.
 
 | 설계 상태 | 의미 |
 |---|---|
@@ -2419,7 +2419,7 @@ Backend API 작업은 정상 응답뿐 아니라 명세된 검증 오류, 없는
 | 세부 작업 / 영역 | 선행 작업 | Related IDs | 완료 및 검증 조건 | 설계 상태 / 문서 |
 |---|---|---|------|---|
 | `TASK-011.01` Email Provider Adapter / BE | TASK-010.02 | DEC-015, FR-017, EXT-004 | 정해진 수신자·본문으로 전송하고 수신자별 성공/실패를 반환한다. Mock Provider 테스트 통과 | 설계완료 · `docs/specs/phase-06-publish/TASK-011.01/` |
-| `TASK-011.02` Email 결과와 수신자 선택 연결 / BE, FE | TASK-011.01, TASK-004.03 | API-003,010,015, SCR-007 | 선택된 참석자에게만 전달되고 각 결과가 UI에 표시된다. 빈 수신자·개별 실패 테스트 통과 | 설계중 · `docs/specs/phase-06-publish/TASK-011.02/` |
+| `TASK-011.02` Email 결과와 수신자 선택 연결 / BE, FE | TASK-011.01, TASK-004.03 | API-003,010,015, SCR-007 | 선택된 참석자에게만 전달되고 각 결과가 UI에 표시된다. 빈 수신자·개별 실패 테스트 통과 | 설계완료 · `docs/specs/phase-06-publish/TASK-011.02/` |
 
 ### TASK-012 Slack Notification — 작업 묶음
 
