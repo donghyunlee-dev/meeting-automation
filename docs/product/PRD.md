@@ -2220,7 +2220,7 @@ Meeting UI
 
 각 세부 TASK 표의 `설계 상태 / 문서` 열은 **설계 진행 상태**를 기록한다. 구현 진행 상태는 계속 GitHub Issue의 상태 라벨과 종료 상태가 기준이며, 두 상태를 혼합하지 않는다.
 
-**다음 설계 대상 커서: `TASK-008.02`** — TASK-008.01의 네 문서, Issue #37 및 master 원격 경로를 확인했다. API-012는 Review Session의 전체 Structured Minutes를 검증·원자 저장하고 Template identity는 API-013 재생성으로만 변경하도록 설계했다. 다음은 Minutes 편집과 Transcript Drawer UI다.
+**다음 설계 대상 커서: `TASK-008.03`** — TASK-008.02의 네 문서, Issue #38 및 master 원격 경로를 확인했다. Review UI는 Structured Minutes를 local draft로 편집하고 Transcript Drawer에서 시간순 원문을 읽으며, API-012 저장 연결을 caller 경계로 분리하도록 설계했다. 다음은 API-010/012 왕복 저장 통합이다.
 
 | 설계 상태 | 의미 |
 |---|---|
@@ -2372,7 +2372,7 @@ Backend API 작업은 정상 응답뿐 아니라 명세된 검증 오류, 없는
 | 세부 작업 / 영역 | 선행 작업 | Related IDs | 완료 및 검증 조건 | 설계 상태 / 문서 |
 |---|---|---|------|---|
 | `TASK-008.01` Minutes 편집 API PUT / BE | TASK-006.06 | FR-012,015, API-012 | 허용된 Minutes 필드만 수정되고 유효성·없는 Session·잘못된 본문 테스트 통과 | 설계완료 · `docs/specs/phase-05-review/TASK-008.01/` |
-| `TASK-008.02` Minutes 편집 및 Transcript Drawer UI / FE | TASK-007.03 | SCR-006, FR-012,015 | 초안 수정·저장과 Transcript 열기/닫기가 동작한다. 변경 없음·저장 중·오류 상태 테스트 통과 | 설계중 · `docs/specs/phase-05-review/TASK-008.02/` |
+| `TASK-008.02` Minutes 편집 및 Transcript Drawer UI / FE | TASK-007.03 | SCR-006, FR-012,015 | 초안 수정·저장과 Transcript 열기/닫기가 동작한다. 변경 없음·저장 중·오류 상태 테스트 통과 | 설계완료 · `docs/specs/phase-05-review/TASK-008.02/` |
 | `TASK-008.03` Review 데이터 저장 통합 / INTEGRATION | TASK-008.01, TASK-008.02 | API-010,012 | 재조회 후 저장값이 유지되고 미저장 변경을 잃지 않도록 동작한다. 왕복 테스트 통과 | 미설계 · — |
 
 ### TASK-009 Template Regeneration — 작업 묶음
