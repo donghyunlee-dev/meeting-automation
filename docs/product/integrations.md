@@ -4,7 +4,7 @@
 > **기준 문서:** [PRD.md](./PRD.md)
 > **시스템 구성:** [architecture.md](./architecture.md)
 > **HTTP 경계:** [api-spec.md](./api-spec.md)
-> **기준일:** 2026-10-04
+> **기준일:** 2026-10-05
 
 ## 공통 연동 규칙
 
@@ -126,7 +126,11 @@ Provider capability는 root 검증, child page 탐색/생성/읽기, 최소 meta
 
 ### Confluence Adapter
 
-- Parent/child page 계층을 사용한다.
+- V1 대상은 Confluence Cloud이며 REST API v2를 사용한다. `CONFLUENCE_BASE_URL`은 `https://<site>.atlassian.net` 형식의 사이트 origin이다.
+- `CONFLUENCE_ACCOUNT_EMAIL`과 `CONFLUENCE_AUTH_TOKEN`으로 Basic 인증을 구성한다. Authorization 값은 UTF-8 `email:API token`을 Base64 인코딩한 뒤 `Basic` scheme으로 전송한다. Password 기반 인증은 사용하지 않는다.
+- 설정된 `DOCUMENT_ROOT_ID`의 직속 자식은 `GET /wiki/api/v2/pages/{id}/direct-children`으로 페이지네이션해 조회한다. 응답 중 `type=page`인 항목만 사용하며 Database, Folder, Whiteboard, Embed 등은 무시한다.
+- 정확한 제목 `Meetings`, `Participants`의 직속 Page가 각각 하나씩 있어야 한다. 누락 또는 중복이면 `DOCUMENT_STRUCTURE_NOT_FOUND`를 반환하고 생성/복구하지 않는다.
+- Basic 자격 증명은 Backend runtime secret/config에서만 읽는다. Authorization header, email, token, 원본 오류 본문을 응답이나 로그에 남기지 않는다.
 - child page 조회/읽기/생성/갱신, 최소 content metadata/property를 처리한다.
 - 내부 `documentId`와 URL로 변환하며 vendor response는 Adapter에 격리한다.
 
@@ -193,6 +197,7 @@ DOCUMENT_PROVIDER
 DOCUMENT_ROOT_ID
 NOTION_TOKEN
 CONFLUENCE_BASE_URL
+CONFLUENCE_ACCOUNT_EMAIL
 CONFLUENCE_AUTH_TOKEN
 OPENAI_API_KEY
 TRANSCRIPTION_MODEL

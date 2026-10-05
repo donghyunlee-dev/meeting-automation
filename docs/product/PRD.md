@@ -1,7 +1,7 @@
 # Meeting Automation Product Requirements Document
 
 > **문서 ID:** PRD-MA-001\
-> **버전:** 1.6.0\
+> **버전:** 1.6.1\
 > **기준일:** 2026-10-05\
 > **상태:** Approved Baseline Candidate\
 > **문서 역할:** Meeting Automation V1의
@@ -28,6 +28,7 @@
 > **변경 이력 v1.4.0:** TASK별 SDD 문서 설계 상태·경로 추적 기준과 스킬의 선택적 문서 확인 절차 추가\
 > **변경 이력 v1.5.0:** 설계 진행 커서를 추가해 다음 문서 작업을 직접 지정하고, 세션별 순차 재탐색을 금지\
 > **변경 이력 v1.6.0:** 상세 설계 문서와 PRD 상태를 기본 브랜치에 커밋·푸시한 뒤에만 설계 완료로 처리\
+> **변경 이력 v1.6.1:** Confluence Cloud Basic 인증과 Backend 계정 이메일 설정을 확정\
 > **변경 이력 v1.1.0:** Technology Baseline 확정, Monorepo/Node.js/React/Spring Boot 역할 명시, 실제 모바일·회의실 품질 검증을 개발 선행 Gate에서 Phase 8로 이동
 
 ------------------------------------------------------------------------
@@ -2088,6 +2089,7 @@ DOCUMENT_ROOT_ID
 
 NOTION_TOKEN
 CONFLUENCE_BASE_URL
+CONFLUENCE_ACCOUNT_EMAIL
 CONFLUENCE_AUTH_TOKEN
 
 OPENAI_API_KEY
@@ -2209,7 +2211,7 @@ Meeting UI
 
 각 세부 TASK 표의 `설계 상태 / 문서` 열은 **설계 진행 상태**를 기록한다. 구현 진행 상태는 계속 GitHub Issue의 상태 라벨과 종료 상태가 기준이며, 두 상태를 혼합하지 않는다.
 
-**다음 설계 대상 커서: `TASK-002.03`** — TASK-002.02의 네 문서와 Issue #7 등록 및 기본 브랜치 원격 경로를 확인했다. TASK-002.03은 인증 방식 결정이 필요해 Issue #8에서 결정 대기 중이며, 결정 후 같은 커서에서 재개한다. TASK-001.02~001.05와 TASK-002.01도 네 문서와 Issue #2~#6이 등록된 것으로 확인했다.
+**다음 설계 대상 커서: `TASK-002.03`** — TASK-002.02의 네 문서와 Issue #7 등록 및 기본 브랜치 원격 경로를 확인했다. TASK-002.03 인증은 Confluence Cloud Basic(`CONFLUENCE_ACCOUNT_EMAIL` + `CONFLUENCE_AUTH_TOKEN`)으로 확정되어 Issue #8에서 설계를 재개한다. TASK-001.02~001.05와 TASK-002.01도 네 문서와 Issue #2~#6이 등록된 것으로 확인했다.
 
 | 설계 상태 | 의미 |
 |---|---|
@@ -2295,7 +2297,7 @@ Backend API 작업은 정상 응답뿐 아니라 명세된 검증 오류, 없는
 |---|---|---|------|---|
 | `TASK-002.01` DocumentProvider 계약과 계약 테스트 / BE | TASK-001.05 | DEC-006,013,014, EXT-003 | Root/하위 Page 탐색, 읽기, 생성의 공통 계약 테스트가 Adapter 구현 전에 실패하도록 작성되고 계약 필드·오류가 고정된다. | 설계완료 · `docs/specs/phase-02-documents/TASK-002.01/` |
 | `TASK-002.02` Notion Page hierarchy Adapter / BE | TASK-002.01 | DEC-013,014, API-019, EXT-003 | 설정된 Root에서 Meetings/Participants를 Database 없이 탐색한다. 성공·빈 계층·권한 오류 Adapter 테스트 통과 | 설계완료 · `docs/specs/phase-02-documents/TASK-002.02/` |
-| `TASK-002.03` Confluence Page hierarchy Adapter / BE | TASK-002.01 | DEC-013,014, API-019, EXT-003 | 동일한 공통 계약을 만족하며 Page hierarchy만 사용한다. 성공·빈 계층·권한 오류 Adapter 테스트 통과 | 결정대기 · — |
+| `TASK-002.03` Confluence Page hierarchy Adapter / BE | TASK-002.01 | DEC-013,014, API-019, EXT-003 | 동일한 공통 계약을 만족하며 Page hierarchy만 사용한다. 성공·빈 계층·권한 오류 Adapter 테스트 통과 | 설계중 · `docs/specs/phase-02-documents/TASK-002.03/` |
 | `TASK-002.04` Provider 선택 및 연결 Health / BE | TASK-002.02, TASK-002.03 | FR-025,026, API-001,019 | 활성 Provider의 연결 상태가 반환되고 Secret 값은 응답에서 제외된다. 정상·연결 실패·미설정 테스트 통과 | 미설계 · — |
 
 ### TASK-003 Participant Management — 작업 묶음
