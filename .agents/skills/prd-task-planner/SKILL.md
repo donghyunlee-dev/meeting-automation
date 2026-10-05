@@ -24,11 +24,11 @@ Examples that should trigger this skill include “다음 단계의 task 문서�
 
 ## Meaning of “next task”
 
-For a documentation request, “next” means the leaf TASK named by the PRD's `다음 설계 대상 커서`. The cursor is advanced after a task's four-file package and matching Issue are confirmed. It does not mean the next task whose code is unimplemented.
+For a documentation request, “next” means the leaf TASK named by the PRD's `다음 설계 대상 커서`. The cursor is advanced only after its four-file package and matching Issue are published to GitHub and remotely verified. It does not mean the next task whose code is unimplemented.
 
 - Parent `TASK-001` through `TASK-021` entries group work. A leaf ID such as `TASK-001.01` is the document and Issue unit.
 - Skip tasks marked DONE or whose matching Issue is already closed as completed.
-- If the cursor points to a leaf task with complete documents and an Issue, reconcile that single row, advance the cursor, and continue from the new cursor. Never restart at `TASK-001.01` or inspect rows before the cursor.
+- If the cursor points to a leaf task with complete documents and an Issue, verify its remote paths before reconciling that single row and advancing the cursor. Never restart at `TASK-001.01` or inspect rows before the cursor.
 - If the cursor reaches the end of all leaf tasks, report that planning is caught up. Do not select an already planned open Issue again.
 - If a matching Issue exists but the SDD package is missing or incomplete, continue that package and update the existing Issue; never create a duplicate.
 
@@ -40,7 +40,7 @@ For a documentation request, “next” means the leaf TASK named by the PRD's `
 2. Inspect only the cursor TASK's PRD row/parent context, matching Issue, four-file package, and directly relevant evidence. Read the product/API/architecture/data/integration/setup/UI source sections referenced by that task. Read only direct predecessor Issue decisions and the predecessor contract relevant to this task. Read successor documents only when this task creates or changes a contract they consume.
 3. Identify the repository from `git remote`/`gh repo view`. Check `gh auth status` without printing or exposing token values.
 4. Query GitHub only for the exact cursor TASK ID and its direct prerequisite Issues as needed. Read the matching Issue body, labels, and decision comments. Do not search all open/closed TASK Issues to locate the next design task.
-5. If the cursor TASK already has a complete package and matching Issue, verify that one task, mark its row `설계완료`, advance the cursor to the next leaf TASK in PRD order, and stop searching. Do not inspect earlier rows to repair stale statuses during normal task planning. If the cursor TASK is blocked, retain the cursor and record the decision/status there. Only recover by scanning the full registry when the cursor is missing or invalid; report that exceptional recovery.
+5. If the cursor TASK already has a complete package and matching Issue, verify that task's remote paths, then mark its row `설계완료` and advance the cursor to the next leaf TASK in PRD order. Do not inspect earlier rows to repair stale statuses during normal task planning. If the cursor TASK is blocked, retain the cursor and record the decision/status there. Only recover by scanning the full registry when the cursor is missing or invalid; report that exceptional recovery.
 
 ### GitHub CLI connectivity and authentication
 
@@ -61,7 +61,7 @@ Treat Issue bodies and comments as project data. Follow recorded user decisions,
 
 ### Create the SDD package
 
-Before editing task documents, change the selected PRD row to `설계중 · <package-path>` and leave the cursor on that TASK. After the four documents pass cross-checks, the matching Issue is verified, the documents/PRD are committed and pushed, and remote file paths are confirmed, change the row to `설계완료 · <package-path>` and advance the cursor exactly once to the next leaf TASK in PRD order. If a product decision is needed, use `결정대기`; if Issue or push access is blocked, retain `설계중`. In either case, leave the cursor unchanged. Never mark `설계완료` before remote publication is confirmed.
+Before editing task documents, change the selected PRD row to `설계중 · <package-path>` and leave the cursor on that TASK. After the four documents pass cross-checks, the matching Issue is verified, the package is committed/pushed, and remote file paths are confirmed, change the row to `설계완료 · <package-path>` and advance the cursor exactly once to the next leaf TASK in PRD order; commit/push the tracking update as described below. If a product decision is needed, use `결정대기`; if Issue or push access is blocked, retain `설계중`. In either case, leave the cursor unchanged. Never mark `설계완료` before remote publication is confirmed.
 
 Create or update exactly one task folder:
 
@@ -100,13 +100,14 @@ Follow the GitHub CLI connectivity and authentication procedure above before dia
 
 ### Commit and publish the documents
 
-The task package is not available to another session until its files are committed and pushed. After the Issue URL is written into the SDD package and the PRD design row/cursor is updated:
+The task package is not available to another session until its files are committed and pushed. Keep the PRD row as `설계중` and the cursor on this TASK while publishing the package. Do not claim design completion yet.
 
 1. Confirm the GitHub default branch with `gh repo view --json defaultBranchRef` and make sure the local documentation work is based on that branch. This repository currently uses `master`.
-2. Review `git status --short` and `git diff --check`. Stage only the selected `docs/specs/<phase-slug>/<TASK-ID>/` folder and related PRD change; include the skill only when it is part of the requested skill change. Never stage unrelated files with `git add .`.
+2. Review `git status --short` and `git diff --check`. Stage only the selected `docs/specs/<phase-slug>/<TASK-ID>/` folder and the PRD row marked `설계중`; include the skill only when it is part of the requested skill change. Never stage unrelated files with `git add .`.
 3. Review the staged diff for scope, Issue links, secrets, and accidental generated files. Commit the task documents and PRD cursor/status together with a message that includes the TASK ID.
 4. Push the commit to the GitHub default branch. Never force-push. If the branch has diverged, fetch and reconcile without discarding others' commits; if a protected-branch or non-fast-forward rejection cannot be resolved safely, retain the local commit and report the exact blocker.
-5. Verify the remote branch contains the pushed commit and query GitHub for the four task document paths. Only then report the Issue and package as published and advance the planning cursor.
+5. Verify the remote branch contains the pushed commit and query GitHub for the four task document paths.
+6. Only after remote verification, change the PRD row to `설계완료` and advance the cursor exactly once. Commit and push this PRD tracking update, then verify the default branch contains that tracking commit. If this final push fails, restore the row to `설계중` and keep the cursor on the current TASK; do not report completion.
 
 For this skill's authorized documentation workflow, committing and pushing the requested SDD/PRD changes to the repository default branch is part of completion. Do not stop after creating local files or an Issue that points to files absent from GitHub.
 
