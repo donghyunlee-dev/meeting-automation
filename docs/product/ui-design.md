@@ -241,6 +241,7 @@ font-family:
 - 회의가 없으면 최근 목록 자리에 짧은 Empty state를 보여주고 시작 버튼은 그대로 노출한다.
 - Loading/Error 상태와 재시도 action을 정의한다.
 - Bottom Navigation을 표시한다.
+- 구현 단계에서 Home shell과 새 회의 진입은 TASK-004.01, 최근 회의 목록·전체 보기는 TASK-014.03에서 연결한다.
 
 ### SCR-002 New Meeting
 
