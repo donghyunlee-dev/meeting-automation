@@ -38,4 +38,3 @@ npm run dev -- --host 127.0.0.1 --port 5173
 ```
 
 현지 npm 설정은 `esbuild` postinstall 승인 대기 경고를 출력했지만 설치와 테스트, 빌드가 모두 성공했다. npm은 취약점 0건을 보고했다.
-
