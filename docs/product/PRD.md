@@ -2300,7 +2300,7 @@ Meeting UI
 
 각 세부 TASK 표의 `설계 상태 / 문서` 열은 **설계 진행 상태**를 기록한다. 구현 진행 상태는 계속 GitHub Issue의 상태 라벨과 종료 상태가 기준이며, 두 상태를 혼합하지 않는다.
 
-**다음 설계 대상 커서: `TASK-020.04`** — TASK-020.03 네 문서와 Issue #75를 master commit `a201dfe`에서 원격 확인했다. PRD 버튼/입력 크기, keyboard-only flow, dialog focus, control name/state, WCAG 2.2 target/focus 기준을 자동 및 수동 QA 절차로 정리했다. 다음은 Android/iOS 실기기 전체 화면 회귀다.
+**다음 설계 대상 커서: `TASK-021.01`** — TASK-020.04 네 문서와 Issue #76을 master commit `4ff348d`에서 원격 확인했다. Android Chrome/iPhone Safari 실기기에서 주요 화면, 접근성 spot-check, 짧은 녹음 handoff를 non-production synthetic 환경에서 검증하고, TASK-018 장시간 녹음 테스트와 중복하지 않는 설계를 완료했다. 다음은 mock 기반 핵심 E2E 시나리오다. TASK-020.03은 Issue #75 및 PRD 44px target 수정 commit `19b508c`까지 원격 반영을 확인했다.
 
 ## 📊 개발 진행 현황
 
@@ -2383,7 +2383,7 @@ Meeting UI
 | `TASK-020.01` | TODO | DESIGN | [Issue #73](https://github.com/donghyunlee-dev/meeting-automation/issues/73) / — | — | — | — |
 | `TASK-020.02` | TODO | DESIGN | [Issue #74](https://github.com/donghyunlee-dev/meeting-automation/issues/74) / — | — | — | — |
 | `TASK-020.03` | TODO | DESIGN | [Issue #75](https://github.com/donghyunlee-dev/meeting-automation/issues/75) / — | — | — | — |
-| `TASK-020.04` | TODO | DESIGN | — | — | — | — |
+| `TASK-020.04` | TODO | DESIGN | [Issue #76](https://github.com/donghyunlee-dev/meeting-automation/issues/76) / — | — | — | — |
 | `TASK-021.01` | TODO | DESIGN | — | — | — | — |
 | `TASK-021.02` | TODO | DESIGN | — | — | — | — |
 | `TASK-021.03` | TODO | DESIGN | — | — | — | — |
@@ -2643,7 +2643,7 @@ Backend API 작업은 정상 응답뿐 아니라 명세된 검증 오류, 없는
 | `TASK-020.01` 주요 화면 360px 및 반응형 검증 / FE, QA | TASK-004.05, TASK-014.04 | SCR-001~012, NFR-001,002 | 모든 주요 화면이 360px 이상에서 가로 넘침 없이 동작한다. 화면별 viewport 검사 통과 | 설계완료 · `docs/specs/phase-09-release/TASK-020.01/` |
 | `TASK-020.02` Loading/Empty/Error/Ready 상태 점검 / FE, QA | TASK-020.01, TASK-016.03 | SCR-001~012 | 각 화면의 적용 가능한 상태가 일관되게 보이고 상태별 컴포넌트 테스트 통과 | 설계완료 · `docs/specs/phase-09-release/TASK-020.02/` |
 | `TASK-020.03` Touch target·키보드·접근성 점검 / FE, QA | TASK-020.01 | NFR-010,012 | 핵심 조작이 터치·키보드로 가능하고 이름/상태가 보조기술에 노출된다. 자동 및 수동 점검 기록 | 설계완료 · `docs/specs/phase-09-release/TASK-020.03/` |
-| `TASK-020.04` Android/iOS 전체 화면 회귀 / QA | TASK-020.01~TASK-020.03, TASK-018.04 | SCR-001~012 | 지원 브라우저에서 핵심 화면과 녹음 전후 흐름을 회귀 점검하고 Evidence를 남긴다. | 설계중 · `docs/specs/phase-09-release/TASK-020.04/` |
+| `TASK-020.04` Android/iOS 전체 화면 회귀 / QA | TASK-020.01~TASK-020.03, TASK-018.04 | SCR-001~012 | 지원 브라우저에서 핵심 화면과 녹음 전후 흐름을 회귀 점검하고 Evidence를 남긴다. | 설계완료 · `docs/specs/phase-09-release/TASK-020.04/` |
 
 ### TASK-021 End-to-End Acceptance — 작업 묶음
 
