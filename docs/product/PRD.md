@@ -2300,7 +2300,7 @@ Meeting UI
 
 각 세부 TASK 표의 `설계 상태 / 문서` 열은 **설계 진행 상태**를 기록한다. 구현 진행 상태는 계속 GitHub Issue의 상태 라벨과 종료 상태가 기준이며, 두 상태를 혼합하지 않는다.
 
-**다음 설계 대상 커서: `TASK-021.04`** — TASK-021.03 네 문서와 Issue #79를 master commit `c2927b1`에서 원격 확인했다. History read-only, Secret 비노출, Audio 최대 24시간 보존, 재시도·native download/discard·만료 cleanup 및 실패 회의록 참석자 미발송 E2E를 설계했다. 다음은 Release Acceptance 및 증거 검토다. TASK-021.02 네 문서와 Issue #78은 master commit `9889d8c`에서 원격 확인했다.
+**다음 설계 대상 커서: 없음 (PRD leaf TASK 설계 완료)** — 마지막 leaf인 TASK-021.04 네 문서와 Issue #80을 master commit `38a0c8f`에서 원격 확인했다. PRD Section 24의 20개 Release DoD별 Evidence 판정·추적 규칙을 설계했다. TASK-021.03 네 문서와 Issue #79는 master commit `c2927b1`, TASK-021.02 네 문서와 Issue #78은 master commit `9889d8c`에서 원격 확인했다. 현재 PRD 설계 backlog에 남은 leaf TASK가 없다.
 
 ## 📊 개발 진행 현황
 
@@ -2387,7 +2387,7 @@ Meeting UI
 | `TASK-021.01` | TODO | DESIGN | [Issue #77](https://github.com/donghyunlee-dev/meeting-automation/issues/77) / — | — | — | — |
 | `TASK-021.02` | TODO | DESIGN | [Issue #78](https://github.com/donghyunlee-dev/meeting-automation/issues/78) / — | — | — | — |
 | `TASK-021.03` | TODO | DESIGN | [Issue #79](https://github.com/donghyunlee-dev/meeting-automation/issues/79) / — | — | — | — |
-| `TASK-021.04` | TODO | DESIGN | — | — | — | — |
+| `TASK-021.04` | TODO | DESIGN | [Issue #80](https://github.com/donghyunlee-dev/meeting-automation/issues/80) / — | — | — | — |
 
 | 설계 상태 | 의미 |
 |---|---|
@@ -2652,7 +2652,7 @@ Backend API 작업은 정상 응답뿐 아니라 명세된 검증 오류, 없는
 | `TASK-021.01` Mock 기반 핵심 E2E 시나리오 / FE, BE, QA | TASK-001.05~TASK-020.04 | 전체 | 회의 생성→녹음 Chunk→처리→화자 매핑→Minutes 수정/재생성 흐름을 자동화 테스트로 통과한다. | 설계완료 · `docs/specs/phase-10-e2e/TASK-021.01/` |
 | `TASK-021.02` Document/Email/Slack E2E / INTEGRATION, QA | TASK-021.01 | 전체, EXT-003~005 | Document 저장 이후 Email/Slack 결과와 실패 재시도가 각 채널 독립적으로 검증된다. | 설계완료 · `docs/specs/phase-10-e2e/TASK-021.02/` |
 | `TASK-021.03` History·보안·임시 Audio E2E / QA | TASK-021.02 | FR-020~030, DEC-020 | 완료 회의 재조회, read-only 상세, Secret 비노출, Audio 삭제까지 자동/수동 Evidence로 확인한다. | 설계완료 · `docs/specs/phase-10-e2e/TASK-021.03/` |
-| `TASK-021.04` Release Acceptance 및 증거 검토 / QA | TASK-021.01~TASK-021.03, TASK-018.04, TASK-019.03, TASK-020.04 | 전체 | Release Definition of Done의 모든 항목에 Evidence가 연결되고 미충족 항목은 DONE 처리되지 않는다. | 설계중 · `docs/specs/phase-10-e2e/TASK-021.04/` |
+| `TASK-021.04` Release Acceptance 및 증거 검토 / QA | TASK-021.01~TASK-021.03, TASK-018.04, TASK-019.03, TASK-020.04 | 전체 | Release Definition of Done의 모든 항목에 Evidence가 연결되고 미충족 항목은 DONE 처리되지 않는다. | 설계완료 · `docs/specs/phase-10-e2e/TASK-021.04/` |
 
 
 # 24. Release Definition of Done
