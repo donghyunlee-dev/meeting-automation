@@ -2187,7 +2187,11 @@ SLACK_MEETING_WEBHOOK_URL
 SLACK_ADMIN_WEBHOOK_URL
 
 ALLOWED_ORIGINS
-TEMP_AUDIO_DIR
+AUDIO_STORAGE_PROVIDER
+AUDIO_STORAGE_ENDPOINT
+AUDIO_STORAGE_CONTAINER
+AUDIO_STORAGE_REGION
+AUDIO_STORAGE_CREDENTIALS (Backend secret configuration)
 ```
 
 규칙: - 실제 Secret을 Git에 Commit하지 않는다. - Frontend env에는
@@ -2522,7 +2526,7 @@ Backend API 작업은 정상 응답뿐 아니라 명세된 검증 오류, 없는
 | `TASK-017.01` Secret 경계 및 로그 마스킹 / BE, FE | TASK-001.05, TASK-016.01 | DEC-017, FR-030, NFR-004~006 | FE bundle/API 응답/로그에서 Secret 탐지 0건. 자동 secret scan과 로그 테스트 통과 | 설계완료 · `docs/specs/phase-07-security/TASK-017.01/` |
 | `TASK-017.02` 비공개 Audio 보존·실패 종료 Backend / BE | TASK-006.01, TASK-006.04, TASK-006.05, TASK-010.02 | DEC-020, FR-027,028, NFR-006, API-020~022 | 변환 실패 Audio가 비공개 객체 저장소에 대기 중 최대 24시간 보존되고, 성공·실패 종료·만료 후 삭제된다. 인증되지 않은 공개 URL 접근이 불가능하고 실패 종료 문서는 Email/Slack으로 전달되지 않는다. | 설계완료 · `docs/specs/phase-07-security/TASK-017.02/` |
 | `TASK-017.03` 처리 실패 재시도·Audio 복구 화면 / FE, INTEGRATION | TASK-017.02 | SCR-005, FR-027, API-010,020~022 | 실패 stage와 남은 보존 시간을 표시하고 명시 재시도, Audio 다운로드 및 실패 마무리를 제공한다. 완료/오류/만료 화면 상태를 검증한다. | 설계완료 · `docs/specs/phase-07-security/TASK-017.03/` |
-| `TASK-017.04` 보안·개인정보 회귀 점검 / QA | TASK-017.01, TASK-017.02, TASK-017.03 | DEC-017,020, FR-027,028,030, NFR-004~006 | Audio/Transcript/Secret 로그 노출, FE Secret, 잔여 Audio, 실패 문서 전달 억제를 검증하고 Evidence를 기록한다. | 미설계 · — |
+| `TASK-017.04` 보안·개인정보 회귀 점검 / QA | TASK-017.01, TASK-017.02, TASK-017.03 | DEC-017,020, FR-027,028,030, NFR-004~006 | FE Secret, Audio/Transcript/Minutes 로그·API·문서 노출, 비공개 Audio 저장소 접근·만료·삭제, 실패 문서 전달 억제를 synthetic fixture로 검증하고 비민감 Evidence를 기록한다. | 설계중 · `docs/specs/phase-07-security/TASK-017.04/` |
 
 ## Phase 8 — 실제 모바일 / 회의실 품질 검증 및 튜닝
 
