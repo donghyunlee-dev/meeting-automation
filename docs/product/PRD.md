@@ -2300,7 +2300,7 @@ Meeting UI
 
 각 세부 TASK 표의 `설계 상태 / 문서` 열은 **설계 진행 상태**를 기록한다. 구현 진행 상태는 계속 GitHub Issue의 상태 라벨과 종료 상태가 기준이며, 두 상태를 혼합하지 않는다.
 
-**다음 설계 대상 커서: `TASK-020.02`** — TASK-020.01 네 문서와 Issue #73을 master commit `f2e34e4`에서 원격 확인했다. 360~1280 CSS px viewport에서 주요 화면과 modal/drawer layout을 검증하고 Playwright viewport harness 및 Evidence를 준비하는 설계를 완료했다. 다음은 화면별 Loading/Empty/Error/Ready 상태 검증이다.
+**다음 설계 대상 커서: `TASK-020.03`** — TASK-020.02 네 문서와 Issue #74를 master commit `efde974`에서 원격 확인했다. 주요 화면의 Loading/Empty/Error/Ready 적용성, safe error mapping, draft 보존, 명시 재시도 경계를 공통 FE 상태 설계로 정리했다. 다음은 핵심 조작의 touch target·키보드·접근성 검증이다.
 
 ## 📊 개발 진행 현황
 
@@ -2381,7 +2381,7 @@ Meeting UI
 | `TASK-019.02` | TODO | DESIGN | [Issue #71](https://github.com/donghyunlee-dev/meeting-automation/issues/71) / — | — | — | — |
 | `TASK-019.03` | TODO | DESIGN | [Issue #72](https://github.com/donghyunlee-dev/meeting-automation/issues/72) / — | — | — | — |
 | `TASK-020.01` | TODO | DESIGN | [Issue #73](https://github.com/donghyunlee-dev/meeting-automation/issues/73) / — | — | — | — |
-| `TASK-020.02` | TODO | DESIGN | — | — | — | — |
+| `TASK-020.02` | TODO | DESIGN | [Issue #74](https://github.com/donghyunlee-dev/meeting-automation/issues/74) / — | — | — | — |
 | `TASK-020.03` | TODO | DESIGN | — | — | — | — |
 | `TASK-020.04` | TODO | DESIGN | — | — | — | — |
 | `TASK-021.01` | TODO | DESIGN | — | — | — | — |
@@ -2641,7 +2641,7 @@ Backend API 작업은 정상 응답뿐 아니라 명세된 검증 오류, 없는
 | 세부 작업 / 영역 | 선행 작업 | Related IDs | 완료 및 검증 조건 | 설계 상태 / 문서 |
 |---|---|---|------|---|
 | `TASK-020.01` 주요 화면 360px 및 반응형 검증 / FE, QA | TASK-004.05, TASK-014.04 | SCR-001~012, NFR-001,002 | 모든 주요 화면이 360px 이상에서 가로 넘침 없이 동작한다. 화면별 viewport 검사 통과 | 설계완료 · `docs/specs/phase-09-release/TASK-020.01/` |
-| `TASK-020.02` Loading/Empty/Error/Ready 상태 점검 / FE, QA | TASK-020.01, TASK-016.03 | SCR-001~012 | 각 화면의 적용 가능한 상태가 일관되게 보이고 상태별 컴포넌트 테스트 통과 | 설계중 · `docs/specs/phase-09-release/TASK-020.02/` |
+| `TASK-020.02` Loading/Empty/Error/Ready 상태 점검 / FE, QA | TASK-020.01, TASK-016.03 | SCR-001~012 | 각 화면의 적용 가능한 상태가 일관되게 보이고 상태별 컴포넌트 테스트 통과 | 설계완료 · `docs/specs/phase-09-release/TASK-020.02/` |
 | `TASK-020.03` Touch target·키보드·접근성 점검 / FE, QA | TASK-020.01 | NFR-010,012 | 핵심 조작이 터치·키보드로 가능하고 이름/상태가 보조기술에 노출된다. 자동 및 수동 점검 기록 | 미설계 · — |
 | `TASK-020.04` Android/iOS 전체 화면 회귀 / QA | TASK-020.01~TASK-020.03, TASK-018.04 | SCR-001~012 | 지원 브라우저에서 핵심 화면과 녹음 전후 흐름을 회귀 점검하고 Evidence를 남긴다. | 미설계 · — |
 
