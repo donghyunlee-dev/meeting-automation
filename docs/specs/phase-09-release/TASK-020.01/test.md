@@ -2,7 +2,7 @@
 
 ## 자동화 테스트
 
-Frontend Issue #2 문서에서 지정한 `npm run test`, `npm run lint`, `npm run build`를 기준으로 하되 현재 checkout에서 실제 정의된 script가 있는지 확인해 사용한다. Viewport/browser test command가 없으면 실제 설치된 browser tooling을 확인해 이 task deliverable로 test entry를 추가하고 그 정확한 command를 기록한다. 계획 단계에서는 test를 실행하지 않는다.
+기존 FE unit/component 명령은 `frontend/`에서 `npm run test`, `npm run lint`, `npm run build`이다. `vitest`/`jsdom`은 page CSS layout을 계산하지 않으므로 이 task는 현재 구현 시점의 stable `@playwright/test` dev dependency, Chromium/WebKit projects, `playwright.viewport.config.ts`, Vite `webServer` config 및 `npm run test:viewport`를 추가한다. Browser binaries는 `npx playwright install chromium webkit`으로 setup한다. 계획 단계에서는 test를 실행하지 않는다.
 
 | ID | 조건/절차 | 기대 결과 | 증거 |
 |---|---|---|---|
@@ -17,6 +17,8 @@ Frontend Issue #2 문서에서 지정한 `npm run test`, `npm run lint`, `npm ru
 | REVIEW-SHARE | SCR-006 speaker map/template/actions, SCR-007 share choices, SCR-008 result | 주요 buttons/sections가 viewport 안에서 wrap/vertical flow, no page x overflow | route fixture screenshot |
 | NAV-RECORDING | SCR-001 nav 및 SCR-003 Recording layout at phone/desktop widths | Recording nav hidden; timer/title/end action remain within 360px; Home nav fits | selector rect/nav state |
 | RECHECK-SHARED | CSS fix 뒤 target route plus shared nav/modal/drawer pages re-run | original assertion green, no regression at all matrix widths | test reports/build commit |
+
+`npm run test:viewport`은 Playwright Chromium/WebKit projects를 모두 실행한다. CI에서 Browser cache를 사용할 수 없을 때만 위의 browser-install command를 실행하며 설치 결과/browser revision을 Evidence에 기록한다.
 
 ## 수동 시각 점검
 

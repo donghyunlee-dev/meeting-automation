@@ -21,6 +21,17 @@
 
 이 task의 사용자 가치는 기준 화면을 각 viewport에서 보이게 하는 것이다. 구현 코드를 바꾸기 전 route별 자동 viewport checks를 만들고 failing breakpoint를 재현한다. CSS/component를 수정하면 기존 check와 영향을 받는 route matrix를 재실행한다.
 
+## Browser viewport harness
+
+현재 `vitest.config.ts`는 `jsdom`을 사용하며 실제 CSS layout engine이 아니므로 `scrollWidth`/bounding box를 제품 DOM에서 판정할 수 없다. 이 task는 FE root에 현재 구현 시점의 최신 안정 `@playwright/test` dev dependency와 lockfile entry를 추가하고, 별도의 `playwright.viewport.config.ts`, route viewport test suite, `npm run test:viewport` script를 만든다.
+
+- Playwright Chromium과 WebKit projects를 사용해 CSS pixel viewport matrix를 실행한다. Playwright WebKit 결과는 iOS Safari 인증/실기기 결과로 표기하지 않으며 실제 기기 검증은 `.020.04`에 둔다.
+- Playwright config `webServer`가 `npm run dev -- --host 127.0.0.1 --port 4173 --strictPort`를 시작하고 `http://127.0.0.1:4173` ready URL을 기다리게 한다. 별도 backend가 필요한 routes는 기존 API mock fixture가 준비될 때만 `route.fulfill()`으로 응답한다.
+- `@playwright/test` version은 문서 설계 시 고정하지 않는다. 구현 시 npm registry stable release를 확인하고 `package-lock.json`에 exact resolution을 보존한다.
+- Test runner는 route별 fixture/viewport를 parameterize하고 app route에 접근해 root/body scroll width, 핵심 selector bounding rect, visible text/action, `page.screenshot()` artifact를 저장한다.
+- Visual review용 screenshot은 실행 산출물로 남기되 OS/browser rendering 변동 때문에 pixel-golden assertion/임의 pixel tolerance를 도입하지 않는다. 구조적 layout assertion이 pass/fail oracle다.
+- 근거 문서: [Playwright Projects](https://playwright.dev/docs/test-projects), [Playwright Web Server](https://playwright.dev/docs/test-webserver), [Playwright Screenshot Assertions](https://playwright.dev/docs/test-snapshots).
+
 ## 화면 및 뷰포트 행렬
 
 | 화면 ID | 대표 route/content | 보조 표면 |
@@ -42,13 +53,14 @@ Viewport width matrix: 360, 375, 390, 430, 768, 1280 CSS px. Mobile cases use re
 
 ## 실행 순서
 
-- Identify app startup/test scripts and existing route/component testing selectors; use existing browser-test tooling if available. Result: exact test command and entry method are recorded, not invented.
+- FE root의 기존 `npm run test`, `lint`, `build` scripts 및 Browser route selectors를 확인하고 Playwright harness/version을 추가한다. 결과: `npm run test:viewport`와 local server setup이 재현 가능하다.
 - Build SCR-001~012 route fixture inventory. Result: every screen and inline modal/drawer points to one synthetic dataset/state.
 - At 360, 375, 390, 430, 768, and 1280 run the same screens/fixtures. Result: root scroll/client widths and key element rects are captured.
 - Test long Korean title, 80+ character Participant name, fixture email, multi-line validation/error, long decision/action item and Transcript sentences at 360px. Result: wrap/clamp and action visibility are directly observed.
 - Confirm mobile `content max-width` behavior is unrestricted up to 640px, padding never below 16px, body has no x overflow; at 768/1280 content column is centered and <=640px.
 - Capture screenshot only when automated bounding checks fail or as route baseline evidence; manually inspect truncation, position and readable content.
 - Where a failing CSS issue occurs, record baseline screenshot/selector/width, add failing responsive assertion, make minimal FE layout correction, then rerun the affected route at all widths plus shared layout regression.
+- TDD order: failing Playwright viewport assertion를 먼저 추가해 현재 overflow/clipping을 재현하고, CSS/component fix 뒤 `npm run test:viewport`를 green으로 만든다. Existing `npm run test`는 FE unit/component 회귀로 유지한다.
 - Distinguish layout failure from missing application states/API fixture issues; detailed state coverage goes to TASK-020.02.
 - Save sanitized results and screenshots in `docs/evidence/TASK-020.01.md`; remove real data from test environment, and link unresolved accessibility or device behavior to `.020.03/.04`.
 

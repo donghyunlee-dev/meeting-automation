@@ -3,7 +3,7 @@
 ## 단계
 
 - TASK-004.05/#18 및 TASK-014.04/#55 routes/surfaces를 확인한다. 의존: 직접 선행 route 구현. 완료 결과: SCR-001~012마다 검증 가능한 route와 대표 content를 지정한다.
-- test script/browser harness/browser installation/fixture support를 확인한다. 의존: frontend workspace. 완료 결과: 실제 실행 command 및 app start 방식이 확정된다.
+- `@playwright/test` stable dependency, `playwright.viewport.config.ts`, `npm run test:viewport` 및 Vite `webServer` 설정을 추가한다. 의존: frontend workspace. 완료 결과: Chromium/WebKit browser binaries 설치 및 local Vite route start가 재현된다.
 - 360/375/390/430/768/1280px viewport를 정의하고 root scroll-width 및 bounding-box checks를 작성한다. 의존: route inventory. 완료 결과: 360px overflow 시 red가 되는 layout assertion이 있다.
 - SCR-001~012와 SCR-004 modal/SCR-006 drawer에 long/synthetic content fixtures를 연결한다. 의존: route map 및 synthetic data. 완료 결과: 모든 화면을 same responsive matrix로 재현한다.
 - baseline browser viewport matrix와 screenshots/DOM measurements를 수집한다. 의존: existing UI baseline. 완료 결과: 실패 화면과 정확한 breakpoint/selector가 증거로 확인된다.
