@@ -2300,7 +2300,7 @@ Meeting UI
 
 각 세부 TASK 표의 `설계 상태 / 문서` 열은 **설계 진행 상태**를 기록한다. 구현 진행 상태는 계속 GitHub Issue의 상태 라벨과 종료 상태가 기준이며, 두 상태를 혼합하지 않는다.
 
-**다음 설계 대상 커서: `TASK-018.03`** — TASK-018.02 네 문서와 Issue #66을 master commit `b24abcc`에서 원격 확인했다. iOS Safari 30/60분 녹음, 화면 잠금·앱 전환·전화·네트워크 단절 현장 검증과 Android 비교 절차 및 비민감 Evidence 설계를 완료했다. 다음은 Android/iOS 결과를 바탕으로 Chunk 복구·재전송을 검증한다.
+**다음 설계 대상 커서: `TASK-018.04`** — TASK-018.03 네 문서와 Issue #67을 master commit `6a9846f`에서 원격 확인했다. Android Chrome 및 iOS Safari에서 synthetic Chunk의 API-008 reconcile, 직렬 missing-only upload, ACK 유실, retry, browser reopen, 저장 오류와 API-009 handoff gate를 확인하는 절차를 완료했다. 다음은 Phase 8 현장 Evidence의 호환성 결함을 조정하고 재검증한다.
 
 ## 📊 개발 진행 현황
 
@@ -2375,7 +2375,7 @@ Meeting UI
 | `TASK-017.04` | TODO | DESIGN | [Issue #64](https://github.com/donghyunlee-dev/meeting-automation/issues/64) / — | — | — | — |
 | `TASK-018.01` | TODO | DESIGN | [Issue #65](https://github.com/donghyunlee-dev/meeting-automation/issues/65) / — | — | — | — |
 | `TASK-018.02` | TODO | DESIGN | [Issue #66](https://github.com/donghyunlee-dev/meeting-automation/issues/66) / — | — | — | — |
-| `TASK-018.03` | TODO | DESIGN | — | — | — | — |
+| `TASK-018.03` | TODO | DESIGN | [Issue #67](https://github.com/donghyunlee-dev/meeting-automation/issues/67) / — | — | — | — |
 | `TASK-018.04` | TODO | DESIGN | — | — | — | — |
 | `TASK-019.01` | TODO | DESIGN | — | — | — | — |
 | `TASK-019.02` | TODO | DESIGN | — | — | — | — |
@@ -2623,7 +2623,7 @@ Backend API 작업은 정상 응답뿐 아니라 명세된 검증 오류, 없는
 |---|---|---|------|---|
 | `TASK-018.01` Android Chrome 녹음 검증 / QA | TASK-005.08, TASK-017.03 | NFR-001~003,007, Section 21 | Android Chrome 30/60분 baseline 및 화면 잠금·앱 전환·전화·네트워크 단절별 녹음 결과, chunk/업로드 무결성, 재현 절차와 비민감 Evidence를 기록한다. | 설계완료 · `docs/specs/phase-08-field-validation/TASK-018.01/` |
 | `TASK-018.02` iOS Safari 녹음 검증 / QA | TASK-005.08, TASK-017.03 | NFR-001~003,007, Section 21 | 동일 조건을 iOS Safari에서 검증하고 브라우저별 제한 및 재현 결과를 기록한다. | 설계완료 · `docs/specs/phase-08-field-validation/TASK-018.02/` |
-| `TASK-018.03` Chunk 복구·재전송 현장 검증 / QA | TASK-018.01, TASK-018.02 | FR-005, NFR-007 | 단절 구간에서 저장된 Chunk가 누락·중복 없이 복구되는지 확인하고 Evidence를 남긴다. | 설계중 · `docs/specs/phase-08-field-validation/TASK-018.03/` |
+| `TASK-018.03` Chunk 복구·재전송 현장 검증 / QA | TASK-018.01, TASK-018.02 | FR-005, NFR-007 | 단절 구간에서 저장된 Chunk가 누락·중복 없이 복구되는지 확인하고 Evidence를 남긴다. | 설계완료 · `docs/specs/phase-08-field-validation/TASK-018.03/` |
 | `TASK-018.04` 녹음 호환성 조정과 재검증 / FE, BE, QA | TASK-018.01~TASK-018.03 | NFR-001~003,007 | 발견된 MIME/Chunk/안내 이슈를 수정하고 실패 시나리오를 재검증한다. 지원 브라우저 범위를 확정한다. | 미설계 · — |
 
 ### TASK-019 Meeting Room STT / Diarization Tuning — 작업 묶음
