@@ -1,7 +1,7 @@
 # Meeting Automation Product Requirements Document
 
 > **문서 ID:** PRD-MA-001\
-> **버전:** 1.8.0\
+> **버전:** 1.8.1\
 > **기준일:** 2026-10-06\
 > **상태:** Approved Baseline Candidate\
 > **문서 역할:** Meeting Automation V1의
@@ -32,6 +32,7 @@
 > **변경 이력 v1.6.2:** Document Provider 미선택 상태와 공통 Integration Health 응답 규칙을 확정\
 > **변경 이력 v1.7.0:** Participant를 회의 작성자 지정형 `{id,name,email}` roster로 정의\
 > **변경 이력 v1.8.0:** 처리 실패 시 사용자 명시 재시도, Audio 24시간 임시 보존·다운로드·실패 문서 종료와 참석자 전달 억제 규칙 추가\
+> **변경 이력 v1.8.1:** 변환 실패 Audio를 비공개 객체 저장소에 최대 24시간 보존해 재시도·다운로드를 지원하고 만료 정리를 추가\
 > **변경 이력 v1.1.0:** Technology Baseline 확정, Monorepo/Node.js/React/Spring Boot 역할 명시, 실제 모바일·회의실 품질 검증을 개발 선행 Gate에서 Phase 8로 이동
 
 ------------------------------------------------------------------------
@@ -301,8 +302,9 @@ Spring Boot 4.1.x / Java 25
 
   `DEC-020`                           원본 Audio는 처리용 임시 데이터다.
                                       성공 시 Review 진입 때 삭제하고,
-                                      실패 시 마지막 실패부터 24시간 내
-                                      재시도/다운로드 후 정리한다.
+                                      실패 시 비공개 객체 저장소에 마지막
+                                      실패부터 24시간 내 재시도/다운로드
+                                      용도로 보존한 후 정리한다.
   -----------------------------------------------------------------------
 
 ------------------------------------------------------------------------
@@ -395,7 +397,7 @@ sequenceDiagram
         B->>A: Template 기반 Minutes 생성
         A-->>B: Structured Minutes
         B-->>W: Review Data
-        B->>B: Temporary Audio 삭제
+        B->>B: private Audio object 삭제
 
         U->>W: Speaker A/B/C ↔ Participant 매핑
         W->>B: Speaker Mapping 저장
@@ -428,7 +430,7 @@ sequenceDiagram
             W->>B: 실패 종료
             B->>D: 회의 정보 + 변환 실패/disposition 기록
             Note over B,E: Email 및 Slack 전달을 만들지 않음
-            B->>B: Temporary Audio/chunks 삭제
+            B->>B: private Audio/chunk object 삭제
         end
     end
 ```
@@ -479,15 +481,15 @@ flowchart LR
 
 ## 6.2 Backend 책임
 
-Backend는 데이터 저장 서버가 아니라 **Integration Gateway + Meeting
-Workflow Processor**다.
+Backend는 범용 파일 저장 서버가 아니라 **Integration Gateway + Meeting
+Workflow Processor**다. Audio 처리 입력과 실패 복구를 위해 제한된 기간 동안만 비공개 객체 저장소를 사용한다.
 
 ``` mermaid
 flowchart TB
     API[REST API]
     APP[Meeting Application]
     SES[In-memory Session Store]
-    AUD[Temporary Audio]
+    AUD[Private Audio Object Storage]
     TMP[Template Service]
     STT[Transcription Port]
     DOC[DocumentProvider]
@@ -553,7 +555,7 @@ Domain/Application 계층은 특정 Notion/Confluence/Slack/OpenAI SDK 타입을
   Meeting Minutes                          Document Provider             Y
   Transcript                               Meeting Document              Y
   Active MeetingSession                    Spring memory                 N
-  Audio chunk/assembled audio              Browser + Backend temporary   N
+  Audio chunk/assembled audio              Browser temporary + private object storage   처리 중 유지, 성공 시 삭제, 실패 시 최대 24시간
   Meeting list cache                       memory                        N
 
 ## 7.2 MeetingSession
@@ -891,7 +893,7 @@ Backend가 Template에 렌더링한다.
 
   `FR-027`                            사용자가 retryable 처리 실패를 24시간 안에 명시 재시도하거나 Audio 다운로드 후 실패 마무리를 선택한다. 자동 재시도는 없다.
 
-  `FR-028`                            처리 성공 시 Audio를 삭제하고, 변환 실패에서는 다운로드·실패 종료 기회를 위해 최대 24시간 보존 후 삭제한다.
+  `FR-028`                            처리 성공 시 Audio를 삭제하고, 변환 실패에서는 비공개 객체 저장소에 다운로드·실패 종료 기회를 위해 최대 24시간 보존 후 삭제한다.
 
   `FR-029`                            운영 오류를 Admin Slack으로
                                       전송한다.
@@ -924,7 +926,7 @@ Backend가 Template에 렌더링한다.
   `NFR-005`                           Provider Secret은 Backend에서만
                                       사용한다.
 
-  `NFR-006`                           Audio는 처리 목적의 임시 데이터이며 영구 보관하지 않는다. 변환 실패 Audio는 실패 대기 상태에서 마지막 실패부터 최대 24시간 보존한다. 사용자 retry 실행 중에는 처리 입력으로 유지한다.
+  `NFR-006`                           Audio는 처리 목적의 임시 데이터이며 영구 보관하지 않는다. 비공개 객체 저장소에서 변환 실패 Audio를 마지막 실패부터 최대 24시간 보존한다. 사용자 retry 실행 중에는 처리 입력으로 유지한다. 인증된 Backend 경로로만 읽고 공개 URL을 만들지 않으며 성공·사용자 종료·만료 후 삭제한다.
 
   `NFR-007`                           네트워크 일시 단절 시 미전송
                                       chunk를 재전송할 수 있어야 한다.
@@ -1104,12 +1106,12 @@ Bottom Sheet/Modal:
 
 실제 Backend 상태와 동기화한다.
 
-`PROCESSING_FAILED`이면 실패 stage와 안전한 안내를 표시한다. `retryable=true`이고 Audio 보존 기한 전이면 사용자가 `변환 재시도`를 명시적으로 실행할 수 있다. 자동 재시도는 없다. 실패가 반복되면 사용자는 원본 Audio를 내려받은 뒤 `변환 실패로 마무리`를 선택할 수 있다. 실패 종료 시 Meeting 문서에는 회의 정보, 변환 실패, Audio 다운로드 완료 여부를 기록하고 Email/Slack은 참석자에게 보내지 않는다. 24시간 안에 결정을 하지 않으면 Audio를 정리하고 실패 문서를 마무리한다.
+`PROCESSING_FAILED`이면 실패 stage와 안전한 안내를 표시한다. `retryable=true`이고 Audio 보존 기한 전이면 사용자가 `변환 재시도`를 명시적으로 실행할 수 있다. 자동 재시도는 없다. 실패가 반복되면 사용자는 비공개 객체 저장소의 원본 Audio를 내려받은 뒤 `변환 실패로 마무리`를 선택할 수 있다. 실패 종료 시 Meeting 문서에는 회의 정보, 변환 실패, Audio 다운로드 완료 여부를 기록하고 Email/Slack은 참석자에게 보내지 않는다. 24시간 안에 결정을 하지 않으면 Audio를 정리하고 실패 문서를 마무리한다.
 
 ``` text
 녹음 변환에 실패했어요
 실패 단계: 음성 변환
-원본 녹음은 24시간 동안 보관됩니다.
+원본 녹음은 비공개 저장소에 최대 24시간 동안 보관됩니다.
 
 [ 변환 재시도 ]  [ 원본 녹음 다운로드 ]
 [ 변환 실패로 마무리 ]
@@ -1688,7 +1690,7 @@ Response:
 ```
 
 Errors: - `AUDIO_CHUNK_CONFLICT` - `AUDIO_CHUNK_INVALID` -
-`SESSION_NOT_FOUND`
+`AUDIO_STORAGE_FAILED` - `SESSION_NOT_FOUND`
 
 ------------------------------------------------------------------------
 
@@ -2518,8 +2520,8 @@ Backend API 작업은 정상 응답뿐 아니라 명세된 검증 오류, 없는
 | 세부 작업 / 영역 | 선행 작업 | Related IDs | 완료 및 검증 조건 | 설계 상태 / 문서 |
 |---|---|---|------|---|
 | `TASK-017.01` Secret 경계 및 로그 마스킹 / BE, FE | TASK-001.05, TASK-016.01 | DEC-017, FR-030, NFR-004~006 | FE bundle/API 응답/로그에서 Secret 탐지 0건. 자동 secret scan과 로그 테스트 통과 | 설계완료 · `docs/specs/phase-07-security/TASK-017.01/` |
-| `TASK-017.02` Temporary Audio 보존·실패 종료 Backend / BE | TASK-006.01, TASK-006.04, TASK-006.05, TASK-010.02 | DEC-020, FR-027,028, NFR-006, API-020~022 | 변환 실패 Audio가 대기 중 최대 24시간 보존되고, 성공·실패 종료·만료 후 정리된다. 실패 종료 문서는 Email/Slack으로 전달되지 않는다. | 설계완료 · `docs/specs/phase-07-security/TASK-017.02/` |
-| `TASK-017.03` 처리 실패 재시도·Audio 복구 화면 / FE, INTEGRATION | TASK-017.02 | SCR-005, FR-027, API-010,020~022 | 실패 stage와 남은 보존 시간을 표시하고 명시 재시도, Audio 다운로드 및 실패 마무리를 제공한다. 완료/오류/만료 화면 상태를 검증한다. | 미설계 · — |
+| `TASK-017.02` 비공개 Audio 보존·실패 종료 Backend / BE | TASK-006.01, TASK-006.04, TASK-006.05, TASK-010.02 | DEC-020, FR-027,028, NFR-006, API-020~022 | 변환 실패 Audio가 비공개 객체 저장소에 대기 중 최대 24시간 보존되고, 성공·실패 종료·만료 후 삭제된다. 인증되지 않은 공개 URL 접근이 불가능하고 실패 종료 문서는 Email/Slack으로 전달되지 않는다. | 설계완료 · `docs/specs/phase-07-security/TASK-017.02/` |
+| `TASK-017.03` 처리 실패 재시도·Audio 복구 화면 / FE, INTEGRATION | TASK-017.02 | SCR-005, FR-027, API-010,020~022 | 실패 stage와 남은 보존 시간을 표시하고 명시 재시도, Audio 다운로드 및 실패 마무리를 제공한다. 완료/오류/만료 화면 상태를 검증한다. | 설계중 · `docs/specs/phase-07-security/TASK-017.03/` |
 | `TASK-017.04` 보안·개인정보 회귀 점검 / QA | TASK-017.01, TASK-017.02, TASK-017.03 | DEC-017,020, FR-027,028,030, NFR-004~006 | Audio/Transcript/Secret 로그 노출, FE Secret, 잔여 Audio, 실패 문서 전달 억제를 검증하고 Evidence를 기록한다. | 미설계 · — |
 
 ## Phase 8 — 실제 모바일 / 회의실 품질 검증 및 튜닝

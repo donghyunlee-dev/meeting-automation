@@ -1,14 +1,14 @@
-# Temporary Audio 보존과 변환 실패 종료
+# 비공개 Audio 보존과 변환 실패 종료
 
 ## 목표
 
-STT, diarization 또는 Minutes 변환이 실패해도 사용자가 직접 다시 시도하고, 반복 실패 시 원본 Audio를 다운로드하거나 실패로 마무리할 수 있도록 Backend 임시 Audio 수명주기를 정의한다. 실패 마무리 Meeting 문서에는 회의 정보와 변환 실패를 남기며 참석자 Email/Slack 전달은 수행하지 않는다.
+STT, diarization 또는 Minutes 변환이 실패해도 사용자가 직접 다시 시도하고, 반복 실패 시 원본 Audio를 다운로드하거나 실패로 마무리할 수 있도록 Backend 비공개 객체 Audio 수명주기를 정의한다. 실패 마무리 Meeting 문서에는 회의 정보와 변환 실패를 남기며 참석자 Email/Slack 전달은 수행하지 않는다.
 
-PRD v1.8.0 (2026-10-06), `TASK-017.02`, `DEC-020`, `FR-027`, `FR-028`, `NFR-006`, `API-010`, `API-020~022`를 구체화한다. Issue [#61](https://github.com/donghyunlee-dev/meeting-automation/issues/61).
+PRD v1.8.1 (2026-10-06), `TASK-017.02`, `DEC-020`, `FR-027`, `FR-028`, `NFR-006`, `API-010`, `API-020~022`를 구체화한다. Issue [#61](https://github.com/donghyunlee-dev/meeting-automation/issues/61).
 
 ## 범위
 
-- Backend chunk 및 assembled Audio의 성공·실패·재시도·다운로드·정리 수명주기
+- 비공개 객체 저장소에 Backend chunk 및 assembled Audio를 저장하는 성공·실패·재시도·다운로드·정리 수명주기
 - `PROCESSING_FAILED` 상태의 retryability, Audio 가용성/만료 metadata 및 허용 action 제공
 - 사용자 명시 processing retry를 실패 stage부터 재개
 - 원본 Audio binary 다운로드와 24시간 보존 기한 처리
@@ -18,7 +18,8 @@ PRD v1.8.0 (2026-10-06), `TASK-017.02`, `DEC-020`, `FR-027`, `FR-028`, `NFR-006`
 
 ## 비범위
 
-- Vercel Blob, Object Storage, DB, Redis, Queue 추가
+- 구체 Storage Provider/SDK를 Domain/Application에 직접 결합
+- DB, Redis, Queue 추가
 - Audio, Transcript, Minutes 또는 Provider raw body를 실패 문서에 저장
 - 누락/손상 source chunk 재업로드 및 chunk별 다운로드
 - 자동 retry, retry 횟수 상한, 참가자별 상태 관리
@@ -28,9 +29,11 @@ PRD v1.8.0 (2026-10-06), `TASK-017.02`, `DEC-020`, `FR-027`, `FR-028`, `NFR-006`
 ## 동작 계약
 
 - Meeting metadata, Template, 작성자가 고른 Participant roster는 녹음 시작 전에 Session에 확정되어 있다.
-- 정상 pipeline이 `REVIEW`에 진입하면 backend chunk와 assembled Audio를 정리한다.
+- 정상 pipeline이 `REVIEW`에 진입하면 private object chunk와 assembled Audio를 정리한다.
 - Audio assembly 뒤 `TRANSCRIPTION`, `DIARIZATION`, `MINUTES_GENERATION` 변환 stage가 실패하면 Session을 `PROCESSING_FAILED`로 기록한다. 이전 완료 stage 산출물은 보존해 재시도 시 실패 stage부터 재개한다. `MINUTES_GENERATION` retry는 기존 Transcript와 mapping만 재사용한다.
-- Audio assembly 실패는 source chunks를 최대 24시간 보존한다. 실패가 retryable이고 모든 expected chunk가 남아 있으면 `RETRY_PROCESSING`으로 assembly stage부터 재개한다. 검증된 assembled Audio가 없으면 `DOWNLOAD_AUDIO`를 제공하지 않고 실패 마무리 시 chunks를 폐기한다.
+- `PrivateAudioStoragePort`는 Domain/Application의 표준 경계다. 선택한 object storage adapter가 객체의 private access, byte stream, metadata, 삭제를 제공한다. Provider SDK/type, raw key, credential은 Domain/API에 노출하지 않는다.
+- 모든 Backend 수신 chunk와 assembled Audio는 Backend local filesystem이 아닌 비공개 객체 저장소에 쓴다. durable 저장 확인 전에 API-007은 성공 ACK를 반환하지 않는다. 객체는 session ID/sequence/type을 서버 생성 opaque object key와 metadata로 연결하며 public URL을 만들지 않는다.
+- Audio assembly 실패는 source chunk 객체를 최대 24시간 보존한다. 실패가 retryable이고 모든 expected chunk가 남아 있으면 `RETRY_PROCESSING`으로 assembly stage부터 재개한다. 검증된 assembled Audio가 없으면 `DOWNLOAD_AUDIO`를 제공하지 않고 실패 마무리 시 chunks를 폐기한다.
 - Assembly 완료 뒤 발생한 변환 실패는 assembled Audio를 실패 시각부터 최대 24시간 보존한다. retryable 오류에만 `RETRY_PROCESSING`을 제공한다. retryable이 아닌 경우에도 assembled Audio 다운로드/실패 종료는 보존 기간 동안 허용한다.
 - 24시간은 `PROCESSING_FAILED` 대기 상태에 적용한다. 사용자가 기한 전에 명시 retry를 시작하면 active processing 동안 입력 Audio/chunks를 삭제하지 않고 대기 TTL을 정지한다. retry가 다시 실패하면 그 실패 시각부터 24시간을 새로 계산한다. retry 성공 시 Review 진입 전에 Audio와 chunk를 정리한다. 각 사용 retry는 새 `Idempotency-Key`와 최신 `If-Match`를 사용한다.
 - 다운로드는 서버가 제공한 원본 Audio stream을 browser attachment로 전달한다. Browser가 성공 응답을 받은 뒤 사용자가 저장 여부를 선택한다. 사용자는 저장 확인 후 실패를 `DOWNLOADED`로 마무리하거나 `DISCARDED`로 마무리할 수 있다.
@@ -39,7 +42,8 @@ PRD v1.8.0 (2026-10-06), `TASK-017.02`, `DEC-020`, `FR-027`, `FR-028`, `NFR-006`
 - 미종료 Audio는 마지막 변환 실패 후 24시간에 접근 불가해진다. 만료 처리기가 Audio/chunk를 제거하고 `DISCARDED`로 실패 문서를 저장해 `COMPLETED_WITH_WARNINGS`로 종료한다. Document 저장 실패는 안전 오류를 보존하고 Audio disposition/Session을 유지한다. 사용자가 finalize를 재요청할 때는 새 Idempotency-Key를 사용하고 provider `externalSessionId` 멱등성으로 중복 문서를 막는다.
 - 만료 시각은 UTC instant로 저장한다. API는 만료 시각이 지났으면 처리기가 파일을 지우기 전이라도 retry/download를 거부한다. 정리기는 적어도 1분 주기로 기한을 확인하고 삭제를 재수행한다. active retry는 만료 sweep에서 제외한다. 삭제는 idempotent다.
 - Session과 job은 메모리 전용이다. Backend 재시작/재배포 뒤 Session 복구 및 Audio retry/download를 보장하지 않는다. Session이 사라지면 기존 API의 `SESSION_NOT_FOUND`를 반환한다.
-- 삭제 실패 시 해당 경로를 성공 삭제로 기록하지 않는다. 파일 경로/Audio bytes/Transcript/Secret 없이 `sessionId`, `traceId`, stage, error code, cleanup outcome만 로그에 남긴다. 경로는 서버 생성 ID 하위로 제한하고 symlink 및 경로 탈출을 거부한다.
+- expiry metadata는 객체와 함께 durable하게 저장해 Backend 재시작 뒤에도 cleanup scheduler가 세션 메모리와 독립적으로 만료 객체를 제거한다. 명시 retry 중인 객체는 lease/expiry를 갱신해 처리 종료 전 삭제하지 않고, retry 실패 시 새 실패시각+24h로 재설정한다.
+- Storage I/O 실패 또는 객체의 무결성 불일치는 `AUDIO_STORAGE_FAILED`로 안전하게 반환한다. 부분 upload는 객체 확정 전 정리하고 실패한 object 삭제는 cleanup-pending으로 재시도한다. object key, Audio bytes, Transcript, Secret 없이 `sessionId`, `traceId`, stage, safe error code, cleanup outcome만 로그에 남긴다.
 
 ## API 계약
 
@@ -47,21 +51,22 @@ PRD v1.8.0 (2026-10-06), `TASK-017.02`, `DEC-020`, `FR-027`, `FR-028`, `NFR-006`
 - `API-020`: `POST /meeting-sessions/{sessionId}/processing/retry`는 `Idempotency-Key`와 `If-Match`를 사용하며 retryable 실패·미만료 Audio 또는 필요한 complete chunks만 허용한다. 이미 완료한 stage를 건너뛰고 실패 stage부터 처리한다.
 - `API-021`: `GET /meeting-sessions/{sessionId}/audio/download`는 검증된 assembled Audio가 미만료일 때 binary attachment로 반환한다. 응답 body는 공통 JSON envelope 예외다.
 - `API-022`: `POST /meeting-sessions/{sessionId}/processing/finalize-failure`는 `{audioDisposition:"DOWNLOADED"|"DISCARDED"}`를 받는다. 성공 download가 없는 `DOWNLOADED` 요청은 거절한다.
-- 만료·파일 부재는 `AUDIO_NOT_AVAILABLE`; 상태 충돌은 `SESSION_STATE_CONFLICT`; stale version은 기존 `SESSION_VERSION_CONFLICT`를 따른다.
+- 만료·객체 부재는 `AUDIO_NOT_AVAILABLE`; 저장소 I/O 실패는 retryable `AUDIO_STORAGE_FAILED`; 상태 충돌은 `SESSION_STATE_CONFLICT`; stale version은 기존 `SESSION_VERSION_CONFLICT`를 따른다.
 
 ## 수용 기준
 
-- 정상 처리 성공은 Review 진입 전에 임시 Audio와 chunks를 제거한다.
+- 정상 처리 성공은 Review 진입 전에 비공개 객체의 Audio와 chunks를 제거한다.
 - retryable 변환 실패는 failed stage와 Audio 만료 시각을 저장하고 만료 전 사용자 재시도 action을 제공한다.
 - `MINUTES_GENERATION` 재시도는 STT/Diarization을 다시 호출하지 않는다.
 - non-retryable 변환 실패는 재시도 action 없이 다운로드와 실패 종료를 제공한다.
 - 재시도는 완료 stage를 다시 호출하지 않으며 retry 실패 시 만료 시각을 갱신한다.
-- 기한 경과 즉시 API가 retry/download를 차단하고 정리기가 임시 Audio/chunks를 삭제한다.
+- 기한 경과 즉시 API가 retry/download를 차단하고 정리기가 private object Audio/chunks를 삭제한다. Backend 재시작 후에도 만료 객체가 정리된다.
 - 성공 download 뒤 `DOWNLOADED`, 사용자가 저장하지 않기로 선택하면 `DISCARDED`로 실패 종료한다.
 - 실패 문서에는 meeting metadata와 실패 요약/disposition이 있고 Transcript/Minutes/Audio/raw provider 오류가 없다.
 - 실패 종료/만료 시 Email/Slack 호출 및 Delivery row가 0건이다.
-- 중복 finalize, 반복 cleanup, download 불가, 잘못된 경로, symlink, 삭제 오류가 안전하게 처리된다.
-- Backend restart 후 Session을 찾을 수 없으며 오래된 임시 파일 정리만 수행한다.
+- 중복 finalize, 반복 cleanup, download 불가, 임의 object key, 저장소 timeout, 삭제 오류가 안전하게 처리된다.
+- 저장소 쓰기가 durable하게 확인되지 않으면 API-007은 성공 ACK를 보내지 않고 `AUDIO_STORAGE_FAILED`를 반환한다. 미완료 객체는 정리 대상이 된다.
+- Backend restart 후 Session은 찾을 수 없지만 만료 sweep은 Session과 독립적으로 private object를 정리한다.
 
 ## 승인된 결정
 
@@ -69,6 +74,7 @@ PRD v1.8.0 (2026-10-06), `TASK-017.02`, `DEC-020`, `FR-027`, `FR-028`, `NFR-006`
 - 실패가 반복되면 사용자는 원본 Audio를 다운로드하거나 변환 실패로 마무리한다.
 - 실패 Meeting 문서에는 Audio 다운로드/변환 실패를 기록하되 Email/Slack은 참석자에게 보내지 않는다.
 - Processing 실패의 필요한 retry input 및 검증된 assembled Audio 보존 기간은 마지막 실패로부터 최대 24시간이며, 각 명시 재시도 실패 뒤 기한을 다시 계산한다.
+- 사용자는 Audio를 실패 후 재시도/다운로드를 위해 private object storage에 최대 24시간 보관하는 방식을 승인했다. 구체 storage provider는 adapter/configuration 경계에 두며 public access를 사용하지 않는다.
 - 사용자 결정은 Issue #61에 기록했다.
 
 ## 추적성 참고

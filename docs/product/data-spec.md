@@ -10,7 +10,7 @@
 - 별도 application database를 두지 않는다.
 - 진행 중 Session과 조회 cache는 메모리에만 둔다.
 - Participant와 완료 Meeting 문서는 Document Provider가 영속 Source of Truth다.
-- Audio는 처리용 임시 데이터이며 처리 이후 삭제한다.
+- Audio는 처리용 임시 데이터다. 실패한 Audio는 비공개 객체 저장소에서 최대 24시간 보존하고 처리 이후 삭제한다.
 - 모든 모델은 Provider SDK 타입과 분리된 표준 DTO/Domain model이다.
 - 시간은 ISO 8601 offset/Z 표기를 사용한다. Segment 위치는 정수 millisecond다.
 
@@ -25,12 +25,12 @@
 | 완료 Meeting, Minutes, Transcript | Document Provider `Meetings` child page | Provider 정책에 따름 |
 | 진행 MeetingSession | Backend memory | 완료/실패 또는 프로세스 재시작까지 |
 | 브라우저 대기 Audio chunk | IndexedDB 등 Browser temporary storage | 업로드 ACK/세션 정리까지 |
-| Backend chunk 및 assembled Audio | 설정된 임시 디렉터리 | 성공 시 Review 진입 때 삭제. Processing 실패에서 재시도 입력/chunks 및 검증된 assembled Audio를 마지막 실패부터 최대 24시간 보존하며, 재시도·실패 마무리·만료 시 삭제 |
+| Backend chunk 및 assembled Audio | 비공개 객체 저장소 | 성공 시 Review 진입 때 삭제. Processing 실패에서 retry input/chunks 및 검증된 assembled Audio를 마지막 실패부터 최대 24시간 보존하며, retry 성공·실패 마무리·만료 시 삭제. Backend filesystem에 영속 Audio를 두지 않음 |
 | Meeting list cache | Backend memory | 짧은 휘발성 cache, 재조회 가능 |
 
-Session은 서버 재시작 뒤 복구되지 않는다. 구현은 서버 영속화를 암묵적으로 기대하지 말고, 상태 조회 시 휘발된 Session에 `SESSION_NOT_FOUND`를 반환한다. Browser의 미전송 chunk는 재전송할 수 있지만 Session이 유실된 경우 새 Session 재생성이 필요할 수 있다. Render 재시작/재배포로 Session과 임시 파일이 함께 유실되면 해당 Session의 재시도/다운로드는 불가능하다.
+Session은 서버 재시작 뒤 복구되지 않는다. 상태 조회 시 휘발된 Session에 `SESSION_NOT_FOUND`를 반환한다. Browser의 미전송 chunk는 재전송할 수 있지만 Session이 유실된 경우 새 Session 재생성이 필요할 수 있다. 비공개 Audio 객체는 Backend 재시작/재배포로 삭제되지 않으며 설정된 만료까지 보존·정리된다. 다만 Session 복구가 별도로 지원되지 않으므로 API를 통한 해당 Session의 재시도/다운로드는 불가능할 수 있다.
 
-`PROCESSING_FAILED` Session은 `failedStage`, 안전한 `errorCode`, `retryable`, `audioAvailable`, `audioExpiresAt` metadata를 가진다. retryable 여부와 관계없이 만료 전 실패 종료는 가능하다. `AUDIO_ASSEMBLY` 실패 시 필요한 source chunks를 보존하고 retryable이면 재시도한다. 검증된 assembled Audio가 있을 때만 사용자는 원본 Audio를 다운로드할 수 있다. 재시도가 명시적으로 시작되면 필요한 Audio/chunks를 유지하고, 재시도 실패 시 만료를 새 실패 시각에서 24시간으로 갱신한다. 성공하면 REVIEW 진입 전 Audio/chunk를 삭제한다. 실패 종료 또는 기한 만료 시 Audio/chunk를 삭제하고 Session을 `COMPLETED_WITH_WARNINGS`로 마무리한다.
+`PROCESSING_FAILED` Session은 `failedStage`, 안전한 `errorCode`, `retryable`, `audioAvailable`, `audioExpiresAt` metadata를 가진다. retryable 여부와 관계없이 만료 전 실패 종료는 가능하다. Audio chunk와 assembled object는 private storage port에 서버 생성 opaque key로 저장하며 public URL을 생성하지 않는다. `AUDIO_ASSEMBLY` 실패 시 필요한 source chunks를 보존하고 retryable이면 재시도한다. 검증된 assembled Audio가 있을 때만 사용자는 인증된 API 경로로 원본 Audio를 다운로드할 수 있다. 재시도가 명시적으로 시작되면 필요한 Audio/chunks의 expiry sweep을 중지하고, 재시도 실패 시 object 만료를 새 실패 시각에서 24시간으로 갱신한다. 성공하면 REVIEW 진입 전 Audio/chunk를 삭제한다. 실패 종료 또는 기한 만료 시 Audio/chunk를 삭제하고 Session을 `COMPLETED_WITH_WARNINGS`로 마무리한다. 저장 실패는 안전한 `AUDIO_STORAGE_FAILED`로 처리하며 Audio를 잃은 상태로 processing 성공을 가장하지 않는다.
 
 실패 종료 Meeting 문서는 `{externalSessionId,meetingAt,templateId,participantIds}` 기존 최소 metadata에 실패 stage, safe error code, `audioDisposition`, 완료 시각을 추가한다. 본문에는 meeting 정보와 `녹음 변환 결과: 실패` 기록을 둔다. Transcript, Minutes placeholder, Audio bytes, 파일 경로, Provider 원문은 기록하지 않는다. 정상 처리 완료 문서 저장은 기존 Review/Confirm 흐름을 따른다.
 

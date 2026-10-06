@@ -17,16 +17,18 @@
 | AUDIO-LIFE-11 | `DISCARDED` finalize 및 TTL 자동 finalize | 실패 문서 기록, Audio/chunk 삭제, email/notification 호출 0회 | adapter interaction assertions |
 | AUDIO-LIFE-12 | 성공 download 없이 `DOWNLOADED` finalize | 거절, Session/document 불변 | HTTP error + version assertion |
 | AUDIO-LIFE-13 | 동일 finalize key 재요청 | 최초 성공 결과 재사용, 문서 중복 생성 없음 | idempotency/document call count |
-| AUDIO-LIFE-14 | 중복 cleanup, 파일 없음, delete IOException | 멱등 처리 또는 cleanup-pending; raw path/Audio 없는 로그 | filesystem fake + log capture |
-| AUDIO-LIFE-15 | `../`, symlink, 다른 app subtree | 경로 탈출/심볼릭 링크 거부 | temp filesystem security test |
-| AUDIO-LIFE-16 | Backend 재시작 후 기존 Session 조회 | `SESSION_NOT_FOUND`; 메모리 Session 복구 없음, stale temp 정리 | restart fixture + logs |
+| AUDIO-LIFE-14 | 중복 cleanup, 객체 없음, delete timeout | 멱등 처리 또는 cleanup-pending; object key/Audio 없는 로그 | object storage fake + log capture |
+| AUDIO-LIFE-15 | 임의 object key, 다른 Session/object prefix | 외부 key 접근 및 cross-session object 조작 거부 | storage adapter authorization test |
+| AUDIO-LIFE-16 | Backend 재시작 후 기존 Session 조회 | `SESSION_NOT_FOUND`; 메모리 Session 복구 없음 | restart fixture + logs |
 | AUDIO-LIFE-17 | 실패 Meeting Document 본문 | metadata와 safe failure/disposition만 있고 Transcript/Minutes/Audio/raw provider response 없음 | captured body scan |
 | AUDIO-LIFE-18 | 기존 REVIEW/CONFIRMED/PUBLISH 정상 경로 | 정상 action, 저장, 선택 Delivery 결과 불변 | focused regression suite |
 | AUDIO-LIFE-19 | `MINUTES_GENERATION` retryable 실패 후 retry | 기존 Transcript/mapping 사용, STT와 diarization adapter 재호출 0회 | stage and adapter invocation assertions |
 | AUDIO-LIFE-20 | Failure Document Provider write 오류 후 새 finalize key로 재요청 | safe `DOCUMENT_FAILED`; Audio disposition 유지, externalSessionId로 문서 중복 없이 저장 재시도 | Document Port failure/retry test |
 | AUDIO-LIFE-21 | 두 retry 명령 동시 제출 또는 stale `If-Match` | Session 단위 한 실행만 접수; stale version은 412, 중복은 상태 충돌/동일 접수 결과 | concurrency and version tests |
+| AUDIO-LIFE-22 | Backend restart 뒤 storage expiry sweep | Session 복구 없이도 expiry metadata가 지난 app-owned Audio object를 제거 | adapter listing fake + fake clock |
+| AUDIO-LIFE-23 | Chunk durable write timeout/failure | API-007 성공 ACK가 없고 retry-safe storage error 반환 | storage adapter failure injection |
 
-모든 수용 기준을 AUDIO-LIFE-01~21에 연결한다. JSON API 오류는 공통 `{error}` envelope와 safe code/category/traceId를 검증한다.
+모든 수용 기준을 AUDIO-LIFE-01~23에 연결한다. JSON API 오류는 공통 `{error}` envelope와 safe code/category/traceId를 검증한다.
 
 ## 수동 QA
 
@@ -44,4 +46,4 @@ Evidence에 실제 Audio, Transcript, Secret, Provider raw body를 저장하지 
 
 - PRD, API, Data, Architecture, SDD 간 계약 일치와 `git diff --check`를 확인한다.
 - Java 21/Gradle baseline의 실행 명령은 구현 단계에서 확정한다. 이 설계 요청에서는 테스트를 실행하지 않는다.
-- Backend 재시작 시 memory-only Session과 미완료 Audio 복구를 보장하지 않는 제한을 release note에 기록한다.
+- Backend 재시작 시 Session 복구는 지원하지 않지만 private Audio object는 만료까지 durable하며 cleanup sweep은 Session과 독립적으로 수행함을 확인한다.

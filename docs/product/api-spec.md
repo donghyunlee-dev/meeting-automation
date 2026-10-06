@@ -64,6 +64,7 @@ Session 상태와 전이 규칙은 [architecture.md](./architecture.md)의 상�
 | `DELIVERY_NOT_RETRYABLE` | 409 | N | Delivery가 FAILED가 아니거나 안전한 재시도가 허용되지 않음 |
 | `DELIVERY_RETRY_IN_PROGRESS` | 409 | N | 해당 Delivery의 재시도 처리가 이미 진행 중 |
 | `AUDIO_NOT_AVAILABLE` | 409 | N | 원본 Audio가 정리되었거나 보존 기한이 지남 |
+| `AUDIO_STORAGE_FAILED` | 502 | Y | private object storage 작업 실패. Audio를 온전한 저장 상태로 확인할 수 없음 |
 | `REVIEW_VALIDATION_FAILED` | 422 | N | Review 확정 조건 미충족. `details.issues`에 `{path,code}` 배열 포함 |
 | `AUDIO_CHUNK_INVALID` | 400 | N | MIME, checksum, 길이, 크기 검증 실패 |
 | `AUDIO_CHUNK_CONFLICT` | 409 | N | 같은 sequence가 다른 bytes로 이미 저장됨 |
@@ -166,7 +167,7 @@ Backend는 trim한 title, `default.md`/`project.md` Template, 1개 이상인 중
 
 `PUT /api/v1/meeting-sessions/{sessionId}/audio/chunks/{sequence}` → `200`
 
-Raw bytes body. `sequence`는 0 이상의 정수. Header에 `Content-Type`, `X-Audio-SHA256`, `X-Audio-Byte-Length`, `Idempotency-Key`를 보낸다. 동일 bytes 재전송은 `{sequence,received:true}`로 멱등 ACK한다. 같은 sequence에 다른 bytes, 잘못된 MIME/길이, 허용 크기 초과는 명시 오류다.
+Raw bytes body. `sequence`는 0 이상의 정수. Header에 `Content-Type`, `X-Audio-SHA256`, `X-Audio-Byte-Length`, `Idempotency-Key`를 보낸다. Backend는 검증 후 private Audio object storage에 저장하고, 저장이 durable하게 확인된 뒤에만 ACK `{sequence,received:true}`를 반환한다. 동일 bytes 재전송은 멱등 ACK한다. 같은 sequence에 다른 bytes, 잘못된 MIME/길이, 허용 크기 초과는 명시 오류다. 저장소 오류는 `AUDIO_STORAGE_FAILED`로 반환하고 성공 ACK를 하지 않는다.
 
 ### API-008 Audio Upload Status
 
@@ -196,7 +197,7 @@ Session이 `PROCESSING_FAILED`, 오류가 retryable, Audio assembly 산출물 �
 
 `GET /api/v1/meeting-sessions/{sessionId}/audio/download` → `200` binary
 
-Session의 Audio가 존재하고 미만료일 때만 허용한다. Raw audio stream, 검증된 MIME type, `Content-Disposition: attachment`를 반환한다. Session 생성 때 받은 recording MIME과 서버가 만든 안전한 파일명을 사용한다. 만료/삭제 후에는 409 `AUDIO_NOT_AVAILABLE`을 반환한다. Audio bytes와 경로는 로그에 남기지 않는다. Browser는 전송이 성공한 뒤 사용자에게 저장 확인을 받고 그 선택으로 API-022를 호출한다.
+Session의 Audio가 private object storage에 존재하고 미만료일 때만 허용한다. Backend가 Session 존재·상태·action과 저장소 object 접근을 검증한 뒤 stream하며 raw object URL이나 storage credential을 반환하지 않는다. Object storage credential은 Backend service에만 설정한다. 검증된 MIME type, `Content-Disposition: attachment`, Session 생성 때 받은 recording MIME과 서버가 만든 안전한 파일명을 사용한다. 만료/삭제 후에는 409 `AUDIO_NOT_AVAILABLE`을 반환한다. Audio bytes, object key, storage credential은 로그에 남기지 않는다. Browser는 전송이 성공한 뒤 사용자에게 저장 확인을 받고 그 선택으로 API-022를 호출한다.
 
 ### API-022 Finalize Processing Failure
 
