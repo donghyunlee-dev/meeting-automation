@@ -75,6 +75,10 @@ Session 상태와 전이 규칙은 [architecture.md](./architecture.md)의 상�
 
 위 세부 HTTP 매핑은 표준 제안이다. 구현 시 Spring 예외 처리기에서 일관되게 매핑하며 PRD 오류 유형 네 가지(`PROCESSING_FAILURE`, `DOCUMENT_FAILURE`, `EMAIL_FAILURE`, `NOTIFICATION_FAILURE`)를 운영 분류로 유지한다.
 
+`error.category`는 클라이언트가 안전한 안내를 선택할 수 있는 공개 오류 계열이다. 입력 오류는 `VALIDATION`, 자원 없음은 `NOT_FOUND`, 상태/idempotency 충돌은 `CONFLICT`, 처리되지 않은 내부 오류는 `INTERNAL`을 사용한다. 업무 Provider 실패는 각각 `PROCESSING_FAILURE`, `DOCUMENT_FAILURE`, `EMAIL_FAILURE`, `NOTIFICATION_FAILURE`를 사용한다. 운영 `incidentType`은 이 네 업무 분류만 허용하며, `traceId`, `sessionId`, `stage`, `errorCode`, `retryable`로 구조화 로그에 연결한다. 공개 API의 `code`/`category`와 Admin incident `incidentType`을 혼합하지 않는다.
+
+`retryable`은 해당 오류의 사용자/API 재시도가 중복 부작용 없이 안전한지 나타내며 서버 자동 반복을 뜻하지 않는다. Delivery는 각 결과의 `retryable`을 API-016이 소비한다. Audio/Document 작업은 해당 업무 API의 idempotency/상태 보호를 확인한 뒤 정하고, 전송 성공 여부가 불명확한 timeout/응답 유실은 `false`다. 일반 미분류 예외는 기존 `INTERNAL_ERROR`, category `INTERNAL`, `retryable=false`로 보수 변환한다.
+
 ## API 목록
 
 | ID | Method / Path | 목적 |
