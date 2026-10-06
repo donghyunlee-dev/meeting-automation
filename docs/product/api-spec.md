@@ -230,7 +230,7 @@ FAILED이며 `retryable=true`인 Delivery만 허용한다. `retryable`은 사용
 
 `GET /api/v1/meetings?limit=100` → `200`
 
-`limit` 기본 100, 허용 범위 1..100. 응답 item은 `{documentId,title,meetingAt,participants:[{id,name}],documentUrl}`. Provider child 페이지와 metadata를 읽으며 서버 full text search는 제공하지 않는다. 잘못된 범위는 400.
+`limit` 기본 100, 허용 범위 1..100. 응답 item은 `{documentId,title,meetingAt,participants:[{id,name}],documentUrl}`이며 결과는 `meetingAt` 내림차순(최신순)이다. Provider `Meetings` child page를 페이지네이션해 조회하고 필요한 Participant 이름은 Provider roster reference로 해석한다. `limit`은 모든 child page를 확인한 뒤 최신 회의 기준으로 적용한다. 서버 full text search는 제공하지 않는다. 잘못된 범위는 400 `VALIDATION_FAILED`; 필수 문서/metadata를 읽지 못하거나 Provider 조회가 실패하면 기존 502 `DOCUMENT_FAILED` (`DOCUMENT_FAILURE`)로 실패하며 부분 목록을 성공으로 반환하지 않는다.
 
 ### API-018 Meeting Detail
 
