@@ -5,7 +5,7 @@
 `frontend/`에서 React 웹 앱을 설치·실행·검증할 수 있는 최소 개발 기반을 만든다. 기본 렌더 테스트와 build/lint 명령으로 scaffold가 정상인지 확인한다.
 
 - GitHub Issue: [#2](https://github.com/donghyunlee-dev/meeting-automation/issues/2)
-- 선행 작업: `TASK-001.01`, [#1](https://github.com/donghyunlee-dev/meeting-automation/issues/1) 완료 후 구현 착수
+- 선행 작업: `TASK-001.01`, [#1](https://github.com/donghyunlee-dev/meeting-automation/issues/1) 완료 (PR #63 merged to `master`)
 - 후속 작업: `TASK-001.05`
 
 ## 관련 원본

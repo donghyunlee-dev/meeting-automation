@@ -46,7 +46,7 @@
 - PRD 3.1~3.2절의 Monorepo 및 Frontend 기준을 따른다: Node.js 22 LTS, npm, React 19, TypeScript 5.x, Vite 7.x, ESLint, Vitest.
 - 세부 패키지 버전은 기준 Major를 지키면서 설치 시점에 호환되는 버전을 잠금 파일에 고정한다.
 - 환경 변수는 Vite 클라이언트 bundle에 포함될 수 있으므로 공개 가능한 설정만 허용한다.
-- 선행 작업 Issue: [#1](https://github.com/donghyunlee-dev/meeting-automation/issues/1)은 현재 `OPEN`, `status:todo`다. 문서와 Issue 등록은 진행하지만 이 작업의 구현 착수는 #1 완료 후에 한다.
+- 선행 작업 Issue: [#1](https://github.com/donghyunlee-dev/meeting-automation/issues/1)은 `CLOSED`이며 PR #63이 `master`에 병합되었다. 선행 조건이 충족되어 이 작업의 구현을 진행한다.
 
 ## 연결된 문서
 
