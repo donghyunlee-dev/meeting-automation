@@ -1,0 +1,16 @@
+# Frontend generated files
+**/node_modules/
+/frontend/dist/
+/frontend/.vite/
+
+# Backend generated files
+/backend/.gradle/
+/backend/build/
+
+# Local environment files
+**/.env
+**/.env.*
+
+# Safe environment examples remain trackable
+!**/.env.example
+!**/.env.*.example
