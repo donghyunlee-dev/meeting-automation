@@ -2652,7 +2652,7 @@ Backend API 작업은 정상 응답뿐 아니라 명세된 검증 오류, 없는
 | `TASK-021.01` Mock 기반 핵심 E2E 시나리오 / FE, BE, QA | TASK-001.05~TASK-020.04 | 전체 | 회의 생성→녹음 Chunk→처리→화자 매핑→Minutes 수정/재생성 흐름을 자동화 테스트로 통과한다. | 설계완료 · `docs/specs/phase-10-e2e/TASK-021.01/` |
 | `TASK-021.02` Document/Email/Slack E2E / INTEGRATION, QA | TASK-021.01 | 전체, EXT-003~005 | Document 저장 이후 Email/Slack 결과와 실패 재시도가 각 채널 독립적으로 검증된다. | 설계완료 · `docs/specs/phase-10-e2e/TASK-021.02/` |
 | `TASK-021.03` History·보안·임시 Audio E2E / QA | TASK-021.02 | FR-020~030, DEC-020 | 완료 회의 재조회, read-only 상세, Secret 비노출, Audio 삭제까지 자동/수동 Evidence로 확인한다. | 설계완료 · `docs/specs/phase-10-e2e/TASK-021.03/` |
-| `TASK-021.04` Release Acceptance 및 증거 검토 / QA | TASK-021.01~TASK-021.03, TASK-018.04, TASK-019.03, TASK-020.04 | 전체 | Release Definition of Done의 모든 항목에 Evidence가 연결되고 미충족 항목은 DONE 처리되지 않는다. | 미설계 · — |
+| `TASK-021.04` Release Acceptance 및 증거 검토 / QA | TASK-021.01~TASK-021.03, TASK-018.04, TASK-019.03, TASK-020.04 | 전체 | Release Definition of Done의 모든 항목에 Evidence가 연결되고 미충족 항목은 DONE 처리되지 않는다. | 설계중 · `docs/specs/phase-10-e2e/TASK-021.04/` |
 
 
 # 24. Release Definition of Done
