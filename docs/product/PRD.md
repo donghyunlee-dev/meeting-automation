@@ -2300,7 +2300,7 @@ Meeting UI
 
 각 세부 TASK 표의 `설계 상태 / 문서` 열은 **설계 진행 상태**를 기록한다. 구현 진행 상태는 계속 GitHub Issue의 상태 라벨과 종료 상태가 기준이며, 두 상태를 혼합하지 않는다.
 
-**다음 설계 대상 커서: `TASK-019.03`** — TASK-019.02 네 문서와 Issue #71을 master commit `aafe140`에서 원격 확인했다. 3인 baseline과 같은 scorecard/provider 설정을 5인 synthetic fixture에 적용해 CER/WER, diarization 오류, mapping 완료율의 비교 및 제한을 기록하는 설계를 완료했다. 다음은 두 인원수 fixture를 이용한 provider 설정 튜닝과 비회귀를 설계한다.
+**다음 설계 대상 커서: `TASK-020.01`** — TASK-019.03 네 문서와 Issue #72를 master commit `0ab4048`에서 원격 확인했다. 3인/5인 fixed fixture에서 EXT-001 설정 후보를 one-factor로 비교하고 지표 tradeoff/계약 회귀가 없을 때만 채택하며, EXT-002는 고정 contract로 보호하는 설계를 완료했다. 다음은 주요 모바일 화면의 360px 반응형 품질 검증이다.
 
 ## 📊 개발 진행 현황
 
@@ -2379,7 +2379,7 @@ Meeting UI
 | `TASK-018.04` | TODO | DESIGN | [Issue #68](https://github.com/donghyunlee-dev/meeting-automation/issues/68) / — | — | — | — |
 | `TASK-019.01` | TODO | DESIGN | [Issue #69](https://github.com/donghyunlee-dev/meeting-automation/issues/69) / — | — | — | — |
 | `TASK-019.02` | TODO | DESIGN | [Issue #71](https://github.com/donghyunlee-dev/meeting-automation/issues/71) / — | — | — | — |
-| `TASK-019.03` | TODO | DESIGN | — | — | — | — |
+| `TASK-019.03` | TODO | DESIGN | [Issue #72](https://github.com/donghyunlee-dev/meeting-automation/issues/72) / — | — | — | — |
 | `TASK-020.01` | TODO | DESIGN | — | — | — | — |
 | `TASK-020.02` | TODO | DESIGN | — | — | — | — |
 | `TASK-020.03` | TODO | DESIGN | — | — | — | — |
@@ -2632,7 +2632,7 @@ Backend API 작업은 정상 응답뿐 아니라 명세된 검증 오류, 없는
 |---|---|---|------|---|
 | `TASK-019.01` 3인 회의 fixture 및 품질 기준 검증 / QA | TASK-006.06, TASK-018.04 | DEC-007~010, FR-007,010, Section 21 | 3인 회의 음성의 STT/화자 오류와 Speaker mapping 완료율을 기록한다. | 설계완료 · `docs/specs/phase-08-field-validation/TASK-019.01/` |
 | `TASK-019.02` 5인 회의 fixture 및 품질 기준 검증 / QA | TASK-019.01 | 동일 | 5인 회의 조건을 동일 기준으로 측정하고 3인 결과와 차이를 기록한다. | 설계완료 · `docs/specs/phase-08-field-validation/TASK-019.02/` |
-| `TASK-019.03` 설정 튜닝과 회귀 검증 / BE, QA | TASK-019.01, TASK-019.02 | EXT-001,002, DEC-008~010 | 조정 설정이 고정 fixture에서 개선 또는 비회귀를 보이며, 변경 근거와 알려진 한계를 기록한다. | 설계중 · `docs/specs/phase-08-field-validation/TASK-019.03/` |
+| `TASK-019.03` 설정 튜닝과 회귀 검증 / BE, QA | TASK-019.01, TASK-019.02 | EXT-001,002, DEC-008~010 | 조정 설정이 고정 fixture에서 개선 또는 비회귀를 보이며, 변경 근거와 알려진 한계를 기록한다. | 설계완료 · `docs/specs/phase-08-field-validation/TASK-019.03/` |
 
 ## Phase 9 — Release
 
