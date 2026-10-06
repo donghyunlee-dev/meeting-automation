@@ -20,7 +20,11 @@
 - 정적 검사: `npm run lint` 성공.
 - 빌드: `npm run build` 성공. Vite `7.3.7`이 `frontend/dist/`에 산출물을 생성했다.
 - 개발 서버: `npm run dev -- --host 127.0.0.1 --port 5173` 성공. Chrome에서 `http://127.0.0.1:5173/`를 열어 `Meeting Automation` 제목을 확인했다.
+- 수동 QA 캡처: Chrome에서 확인한 기본 화면을 저장했다.
+
+![Chrome에서 확인한 Meeting Automation 기본 화면](./TASK-001.02.png)
 - 의존성 감사: `npm audit` 결과 취약점 0건. 초기 도구 버전에서 확인된 취약 항목은 Node 22.12/Vite 7 호환을 검증해 Vitest 5.0.3 및 TypeScript-ESLint 8.55.0으로 올린 뒤 해소했다.
+- ESLint 9.39.5는 Node 22.12를 포함하는 명시된 런타임 범위에서 설치·실행 가능한 최신 ESLint major 9 버전이다. ESLint 10의 공식 Node 조건은 22.13 이상이라 이 작업의 `engines.node` 조건을 임의로 좁히지 않았다.
 - Secret 경계: Frontend 소스와 설정에 Secret, API credential 또는 환경 설정 파일이 없다.
 - `git diff --check`: 통과.
 
