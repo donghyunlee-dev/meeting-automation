@@ -2302,6 +2302,93 @@ Meeting UI
 
 **다음 설계 대상 커서: `TASK-018.01`** — TASK-017.04 네 문서와 Issue #64를 master commit `8104fe1`에서 원격 확인했다. Secret·회의 콘텐츠·비공개 Audio object 접근/만료/삭제·실패 전달 억제를 synthetic fixture로 검증하는 QA 설계를 완료했다. 다음은 TASK-005.08 녹음 구현 및 TASK-017.03 복구 화면을 기준으로 Android Chrome 장시간 녹음 품질을 검증하는 설계다.
 
+## 📊 개발 진행 현황
+
+구현 상태는 이 표와 GitHub Issue/PR, `docs/evidence/`의 head별 검증 기록으로 관리한다. 기존 세부 TASK 표의 `설계 상태 / 문서`와 설계 커서는 설계 상태만 나타내며 개발 상태를 대신하지 않는다.
+
+**다음 개발 대상 커서: `TASK-001.01`**
+
+| TASK | 개발 상태 | 단계 | Issue / PR | 검증 증거 | 병합 commit | 완료 일시 (Asia/Seoul) |
+|---|---|---|---|---|---|---|
+| `TASK-001.01` | IN_PROGRESS | DEVELOPMENT | [Issue #1](https://github.com/donghyunlee-dev/meeting-automation/issues/1) / — | — | — | — |
+| `TASK-001.02` | TODO | DESIGN | [Issue #2](https://github.com/donghyunlee-dev/meeting-automation/issues/2) / — | — | — | — |
+| `TASK-001.03` | TODO | DESIGN | [Issue #3](https://github.com/donghyunlee-dev/meeting-automation/issues/3) / — | — | — | — |
+| `TASK-001.04` | TODO | DESIGN | [Issue #4](https://github.com/donghyunlee-dev/meeting-automation/issues/4) / — | — | — | — |
+| `TASK-001.05` | TODO | DESIGN | [Issue #5](https://github.com/donghyunlee-dev/meeting-automation/issues/5) / — | — | — | — |
+| `TASK-002.01` | TODO | DESIGN | [Issue #6](https://github.com/donghyunlee-dev/meeting-automation/issues/6) / — | — | — | — |
+| `TASK-002.02` | TODO | DESIGN | [Issue #7](https://github.com/donghyunlee-dev/meeting-automation/issues/7) / — | — | — | — |
+| `TASK-002.03` | TODO | DESIGN | [Issue #8](https://github.com/donghyunlee-dev/meeting-automation/issues/8) / — | — | — | — |
+| `TASK-002.04` | TODO | DESIGN | [Issue #9](https://github.com/donghyunlee-dev/meeting-automation/issues/9) / — | — | — | — |
+| `TASK-003.01` | TODO | DESIGN | [Issue #10](https://github.com/donghyunlee-dev/meeting-automation/issues/10) / — | — | — | — |
+| `TASK-003.02` | TODO | DESIGN | [Issue #11](https://github.com/donghyunlee-dev/meeting-automation/issues/11) / — | — | — | — |
+| `TASK-003.03` | TODO | DESIGN | [Issue #12](https://github.com/donghyunlee-dev/meeting-automation/issues/12) / — | — | — | — |
+| `TASK-003.04` | TODO | DESIGN | [Issue #13](https://github.com/donghyunlee-dev/meeting-automation/issues/13) / — | — | — | — |
+| `TASK-004.01` | TODO | DESIGN | [Issue #14](https://github.com/donghyunlee-dev/meeting-automation/issues/14) / — | — | — | — |
+| `TASK-004.02` | TODO | DESIGN | [Issue #15](https://github.com/donghyunlee-dev/meeting-automation/issues/15) / — | — | — | — |
+| `TASK-004.03` | TODO | DESIGN | [Issue #16](https://github.com/donghyunlee-dev/meeting-automation/issues/16) / — | — | — | — |
+| `TASK-004.04` | TODO | DESIGN | [Issue #17](https://github.com/donghyunlee-dev/meeting-automation/issues/17) / — | — | — | — |
+| `TASK-004.05` | TODO | DESIGN | [Issue #18](https://github.com/donghyunlee-dev/meeting-automation/issues/18) / — | — | — | — |
+| `TASK-005.01` | TODO | DESIGN | [Issue #19](https://github.com/donghyunlee-dev/meeting-automation/issues/19) / — | — | — | — |
+| `TASK-005.02` | TODO | DESIGN | [Issue #20](https://github.com/donghyunlee-dev/meeting-automation/issues/20) / — | — | — | — |
+| `TASK-005.03` | TODO | DESIGN | [Issue #21](https://github.com/donghyunlee-dev/meeting-automation/issues/21) / — | — | — | — |
+| `TASK-005.04` | TODO | DESIGN | [Issue #22](https://github.com/donghyunlee-dev/meeting-automation/issues/22) / — | — | — | — |
+| `TASK-005.05` | TODO | DESIGN | [Issue #23](https://github.com/donghyunlee-dev/meeting-automation/issues/23) / — | — | — | — |
+| `TASK-005.06` | TODO | DESIGN | [Issue #24](https://github.com/donghyunlee-dev/meeting-automation/issues/24) / — | — | — | — |
+| `TASK-005.07` | TODO | DESIGN | [Issue #25](https://github.com/donghyunlee-dev/meeting-automation/issues/25) / — | — | — | — |
+| `TASK-005.08` | TODO | DESIGN | [Issue #26](https://github.com/donghyunlee-dev/meeting-automation/issues/26) / — | — | — | — |
+| `TASK-006.01` | TODO | DESIGN | [Issue #27](https://github.com/donghyunlee-dev/meeting-automation/issues/27) / — | — | — | — |
+| `TASK-006.02` | TODO | DESIGN | [Issue #28](https://github.com/donghyunlee-dev/meeting-automation/issues/28) / — | — | — | — |
+| `TASK-006.03` | TODO | DESIGN | [Issue #29](https://github.com/donghyunlee-dev/meeting-automation/issues/29) / — | — | — | — |
+| `TASK-006.04` | TODO | DESIGN | [Issue #30](https://github.com/donghyunlee-dev/meeting-automation/issues/30) / — | — | — | — |
+| `TASK-006.05` | TODO | DESIGN | [Issue #31](https://github.com/donghyunlee-dev/meeting-automation/issues/31) / — | — | — | — |
+| `TASK-006.06` | TODO | DESIGN | [Issue #32](https://github.com/donghyunlee-dev/meeting-automation/issues/32) / — | — | — | — |
+| `TASK-006.07` | TODO | DESIGN | [Issue #33](https://github.com/donghyunlee-dev/meeting-automation/issues/33) / — | — | — | — |
+| `TASK-007.01` | TODO | DESIGN | [Issue #34](https://github.com/donghyunlee-dev/meeting-automation/issues/34) / — | — | — | — |
+| `TASK-007.02` | TODO | DESIGN | [Issue #35](https://github.com/donghyunlee-dev/meeting-automation/issues/35) / — | — | — | — |
+| `TASK-007.03` | TODO | DESIGN | [Issue #36](https://github.com/donghyunlee-dev/meeting-automation/issues/36) / — | — | — | — |
+| `TASK-008.01` | TODO | DESIGN | [Issue #37](https://github.com/donghyunlee-dev/meeting-automation/issues/37) / — | — | — | — |
+| `TASK-008.02` | TODO | DESIGN | [Issue #38](https://github.com/donghyunlee-dev/meeting-automation/issues/38) / — | — | — | — |
+| `TASK-008.03` | TODO | DESIGN | [Issue #39](https://github.com/donghyunlee-dev/meeting-automation/issues/39) / — | — | — | — |
+| `TASK-009.01` | TODO | DESIGN | [Issue #40](https://github.com/donghyunlee-dev/meeting-automation/issues/40) / — | — | — | — |
+| `TASK-009.02` | TODO | DESIGN | [Issue #41](https://github.com/donghyunlee-dev/meeting-automation/issues/41) / — | — | — | — |
+| `TASK-009.03` | TODO | DESIGN | [Issue #42](https://github.com/donghyunlee-dev/meeting-automation/issues/42) / — | — | — | — |
+| `TASK-010.01` | TODO | DESIGN | [Issue #43](https://github.com/donghyunlee-dev/meeting-automation/issues/43) / — | — | — | — |
+| `TASK-010.02` | TODO | DESIGN | [Issue #44](https://github.com/donghyunlee-dev/meeting-automation/issues/44) / — | — | — | — |
+| `TASK-010.03` | TODO | DESIGN | [Issue #45](https://github.com/donghyunlee-dev/meeting-automation/issues/45) / — | — | — | — |
+| `TASK-011.01` | TODO | DESIGN | [Issue #46](https://github.com/donghyunlee-dev/meeting-automation/issues/46) / — | — | — | — |
+| `TASK-011.02` | TODO | DESIGN | [Issue #47](https://github.com/donghyunlee-dev/meeting-automation/issues/47) / — | — | — | — |
+| `TASK-012.01` | TODO | DESIGN | [Issue #48](https://github.com/donghyunlee-dev/meeting-automation/issues/48) / — | — | — | — |
+| `TASK-012.02` | TODO | DESIGN | [Issue #49](https://github.com/donghyunlee-dev/meeting-automation/issues/49) / — | — | — | — |
+| `TASK-013.01` | TODO | DESIGN | [Issue #50](https://github.com/donghyunlee-dev/meeting-automation/issues/50) / — | — | — | — |
+| `TASK-013.02` | TODO | DESIGN | [Issue #51](https://github.com/donghyunlee-dev/meeting-automation/issues/51) / — | — | — | — |
+| `TASK-014.01` | TODO | DESIGN | [Issue #52](https://github.com/donghyunlee-dev/meeting-automation/issues/52) / — | — | — | — |
+| `TASK-014.02` | TODO | DESIGN | [Issue #53](https://github.com/donghyunlee-dev/meeting-automation/issues/53) / — | — | — | — |
+| `TASK-014.03` | TODO | DESIGN | [Issue #54](https://github.com/donghyunlee-dev/meeting-automation/issues/54) / — | — | — | — |
+| `TASK-014.04` | TODO | DESIGN | [Issue #55](https://github.com/donghyunlee-dev/meeting-automation/issues/55) / — | — | — | — |
+| `TASK-015.01` | TODO | DESIGN | [Issue #56](https://github.com/donghyunlee-dev/meeting-automation/issues/56) / — | — | — | — |
+| `TASK-016.01` | TODO | DESIGN | [Issue #57](https://github.com/donghyunlee-dev/meeting-automation/issues/57) / — | — | — | — |
+| `TASK-016.02` | TODO | DESIGN | [Issue #58](https://github.com/donghyunlee-dev/meeting-automation/issues/58) / — | — | — | — |
+| `TASK-016.03` | TODO | DESIGN | [Issue #59](https://github.com/donghyunlee-dev/meeting-automation/issues/59) / — | — | — | — |
+| `TASK-017.01` | TODO | DESIGN | [Issue #60](https://github.com/donghyunlee-dev/meeting-automation/issues/60) / — | — | — | — |
+| `TASK-017.02` | TODO | DESIGN | [Issue #61](https://github.com/donghyunlee-dev/meeting-automation/issues/61) / — | — | — | — |
+| `TASK-017.03` | TODO | DESIGN | [Issue #62](https://github.com/donghyunlee-dev/meeting-automation/issues/62) / — | — | — | — |
+| `TASK-017.04` | TODO | DESIGN | [Issue #64](https://github.com/donghyunlee-dev/meeting-automation/issues/64) / — | — | — | — |
+| `TASK-018.01` | TODO | DESIGN | — | — | — | — |
+| `TASK-018.02` | TODO | DESIGN | — | — | — | — |
+| `TASK-018.03` | TODO | DESIGN | — | — | — | — |
+| `TASK-018.04` | TODO | DESIGN | — | — | — | — |
+| `TASK-019.01` | TODO | DESIGN | — | — | — | — |
+| `TASK-019.02` | TODO | DESIGN | — | — | — | — |
+| `TASK-019.03` | TODO | DESIGN | — | — | — | — |
+| `TASK-020.01` | TODO | DESIGN | — | — | — | — |
+| `TASK-020.02` | TODO | DESIGN | — | — | — | — |
+| `TASK-020.03` | TODO | DESIGN | — | — | — | — |
+| `TASK-020.04` | TODO | DESIGN | — | — | — | — |
+| `TASK-021.01` | TODO | DESIGN | — | — | — | — |
+| `TASK-021.02` | TODO | DESIGN | — | — | — | — |
+| `TASK-021.03` | TODO | DESIGN | — | — | — | — |
+| `TASK-021.04` | TODO | DESIGN | — | — | — | — |
+
 | 설계 상태 | 의미 |
 |---|---|
 | `미설계` | 네 문서 패키지 작성이 시작되지 않았다. |
