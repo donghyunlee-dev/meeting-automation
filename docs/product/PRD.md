@@ -2243,7 +2243,7 @@ Meeting UI
 
 각 세부 TASK 표의 `설계 상태 / 문서` 열은 **설계 진행 상태**를 기록한다. 구현 진행 상태는 계속 GitHub Issue의 상태 라벨과 종료 상태가 기준이며, 두 상태를 혼합하지 않는다.
 
-**다음 설계 대상 커서: `TASK-014.02`** — TASK-014.01 네 문서와 Issue #52를 master commit `c8dacd2`에서 원격 확인했다. API-017 pagination, 최신순·limit, roster 요약 및 빈/오류 응답을 설계했다. 다음은 API-018 Meeting Detail 조회 설계다.
+**다음 설계 대상 커서: `TASK-014.03`** — TASK-014.02 네 문서와 Issue #53을 master commit `3f5dbb1`에서 원격 확인했다. API-018 읽기 전용 상세, `MEETING_NOT_FOUND`, Minutes/Transcript 표준 매핑을 설계했다. 다음은 Home 최근 목록과 Meetings 화면 연결 설계다.
 
 | 설계 상태 | 의미 |
 |---|---|
@@ -2444,8 +2444,8 @@ Backend API 작업은 정상 응답뿐 아니라 명세된 검증 오류, 없는
 | 세부 작업 / 영역 | 선행 작업 | Related IDs | 완료 및 검증 조건 | 설계 상태 / 문서 |
 |---|---|---|------|---|
 | `TASK-014.01` Meetings List GET / BE | TASK-002.02 또는 TASK-002.03, TASK-010.02 | FR-020, API-017 | 최신 순, 최근 5건/전체 범위 기준의 요약을 반환한다. 빈 결과·100건 경계 테스트 통과 | 설계완료 · `docs/specs/phase-07-history/TASK-014.01/` |
-| `TASK-014.02` Meeting Detail GET / BE | TASK-014.01 | FR-021~023, API-018 | 읽기 전용 상세와 Provider 원문 URL을 반환한다. 없는 회의·누락 문서 테스트 통과 | 설계중 · `docs/specs/phase-07-history/TASK-014.02/` |
-| `TASK-014.03` Home 최근 목록·Meetings 화면 / FE | TASK-014.01 | SCR-001,009, FR-001,020 | 최근 5건과 전체 목록을 표시하고 Empty/Loading/Error를 검증한다. | 미설계 · — |
+| `TASK-014.02` Meeting Detail GET / BE | TASK-014.01 | FR-021~023, API-018 | 읽기 전용 상세와 Provider 원문 URL을 반환한다. 없는 회의·누락 문서 테스트 통과 | 설계완료 · `docs/specs/phase-07-history/TASK-014.02/` |
+| `TASK-014.03` Home 최근 목록·Meetings 화면 / FE | TASK-014.01 | SCR-001,009, FR-001,020 | 최근 5건과 전체 목록을 표시하고 Empty/Loading/Error를 검증한다. | 설계중 · `docs/specs/phase-07-history/TASK-014.03/` |
 | `TASK-014.04` Client-side filter 및 Detail 연결 / FE, INTEGRATION | TASK-014.02, TASK-014.03 | SCR-009,010, FR-021~023 | 제목/참석자/날짜 필터와 읽기 전용 상세·원문 열기가 동작한다. 경계·결과 없음 테스트 통과 | 미설계 · — |
 
 ### TASK-015 Settings / Integration Health — 작업 묶음
