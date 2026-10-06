@@ -2243,7 +2243,7 @@ Meeting UI
 
 각 세부 TASK 표의 `설계 상태 / 문서` 열은 **설계 진행 상태**를 기록한다. 구현 진행 상태는 계속 GitHub Issue의 상태 라벨과 종료 상태가 기준이며, 두 상태를 혼합하지 않는다.
 
-**다음 설계 대상 커서: `TASK-017.01`** — TASK-016.03 네 문서와 Issue #59를 master commit `01bbce2`에서 원격 확인했다. SCR-003~008 대표 오류 안내, draft/result 보존, retry gating과 timeout mutation 회귀 검증을 설계했다. 다음은 Frontend/API/log 경계의 Secret 방지와 로그 마스킹 설계다.
+**다음 설계 대상 커서: `TASK-017.02`** — TASK-017.01 네 문서와 Issue #60을 master commit `59e86a3`에서 원격 확인했다. FE build/API/log 경계의 synthetic canary 검사, scanner 제외 경로와 비노출 증거를 설계했다. 다음은 성공·실패·중단 경로에서 Temporary Audio 수명주기를 검증하는 설계다.
 
 | 설계 상태 | 의미 |
 |---|---|
@@ -2466,8 +2466,8 @@ Backend API 작업은 정상 응답뿐 아니라 명세된 검증 오류, 없는
 
 | 세부 작업 / 영역 | 선행 작업 | Related IDs | 완료 및 검증 조건 | 설계 상태 / 문서 |
 |---|---|---|------|---|
-| `TASK-017.01` Secret 경계 및 로그 마스킹 / BE, FE | TASK-001.05, TASK-016.01 | DEC-017, FR-028, NFR-004~006 | FE bundle/API 응답/로그에서 Secret 탐지 0건. 자동 secret scan과 로그 테스트 통과 | 설계중 · `docs/specs/phase-07-security/TASK-017.01/` |
-| `TASK-017.02` Temporary Audio 수명주기 / BE | TASK-006.01, TASK-010.02 | DEC-020, FR-030, NFR-014 | 성공·실패·중단 경로에서 정책에 따라 임시 Audio가 정리된다. 각 종료 경로 테스트 통과 | 미설계 · — |
+| `TASK-017.01` Secret 경계 및 로그 마스킹 / BE, FE | TASK-001.05, TASK-016.01 | DEC-017, FR-028, NFR-004~006 | FE bundle/API 응답/로그에서 Secret 탐지 0건. 자동 secret scan과 로그 테스트 통과 | 설계완료 · `docs/specs/phase-07-security/TASK-017.01/` |
+| `TASK-017.02` Temporary Audio 수명주기 / BE | TASK-006.01, TASK-010.02 | DEC-020, FR-030, NFR-014 | 성공·실패·중단 경로에서 정책에 따라 임시 Audio가 정리된다. 각 종료 경로 테스트 통과 | 설계중 · `docs/specs/phase-07-security/TASK-017.02/` |
 | `TASK-017.03` 보안·개인정보 회귀 점검 / QA | TASK-017.01, TASK-017.02 | DEC-017,020, FR-028,030 | Audio/Transcript/Secret 로그 노출, FE Secret, 잔여 Audio 검사 결과가 모두 기준을 만족하고 Evidence가 기록된다. | 미설계 · — |
 
 ## Phase 8 — 실제 모바일 / 회의실 품질 검증 및 튜닝
