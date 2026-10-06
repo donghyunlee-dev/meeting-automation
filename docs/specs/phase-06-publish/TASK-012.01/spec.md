@@ -55,9 +55,8 @@ Adapter는 webhook URL로 HTTPS POST `application/json`을 한 번 보낸다. Sl
 
 ## 실패·health·재시도
 
-- 누락/잘못된 webhook config이면 `configured=false`, `reachable=false`; Slack 요청을 보내지 않는다.
 - HTTP 200 이외 또는 body가 `ok`가 아니면 `FAILED`, `NOTIFICATION_FAILED`, 안전한 오류 메시지만 반환한다.
-- malformed payload 및 URL revoke/invalid/auth restriction 응답은 `retryable=false`다. 설정 수정 이후 명시적으로 다시 Publish/Delivery retry를 시작해야 한다.
+- 잘못되거나 누락된 webhook 설정은 `configured=false`, `reachable=false`이며 Slack HTTP 요청 없이 해당 Delivery를 `FAILED`, `NOTIFICATION_FAILED`, `retryable=true`로 기록한다. Slack이 수락하지 않은 것이 분명한 무효/폐기 webhook 및 권한 제한 거절도 설정/권한 수정 후 재시도할 수 있도록 `retryable=true`다. HTTP 400 malformed payload는 코드 수정이 필요한 오류이므로 `retryable=false`다.
 - Slack의 명시적 HTTP 429는 `retryable=true`로 변환해 후속 `API-016` delivery workflow가 사용자가 요청한 재시도를 허용한다. HTTP 5xx 응답도 Slack이 message를 게시했는지 문서화된 보장이 없으므로 `retryable=false`로 보수 처리한다. Adapter 내부 자동 loop retry는 하지 않는다.
 - HTTP timeout/connection reset 또는 응답 본문 유실은 Slack이 이미 post했는지 알 수 없다. Incoming Webhook에는 애플리케이션이 제공하는 idempotency key가 없으므로 `FAILED`, `retryable=false`로 분류해 중복 메시지 자동 retry를 막는다.
 - Email 실패/성공 상태, Document saved 상태를 이 Provider가 읽거나 되돌리지 않는다. Channel Delivery 결과는 독립된 모델 기록다.

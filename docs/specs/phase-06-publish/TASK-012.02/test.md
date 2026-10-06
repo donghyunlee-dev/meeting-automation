@@ -15,7 +15,7 @@
 | PUB-NOTI-05 | Email 일부 실패 및 Slack 성공 | Email FAILED row와 Notification SENT row가 독립 유지 | Mixed channel integration test |
 | PUB-NOTI-06 | Email 성공 및 Slack 실패 | Email SENT와 Notification FAILED를 모두 보존 | Mixed channel integration test |
 | PUB-NOTI-07 | API-010 조회: NOTIFICATION row | 공통 `{data}` envelope, recipient ID/주소 없이 delivery 필드만 반환 | API serialization test |
-| PUB-NOTI-08 | notification provider null/unconfigured, SCR-007 진입 | Slack 선택 비활성/해제, Settings 연결 경로 표시, Publish body는 false | AppConfig component test |
+| PUB-NOTI-08 | notification provider null/unconfigured, SCR-007 진입 | 설정 안내/Settings 경로를 표시하고 사용자 선택은 보존; true로 Publish 시 미전송 FAILED/retryable true Delivery | AppConfig component test |
 | PUB-NOTI-09 | 선택 true/false로 API-015 실행 | 화면의 명시 선택값과 request boolean 일치 | Share request test |
 | PUB-NOTI-10 | API-010 Notification PENDING/SENDING/SENT/FAILED | 각각 진행/접수/실패 텍스트를 Email 목록과 별도로 표시 | Delivery status component test |
 | PUB-NOTI-11 | timeout 뒤 API-010에서 PENDING, 뒤이어 FAILED 조회 | 결과 확인 전 SENT로 표시하지 않고 새 Publish 자동 호출 없음 | Poll reconciliation test |

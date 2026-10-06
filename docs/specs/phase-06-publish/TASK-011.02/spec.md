@@ -20,7 +20,7 @@ Gmail OAuth/Gmail API 구현은 TASK-011.01, Notification 수신 여부·결과 
 - API-010 `meeting.participantIds`가 Session의 authoritative roster ID 집합이다. API-003 Participants 결과를 표시 정보와 Email 주소 조회에 사용하되 roster 밖 ID는 화면 후보/Publish request에 절대 넣지 않는다.
 - 화면에서 제공되는 이름/Email은 API-003 `{id,name,email}` record를 roster ID와 join해 얻는다. 신규 Session roster record를 추가하거나 다른 attendee를 자동 포함하지 않는다.
 - API-003 record를 일시 조회하지 못해도 Session roster 자체를 변경·거절하지 않는다. 이미 확보한 이름/email을 화면에서 보존하며, 데이터가 없을 때는 participant ID를 fallback label로 사용한다. 사용자는 각 ID의 선택을 취소할 수 있다.
-- Provider Participant record에 해당 ID/email이 없거나 email 형식이 잘못됐으면 API-015 request를 Session roster만으로 유효하게 접수하되 해당 recipient Delivery를 `FAILED`, safe `EMAIL_FAILED`, `retryable=false`로 기록한다. 참석자 자체를 Session에서 제거하거나 active/existence 상태로 표현하지 않는다.
+- Provider Participant record에 해당 ID/email이 없거나 email 형식이 잘못됐으면 API-015 request를 Session roster만으로 유효하게 접수하되 해당 recipient Delivery를 `FAILED`, safe `EMAIL_FAILED`, `retryable=true`로 기록한다. 주소를 바로잡은 뒤 API-016이 ID로 Participant 정보를 다시 확인해 사용자가 재시도할 수 있다. 참석자 자체를 Session에서 제거하거나 active/existence 상태로 표현하지 않는다.
 - 보이는 Email 주소는 전달 대상을 사람이 확인하는 화면에만 표시한다. API-015 request, API-010 delivery response, delivery history, 로그에 주소를 넣지 않는다.
 - PRD 화면 예처럼 roster 참가자는 기본 선택 상태다. 작성자가 모두 해제하면 빈 `emailRecipientParticipantIds:[]`를 전달하며 Email send 0건으로 문서/다른 채널 Publish를 계속한다.
 

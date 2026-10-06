@@ -9,14 +9,14 @@ Backend 구현 시 Java 21/Gradle JUnit 5를 사용하고 Slack HTTP 요청은 �
 | ID | 준비 및 입력 | 기대 결과 | 증거 |
 |---|---|---|---|
 | SLACK-01 | `NOTIFICATION_PROVIDER=SLACK`, 유효한 HTTPS 회의 webhook URL | factory가 Slack adapter를 선택하고 Admin webhook은 분리됨 | 설정/factory 테스트 |
-| SLACK-02 | provider 누락/미지원 또는 webhook URL 누락/오형식 | `configured=false/reachable=false`, Slack 요청 0회, 안전한 Health 응답 | 설정 검증 테스트 |
+| SLACK-02 | provider 누락/미지원 또는 webhook URL 누락/오형식 | `configured=false/reachable=false`, Slack 요청 0회, 안전한 Health 응답; Notification Delivery는 retryable true | 설정 검증 테스트 |
 | SLACK-03 | 전송 전 `validateConnection()` 호출 | HTTP POST/시험 메시지 없이 설정만 확인, 실제 성공 전까지 reachable false | Health 무부작용 테스트 |
 | SLACK-04 | 제목/날짜/문서 URL command와 mock 200 `ok` 응답 | 회의 webhook으로 HTTPS JSON POST 1회, 세 값 포함, SENT/retryable false, reachable true | webhook 요청 계약 테스트 |
 | SLACK-05 | 문서 URL이 null/오형식/HTTP(S) 이외 scheme | 요청 없이 안전한 `NOTIFICATION_FAILED`, retryable false | 입력 검증 테스트 |
 | SLACK-06 | 제목에 CRLF, `<@U…>`, `<!channel>`, mrkdwn 구문 포함 | 일반 텍스트로 정규화되고 의도하지 않은 mention/markup 해석 및 추가 정보가 없음 | payload escaping 테스트 |
 | SLACK-07 | HTTP 200 응답 본문이 `ok`가 아님 | FAILED `NOTIFICATION_FAILED`; 상태 코드만으로 성공 처리하지 않음 | 응답 본문 계약 테스트 |
-| SLACK-08 | HTTP 400 잘못된 요청 또는 403 `action_prohibited` | FAILED/retryable false, 안전한 오류만 반환하고 원문 본문은 미기록 | 영구 HTTP 오류 매핑 테스트 |
-| SLACK-09 | HTTP 404 무효/폐기된 webhook | FAILED/retryable false, reachable false, URL/token 가림 | endpoint 오류 테스트 |
+| SLACK-08 | HTTP 400 payload 오류 또는 403 `action_prohibited` 권한 거절 | payload 오류는 retryable false, 확정된 권한 거절은 retryable true; 원문 미기록 | 거절 유형 매핑 테스트 |
+| SLACK-09 | HTTP 404 무효/폐기된 webhook | FAILED/retryable true, reachable false, URL/token 가림; 수정 후 API-016 허용 | endpoint 오류 테스트 |
 | SLACK-10 | HTTP 429 및 `Retry-After` | FAILED/retryable true, 내부 자동 재시도 없음, 헤더 값을 로그에 노출하지 않음 | rate limit 매핑 테스트 |
 | SLACK-11 | 전송 결과가 불명확한 HTTP 5xx | 중복 방지를 위해 FAILED/retryable false, adapter 내부 반복 없음 | 불명확 서버 오류 테스트 |
 | SLACK-12 | 요청 전송 뒤 발생한 timeout/reset | 게시 결과를 알 수 없으므로 FAILED/retryable false, 자동 재호출 없음 | 불명확 전달 테스트 |

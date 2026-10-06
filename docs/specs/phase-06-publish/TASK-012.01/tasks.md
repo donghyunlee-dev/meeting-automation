@@ -14,7 +14,7 @@
 - [ ] Health/config 검사가 Slack POST를 0회 호출하는 test를 작성한다. 완료 결과: Settings 조회가 시험용 message 부작용을 만들지 않는다.
 - [ ] Domain 중립 meeting command/result와 Slack Provider factory 연결을 고정한다. 완료 결과: Admin incident DTO/URL이 Meeting Adapter에 주입되지 않는다.
 - [ ] Slack payload builder를 구현한다. 완료 결과: 제목/날짜/document URL만 `text`에 포함하고 title newline/mention formatting을 안전하게 처리하며 `mrkdwn=false`, `unfurl_links=false`를 사용한다.
-- [ ] Webhook HTTP Adapter를 구현한다. 완료 결과: HTTPS JSON POST 1회, 200+`ok`는 SENT, 429만 재시도 가능 여부, 영구/불명확 오류는 non재시도 가능 여부로 분류한다.
+- [ ] Webhook HTTP Adapter를 구현한다. 완료 결과: HTTPS JSON POST 1회, 200+`ok`는 SENT, 명시 거절과 설정 수정 가능한 오류는 retryable, payload 오류 및 불명확한 5xx/timeout은 nonretryable로 분류한다.
 - [ ] 불명확한 timeout을 `NOTIFICATION_FAILED/재시도 가능 여부=false`로 기록한다. 완료 결과: 자동 재전송이 없다.
 - [ ] 가장 최근 실제 Delivery 결과를 ProviderHealth reachable 관측값에 반영한다. 완료 결과: 아직 전송하지 않았거나 마지막 전송에 실패한 경우 reachable=true가 되지 않는다.
 - [ ] API-010 generic notification Delivery 및 Email 독립성 test를 TASK-012.02 계약 모의으로 검증한다.

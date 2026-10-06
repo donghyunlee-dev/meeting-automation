@@ -158,7 +158,7 @@ Delivery = {
 }
 ```
 
-Email은 수신자별 독립 Delivery다. Notification은 선택된 목적지에 대한 별도 Delivery다. 외부 응답 원문, 인증 값, 전체 이메일 주소는 Session delivery 이력이나 로그에 저장하지 않는다.
+Email은 수신자별 독립 Delivery다. Notification은 선택된 목적지에 대한 별도 Delivery다. 외부 응답 원문, 인증 값, 전체 이메일 주소는 Session delivery 이력이나 로그에 저장하지 않는다. `attemptCount`는 Provider 호출이 시작된 횟수로, API-016 접수만으로 증가하지 않고 PENDING에서 SENDING으로 전이할 때 한 번 증가한다. `lastAttemptAt`도 Provider 호출 시작 시각이다. `retryable`은 API-016의 사용자 명시 재시도가 안전한지를 나타내며 자동 재시도 뜻이 아니다. Provider가 수락하지 않았음이 확인된 뒤 원인을 수정할 수 있는 설정/권한 거절 및 명시적 rate limit은 true가 될 수 있다. 전송 timeout, connection reset, 응답 유실 및 부작용 여부를 판별할 수 없는 서버 오류는 중복 전달 방지를 위해 false다.
 
 API-010은 Publish가 시작된 뒤 이 generic Delivery projection을 제공한다. Email row에는 `recipientParticipantId`만 넣고 recipient address는 반환하지 않는다. Adapter의 `RecipientDeliveryResult`에는 participant ID를 유지하며, `deliveryId` 발급과 `attemptCount` 저장은 orchestration이 담당한다.
 

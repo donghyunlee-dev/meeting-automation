@@ -21,7 +21,7 @@
 ## Frontend: 선택/결과 테스트 우선
 
 - [ ] SCR-007 선택값 test를 작성한다. 기대: 초기 선택과 사용자 토글이 명시 boolean으로 API-015에 전달된다.
-- [ ] API-019 provider null/unconfigured test를 작성한다. 기대: 전송 선택이 꺼지고 Settings 경로가 제공되며 자동 provider 선택 없음.
+- [ ] API-019 provider null/unconfigured test를 작성한다. 기대: 설정 안내/Settings 경로를 제공하고 사용자 선택은 보존하며 자동 provider 선택 없음.
 - [ ] API-010 Notification 상태 표시 테스트를 작성한다. 기대: PENDING/SENDING/SENT/FAILED 및 retryable 안내가 Email row와 독립 표시된다.
 - [ ] 지연/이전 version 응답 test를 작성한다. 기대: 오래된 결과가 최신 화면을 덮지 않는다.
 - [ ] 최소 UI 구현을 연결한다. 기대: 접근성 이름, 상태 텍스트/live update, 모바일 너비에서 결과를 확인할 수 있다.

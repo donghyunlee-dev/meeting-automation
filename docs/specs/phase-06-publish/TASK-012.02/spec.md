@@ -30,7 +30,7 @@ API-010 공통 `{data}` envelope와 Delivery 모델을 유지한다. 전송을 �
 ## 화면 동작
 
 - SCR-007은 Slack 알림 선택값을 명시적으로 API-015에 전달한다. 초기 선택은 기존 API 예시와 같이 켜짐이며 사용자가 끌 수 있다.
-- API-019 `notification.provider=null` 또는 `configured=false`이면 Slack 전송 선택을 끄고 알림 연결을 위한 Settings 경로를 제공한다. 임의 Provider 선택이나 연결 확인용 메시지 전송은 하지 않는다.
+- API-019 `notification.provider=null` 또는 `configured=false`이면 알림 연결을 위한 Settings 경로와 미설정 안내를 제공하되, 사용자의 `notificationEnabled` 선택을 묵시적으로 바꾸지 않는다. 사용자가 알림을 선택한 채 Publish하면 Slack 호출 없이 `FAILED/retryable=true` Notification Delivery를 기록해 설정 수정 후 API-016 재시도를 허용한다. 임의 Provider 선택이나 연결 확인용 메시지 전송은 하지 않는다.
 - Publish 중 API-010을 조회해 Notification Delivery 상태를 갱신한다. `PENDING`/`SENDING`은 전송 중, `SENT`는 Slack 요청 수락, `FAILED`는 안전한 실패 안내와 `retryable` 상태로 표시한다.
 - Slack 결과 영역의 갱신은 Email participant Delivery 목록의 선택/결과를 덮거나 초기화하지 않는다. 채널 사이 성공/실패를 합산하지 않는다.
 - `FAILED`에서 retryable이어도 이 화면은 직접 재호출하지 않는다. retry action은 TASK-013.02에서 제공한다.

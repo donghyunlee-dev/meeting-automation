@@ -58,6 +58,9 @@ Session 상태와 전이 규칙은 [architecture.md](./architecture.md)의 상�
 | `SESSION_STATE_CONFLICT` | 409 | N | 현재 상태에서 요청 불가 |
 | `SESSION_VERSION_CONFLICT` | 412 | 조건부 | If-Match 버전이 오래됨. 최신 상태 조회 후 사용자 수정 반영 |
 | `IDEMPOTENCY_KEY_CONFLICT` | 409 | N | 같은 키로 다른 요청 payload 사용 |
+| `DELIVERY_NOT_FOUND` | 404 | N | Session에 속한 Delivery를 찾을 수 없음 |
+| `DELIVERY_NOT_RETRYABLE` | 409 | N | Delivery가 FAILED가 아니거나 안전한 재시도가 허용되지 않음 |
+| `DELIVERY_RETRY_IN_PROGRESS` | 409 | N | 해당 Delivery의 재시도 처리가 이미 진행 중 |
 | `REVIEW_VALIDATION_FAILED` | 422 | N | Review 확정 조건 미충족. `details.issues`에 `{path,code}` 배열 포함 |
 | `AUDIO_CHUNK_INVALID` | 400 | N | MIME, checksum, 길이, 크기 검증 실패 |
 | `AUDIO_CHUNK_CONFLICT` | 409 | N | 같은 sequence가 다른 bytes로 이미 저장됨 |
@@ -219,7 +222,9 @@ Request `{ "confirm":true }`. 필수 `Idempotency-Key`와 `If-Match` version, Se
 
 `POST /api/v1/meeting-sessions/{sessionId}/deliveries/{deliveryId}/retry` (`Idempotency-Key`) → `202`
 
-실패하고 재시도 가능한 delivery만 허용한다. 이미 성공한 Delivery 재발송은 금지. 응답 `{deliveryId,status:"PENDING"}`.
+FAILED이며 `retryable=true`인 Delivery만 허용한다. `retryable`은 사용자가 명시적으로 요청하는 재시도가 안전한지를 뜻하며 자동 재시도를 허용하지 않는다. 이미 `SENT`인 Delivery, `retryable=false`인 실패, 또는 진행 중인 `PENDING`/`SENDING`은 각각 409 `DELIVERY_NOT_RETRYABLE` 또는 `DELIVERY_RETRY_IN_PROGRESS`로 거절한다. 다른 Session의 Delivery ID는 404 `DELIVERY_NOT_FOUND`다.
+
+`Idempotency-Key`는 필수다. 같은 Session에서 동일 키와 동일 `deliveryId` 재요청은 최초 `202` 접수 응답을 재사용하며 새 Provider 호출을 만들지 않는다. 같은 키에 다른 Delivery ID를 보내면 409 `IDEMPOTENCY_KEY_CONFLICT`다. 동시에 들어온 서로 다른 재시도는 Delivery의 FAILED→PENDING 조건부 전이에서 한 건만 성공하고 나머지는 `DELIVERY_RETRY_IN_PROGRESS`로 거절한다. 성공 응답은 `{data:{deliveryId,status:"PENDING"}}`이며 실제 결과/시도 횟수는 API-010에서 확인한다. `attemptCount`는 Provider 호출이 시작될 때 한 번 증가한다. 재시도 요청의 명시적 사용자 동작 전에는 어떤 Provider도 다시 호출하지 않는다.
 
 ### API-017 Meetings List
 

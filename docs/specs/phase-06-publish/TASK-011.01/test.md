@@ -10,17 +10,18 @@ Backend 구현 시 Java 21/Gradle의 JUnit 5 검증을 사용한다. Exact build
 |---|---|---|---|
 | MAIL-01 | 모든 OAuth setting과 sender address 정상; mocked refresh 성공 | `validateConnection()` configured/reachable true; Gmail send 0회 | Config/OAuth client test |
 | MAIL-02 | OAuth client/refresh secret 하나 이상 누락 | configured=false/reachable=false; token/Gmail endpoint 호출 없음 | Configuration validation test |
-| MAIL-03 | refresh token 승인 거부/철회 | safe `EMAIL_FAILED`, Gmail send 0회, token/error 원문 미노출 | OAuth error normalization test |
+| MAIL-03 | refresh token 승인 거부/철회 | safe `EMAIL_FAILED`, Gmail send 0회, credential 수정 뒤 API-016 수동 재시도 가능, token/error 원문 미노출 | OAuth error normalization test |
 | MAIL-04 | 만료 access token 및 유효 refresh response | token refresh 후 Gmail request에 bearer access token 전달 | OAuth refresh interaction test |
 | MAIL-05 | 유효 recipient 한 명과 subject/summary/document URL | MIME From/To/Subject/body/URL 보존, Base64URL raw, `users.messages.send(userId="me")` 한 번 | Gmail request contract test |
 | MAIL-06 | 두 명의 수신자 | 별도 Gmail message 두 건, 각 To에 해당 recipient만 있고 recipient 간 주소 비노출 | Per-recipient isolation test |
 | MAIL-07 | 빈 recipient 배열 | empty result, OAuth/Gmail send 호출 없음 | Empty batch test |
-| MAIL-08 | 잘못된 이메일 하나와 올바른 이메일 하나 | 잘못된 주소의 FAILED 결과, 정상 주소 send 성공; 다음 recipient 진행 | Recipient validation isolation test |
+| MAIL-08 | 잘못된 이메일 하나와 올바른 이메일 하나 | 잘못된 주소의 FAILED/retryable true, 정상 주소 send 성공; 다음 recipient 진행 | Recipient validation isolation test |
 | MAIL-09 | 다수 중 Gmail API success/failure 혼합 | 각 participant의 SENT/FAILED가 분리되며 성공 결과 불변 | Partial result mapping test |
 | MAIL-10 | Gmail API success response | 해당 Delivery SENT/retryable false; 이후 retry 실행 대상에 포함 안 됨 | Successful delivery idempotency test |
-| MAIL-11 | explicit quota/rate-limit 응답 | recipient 실패 `EMAIL_FAILED`, retryable true, 원 Provider body 미노출 | Retryable provider error test |
-| MAIL-12 | invalid scope/forbidden/invalid recipient | safe FAILED, retryable false, 다음 유효 수신자 처리는 계속 | Nonretryable error test |
-| MAIL-13 | 5xx response | `EMAIL_FAILED`, retryable true; 자동 loop retry 없음 | Transient error classification test |
+| MAIL-11 | 명시적 quota/rate-limit 거절 | recipient 실패 `EMAIL_FAILED`, retryable true, 원 Provider body 미노출 | Retryable provider error test |
+| MAIL-12 | invalid scope/forbidden/invalid recipient | safe FAILED, 확정 거절은 retryable true, 다음 유효 수신자 처리는 계속 | Correctable rejection classification test |
+| MAIL-13 | Gmail `messages.send`의 전송 결과가 불명확한 5xx response | `EMAIL_FAILED`, retryable false; 자동 반복/수동 재시도 불가 | Ambiguous server outcome test |
+| MAIL-19 | Gmail send 이전 OAuth token refresh의 명시 5xx/일시 실패 | Gmail send 0회, `EMAIL_FAILED`, retryable true; 사용자가 설정/서비스 복구 뒤 API-016으로 재시도 | Pre-send retryability test |
 | MAIL-14 | send request timeout/response loss | FAILED, retryable false; 재전송하지 않고 uncertain outcome을 기록 | Ambiguous send outcome test |
 | MAIL-15 | subject CR/LF, malformed URL, body containing plain text punctuation | header injection은 거부; URL/content를 HTML 실행 없이 text/plain으로 전송 | MIME/input safety test |
 | MAIL-16 | captured logs and API error response | oauth client secret/refresh/access token/Authorization/email/MIME/provider body 0건 | Redaction/log capture test |

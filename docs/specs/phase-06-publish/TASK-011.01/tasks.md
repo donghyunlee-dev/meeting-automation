@@ -17,7 +17,7 @@
 - [ ] `EMAIL_PROVIDER=GMAIL_API` selection, secret configuration validation, refresh-token credential client, `validateConnection()`을 구현한다.
 - [ ] Gmail API sender를 구현해 RFC 2822 `text/plain; charset=UTF-8` message를 만들고 recipient별로 별도 전송한다.
 - [ ] Per-recipient result/status mapping을 구현한다. 한 recipient format/API error는 다음 사람의 send를 중단하지 않는다.
-- [ ] Auth/config/permission failures, explicit quota/rate-limit, 5xx, ambiguous timeout을 `EMAIL_FAILED` 및 `retryable`로 normalize한다. Ambiguous outcome의 자동 retry는 차단한다.
+- [ ] OAuth/수신자 교정 오류, 명시 quota/rate-limit, token refresh 이전 실패, Gmail send의 5xx, ambiguous timeout을 `EMAIL_FAILED` 및 `retryable`로 분류한다. 결과 불명 send의 수동/자동 retry를 차단한다.
 - [ ] Secret/PII/raw request/error body redaction과 API-019 configured/reachable semantics를 regression 검증한다.
 - [ ] Project test/lint/build/release-check 명령을 실행하고 결과를 Issue #46에 기록한다. 실제 Gmail smoke test는 승인된 test account만 사용한다.
 

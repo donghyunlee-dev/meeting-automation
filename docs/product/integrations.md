@@ -231,10 +231,10 @@ TEMP_AUDIO_DIR
 |---|---|---|
 | Audio assembly/STT/Minutes | `PROCESSING_FAILURE` | 같은 Session/job에 중복 side effect가 없거나 작업 상태로 보호됨 |
 | Notion/Confluence | `DOCUMENT_FAILURE` | `externalSessionId`로 기존 문서 탐색 가능 |
-| Email | `EMAIL_FAILURE` | 실패한 수신자 delivery만, provider가 성공 수락한 건 제외 |
-| Slack/Notification | `NOTIFICATION_FAILURE` | 성공 delivery는 제외, 명시 실패만 재시도 |
+| Email | `EMAIL_FAILURE` | API-016을 사용자가 명시 호출하고 해당 Delivery가 `retryable=true`일 때만 재시도 |
+| Slack/Notification | `NOTIFICATION_FAILURE` | API-016을 사용자가 명시 호출하고 해당 Delivery가 `retryable=true`일 때만 재시도 |
 
-외부 timeout 시 처리 결과가 불명확할 수 있다. Document는 Session ID 조회로 판별한다. Email/Slack의 중복 허용 여부는 Provider의 idempotency capability가 없는 경우 보장할 수 없으므로 응답 불명 timeout은 임의로 반복하지 않고 결과 불명 상태를 노출한다.
+외부 timeout 시 처리 결과가 불명확할 수 있다. Document는 Session ID 조회로 판별한다. Email/Slack의 중복 허용 여부는 Provider의 idempotency capability가 없는 경우 보장할 수 없으므로 응답 불명 timeout은 `retryable=false`로 기록하고 다시 전송하지 않는다. 명시적인 Provider 거절로 부작용이 없다고 확인되는 설정/권한 오류는 원인 수정 뒤 API-016으로 수동 재시도할 수 있다. 어떤 실패도 Adapter 내부 자동 반복을 하지 않는다.
 
 ## 추적성
 
