@@ -2300,7 +2300,7 @@ Meeting UI
 
 각 세부 TASK 표의 `설계 상태 / 문서` 열은 **설계 진행 상태**를 기록한다. 구현 진행 상태는 계속 GitHub Issue의 상태 라벨과 종료 상태가 기준이며, 두 상태를 혼합하지 않는다.
 
-**다음 설계 대상 커서: `TASK-018.01`** — TASK-017.04 네 문서와 Issue #64를 master commit `8104fe1`에서 원격 확인했다. Secret·회의 콘텐츠·비공개 Audio object 접근/만료/삭제·실패 전달 억제를 synthetic fixture로 검증하는 QA 설계를 완료했다. 다음은 TASK-005.08 녹음 구현 및 TASK-017.03 복구 화면을 기준으로 Android Chrome 장시간 녹음 품질을 검증하는 설계다.
+**다음 설계 대상 커서: `TASK-018.02`** — TASK-018.01 네 문서와 Issue #65를 master commit `a067f77`에서 원격 확인했다. Android Chrome의 30/60분 녹음과 화면 잠금·앱 전환·전화·네트워크 단절 검증 절차 및 비민감 Evidence 설계를 완료했다. 다음은 같은 녹음·복구 흐름을 iOS Safari에서 검증한다.
 
 ## 📊 개발 진행 현황
 
@@ -2373,7 +2373,7 @@ Meeting UI
 | `TASK-017.02` | TODO | DESIGN | [Issue #61](https://github.com/donghyunlee-dev/meeting-automation/issues/61) / — | — | — | — |
 | `TASK-017.03` | TODO | DESIGN | [Issue #62](https://github.com/donghyunlee-dev/meeting-automation/issues/62) / — | — | — | — |
 | `TASK-017.04` | TODO | DESIGN | [Issue #64](https://github.com/donghyunlee-dev/meeting-automation/issues/64) / — | — | — | — |
-| `TASK-018.01` | TODO | DESIGN | — | — | — | — |
+| `TASK-018.01` | TODO | DESIGN | [Issue #65](https://github.com/donghyunlee-dev/meeting-automation/issues/65) / — | — | — | — |
 | `TASK-018.02` | TODO | DESIGN | — | — | — | — |
 | `TASK-018.03` | TODO | DESIGN | — | — | — | — |
 | `TASK-018.04` | TODO | DESIGN | — | — | — | — |
@@ -2621,7 +2621,7 @@ Backend API 작업은 정상 응답뿐 아니라 명세된 검증 오류, 없는
 
 | 세부 작업 / 영역 | 선행 작업 | Related IDs | 완료 및 검증 조건 | 설계 상태 / 문서 |
 |---|---|---|------|---|
-| `TASK-018.01` Android Chrome 녹음 검증 / QA | TASK-005.08, TASK-017.03 | NFR-001~003,007, Section 21 | Android Chrome 30/60분 baseline 및 화면 잠금·앱 전환·전화·네트워크 단절별 녹음 결과, chunk/업로드 무결성, 재현 절차와 비민감 Evidence를 기록한다. | 설계중 · `docs/specs/phase-08-field-validation/TASK-018.01/` |
+| `TASK-018.01` Android Chrome 녹음 검증 / QA | TASK-005.08, TASK-017.03 | NFR-001~003,007, Section 21 | Android Chrome 30/60분 baseline 및 화면 잠금·앱 전환·전화·네트워크 단절별 녹음 결과, chunk/업로드 무결성, 재현 절차와 비민감 Evidence를 기록한다. | 설계완료 · `docs/specs/phase-08-field-validation/TASK-018.01/` |
 | `TASK-018.02` iOS Safari 녹음 검증 / QA | TASK-005.08, TASK-017.03 | NFR-001~003,007, Section 21 | 동일 조건을 iOS Safari에서 검증하고 브라우저별 제한 및 재현 결과를 기록한다. | 미설계 · — |
 | `TASK-018.03` Chunk 복구·재전송 현장 검증 / QA | TASK-018.01, TASK-018.02 | FR-005, NFR-007 | 단절 구간에서 저장된 Chunk가 누락·중복 없이 복구되는지 확인하고 Evidence를 남긴다. | 미설계 · — |
 | `TASK-018.04` 녹음 호환성 조정과 재검증 / FE, BE, QA | TASK-018.01~TASK-018.03 | NFR-001~003,007 | 발견된 MIME/Chunk/안내 이슈를 수정하고 실패 시나리오를 재검증한다. 지원 브라우저 범위를 확정한다. | 미설계 · — |
