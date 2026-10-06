@@ -74,6 +74,7 @@ if ((Test-Path 'backend/build.gradle') -or (Test-Path 'backend/build.gradle.kts'
 - README가 PRD 내용을 복사하지 않고 Frontend, Backend, docs의 역할을 분리해 설명하는지 확인한다.
 - `git status --short --ignored`를 확인한다. `docs/product/`, `docs/setup/`의 원본 문서는 제외되지 않아야 한다.
 - 변경 내용을 확인해 인증 정보나 환경 값이 들어가지 않았는지 점검한다. 테스트 출력에 비밀 값을 표시하지 않는다.
+- PRD에 leaf TASK별 개발 tracker 행이 정확히 하나씩 있는지 확인한다. 현재 Issue 상태와 일치하는지, 기존 `다음 설계 대상 커서` 및 설계 상태 표가 보존됐는지 확인한다.
 
 ## 증거
 
