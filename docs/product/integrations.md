@@ -169,6 +169,10 @@ Incoming Webhook URL은 secret이다. `validateConnection()`은 health 조회만
 
 ## Admin Incident 안전 규칙
 
+Admin incident는 `SLACK_ADMIN_WEBHOOK_URL`의 별도 Incoming Webhook으로 전송한다. Meeting 알림 `SLACK_MEETING_WEBHOOK_URL`과 분리하며 API-019의 Notification health나 사용자 Delivery 결과에 합치지 않는다. 업무 실패 하나당 webhook POST 한 번을 시도하고, Slack 전송 실패가 원래 사용자 요청/처리 실패를 변경하거나 재호출하지 않는다. 응답이 불명확한 전송은 blind retry하지 않는다.
+
+Payload는 Slack Incoming Webhook의 JSON `text`로 허용된 incident 필드만 렌더링한다. Slack Webhook URL은 secret이므로 URL/Authorization 및 원 요청/응답은 로그에 쓰지 않는다.
+
 허용 payload:
 
 ```json
