@@ -10,7 +10,7 @@
 | A11Y-OPEN-SURFACES | SCR-004 confirm, SCR-006 transcript drawer, participant picker 등 열어 검사 | dialog name/role, focus 내부 진입, background inert/modal semantics 정상 | Playwright assertions + scan |
 | A11Y-NAMES | 모든 interactive control을 role/name 기준으로 query | icon-only/action control 포함 목적을 설명하는 이름이 존재 | accessible locator result |
 | A11Y-FORM-LABELS | SCR-002/006/009/011/012 fields 검사 | visible label이 input에 연결되고 placeholder가 유일한 label이 아님; invalid/error 설명 연결 | label/id/aria-describedby assertions |
-| A11Y-TARGET-SIZE | primary/input/other frequent controls bounding box 조회 | primary height >=52px, input/select >=48px, common touch target >=48×48px 목표; 나머지 >=24×24 또는 문서화된 WCAG spacing exception | selector rect/exception list |
+| A11Y-TARGET-SIZE | primary/input/주요 touch controls bounding box 조회 | PRD 주요 target >=44×44px, primary height >=52px, input/select height >=48px; 자주 쓰는 mobile target >=48×48px 권고; WCAG 24px exception이 PRD 기준을 낮추지 않음 | selector rect/exception list |
 | A11Y-FOCUS-VISIBLE | 모든 주요 control에 keyboard focus 이동 | focus indicator가 눈에 띄고 viewport/sticky UI에 가려지지 않음 | focus screenshot + rect |
 | A11Y-TAB-ORDER | 각 주요 task flow에서 Tab/Shift+Tab 이동 | 시각/논리 순서 유지, keyboard trap은 열린 modal 내부에서만 존재 | focus sequence assertion |
 | A11Y-KEY-ACTIVATION | Enter/Space/Escape로 link/button/toggle/dialog 조작 | pointer 없이 새 회의, 검색/필터, 종료 취소, drawer/modal open-close 수행 가능 | Playwright key results |

@@ -17,7 +17,7 @@
 ## 적용 기준
 
 - SCR-001~012의 모든 primary action, form control, nav link, icon-only action, state/retry control을 inventory로 만든다. 화면 내 modal/bottom sheet/drawer가 열릴 때와 닫힌 뒤도 포함한다.
-- PRD 15.4의 primary button 최소 높이 52 CSS px 및 Input/Select 최소 높이 48 CSS px를 지킨다. 반복 사용되는 mobile icon/button target은 48×48 CSS px hit area를 목표로 한다. 다른 작은 target은 24×24 CSS px 미만이 되지 않도록 하고, 인접 target 간 spacing이 부족하면 크기 또는 간격을 조정한다. WCAG 2.2 SC 2.5.8의 예외를 적용한 경우 target/예외 근거를 Evidence에 남긴다.
+- PRD 13의 주요 touch target 최소 44×44 CSS px, PRD 15.4의 primary button 최소 높이 52px 및 Input/Select 최소 높이 48px를 모두 지킨다. 자주 쓰는 mobile icon/action은 48×48 CSS px hit area를 목표로 한다. WCAG 2.2 SC 2.5.8의 24×24 CSS px 최소와 spacing 예외도 확인하되, WCAG 예외가 더 엄격한 PRD 44px 기준을 대체하지 않는다.
 - 페이지와 대화상자의 모든 기능은 Tab/Shift+Tab, Enter/Space, Escape 및 해당하는 native select 조작만으로 완료 가능해야 한다. Tab 순서는 시각적/논리적 읽기 순서를 따른다. 키보드 trap은 modal 내부에서만 허용하며 Escape/닫기로 빠져나오고 원래 실행 control로 focus를 돌린다.
 - 모든 입력은 visible label과 programmatic accessible name을 가진다. 오류는 해당 control과 `aria-describedby` 등으로 연결하고 focus 이동 뒤 오류를 알 수 있다.
 - 모든 interactive element는 keyboard focus 시 식별되는 visible indicator를 유지하고 sticky header/action/modal에 가려지지 않는다.
@@ -39,7 +39,7 @@ Home/new meeting, Recording/end confirm/Processing, Review/transcript drawer, Sh
 ## 완료 기준
 
 - 핵심 control inventory가 SCR ID, route, control, accessible name/role, input method, measured target 크기를 담는다.
-- PRD primary/input 최소 크기와 touch-target policy가 확인되고 기록된 예외가 없다면 target size 기준을 통과한다.
+- PRD 주요 target 44×44, primary height 52, input/select height 48 기준을 통과한다. 예외는 상위 요구사항의 명시된 근거에 한해 기록하고 WCAG 24px 예외를 PRD 기준 완화 근거로 쓰지 않는다.
 - 각 주요 흐름이 keyboard-only로 완료되고 visible focus, 논리적 순서, dialog focus 이동/복원이 확인된다.
 - form label/error association, Loading/Processing status announcement, 비색상 status cue가 실제 accessible tree/화면에서 확인된다.
 - 자동 accessibility scan의 미해결 critical/serious violation이 없고, 수동 사례마다 pass/fail와 Evidence가 있다.

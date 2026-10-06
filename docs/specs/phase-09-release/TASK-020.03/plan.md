@@ -24,6 +24,7 @@
 ## 접속성 동작 계약
 
 - Native `button`, `a`, `label`, `input`, `select`, heading, landmark 우선. clickable `div`에 직접 key handler를 추가하기보다 적절한 native element로 바꾼다.
+- 핵심 touch target은 PRD NFR-002의 44×44 CSS px 이상, primary는 높이 52px 이상, Input/Select는 높이 48px 이상을 유지한다. 자주 쓰는 mobile icon/action은 48×48 hit area를 목표로 한다. WCAG 2.2 SC 2.5.8의 24px/spacing 기준을 추가로 확인하되 이를 더 엄격한 PRD 기준의 대체로 쓰지 않는다.
 - Icon-only control은 액션을 설명하는 accessible name을 제공한다. decorational icon은 accessible tree에서 숨긴다.
 - Dialog/sheet는 `role=dialog` 및 accessible title을 제공하고 열릴 때 initial focus를 내부로 이동, Tab 순환을 제한, 닫힐 때 opener에 복원한다. 사용자가 명시적으로 다른 위치로 이동한 경우 focus를 강제로 빼앗지 않는다.
 - Validation errors는 form field에 연결하고 invalid field 또는 summary로 결정적인 focus 이동을 제공한다. 입력 오류가 color only가 되지 않도록 text/shape도 제공한다.
