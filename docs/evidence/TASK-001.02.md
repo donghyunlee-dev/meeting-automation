@@ -4,6 +4,8 @@
 
 - 작업: `TASK-001.02` Frontend 도구 체계 초기화와 기본 렌더 검증
 - Issue: [#2](https://github.com/donghyunlee-dev/meeting-automation/issues/2)
+- PR: [#70](https://github.com/donghyunlee-dev/meeting-automation/pull/70)
+- 구현 검사 head: `5131fdb57252a5062735b58999f92808d90f098b`
 - 작업 브랜치: `codex/issue-2-frontend-toolchain`
 - Node.js: `v22.12.0`
 - npm: `11.16.0`
