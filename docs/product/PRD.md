@@ -2243,7 +2243,7 @@ Meeting UI
 
 각 세부 TASK 표의 `설계 상태 / 문서` 열은 **설계 진행 상태**를 기록한다. 구현 진행 상태는 계속 GitHub Issue의 상태 라벨과 종료 상태가 기준이며, 두 상태를 혼합하지 않는다.
 
-**다음 설계 대상 커서: `TASK-013.02`** — TASK-013.01 네 문서와 Issue #50을 master commit `278fdb5`에서 원격 확인했다. API-016 단건 재시도, 멱등성/동시성 및 명시 거절과 불명확한 부작용의 재시도 경계를 확정했다. 다음은 SCR-008 결과 표시와 실패 Delivery 재시도 UI다.
+**다음 설계 대상 커서: `TASK-014.01`** — TASK-013.02 네 문서와 Issue #51을 master commit `d6cdc4b`에서 원격 확인했다. SCR-008 문서/채널별 결과와 API-016 단건 재시도 UI를 확정했다. 다음은 API-017 Meetings List 조회 설계다.
 
 | 설계 상태 | 의미 |
 |---|---|
@@ -2435,7 +2435,7 @@ Backend API 작업은 정상 응답뿐 아니라 명세된 검증 오류, 없는
 | 세부 작업 / 영역 | 선행 작업 | Related IDs | 완료 및 검증 조건 | 설계 상태 / 문서 |
 |---|---|---|------|---|
 | `TASK-013.01` Delivery 결과·재시도 API / BE | TASK-011.02, TASK-012.02 | FR-019,027, API-016 | 실패한 채널만 재시도하고 성공한 채널은 중복 전달하지 않는다. 채널별 상태 테스트 통과 | 설계완료 · `docs/specs/phase-06-publish/TASK-013.01/` |
-| `TASK-013.02` Complete 화면과 실패 채널 재시도 / FE, INTEGRATION | TASK-013.01 | SCR-008, API-016 | 채널별 결과를 표시하고 실패 건만 재시도한다. 재시도 후 결과 갱신 테스트 통과 | 설계중 · `docs/specs/phase-06-publish/TASK-013.02/` |
+| `TASK-013.02` Complete 화면과 실패 채널 재시도 / FE, INTEGRATION | TASK-013.01 | SCR-008, API-016 | 채널별 결과를 표시하고 실패 건만 재시도한다. 재시도 후 결과 갱신 테스트 통과 | 설계완료 · `docs/specs/phase-06-publish/TASK-013.02/` |
 
 ## Phase 7 — History / Settings / Operations
 
@@ -2443,7 +2443,7 @@ Backend API 작업은 정상 응답뿐 아니라 명세된 검증 오류, 없는
 
 | 세부 작업 / 영역 | 선행 작업 | Related IDs | 완료 및 검증 조건 | 설계 상태 / 문서 |
 |---|---|---|------|---|
-| `TASK-014.01` Meetings List GET / BE | TASK-002.02 또는 TASK-002.03, TASK-010.02 | FR-020, API-017 | 최신 순, 최근 5건/전체 범위 기준의 요약을 반환한다. 빈 결과·100건 경계 테스트 통과 | 미설계 · — |
+| `TASK-014.01` Meetings List GET / BE | TASK-002.02 또는 TASK-002.03, TASK-010.02 | FR-020, API-017 | 최신 순, 최근 5건/전체 범위 기준의 요약을 반환한다. 빈 결과·100건 경계 테스트 통과 | 설계중 · `docs/specs/phase-07-history/TASK-014.01/` |
 | `TASK-014.02` Meeting Detail GET / BE | TASK-014.01 | FR-021~023, API-018 | 읽기 전용 상세와 Provider 원문 URL을 반환한다. 없는 회의·누락 문서 테스트 통과 | 미설계 · — |
 | `TASK-014.03` Home 최근 목록·Meetings 화면 / FE | TASK-014.01 | SCR-001,009, FR-001,020 | 최근 5건과 전체 목록을 표시하고 Empty/Loading/Error를 검증한다. | 미설계 · — |
 | `TASK-014.04` Client-side filter 및 Detail 연결 / FE, INTEGRATION | TASK-014.02, TASK-014.03 | SCR-009,010, FR-021~023 | 제목/참석자/날짜 필터와 읽기 전용 상세·원문 열기가 동작한다. 경계·결과 없음 테스트 통과 | 미설계 · — |
