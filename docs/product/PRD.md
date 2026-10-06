@@ -2643,7 +2643,7 @@ Backend API 작업은 정상 응답뿐 아니라 명세된 검증 오류, 없는
 | `TASK-020.01` 주요 화면 360px 및 반응형 검증 / FE, QA | TASK-004.05, TASK-014.04 | SCR-001~012, NFR-001,002 | 모든 주요 화면이 360px 이상에서 가로 넘침 없이 동작한다. 화면별 viewport 검사 통과 | 설계완료 · `docs/specs/phase-09-release/TASK-020.01/` |
 | `TASK-020.02` Loading/Empty/Error/Ready 상태 점검 / FE, QA | TASK-020.01, TASK-016.03 | SCR-001~012 | 각 화면의 적용 가능한 상태가 일관되게 보이고 상태별 컴포넌트 테스트 통과 | 설계완료 · `docs/specs/phase-09-release/TASK-020.02/` |
 | `TASK-020.03` Touch target·키보드·접근성 점검 / FE, QA | TASK-020.01 | NFR-010,012 | 핵심 조작이 터치·키보드로 가능하고 이름/상태가 보조기술에 노출된다. 자동 및 수동 점검 기록 | 설계완료 · `docs/specs/phase-09-release/TASK-020.03/` |
-| `TASK-020.04` Android/iOS 전체 화면 회귀 / QA | TASK-020.01~TASK-020.03, TASK-018.04 | SCR-001~012 | 지원 브라우저에서 핵심 화면과 녹음 전후 흐름을 회귀 점검하고 Evidence를 남긴다. | 미설계 · — |
+| `TASK-020.04` Android/iOS 전체 화면 회귀 / QA | TASK-020.01~TASK-020.03, TASK-018.04 | SCR-001~012 | 지원 브라우저에서 핵심 화면과 녹음 전후 흐름을 회귀 점검하고 Evidence를 남긴다. | 설계중 · `docs/specs/phase-09-release/TASK-020.04/` |
 
 ### TASK-021 End-to-End Acceptance — 작업 묶음
 
