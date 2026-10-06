@@ -2306,12 +2306,12 @@ Meeting UI
 
 구현 상태는 이 표와 GitHub Issue/PR, `docs/evidence/`의 head별 검증 기록으로 관리한다. 기존 세부 TASK 표의 `설계 상태 / 문서`와 설계 커서는 설계 상태만 나타내며 개발 상태를 대신하지 않는다.
 
-**다음 개발 대상 커서: `TASK-001.02`**
+**다음 개발 대상 커서: `TASK-001.02` (진행 중)**
 
 | TASK | 개발 상태 | 단계 | Issue / PR | 검증 증거 | 병합 commit | 완료 일시 (Asia/Seoul) |
 |---|---|---|---|---|---|---|
 | `TASK-001.01` | DONE | DONE | [Issue #1](https://github.com/donghyunlee-dev/meeting-automation/issues/1) / [PR #63](https://github.com/donghyunlee-dev/meeting-automation/pull/63) | [검증 증거](../evidence/TASK-001.01.md), review/QA PASS at `af14fd0` | `220d419ce94f705d97970c7cfdee7e32f3eaf67c` | 2026-10-06 19:08 KST |
-| `TASK-001.02` | TODO | DESIGN | [Issue #2](https://github.com/donghyunlee-dev/meeting-automation/issues/2) / — | — | — | — |
+| `TASK-001.02` | IN_PROGRESS | DEVELOPMENT | [Issue #2](https://github.com/donghyunlee-dev/meeting-automation/issues/2) / [PR #70](https://github.com/donghyunlee-dev/meeting-automation/pull/70) | [검증 증거](../evidence/TASK-001.02.md), 구현 검사 PASS; review/QA 대기 | — | — |
 | `TASK-001.03` | TODO | DESIGN | [Issue #3](https://github.com/donghyunlee-dev/meeting-automation/issues/3) / — | — | — | — |
 | `TASK-001.04` | TODO | DESIGN | [Issue #4](https://github.com/donghyunlee-dev/meeting-automation/issues/4) / — | — | — | — |
 | `TASK-001.05` | TODO | DESIGN | [Issue #5](https://github.com/donghyunlee-dev/meeting-automation/issues/5) / — | — | — | — |
