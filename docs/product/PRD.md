@@ -2534,7 +2534,7 @@ Backend API 작업은 정상 응답뿐 아니라 명세된 검증 오류, 없는
 
 | 세부 작업 / 영역 | 선행 작업 | Related IDs | 완료 및 검증 조건 | 설계 상태 / 문서 |
 |---|---|---|------|---|
-| `TASK-018.01` Android Chrome 녹음 검증 / QA | TASK-005.08, TASK-017.03 | NFR-001~003,007, Section 21 | 30/60분 녹음, 화면 잠금·앱 전환·전화·네트워크 단절 결과와 재현 절차를 기록한다. | 미설계 · — |
+| `TASK-018.01` Android Chrome 녹음 검증 / QA | TASK-005.08, TASK-017.03 | NFR-001~003,007, Section 21 | Android Chrome 30/60분 baseline 및 화면 잠금·앱 전환·전화·네트워크 단절별 녹음 결과, chunk/업로드 무결성, 재현 절차와 비민감 Evidence를 기록한다. | 설계중 · `docs/specs/phase-08-field-validation/TASK-018.01/` |
 | `TASK-018.02` iOS Safari 녹음 검증 / QA | TASK-005.08, TASK-017.03 | NFR-001~003,007, Section 21 | 동일 조건을 iOS Safari에서 검증하고 브라우저별 제한 및 재현 결과를 기록한다. | 미설계 · — |
 | `TASK-018.03` Chunk 복구·재전송 현장 검증 / QA | TASK-018.01, TASK-018.02 | FR-005, NFR-007 | 단절 구간에서 저장된 Chunk가 누락·중복 없이 복구되는지 확인하고 Evidence를 남긴다. | 미설계 · — |
 | `TASK-018.04` 녹음 호환성 조정과 재검증 / FE, BE, QA | TASK-018.01~TASK-018.03 | NFR-001~003,007 | 발견된 MIME/Chunk/안내 이슈를 수정하고 실패 시나리오를 재검증한다. 지원 브라우저 범위를 확정한다. | 미설계 · — |
