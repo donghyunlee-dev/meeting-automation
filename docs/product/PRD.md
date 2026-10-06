@@ -2300,7 +2300,7 @@ Meeting UI
 
 각 세부 TASK 표의 `설계 상태 / 문서` 열은 **설계 진행 상태**를 기록한다. 구현 진행 상태는 계속 GitHub Issue의 상태 라벨과 종료 상태가 기준이며, 두 상태를 혼합하지 않는다.
 
-**다음 설계 대상 커서: `TASK-017.04`** — TASK-017.03 네 문서와 Issue #62를 master commit `e68fb11`에서 원격 확인했다. TASK-017.02 Issue #61과 Backend 계약도 비공개 객체 저장소의 Audio 최대 24시간 보존 결정에 맞춰 갱신·게시했다. 다음은 Audio/Transcript/Secret 경계와 실패 전달 억제를 점검하는 보안·개인정보 회귀 QA 설계다.
+**다음 설계 대상 커서: `TASK-018.01`** — TASK-017.04 네 문서와 Issue #64를 master commit `8104fe1`에서 원격 확인했다. Secret·회의 콘텐츠·비공개 Audio object 접근/만료/삭제·실패 전달 억제를 synthetic fixture로 검증하는 QA 설계를 완료했다. 다음은 TASK-005.08 녹음 구현 및 TASK-017.03 복구 화면을 기준으로 Android Chrome 장시간 녹음 품질을 검증하는 설계다.
 
 | 설계 상태 | 의미 |
 |---|---|
@@ -2526,7 +2526,7 @@ Backend API 작업은 정상 응답뿐 아니라 명세된 검증 오류, 없는
 | `TASK-017.01` Secret 경계 및 로그 마스킹 / BE, FE | TASK-001.05, TASK-016.01 | DEC-017, FR-030, NFR-004~006 | FE bundle/API 응답/로그에서 Secret 탐지 0건. 자동 secret scan과 로그 테스트 통과 | 설계완료 · `docs/specs/phase-07-security/TASK-017.01/` |
 | `TASK-017.02` 비공개 Audio 보존·실패 종료 Backend / BE | TASK-006.01, TASK-006.04, TASK-006.05, TASK-010.02 | DEC-020, FR-027,028, NFR-006, API-020~022 | 변환 실패 Audio가 비공개 객체 저장소에 대기 중 최대 24시간 보존되고, 성공·실패 종료·만료 후 삭제된다. 인증되지 않은 공개 URL 접근이 불가능하고 실패 종료 문서는 Email/Slack으로 전달되지 않는다. | 설계완료 · `docs/specs/phase-07-security/TASK-017.02/` |
 | `TASK-017.03` 처리 실패 재시도·Audio 복구 화면 / FE, INTEGRATION | TASK-017.02 | SCR-005, FR-027, API-010,020~022 | 실패 stage와 남은 보존 시간을 표시하고 명시 재시도, Audio 다운로드 및 실패 마무리를 제공한다. 완료/오류/만료 화면 상태를 검증한다. | 설계완료 · `docs/specs/phase-07-security/TASK-017.03/` |
-| `TASK-017.04` 보안·개인정보 회귀 점검 / QA | TASK-017.01, TASK-017.02, TASK-017.03 | DEC-017,020, FR-027,028,030, NFR-004~006 | FE Secret, Audio/Transcript/Minutes 로그·API·문서 노출, 비공개 Audio 저장소 접근·만료·삭제, 실패 문서 전달 억제를 synthetic fixture로 검증하고 비민감 Evidence를 기록한다. | 설계중 · `docs/specs/phase-07-security/TASK-017.04/` |
+| `TASK-017.04` 보안·개인정보 회귀 점검 / QA | TASK-017.01, TASK-017.02, TASK-017.03 | DEC-017,020, FR-027,028,030, NFR-004~006 | FE Secret, Audio/Transcript/Minutes 로그·API·문서 노출, 비공개 Audio 저장소 접근·만료·삭제, 실패 문서 전달 억제를 synthetic fixture로 검증하고 비민감 Evidence를 기록한다. | 설계완료 · `docs/specs/phase-07-security/TASK-017.04/` |
 
 ## Phase 8 — 실제 모바일 / 회의실 품질 검증 및 튜닝
 
