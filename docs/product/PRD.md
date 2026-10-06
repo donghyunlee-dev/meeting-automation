@@ -2300,7 +2300,7 @@ Meeting UI
 
 각 세부 TASK 표의 `설계 상태 / 문서` 열은 **설계 진행 상태**를 기록한다. 구현 진행 상태는 계속 GitHub Issue의 상태 라벨과 종료 상태가 기준이며, 두 상태를 혼합하지 않는다.
 
-**다음 설계 대상 커서: `TASK-019.01`** — TASK-018.04 네 문서와 Issue #68을 master commit `2b3e773`에서 원격 확인했다. Phase 8 현장 Evidence의 재현 결함을 test-first로 조정하고 Android/iOS 영향 run을 재검증하며, 검증된 기기·OS·브라우저·MIME 조합만 지원 범위로 기록하는 설계를 완료했다. 다음은 3인 회의 synthetic fixture의 STT/화자 매핑 품질을 검증한다.
+**다음 설계 대상 커서: `TASK-019.02`** — TASK-019.01 네 문서와 Issue #69를 master commit `e547346`에서 원격 확인했다. 3인 한국어 fixture의 CER/WER, diarization 오류 구성, Speaker mapping 완료율과 API-011 전파 검증 및 5인 비교/설정 튜닝 기준선을 설계했다. 다음은 동일 scorecard로 5인 회의 조건을 비교한다.
 
 ## 📊 개발 진행 현황
 
@@ -2377,7 +2377,7 @@ Meeting UI
 | `TASK-018.02` | TODO | DESIGN | [Issue #66](https://github.com/donghyunlee-dev/meeting-automation/issues/66) / — | — | — | — |
 | `TASK-018.03` | TODO | DESIGN | [Issue #67](https://github.com/donghyunlee-dev/meeting-automation/issues/67) / — | — | — | — |
 | `TASK-018.04` | TODO | DESIGN | [Issue #68](https://github.com/donghyunlee-dev/meeting-automation/issues/68) / — | — | — | — |
-| `TASK-019.01` | TODO | DESIGN | — | — | — | — |
+| `TASK-019.01` | TODO | DESIGN | [Issue #69](https://github.com/donghyunlee-dev/meeting-automation/issues/69) / — | — | — | — |
 | `TASK-019.02` | TODO | DESIGN | — | — | — | — |
 | `TASK-019.03` | TODO | DESIGN | — | — | — | — |
 | `TASK-020.01` | TODO | DESIGN | — | — | — | — |
@@ -2630,7 +2630,7 @@ Backend API 작업은 정상 응답뿐 아니라 명세된 검증 오류, 없는
 
 | 세부 작업 / 영역 | 선행 작업 | Related IDs | 완료 및 검증 조건 | 설계 상태 / 문서 |
 |---|---|---|------|---|
-| `TASK-019.01` 3인 회의 fixture 및 품질 기준 검증 / QA | TASK-006.06, TASK-018.04 | DEC-007~010, FR-007,010, Section 21 | 3인 회의 음성의 STT/화자 오류와 Speaker mapping 완료율을 기록한다. | 설계중 · `docs/specs/phase-08-field-validation/TASK-019.01/` |
+| `TASK-019.01` 3인 회의 fixture 및 품질 기준 검증 / QA | TASK-006.06, TASK-018.04 | DEC-007~010, FR-007,010, Section 21 | 3인 회의 음성의 STT/화자 오류와 Speaker mapping 완료율을 기록한다. | 설계완료 · `docs/specs/phase-08-field-validation/TASK-019.01/` |
 | `TASK-019.02` 5인 회의 fixture 및 품질 기준 검증 / QA | TASK-019.01 | 동일 | 5인 회의 조건을 동일 기준으로 측정하고 3인 결과와 차이를 기록한다. | 미설계 · — |
 | `TASK-019.03` 설정 튜닝과 회귀 검증 / BE, QA | TASK-019.01, TASK-019.02 | EXT-001,002, DEC-008~010 | 조정 설정이 고정 fixture에서 개선 또는 비회귀를 보이며, 변경 근거와 알려진 한계를 기록한다. | 미설계 · — |
 
