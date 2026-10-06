@@ -2243,7 +2243,7 @@ Meeting UI
 
 각 세부 TASK 표의 `설계 상태 / 문서` 열은 **설계 진행 상태**를 기록한다. 구현 진행 상태는 계속 GitHub Issue의 상태 라벨과 종료 상태가 기준이며, 두 상태를 혼합하지 않는다.
 
-**다음 설계 대상 커서: `TASK-015.01`** — TASK-014.04 네 문서와 Issue #55를 master commit `e72d3d2`에서 원격 확인했다. 로컬 제목/참석자·날짜 필터, API-018 Detail, Transcript drawer, 안전한 Provider URL 열기를 설계했다. 다음은 Settings Integration Health 조회 연결 설계다.
+**다음 설계 대상 커서: `TASK-016.01`** — TASK-015.01 네 문서와 Issue #56을 master commit `8f56729`에서 원격 확인했다. API-001/API-019 병렬 조회, 독립 오류 처리, `provider:null` 관리자 설정 안내를 설계했다. 다음은 표준 오류 분류와 HTTP 매핑 설계다.
 
 | 설계 상태 | 의미 |
 |---|---|
@@ -2452,13 +2452,13 @@ Backend API 작업은 정상 응답뿐 아니라 명세된 검증 오류, 없는
 
 | 세부 작업 / 영역 | 선행 작업 | Related IDs | 완료 및 검증 조건 | 설계 상태 / 문서 |
 |---|---|---|------|---|
-| `TASK-015.01` Settings 조회 연결 / FE, BE | TASK-002.04, TASK-011.01, TASK-012.01 | FR-026, API-001,019, SCR-011 | Company/Document/Email/Notification 상태를 표시하고 Secret 원문이 응답·화면에 없다. | 설계중 · `docs/specs/phase-07-settings/TASK-015.01/` |
+| `TASK-015.01` Settings 조회 연결 / FE, BE | TASK-002.04, TASK-011.01, TASK-012.01 | FR-026, API-001,019, SCR-011 | Company/Document/Email/Notification 상태를 표시하고 Secret 원문이 응답·화면에 없다. | 설계완료 · `docs/specs/phase-07-settings/TASK-015.01/` |
 
 ### TASK-016 Error / Admin Slack — 작업 묶음
 
 | 세부 작업 / 영역 | 선행 작업 | Related IDs | 완료 및 검증 조건 | 설계 상태 / 문서 |
 |---|---|---|------|---|
-| `TASK-016.01` 오류 분류·표준 매핑 / BE | TASK-001.04, TASK-006.04 | DEC-018, FR-027~029 | PROCESSING/DOCUMENT/EMAIL/NOTIFICATION 오류가 올바른 코드와 traceId/sessionId로 매핑된다. 분류 테스트 통과 | 미설계 · — |
+| `TASK-016.01` 오류 분류·표준 매핑 / BE | TASK-001.04, TASK-006.04 | DEC-018, FR-027~029 | PROCESSING/DOCUMENT/EMAIL/NOTIFICATION 오류가 올바른 코드와 traceId/sessionId로 매핑된다. 분류 테스트 통과 | 설계중 · `docs/specs/phase-07-operations/TASK-016.01/` |
 | `TASK-016.02` Admin Slack safe payload / BE | TASK-016.01, TASK-012.01 | DEC-019, FR-029 | 민감 본문 없이 오류 종류·traceId/sessionId를 전송한다. 네 분류별 payload 테스트 통과 | 미설계 · — |
 | `TASK-016.03` 사용자 오류 상태 화면 검증 / FE, INTEGRATION | TASK-016.01 | SCR-003~008, FR-027 | API 오류가 해당 화면의 안내·복구 동작으로 연결된다. 대표 오류 계약 테스트 통과 | 미설계 · — |
 
