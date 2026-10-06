@@ -1,5 +1,7 @@
 # Processing 상태 및 Review 데이터 조회 API
 
+> **계약 갱신:** 이 패키지가 작성될 당시 `PROCESSING_FAILED`의 `allowedActions`는 빈 배열이었다. 사용자 승인으로 추가된 변환 retry/download/finalize action은 [TASK-017.02](../../phase-07-security/TASK-017.02/spec.md) Issue #61 및 후속 UI task가 해당 기준을 대체한다. 실패 응답의 안전한 오류 경계와 partial Review data 비노출은 계속 유효하다.
+
 ## 목표
 
 API-010 `GET /api/v1/meeting-sessions/{sessionId}`로 Backend memory에 있는 Session의 현재 처리 상태와 Review에 필요한 완료 데이터를 표준 `{data}` 응답으로 조회한다. PRD v1.7.0 (2026-10-05), `SCR-005`, `API-010`, `TASK-006.06`을 구체화한다. Issue [#32](https://github.com/donghyunlee-dev/meeting-automation/issues/32).
@@ -27,7 +29,7 @@ Accept: application/json
 모든 성공은 `{ "data": { sessionId, version, status, processing, ... } }` envelope를 사용한다. 필수 common fields는 `sessionId`, 현재 snapshot `version`, `status`, `processing:{stage,progressPercent}`다.
 
 - `PROCESSING` 및 다른 REVIEW 이전 상태에는 `speakers:[]`, `transcript:[]`, `minutes:null`, `allowedActions:[]`을 반환해 partial review data를 노출하지 않는다. `processing.stage`/`progressPercent`는 API-009/006.04/006.05가 기록한 현재 snapshot을 사용한다.
-- `PROCESSING_FAILED`에는 실패 stage와 마지막 완료 progress를 유지하고 `speakers:[]`, `transcript:[]`, `minutes:null`, `allowedActions:[]`을 반환한다. 내부/provider 예외 원문은 제공하지 않는다. Frontend는 status+stage로 안전한 일반 실패 안내를 구성한다.
+- `PROCESSING_FAILED`에는 실패 stage와 마지막 완료 progress를 유지하고 `speakers:[]`, `transcript:[]`, `minutes:null`을 반환한다. API-010은 현재 Audio/retry availability에 따라 action과 만료 정보를 제공하며, 구체 계약은 TASK-017.02/#61에 정의한다. 내부/provider 예외 원문은 제공하지 않는다.
 - `REVIEW`에서만 완료된 `speakers`, 시간순 `transcript`, Structured `minutes`, `allowedActions`를 한 Session version snapshot으로 반환한다. Speaker는 표준 `{speakerId,label,participantId}`; segment는 `{segmentId,speakerId,startMs,endMs,text}`; Minutes는 `data-spec.md` StructuredMinutes schema를 따른다.
 - REVIEW `allowedActions`는 현재 API-011~014에 해당하는 유효 action만 포함한다. 초기 Review는 `UPDATE_SPEAKER_MAPPING`, `UPDATE_MINUTES`, `REGENERATE_MINUTES`, `CONFIRM`; Session mutation/전이에 따라 매 query에서 재계산한다. Review 전/최종 상태에는 빈 배열이다.
 - Session이 없거나 Backend 재시작 후 memory에서 사라졌으면 HTTP 404 `SESSION_NOT_FOUND` common error envelope.

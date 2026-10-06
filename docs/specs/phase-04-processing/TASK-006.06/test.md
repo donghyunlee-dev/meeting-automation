@@ -6,11 +6,11 @@
 |---|---|---|---|
 | API-010-01 | PROCESSING 직후 API-009 snapshot | `{data}`의 Session/version/status와 `AUDIO_ASSEMBLY` stage/progress 일치 | Controller test |
 | API-010-02 | Assembly/STT/Diarization 실행 중 | current processing stage/progress 반환, partial review arrays 비어 있음 | mapper integration test |
-| API-010-03 | PROCESSING_FAILED at TRANSCRIPTION | 실패 status/stage와 last completed progress, 내부 오류 원문 없음 | failure response test |
+| API-010-03 | PROCESSING_FAILED at TRANSCRIPTION | 실패 status/stage/last completed progress, Audio 만료 metadata와 허용 action, 내부 오류 원문 없음 | failure response test; retry action details in TASK-017.02 |
 | API-010-04 | REVIEW 완료, Speakers/Transcript/Minutes 저장 | 같은 version snapshot의 전체 review data 및 allowedActions | response contract test |
 | API-010-05 | Review speaker mapping/Minutes update 후 조회 | 증가한 version과 갱신된 data/actions | application integration test |
 | API-010-06 | API-011~014 action별 허용/불허 상태 | REVIEW allowedActions에 현재 유효 action만 포함 | action mapper test |
-| API-010-07 | Review 이전/final status | allowedActions 빈 배열, processing 중 partial content 미노출 | state gate test |
+| API-010-07 | PROCESSING/REVIEW 이전 상태 또는 COMPLETED_WITH_WARNINGS terminal status | 허용 action 외에는 노출하지 않으며 partial content는 계속 숨김 | state gate test |
 | API-010-08 | 없는 Session 또는 memory restart 이후 조회 | HTTP 404 `SESSION_NOT_FOUND` common error envelope | Session store/controller test |
 | API-010-09 | 동일 Session 연속 GET | response fields 동일, version/state 저장 변화 없음 | read-only query test |
 | API-010-10 | GET과 Session update가 동시 발생 | payload 내 version/fields가 같은 consistent snapshot | concurrency/snapshot test |

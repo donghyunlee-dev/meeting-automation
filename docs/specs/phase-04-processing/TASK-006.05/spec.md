@@ -42,6 +42,7 @@ Output은 아래 `StructuredMinutes`이며, 모든 필드를 포함한다.
 - Speaker mapping이 없는 화자는 이름/Participant를 추론하지 않는다. Action item owner는 근거와 현재 mapping이 명확하지 않으면 null이다.
 - Transcript가 빈 경우 외부 LLM을 호출하지 않는다. 선택 Template의 id/version과 `summary:""`, 빈 section arrays를 담은 결정적 empty draft를 저장한다. 근거 없는 결론/담당자/날짜를 만들지 않는다.
 - provider timeout/429/5xx는 typed retryable processing failure로, invalid config/auth/malformed structured output은 safe non-retryable failure로 전달한다. 자동 재시도 횟수는 추가하지 않으며 TASK-006.04의 Processing failure contract를 따른다.
+- Minutes 생성 진입 시 `processing.stage=MINUTES_GENERATION`을 기록한다. 이 stage의 failure/retry snapshot 계약은 후속 TASK-017.02 (#61)에서 확장되며, 기존 Transcript와 speaker mapping을 재사용해 Minutes 생성만 다시 수행한다.
 - 성공 Minutes와 Session status/stage/progress는 한 Session mutation 경계에서 저장한다. output persist가 실패하면 Session은 `REVIEW`가 아니며 success response를 보이지 않는다. 성공 시 `status=REVIEW`, processing `{stage:"DRAFT_READY",progressPercent:100}`이다.
 - Template prompt/content, Transcript/Minutes, roster email, provider raw output 및 Secret을 로그/오류에 남기지 않는다. 운영 로그에는 `sessionId`, `traceId`, stage, outcome, safe error code만 남긴다.
 

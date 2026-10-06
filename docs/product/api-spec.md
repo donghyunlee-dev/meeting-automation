@@ -4,12 +4,13 @@
 > **기준 문서:** [PRD.md](./PRD.md)
 > **데이터 정의:** [data-spec.md](./data-spec.md)
 > **외부 Provider 계약:** [integrations.md](./integrations.md)
-> **기준일:** 2026-10-05
+> **기준일:** 2026-10-06
 
 ## 공통 HTTP 규칙
 
 - Base path: `/api/v1`
 - JSON 요청/응답은 UTF-8 `application/json`이다. Audio chunk body는 raw binary이며 `Content-Type`에 실제 녹음 MIME type을 보낸다.
+- API-021 성공 응답은 Audio `application/octet-stream` stream이며 JSON success envelope를 사용하지 않는다.
 - 성공 응답은 `{ "data": ... }` envelope를 사용한다.
 - 오류 응답은 `{ "error": { "code", "message", "category", "retryable", "traceId", "details" } }`다.
 - 시간은 ISO 8601 offset datetime 또는 UTC `Z`이며, duration은 millisecond 정수다.
@@ -62,6 +63,7 @@ Session 상태와 전이 규칙은 [architecture.md](./architecture.md)의 상�
 | `DELIVERY_NOT_FOUND` | 404 | N | Session에 속한 Delivery를 찾을 수 없음 |
 | `DELIVERY_NOT_RETRYABLE` | 409 | N | Delivery가 FAILED가 아니거나 안전한 재시도가 허용되지 않음 |
 | `DELIVERY_RETRY_IN_PROGRESS` | 409 | N | 해당 Delivery의 재시도 처리가 이미 진행 중 |
+| `AUDIO_NOT_AVAILABLE` | 409 | N | 원본 Audio가 정리되었거나 보존 기한이 지남 |
 | `REVIEW_VALIDATION_FAILED` | 422 | N | Review 확정 조건 미충족. `details.issues`에 `{path,code}` 배열 포함 |
 | `AUDIO_CHUNK_INVALID` | 400 | N | MIME, checksum, 길이, 크기 검증 실패 |
 | `AUDIO_CHUNK_CONFLICT` | 409 | N | 같은 sequence가 다른 bytes로 이미 저장됨 |
@@ -102,6 +104,9 @@ Session 상태와 전이 규칙은 [architecture.md](./architecture.md)의 상�
 | API-017 | `GET /meetings` | 과거 Meeting 목록 |
 | API-018 | `GET /meetings/{documentId}` | 읽기 전용 상세 |
 | API-019 | `GET /integrations/health` | Provider 연결 상태 |
+| API-020 | `POST /meeting-sessions/{sessionId}/processing/retry` | 처리 명시 재시도 |
+| API-021 | `GET /meeting-sessions/{sessionId}/audio/download` | 원본 Audio 다운로드 |
+| API-022 | `POST /meeting-sessions/{sessionId}/processing/finalize-failure` | 변환 실패 문서 기록 및 종료 |
 
 ## Endpoint 계약
 
@@ -179,7 +184,25 @@ Request: `{expectedChunks:number,durationMs:number,mimeType:string}`. Backend는
 
 `GET /api/v1/meeting-sessions/{sessionId}` → `200`
 
-응답에는 `{sessionId,version,status,meeting:{participantIds},processing,speakers,transcript,minutes,allowedActions}`가 포함된다. `allowedActions`는 현재 상태에서 허용되는 `UPDATE_SPEAKER_MAPPING`, `UPDATE_MINUTES`, `REGENERATE_MINUTES`, `CONFIRM`, `PUBLISH` 등만 포함한다. `PUBLISH`는 `CONFIRMED` 및 문서 저장 실패 `DOCUMENT_FAILED`에서만 제공한다. Document 저장 뒤에는 `document:{documentId,documentUrl}`를 포함한다. Publish 전에는 `deliveries`를 생략하고 Publish 접수 뒤에는 결과가 없더라도 `deliveries:[]`를 포함하며, 있을 때는 `deliveries:[{deliveryId,channel,recipientParticipantId?,status,attemptCount,lastAttemptAt?,errorCode?,retryable}]` 형식이다. `meeting.participantIds`는 Session 생성 때 회의 작성자가 지정한 roster reference이며 Email 화면의 선택 범위를 제한한다. 응답은 주소/Secret/provider 원문을 노출하지 않는다. Browser는 action을 표시 힌트로 사용하되 서버가 항상 재검증한다.
+응답에는 `{sessionId,version,status,meeting:{participantIds},processing,speakers,transcript,minutes,allowedActions}`가 포함된다. `PROCESSING_FAILED`이면 `processing:{stage,progressPercent,errorCode,retryable,audioAvailable,audioExpiresAt?}`를 제공한다. `stage`는 `AUDIO_ASSEMBLY`, `TRANSCRIPTION`, `DIARIZATION`, `MINUTES_GENERATION` 중 하나다. 허용 시 `allowedActions`에 `RETRY_PROCESSING`, `DOWNLOAD_AUDIO`, `FINALIZE_PROCESSING_FAILURE` 중 가능한 action만 포함한다. Assembly 단계는 complete source chunks로 retry할 수 있지만 검증된 assembled Audio 전에는 `DOWNLOAD_AUDIO`가 없다. 기한 만료 후에는 `DOWNLOAD_AUDIO`와 `RETRY_PROCESSING`을 제거하고 실패 마무리만 허용한다. `COMPLETED_WITH_WARNINGS` 실패 문서 저장 뒤에는 `document:{documentId,documentUrl}`와 `deliveries:[]`를 반환한다. 정상 Review/PUBLISH 동작은 기존 계약을 따른다. 응답은 주소/Secret/provider 원문을 노출하지 않는다. Browser는 action을 표시 힌트로 사용하되 서버가 항상 재검증한다.
+
+### API-020 Processing Retry
+
+`POST /api/v1/meeting-sessions/{sessionId}/processing/retry` (`Idempotency-Key`, `If-Match`) → `202`
+
+Session이 `PROCESSING_FAILED`, 오류가 retryable, Audio assembly 산출물 또는 필요한 모든 source chunks가 존재하고 24시간 보존 기한 전일 때만 허용한다. 같은 처리 job의 완료 stage는 유지하고 실패 stage부터 재개한다. 자동 재시도는 없다. 성공 응답은 `{data:{sessionId,status:"PROCESSING",stage}}`다. 같은 키/요청은 최초 접수 결과를 재사용한다. 사용자가 다시 시도할 때는 새 `Idempotency-Key`와 최신 `If-Match`를 보낸다. 만료/삭제된 retry input, non-retryable 오류 또는 잘못된 상태에서는 `SESSION_STATE_CONFLICT`나 `AUDIO_NOT_AVAILABLE`을 반환하고 Session을 변경하지 않는다.
+
+### API-021 Original Audio Download
+
+`GET /api/v1/meeting-sessions/{sessionId}/audio/download` → `200` binary
+
+Session의 Audio가 존재하고 미만료일 때만 허용한다. Raw audio stream, 검증된 MIME type, `Content-Disposition: attachment`를 반환한다. Session 생성 때 받은 recording MIME과 서버가 만든 안전한 파일명을 사용한다. 만료/삭제 후에는 409 `AUDIO_NOT_AVAILABLE`을 반환한다. Audio bytes와 경로는 로그에 남기지 않는다. Browser는 전송이 성공한 뒤 사용자에게 저장 확인을 받고 그 선택으로 API-022를 호출한다.
+
+### API-022 Finalize Processing Failure
+
+`POST /api/v1/meeting-sessions/{sessionId}/processing/finalize-failure` (`Idempotency-Key`, `If-Match`) → `202`
+
+Request: `{"audioDisposition":"DOWNLOADED"|"DISCARDED"}`. `PROCESSING_FAILED`에서만 허용한다. 실패 stage와 회의 메타데이터, 사용자 선택을 Meeting 문서에 기록하고 status를 `COMPLETED_WITH_WARNINGS`로 마무리한다. `audioDisposition`이 `DOWNLOADED`이면 같은 Session에서 성공한 download 응답이 있어야 한다. Document 저장만 수행하고 Email/Slack delivery를 만들지 않는다. Audio와 chunk는 정리한다. 만료 시 Backend는 `DISCARDED`로 같은 종료 처리를 수행한다. 동일 key/payload의 접수 응답은 재사용하며, Provider 저장 실패 뒤 사용자가 재시도할 때는 새 `Idempotency-Key`를 사용한다. Document Provider 실패 시 안전한 `DOCUMENT_FAILED`로 남기고 Audio disposition 및 Session을 유지한다. `externalSessionId` 기준 문서 멱등성으로 재시도 중복 page 생성을 막는다.
 
 ### API-011 Speaker Mapping Update
 

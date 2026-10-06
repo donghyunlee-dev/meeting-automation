@@ -89,9 +89,10 @@ configuration/
 3. Browser는 녹음 데이터를 순서 번호가 있는 chunk로 임시 저장하고 업로드한다. ACK 받은 chunk만 로컬 재전송 대기열에서 제거한다.
 4. 종료 시 Frontend는 expected chunk 수와 녹음 정보를 보내 processing을 시작한다.
 5. Backend는 누락 sequence 확인 후 Audio를 조립하고 STT/diarization을 호출한다.
-6. Provider 결과를 표준 Transcript와 internal `speakerId`로 변환한다. Transcript 원문은 `speakerId`를 계속 보존한다.
-7. Minutes Provider에 Transcript, Speaker mapping, 선택 Template을 전달하고 구조화 결과를 Session에 둔다.
-8. Frontend는 상태 polling으로 검토 데이터를 받고 Speaker 단위 mapping 및 Minutes 편집을 수행한다.
+6. 변환 실패면 서버는 실패 stage/retryability와 Audio 만료 시각을 저장한다. 사용자가 명시적으로 재시도하면 실패 stage부터 재개한다. 만료 전 사용자는 원본 Audio를 내려받고 실패 종료를 선택할 수 있다.
+7. Provider 결과를 표준 Transcript와 internal `speakerId`로 변환한다. Transcript 원문은 `speakerId`를 계속 보존한다.
+8. Minutes Provider에 Transcript, Speaker mapping, 선택 Template을 전달하고 구조화 결과를 Session에 둔다.
+9. Frontend는 상태 polling으로 검토 데이터를 받고 Speaker 단위 mapping 및 Minutes 편집을 수행한다.
 
 ### Template 재생성
 
@@ -103,7 +104,8 @@ configuration/
 2. Publish는 먼저 Document를 생성하거나 같은 Session ID의 기존 문서를 찾아 재사용한다.
 3. Document 저장 성공 뒤 Email 수신자별 delivery와 선택적 Slack notification을 실행한다. 두 채널 결과는 서로 독립적이다.
 4. 완료 상태와 실패한 개별 delivery를 기록한다. 재시도는 실패한 단계만 수행한다.
-5. Audio 임시 파일은 처리 완료 또는 실패 후 정리 정책에 따라 삭제한다. Transcript/Minutes 본문은 일반 로그나 Admin Slack으로 내보내지 않는다.
+5. 성공 시 Audio 임시 파일은 Review 진입 때 삭제한다. 처리 실패 시 필요한 chunks/Audio를 idle 기준 마지막 실패 뒤 최대 24시간 보존하고, 명시 retry가 실행 중일 때는 만료 sweep을 멈춘다. 재시도 실패 때 만료를 갱신한다. 명시적 실패 종료 또는 만료 후 정리한다. Transcript/Minutes 본문은 일반 로그나 Admin Slack으로 내보내지 않는다.
+6. 변환 실패 종료 시 회의 메타데이터와 실패 요약만 Meeting 문서에 기록한다. Email/Slack을 참석자에게 전달하지 않는다. 정상 변환 회의는 기존 Confirm/Publish 흐름을 따른다.
 
 ## 세션 상태 및 동시성
 

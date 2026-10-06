@@ -1,5 +1,7 @@
 # Processing 화면과 상태 조회 연결
 
+> **계약 갱신:** 이 패키지가 작성될 당시 processing retry API와 retry button은 없었다. 사용자가 승인한 변환 retry, Audio download, 실패 종료 흐름은 [TASK-017.02](../../phase-07-security/TASK-017.02/spec.md) Issue #61과 후속 TASK-017.03이 해당 기준을 대체한다. 조회 polling, API-010 기반 상태 연결, provider 오류 원문 비노출은 계속 유효하다.
+
 ## 목표
 
 Processing 화면을 API-010 공통 `{data}` 응답에 연결한다. Backend가 보고하는 단계와 진행률을 보여주고, 처리가 `REVIEW`에 도달하면 해당 Session의 Review 화면으로 이동하며 실패 시 안전한 안내를 제공한다. PRD v1.7.0 (2026-10-05), `SCR-005`, `API-010`, `TASK-006.07`을 구체화한다. Issue [#33](https://github.com/donghyunlee-dev/meeting-automation/issues/33).
@@ -23,13 +25,13 @@ Processing API/Backend pipeline, Review 화면 구현, 처리 재시작 API 또�
 - API 응답을 공통 `{data}` envelope에서 읽고 API error는 공통 오류 envelope로 분기한다. API-010의 필수 common fields는 `sessionId`, `version`, `status`, `processing:{stage,progressPercent}`다.
 - Processing 단계명과 진행 상태는 서버의 현재 snapshot으로부터 계산한다. `progressPercent`가 없거나 범위를 벗어나면 임의의 수치를 만들지 않고 단계 설명만 표시한다. 알 수 없는 stage에는 안전한 일반 처리 문구를 표시한다.
 - Review 이전에는 `speakers`, `transcript`, `minutes` 등 부분 결과를 UI에서 읽거나 보여주지 않는다. `status=REVIEW`이고 응답 `sessionId`가 현재 route Session과 일치할 때만 `/meetings/{sessionId}/review`로 이동한다.
-- `PROCESSING_FAILED`에서는 `processing.stage`에 해당하는 사용자용 실패 문구와 다시 확인/도움말 안내를 보인다. 오류 원문, provider response, Audio, Transcript를 표시하지 않는다. 현재 API에는 pipeline 재시작 명령/재시도 가능 여부 field가 없으므로 API-009를 반복 호출해 재시작하는 버튼은 만들지 않는다. 화면 조회의 일시적 네트워크 실패는 polling backoff로 재시도한다.
+- `PROCESSING_FAILED`에서는 `processing.stage`에 해당하는 사용자용 실패 문구와 API-010이 허용한 retry/download/finalize action을 표시한다. 오류 원문, provider response, Audio bytes, Transcript를 표시하지 않는다. pipeline retry는 API-020을 사용하며 API-009 반복 호출은 하지 않는다. 일시적 조회 오류는 polling backoff로 재시도한다.
 - `SESSION_NOT_FOUND`는 처리가 만료되었거나 서버에서 사용할 수 없다는 안내와 새 회의를 시작할 수 있는 경로를 제공한다. 해당 Session을 자동 재생성하지 않는다.
 - API 상태를 polling하는 동안 Bottom Navigation을 숨긴다. 색상만으로 단계를 구분하지 않고, 단계명/아이콘/텍스트를 함께 제공하며 `prefers-reduced-motion`에서 진행 애니메이션을 줄인다.
 
 ## polling 정책
 
-첫 API-010 조회는 API-009 `202` 응답 뒤 즉시 수행한다. 아직 처리 중이면 다음 조회를 1초 후 시작하고, 오류가 연속될 경우 2초, 4초, 8초로 늘려 최대 10초로 제한한다. 유효한 응답을 받으면 오류 backoff를 초기화한다. stage/progress 변경 시 화면을 갱신하되 polling 주기는 1초보다 짧아지지 않는다. 동시에 하나의 조회만 실행한다. `REVIEW`, `PROCESSING_FAILED`, `SESSION_NOT_FOUND`, route 이탈/컴포넌트 unmount에서 timer와 in-flight 요청을 취소한다. 탭이 background인 경우에도 중복 timer를 만들지 않고 visibility 복귀 후 즉시 한 번 조회한다.
+첫 API-010 조회는 API-009 `202` 응답 뒤 즉시 수행한다. 아직 처리 중이면 다음 조회를 1초 후 시작하고, 오류가 연속될 경우 2초, 4초, 8초로 늘려 최대 10초로 제한한다. 유효한 응답을 받으면 오류 backoff를 초기화한다. stage/progress 변경 시 화면을 갱신하되 polling 주기는 1초보다 짧아지지 않는다. 동시에 하나의 조회만 실행한다. `PROCESSING_FAILED`에서는 잦은 polling을 멈추고 `audioExpiresAt` 직후 한 번 재조회하는 만료 timer를 유지한다. 사용자 action 완료 때는 즉시 다시 조회한다. `REVIEW`, `COMPLETED_WITH_WARNINGS`, `SESSION_NOT_FOUND`, route 이탈/컴포넌트 unmount에서 모든 timer와 in-flight 요청을 취소한다. 탭 복귀 시 상태를 즉시 재조회한다.
 
 ## 수용 기준
 
