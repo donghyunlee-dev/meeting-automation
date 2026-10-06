@@ -54,6 +54,7 @@ Session 상태와 전이 규칙은 [architecture.md](./architecture.md)의 상�
 | `VALIDATION_FAILED` | 400 | N | 요청 필드 검증 실패 |
 | `INTERNAL_ERROR` | 500 | N | 처리되지 않은 서버 설정 또는 필수 리소스 오류 |
 | `PARTICIPANT_NOT_FOUND` | 404 | N | 존재하지 않는 Participant ID |
+| `MEETING_NOT_FOUND` | 404 | N | Provider Meetings child에서 documentId에 해당하는 Meeting을 찾을 수 없음 |
 | `SESSION_NOT_FOUND` | 404 | N | 존재하지 않거나 메모리에서 만료된 Session |
 | `SESSION_STATE_CONFLICT` | 409 | N | 현재 상태에서 요청 불가 |
 | `SESSION_VERSION_CONFLICT` | 412 | 조건부 | If-Match 버전이 오래됨. 최신 상태 조회 후 사용자 수정 반영 |
@@ -236,7 +237,7 @@ FAILED이며 `retryable=true`인 Delivery만 허용한다. `retryable`은 사용
 
 `GET /api/v1/meetings/{documentId}` → `200`
 
-읽기 전용 `{documentId,title,meetingAt,participants,minutes,transcript,documentUrl}`. 앱을 통한 과거 문서 수정 API는 없다.
+읽기 전용 `{documentId,title,meetingAt,participants:[{id,name}],minutes,transcript,documentUrl}`. `documentId`가 없으면 404 `MEETING_NOT_FOUND`; Provider 조회 실패는 502 `DOCUMENT_FAILED` (`DOCUMENT_FAILURE`)다. 이메일은 응답하지 않는다. 누락/유효하지 않은 원문 URL은 `documentUrl:null`이다. 앱을 통한 과거 문서 수정 API는 없다.
 
 ### API-019 Integration Health
 
