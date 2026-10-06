@@ -2243,7 +2243,7 @@ Meeting UI
 
 각 세부 TASK 표의 `설계 상태 / 문서` 열은 **설계 진행 상태**를 기록한다. 구현 진행 상태는 계속 GitHub Issue의 상태 라벨과 종료 상태가 기준이며, 두 상태를 혼합하지 않는다.
 
-**다음 설계 대상 커서: `TASK-016.03`** — TASK-016.02 네 문서와 Issue #58을 master commit `6f1687f`에서 원격 확인했다. Admin Slack 별도 webhook, 허용 payload, 원 업무 오류 보존 및 단회 best-effort 전송을 설계했다. 다음은 공통 API 오류를 사용자 화면의 안내·복구 행동에 연결하는 설계다.
+**다음 설계 대상 커서: `TASK-017.01`** — TASK-016.03 네 문서와 Issue #59를 master commit `01bbce2`에서 원격 확인했다. SCR-003~008 대표 오류 안내, draft/result 보존, retry gating과 timeout mutation 회귀 검증을 설계했다. 다음은 Frontend/API/log 경계의 Secret 방지와 로그 마스킹 설계다.
 
 | 설계 상태 | 의미 |
 |---|---|
@@ -2460,13 +2460,13 @@ Backend API 작업은 정상 응답뿐 아니라 명세된 검증 오류, 없는
 |---|---|---|------|---|
 | `TASK-016.01` 오류 분류·표준 매핑 / BE | TASK-001.04, TASK-006.04 | DEC-018, FR-027~029 | PROCESSING/DOCUMENT/EMAIL/NOTIFICATION 오류가 올바른 코드와 traceId/sessionId로 매핑된다. 분류 테스트 통과 | 설계완료 · `docs/specs/phase-07-operations/TASK-016.01/` |
 | `TASK-016.02` Admin Slack safe payload / BE | TASK-016.01, TASK-012.01 | DEC-019, FR-029 | 민감 본문 없이 오류 종류·traceId/sessionId를 전송한다. 네 분류별 payload 테스트 통과 | 설계완료 · `docs/specs/phase-07-operations/TASK-016.02/` |
-| `TASK-016.03` 사용자 오류 상태 화면 검증 / FE, INTEGRATION | TASK-016.01 | SCR-003~008, FR-027 | API 오류가 해당 화면의 안내·복구 동작으로 연결된다. 대표 오류 계약 테스트 통과 | 설계중 · `docs/specs/phase-07-operations/TASK-016.03/` |
+| `TASK-016.03` 사용자 오류 상태 화면 검증 / FE, INTEGRATION | TASK-016.01 | SCR-003~008, FR-027 | API 오류가 해당 화면의 안내·복구 동작으로 연결된다. 대표 오류 계약 테스트 통과 | 설계완료 · `docs/specs/phase-07-operations/TASK-016.03/` |
 
 ### TASK-017 Security / Temporary Data — 작업 묶음
 
 | 세부 작업 / 영역 | 선행 작업 | Related IDs | 완료 및 검증 조건 | 설계 상태 / 문서 |
 |---|---|---|------|---|
-| `TASK-017.01` Secret 경계 및 로그 마스킹 / BE, FE | TASK-001.05, TASK-016.01 | DEC-017, FR-028, NFR-004~006 | FE bundle/API 응답/로그에서 Secret 탐지 0건. 자동 secret scan과 로그 테스트 통과 | 미설계 · — |
+| `TASK-017.01` Secret 경계 및 로그 마스킹 / BE, FE | TASK-001.05, TASK-016.01 | DEC-017, FR-028, NFR-004~006 | FE bundle/API 응답/로그에서 Secret 탐지 0건. 자동 secret scan과 로그 테스트 통과 | 설계중 · `docs/specs/phase-07-security/TASK-017.01/` |
 | `TASK-017.02` Temporary Audio 수명주기 / BE | TASK-006.01, TASK-010.02 | DEC-020, FR-030, NFR-014 | 성공·실패·중단 경로에서 정책에 따라 임시 Audio가 정리된다. 각 종료 경로 테스트 통과 | 미설계 · — |
 | `TASK-017.03` 보안·개인정보 회귀 점검 / QA | TASK-017.01, TASK-017.02 | DEC-017,020, FR-028,030 | Audio/Transcript/Secret 로그 노출, FE Secret, 잔여 Audio 검사 결과가 모두 기준을 만족하고 Evidence가 기록된다. | 미설계 · — |
 
