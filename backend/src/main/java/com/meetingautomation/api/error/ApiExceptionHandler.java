@@ -6,8 +6,10 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import com.meetingautomation.document.DocumentProviderException;
 import jakarta.validation.ConstraintViolationException;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -114,6 +116,20 @@ public class ApiExceptionHandler {
                 "요청한 리소스를 찾을 수 없습니다.",
                 "NOT_FOUND",
                 false,
+                request,
+                Map.of());
+    }
+
+    @ExceptionHandler(DocumentProviderException.class)
+    public ResponseEntity<ApiErrorResponse> handleDocumentProviderFailure(
+            DocumentProviderException exception,
+            HttpServletRequest request) {
+        return errorResponse(
+                HttpStatusCode.valueOf(exception.statusCode()),
+                exception.code(),
+                exception.getMessage(),
+                exception.category(),
+                exception.retryable(),
                 request,
                 Map.of());
     }

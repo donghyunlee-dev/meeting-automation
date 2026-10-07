@@ -41,7 +41,8 @@ DocumentProvider Port의 Provider-neutral 구조 탐색, 표준 문서 읽기/�
 ### Provider 오류 변환 및 민감 정보 경계
 
 - 입력: Root/child 누락, 권한 거부, 일시 전송 오류 fixture.
-- 기대 결과: 구조 누락만 `DOCUMENT_STRUCTURE_NOT_FOUND`; 기타 Provider 작업 실패는 `DOCUMENT_FAILED`, 운영 분류는 `DOCUMENT_FAILURE`로 전달된다. 구체적 재시도 가능성은 오류 종류/안전한 중복 여부를 따른다.
+- 기대 결과: 구조 누락은 `DOCUMENT_STRUCTURE_NOT_FOUND`; `getMeeting` 문서 미존재는 API-018의 `MEETING_NOT_FOUND`; `listParticipants` 조회 실패는 API-003의 `PARTICIPANT_LIST_FAILED`; 그 밖의 Provider 작업 실패는 `DOCUMENT_FAILED`로 전달된다. 모든 Provider 작업 실패의 운영 분류는 `DOCUMENT_FAILURE`이며 구체적 재시도 가능성은 오류 종류/안전한 중복 여부를 따른다.
+- 회귀 범위: `listMeetings`, `getMeeting`의 Provider 실패, `findMeetingBySessionId`, `createMeeting`, `createParticipant`, `updateParticipant` 각각에서 공통 `DOCUMENT_FAILED` 매핑을 확인한다. `validateConnection`은 오류 throw 대신 `ProviderHealth` 상태를 반환한다.
 - 보안 assertion: Secret, Provider raw response body, SDK 예외 메시지가 표준 오류 응답/일반 로그에 포함되지 않는다.
 - 증거: code/category/retryable assertion 및 비노출 assertion.
 
