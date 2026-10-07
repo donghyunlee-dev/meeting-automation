@@ -18,7 +18,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 @SpringBootTest
 @AutoConfigureMockMvc
-@Import(ErrorContractProbeController.class)
+@Import({ErrorContractProbeController.class, ConstraintViolationProbeService.class})
 class MeetingAutomationApplicationTests {
 
     private static final String INPUT_MARKER = "sensitive-user-input-marker";
@@ -109,7 +109,29 @@ class MeetingAutomationApplicationTests {
         mockMvc.perform(get("/__test/errors/minimum").queryParam("count", "0"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error.code").value("VALIDATION_FAILED"))
-                .andExpect(jsonPath("$.error.category").value("VALIDATION"));
+                .andExpect(jsonPath("$.error.category").value("VALIDATION"))
+                .andExpect(jsonPath("$.error.details.fieldErrors[0].field").value("count"))
+                .andExpect(jsonPath("$.error.details.fieldErrors[0].code").value("Min"));
+    }
+
+    @Test
+    void handlerMethodParameterValidationIncludesSafeFieldDetails() throws Exception {
+        mockMvc.perform(get("/__test/errors/method-validation").queryParam("value", INPUT_MARKER))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.details.fieldErrors[0].field").value("value"))
+                .andExpect(jsonPath("$.error.details.fieldErrors[0].code").value("Size"))
+                .andExpect(result -> org.junit.jupiter.api.Assertions.assertFalse(
+                        result.getResponse().getContentAsString().contains(INPUT_MARKER)));
+    }
+
+    @Test
+    void constraintViolationValidationIncludesSafeFieldDetails() throws Exception {
+        mockMvc.perform(get("/__test/errors/service-validation").queryParam("value", INPUT_MARKER))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.details.fieldErrors[0].field").value("value"))
+                .andExpect(jsonPath("$.error.details.fieldErrors[0].code").value("Size"))
+                .andExpect(result -> org.junit.jupiter.api.Assertions.assertFalse(
+                        result.getResponse().getContentAsString().contains(INPUT_MARKER)));
     }
 
     @Test

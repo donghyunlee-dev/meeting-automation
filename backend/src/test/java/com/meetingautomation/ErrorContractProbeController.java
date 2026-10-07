@@ -3,6 +3,7 @@ package com.meetingautomation;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Size;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -15,6 +16,13 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/__test/errors")
 class ErrorContractProbeController {
+
+    private final ConstraintViolationProbeService validationProbeService;
+
+    @Autowired
+    ErrorContractProbeController(ConstraintViolationProbeService validationProbeService) {
+        this.validationProbeService = validationProbeService;
+    }
 
     @PostMapping(value = "/validation", consumes = MediaType.APPLICATION_JSON_VALUE)
     void validation(@Valid @RequestBody ValidationRequest request) {
@@ -35,6 +43,15 @@ class ErrorContractProbeController {
 
     @GetMapping("/minimum")
     void minimum(@RequestParam @Min(1) int count) {
+    }
+
+    @GetMapping("/method-validation")
+    void methodValidation(@RequestParam @Size(max = 8) String value) {
+    }
+
+    @GetMapping("/service-validation")
+    void serviceValidation(@RequestParam String value) {
+        validationProbeService.validateValue(value);
     }
 
     @GetMapping("/invalid-return")

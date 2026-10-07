@@ -1,6 +1,7 @@
 package com.meetingautomation.api.error;
 
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.ConstraintViolation;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -12,12 +13,15 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.BindException;
 import org.springframework.validation.FieldError;
+import org.springframework.context.MessageSourceResolvable;
 import org.springframework.web.ErrorResponse;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
+import org.springframework.validation.method.ParameterErrors;
+import org.springframework.validation.method.ParameterValidationResult;
 
 @RestControllerAdvice
 public class ApiExceptionHandler {
@@ -41,11 +45,10 @@ public class ApiExceptionHandler {
                 "VALIDATION",
                 false,
                 request,
-                Map.of("fieldErrors", fieldErrors));
+                validationDetails(fieldErrors));
     }
 
     @ExceptionHandler({
-            ConstraintViolationException.class,
             HttpMessageNotReadableException.class,
             MethodArgumentTypeMismatchException.class
     })
@@ -60,6 +63,23 @@ public class ApiExceptionHandler {
                 false,
                 request,
                 Map.of());
+    }
+
+    @ExceptionHandler(ConstraintViolationException.class)
+    public ResponseEntity<ApiErrorResponse> handleConstraintViolation(
+            ConstraintViolationException exception,
+            HttpServletRequest request) {
+        List<InvalidField> fieldErrors = exception.getConstraintViolations().stream()
+                .map(ApiExceptionHandler::toInvalidField)
+                .toList();
+        return errorResponse(
+                HttpStatus.BAD_REQUEST,
+                "VALIDATION_FAILED",
+                "요청 내용을 확인해 주세요.",
+                "VALIDATION",
+                false,
+                request,
+                validationDetails(fieldErrors));
     }
 
     @ExceptionHandler(HandlerMethodValidationException.class)
@@ -77,7 +97,7 @@ public class ApiExceptionHandler {
                 "VALIDATION",
                 false,
                 request,
-                Map.of());
+                validationDetails(validationErrors(exception)));
     }
 
     @ExceptionHandler(NoResourceFoundException.class)
@@ -145,6 +165,52 @@ public class ApiExceptionHandler {
     private static InvalidField toInvalidField(FieldError error) {
         String constraintCode = error.getCode() == null ? "INVALID" : error.getCode();
         return new InvalidField(error.getField(), constraintCode);
+    }
+
+    private static InvalidField toInvalidField(ConstraintViolation<?> violation) {
+        String field = "request";
+        for (jakarta.validation.Path.Node node : violation.getPropertyPath()) {
+            if (node.getName() != null) {
+                field = node.getName();
+            }
+        }
+        String code = violation.getConstraintDescriptor().getAnnotation().annotationType().getSimpleName();
+        return new InvalidField(field, code);
+    }
+
+    private static List<InvalidField> validationErrors(HandlerMethodValidationException exception) {
+        return exception.getParameterValidationResults().stream()
+                .flatMap(ApiExceptionHandler::validationErrors)
+                .distinct()
+                .sorted(Comparator.comparing(InvalidField::field).thenComparing(InvalidField::code))
+                .toList();
+    }
+
+    private static java.util.stream.Stream<InvalidField> validationErrors(ParameterValidationResult result) {
+        if (result instanceof ParameterErrors parameterErrors) {
+            return parameterErrors.getFieldErrors().stream().map(ApiExceptionHandler::toInvalidField);
+        }
+
+        String parameterName = result.getMethodParameter().getParameterName();
+        String field = parameterName == null ? "parameter" : parameterName;
+        return result.getResolvableErrors().stream()
+                .map(error -> new InvalidField(field, validationCode(error)));
+    }
+
+    private static String validationCode(MessageSourceResolvable error) {
+        String[] codes = error.getCodes();
+        if (codes == null || codes.length == 0) {
+            return "INVALID";
+        }
+        int qualifier = codes[0].indexOf('.');
+        return qualifier < 0 ? codes[0] : codes[0].substring(0, qualifier);
+    }
+
+    private static Map<String, Object> validationDetails(List<InvalidField> fieldErrors) {
+        return Map.of("fieldErrors", fieldErrors.stream()
+                .distinct()
+                .sorted(Comparator.comparing(InvalidField::field).thenComparing(InvalidField::code))
+                .toList());
     }
 
     private static String traceId(HttpServletRequest request) {
