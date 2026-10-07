@@ -16,7 +16,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
-@SpringBootTest
+@SpringBootTest(properties = {"DOCUMENT_PROVIDER=", "NOTIFICATION_PROVIDER=SLACK"})
 @AutoConfigureMockMvc
 @Import({ErrorContractProbeController.class, ConstraintViolationProbeService.class})
 class MeetingAutomationApplicationTests {
@@ -29,6 +29,38 @@ class MeetingAutomationApplicationTests {
 
     @Test
     void contextLoads() {
+    }
+
+    @Test
+    void appConfigExposesOnlyUnselectedDocumentProviderAndConfigured() throws Exception {
+        mockMvc.perform(get("/api/v1/app-config"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.document.provider").value(org.hamcrest.Matchers.nullValue()))
+                .andExpect(jsonPath("$.data.document.configured").value(false))
+                .andExpect(jsonPath("$.data.notification.provider").value("SLACK"))
+                .andExpect(jsonPath("$.data.notification.enabled").value(true))
+                .andExpect(result -> {
+                    String body = result.getResponse().getContentAsString();
+                    org.junit.jupiter.api.Assertions.assertFalse(body.contains("NOTION_TOKEN"));
+                    org.junit.jupiter.api.Assertions.assertFalse(body.contains("DOCUMENT_ROOT_ID"));
+                });
+    }
+
+    @Test
+    void integrationHealthAlwaysReturnsFourSafeUnconfiguredAreasWhenNoProviderIsSelected() throws Exception {
+        mockMvc.perform(get("/api/v1/integrations/health"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.document.provider").value(org.hamcrest.Matchers.nullValue()))
+                .andExpect(jsonPath("$.data.document.configured").value(false))
+                .andExpect(jsonPath("$.data.document.reachable").value(false))
+                .andExpect(jsonPath("$.data.document.rootAccessible").value(false))
+                .andExpect(jsonPath("$.data.email.configured").value(false))
+                .andExpect(jsonPath("$.data.email.reachable").value(false))
+                .andExpect(jsonPath("$.data.notification.configured").value(false))
+                .andExpect(jsonPath("$.data.notification.reachable").value(false))
+                .andExpect(jsonPath("$.data.notification.provider").value("SLACK"))
+                .andExpect(jsonPath("$.data.ai.configured").value(false))
+                .andExpect(jsonPath("$.data.ai.reachable").value(false));
     }
 
     @Test
