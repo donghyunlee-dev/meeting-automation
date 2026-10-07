@@ -49,7 +49,8 @@ public final class NotionPageHierarchyAdapter implements DocumentStructureProvid
             readAllChildren(configuredRootId);
             return new ProviderHealth(true, true, true);
         } catch (NotionApiFailure failure) {
-            return new ProviderHealth(true, failure.responseReceived(), false);
+            boolean authenticated = failure.statusCode() != 401 && failure.statusCode() != 403;
+            return new ProviderHealth(true, failure.responseReceived() && authenticated, false);
         }
     }
 

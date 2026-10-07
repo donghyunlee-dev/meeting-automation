@@ -22,7 +22,7 @@ Backend 설정의 Notion Root Page에서 직속 `Meetings`, `Participants` child
 - 페이지 목록은 `has_more`와 `next_cursor`를 사용해 끝까지 순회한다. `next_cursor`는 불투명 값으로 파싱/검증하지 않고 다음 `start_cursor`에 그대로 전달한다. 페이지 크기는 결과 완전성의 기준으로 사용하지 않는다.
 - 정확한 대소문자 표기 `Meetings`, `Participants`의 직속 `child_page`만 각각 container로 선택한다. `child_database`는 같은 제목이어도 Page로 취급하지 않는다.
 - 두 Page가 각각 하나씩 발견되면 공통 `DocumentStructure(rootId, meetingsPageId, participantsPageId)`를 반환한다. 하나라도 없거나 동일 제목의 직속 Page가 중복되면 `DOCUMENT_STRUCTURE_NOT_FOUND`로 실패한다. Adapter는 누락 Page를 자동 생성하지 않는다.
-- `validateConnection`/Root 접근의 `ProviderHealth` 필드는 공통 Port 계약을 따른다. `configured`는 token과 root ID가 모두 설정됐는지, `reachable`은 Notion API에서 HTTP 응답을 받았는지, `rootAccessible`은 Root child 조회가 성공했는지를 나타낸다. 네트워크 오류는 `reachable=false`, 권한/Root 접근 오류는 `rootAccessible=false`다. 모든 경우 실제 설정값은 반환하지 않는다.
+- `validateConnection`/Root 접근의 `ProviderHealth` 필드는 제품 Health 계약을 따른다. `configured`는 token과 root ID가 모두 설정됐는지, `reachable`은 안전한 확인 요청이 Notion에 도달하고 인증됐는지, `rootAccessible`은 Root child 조회가 성공했는지를 나타낸다. 네트워크 오류와 401/403 인증 거부는 `reachable=false`; Root 접근 실패/구조 실패는 `rootAccessible=false`다. 404는 Root 존재와 접근 권한을 구분할 수 없어 Root 접근 실패로 처리한다. 모든 경우 실제 설정값은 반환하지 않는다.
 - 401/403/404 등 접근 실패와 전송/제한 오류는 표준 `DOCUMENT_FAILED`/`DOCUMENT_FAILURE`로 변환하고 Notion 원문 오류 메시지를 감춘다. HTTP 404는 Root 미존재와 연결 권한 부족을 구분할 수 없으므로 구체 원인을 노출하지 않는다. 성공적으로 목록을 읽었는데 필수 child가 없는 경우에만 `DOCUMENT_STRUCTURE_NOT_FOUND`를 사용한다.
 - Notion API 요청은 필수 `Notion-Version` 헤더를 보낸다. 2026-10-07 공식 문서 확인 결과 최신 값은 `2026-03-11`이다. 구현 시 이 버전을 고정 설정으로 관리한다.
 
