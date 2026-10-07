@@ -23,7 +23,7 @@
 - Root 직속 child는 `GET /wiki/api/v2/pages/{id}/direct-children`으로 가져온다. `limit`을 설정하고 응답의 `_links.next` 또는 `Link` 헤더가 가리키는 다음 페이지를 끝까지 조회한다. 다음 링크는 opaque 값으로 취급하며 같은 base origin 안에서만 요청하고 반복 링크면 Provider 오류로 안전하게 종료한다. 응답에서 `type=page` 항목의 `id`와 `title`만 구조 탐색에 사용한다.
 - 대소문자까지 정확히 일치하는 `Meetings`, `Participants` 직속 Page가 각 하나씩 있을 때 `DocumentStructure(rootId, meetingsPageId, participantsPageId)`를 반환한다. 다른 content type은 무시한다.
 - 필수 Page가 없거나 같은 제목의 직속 Page가 중복되면 `DOCUMENT_STRUCTURE_NOT_FOUND`(HTTP 422, 재시도 불가)로 실패한다. 성공한 조회에서 보이지 않는 child도 사용할 수 없으므로 구조 누락으로 처리한다. Adapter는 Page를 생성/이름변경/복구하지 않는다.
-- `ProviderHealth`는 공통 계약의 `configured`, `reachable`, `rootAccessible`을 반환한다. `configured`는 HTTPS site origin, account email, token, 숫자형 Confluence Page ID root의 존재와 형식 유효성이다. `reachable`은 인증 포함 API에서 HTTP 응답을 받았는지, `rootAccessible`은 Root 직속 child 목록을 성공적으로 조회했는지를 나타낸다. 설정값은 반환하지 않는다.
+- `ProviderHealth`는 공통 제품 Health 계약의 `configured`, `reachable`, `rootAccessible`을 반환한다. `configured`는 HTTPS site origin, account email, token, 숫자형 Confluence Page ID root의 존재와 형식 유효성이다. `reachable`은 안전한 확인 요청이 Confluence에 도달하고 인증됐는지, `rootAccessible`은 Root 직속 child 목록을 성공적으로 조회했는지를 나타낸다. 따라서 401/403 인증 거부는 `reachable=false`, 404 Root 접근 실패는 `rootAccessible=false`다. 설정값은 반환하지 않는다.
 - HTTP 401/403/404는 권한/Root 접근 실패 원인을 세분화하지 않고 `DOCUMENT_FAILED` 및 `DOCUMENT_FAILURE`로 안전하게 변환한다. 429/5xx/네트워크 오류도 같은 표준 실패 경계를 사용하며 재시도는 기존 공통 정책을 따른다. Vendor 응답 본문, Authorization 값, 계정 이메일, API token은 API 응답과 로그에 노출하지 않는다.
 
 ## 명시적 제외 범위

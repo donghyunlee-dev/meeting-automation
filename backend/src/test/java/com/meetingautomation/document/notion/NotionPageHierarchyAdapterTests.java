@@ -130,7 +130,8 @@ class NotionPageHierarchyAdapterTests extends com.meetingautomation.document.Doc
         TestClient healthClient = client(TOKEN, ROOT_ID);
         healthClient.server().expect(notionRequest(URL)).andRespond(withStatus(HttpStatusCode.valueOf(status))
                 .contentType(MediaType.APPLICATION_JSON).body("{\"message\":\"raw-response-marker\"}"));
-        assertEquals(new com.meetingautomation.document.ProviderHealth(true, true, false),
+        boolean authenticated = status != 401 && status != 403;
+        assertEquals(new com.meetingautomation.document.ProviderHealth(true, authenticated, false),
                 healthClient.adapter().validateConnection());
         healthClient.server().verify();
     }
