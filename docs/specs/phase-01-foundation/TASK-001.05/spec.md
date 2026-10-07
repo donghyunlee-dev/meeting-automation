@@ -49,7 +49,7 @@ Frontend와 Backend가 각자 소유한 디렉터리에서 독립적으로 의�
 - Frontend 샘플의 API 주소는 [Frontend Setup](../../../setup/frontend-setup.md)의 `VITE_API_BASE_URL` 예시를 따른다.
 - Backend 샘플의 키와 로컬 기본값은 [Backend Setup](../../../setup/backend-setup.md)의 비밀 아닌 설정 예시를 따른다. Secret 키 예시는 값 없이 둔다.
 - 실제 Provider credential은 Backend runtime 설정으로만 주입한다. `VITE_` 변수는 브라우저 번들에 공개될 수 있으므로 credential을 담지 않는다.
-- 선행 Issue #2, #3, #4는 모두 열려 있다. 설계 문서 및 Issue 등록은 진행하되 구현 착수는 세 선행 작업이 완료된 후다.
+- 선행 Issue #2, #3, #4는 모두 완료됐다. FE/BE toolchain, common error envelope, health 계약이 각 병합 PR에 포함되어 구현을 시작할 수 있다.
 
 ## 연결된 문서
 
