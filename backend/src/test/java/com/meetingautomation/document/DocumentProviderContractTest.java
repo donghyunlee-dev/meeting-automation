@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.function.Supplier;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.function.Executable;
 
 /** Reusable provider contract. Adapters can extend this class and provide a test factory. */
 public abstract class DocumentProviderContractTest {
@@ -65,6 +66,8 @@ public abstract class DocumentProviderContractTest {
         assertEquals(502, documentFailure.statusCode());
         assertEquals("DOCUMENT_FAILURE", documentFailure.category());
         assertFalse(documentFailure.getMessage().contains("provider-secret-marker"));
+        assertFalse(documentFailure.getMessage().contains("raw-response-marker"));
+        assertNull(documentFailure.getCause());
     }
 
     @Test
@@ -77,6 +80,29 @@ public abstract class DocumentProviderContractTest {
         assertEquals(404, missing.statusCode());
         assertEquals("NOT_FOUND", missing.category());
         assertFalse(missing.retryable());
+    }
+
+    @Test
+    protected void genericProviderOperationsUseDocumentFailedContract() {
+        DocumentProvider provider = failingProviderFactory().get();
+
+        assertDocumentFailed(() -> provider.listMeetings(10));
+        assertDocumentFailed(() -> provider.findMeetingBySessionId("session-1"));
+        assertDocumentFailed(() -> provider.createMeeting(meetingCommand()));
+        assertDocumentFailed(() -> provider.createParticipant(
+                new CreateParticipantCommand("A User", "a@example.test")));
+        assertDocumentFailed(() -> provider.updateParticipant(
+                "pt_1", new UpdateParticipantCommand("Updated", null)));
+    }
+
+    private static void assertDocumentFailed(Executable operation) {
+        DocumentProviderException failure = assertThrows(DocumentProviderException.class, operation);
+        assertEquals("DOCUMENT_FAILED", failure.code());
+        assertEquals(502, failure.statusCode());
+        assertEquals("DOCUMENT_FAILURE", failure.category());
+        assertFalse(failure.getMessage().contains("provider-secret-marker"));
+        assertFalse(failure.getMessage().contains("raw-response-marker"));
+        assertNull(failure.getCause());
     }
 
     @Test

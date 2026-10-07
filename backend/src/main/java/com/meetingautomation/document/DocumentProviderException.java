@@ -28,12 +28,22 @@ public final class DocumentProviderException extends RuntimeException {
     }
 
     public static DocumentProviderException participantListFailed(boolean retryable) {
+        return participantListFailed(retryable, null);
+    }
+
+    public static DocumentProviderException participantListFailed(boolean retryable, Throwable providerFailure) {
+        // Do not retain Provider exception text, response bodies, credentials, or stack traces.
         return new DocumentProviderException(
                 "PARTICIPANT_LIST_FAILED", "참가자 목록을 불러올 수 없습니다.", "DOCUMENT_FAILURE", retryable,
                 502);
     }
 
     public static DocumentProviderException documentFailed(boolean retryable) {
+        return documentFailed(retryable, null);
+    }
+
+    public static DocumentProviderException documentFailed(boolean retryable, Throwable providerFailure) {
+        // Do not retain Provider exception text, response bodies, credentials, or stack traces.
         return new DocumentProviderException(
                 "DOCUMENT_FAILED", "문서 작업을 완료할 수 없습니다.", "DOCUMENT_FAILURE", retryable,
                 502);
