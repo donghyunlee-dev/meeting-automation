@@ -7,7 +7,7 @@
 | ID | 준비/입력 | 기대 결과 | 증거 |
 |---|---|---|---|
 | `CONF-AUTH-01` Basic 인증 구성 | 설정에 fake account email과 fake API token을 제공하고 Root children 요청 실행 | `Authorization: Basic <Base64(UTF-8 email:token)>`가 전달된다. 원문 email/token은 예외와 로그에 없다. | client request assertion 및 captured log 검토 |
-| `CONF-CONFIG-01` 필수 설정 누락 | base URL, email, token, Root ID 중 하나씩 누락 | `configured=false` 또는 기존 설정 검증 계약에 따른 실패; 어떤 secret 값도 반환하지 않는다. | property validation assertion |
+| `CONF-CONFIG-01` 설정 누락/형식 오류 | base URL, email, token, Root ID 중 하나씩 누락하거나 base URL/Page ID 형식을 잘못 제공 | `configured=false` 또는 기존 설정 검증 계약에 따른 실패; 어떤 secret 값도 반환하지 않는다. | property validation assertion |
 | `CONF-ROOT-01` 정상 구조 | 두 개의 직속 Page 응답에 `Meetings`, `Participants` 제목 제공 | 공통 `DocumentStructure`에 Root와 각각의 page ID가 정확히 매핑된다. | Adapter DTO assertion |
 | `CONF-PAGE-02` 다른 content type | 동일 제목의 non-Page child와 두 필수 Page 후보가 섞인 응답 제공 | `type=page`만 선택하며 Database/Folder/Whiteboard/Embed는 구조로 인정하지 않는다. | type filter assertion |
 | `CONF-PAGE-03` 빈 구조 | 성공 HTTP 응답에 child 항목 없음 | Page 생성 없이 `DOCUMENT_STRUCTURE_NOT_FOUND`가 발생한다. | 오류 코드 및 생성 호출 0회 assertion |

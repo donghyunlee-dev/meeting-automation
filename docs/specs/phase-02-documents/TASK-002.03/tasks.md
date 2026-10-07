@@ -4,7 +4,7 @@
 
 ## Backend 구현
 
-- [ ] 설정 DTO/properties에 `CONFLUENCE_BASE_URL`, `CONFLUENCE_ACCOUNT_EMAIL`, `CONFLUENCE_AUTH_TOKEN`, `DOCUMENT_ROOT_ID`를 연결한다. 결과: 필수값 누락·잘못된 URL은 시작/설정 검증에서 명확히 실패하고 값 자체는 출력하지 않는다.
+- [ ] 설정 DTO/properties에 `CONFLUENCE_BASE_URL`, `CONFLUENCE_ACCOUNT_EMAIL`, `CONFLUENCE_AUTH_TOKEN`, 숫자형 `DOCUMENT_ROOT_ID`를 연결한다. 결과: 필수값 누락·잘못된 URL/Page ID는 configured=false 또는 기존 설정 검증 계약에 따라 안전하게 처리하고 값 자체는 출력하지 않는다.
 - [ ] Confluence HTTP client를 fakeable한 경계로 둔다. 결과: 단위 테스트에서 네트워크 없이 status/header/body를 공급할 수 있다.
 - [ ] Basic 인증 생성과 요청을 테스트 우선으로 구현한다. 결과: `email:token` UTF-8 Base64 Authorization header가 전송되고 비밀값은 logger/예외에서 제거된다.
 - [ ] API v2 direct-children `_links.next`/`Link` pagination을 테스트 우선으로 구현한다. 결과: opaque next URL을 same-origin에서 순서대로 요청하고 반복 링크 또는 종료 응답 후 호출을 멈춘다.
