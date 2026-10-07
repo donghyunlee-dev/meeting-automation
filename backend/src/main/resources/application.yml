@@ -1,0 +1,3 @@
+spring:
+  application:
+    name: meeting-automation-backend
