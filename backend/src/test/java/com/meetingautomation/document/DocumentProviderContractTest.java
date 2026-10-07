@@ -18,7 +18,7 @@ public abstract class DocumentProviderContractTest {
     protected abstract Supplier<DocumentProvider> failingProviderFactory();
 
     @Test
-    void healthAndMeetingListUseStandardFieldsAndDefaultLimit() {
+    protected void healthAndMeetingListUseStandardFieldsAndDefaultLimit() {
         DocumentProvider provider = providerFactory().get();
         assertEquals(new ProviderHealth(true, true, true), provider.validateConnection());
         List<MeetingSummary> meetings = provider.listMeetings();
@@ -32,7 +32,7 @@ public abstract class DocumentProviderContractTest {
     }
 
     @Test
-    void discoversOnlyConfiguredRootAndItsRequiredChildren() {
+    protected void discoversOnlyConfiguredRootAndItsRequiredChildren() {
         DocumentStructure structure = providerFactory().get().discoverStructure("root-configured");
 
         assertEquals("root-configured", structure.rootId());
@@ -41,7 +41,7 @@ public abstract class DocumentProviderContractTest {
     }
 
     @Test
-    void structureAndProviderFailuresUseNormalizedSafeErrors() {
+    protected void structureAndProviderFailuresUseNormalizedSafeErrors() {
         DocumentProvider provider = failingProviderFactory().get();
 
         DocumentProviderException structureFailure = assertThrows(
@@ -68,7 +68,7 @@ public abstract class DocumentProviderContractTest {
     }
 
     @Test
-    void meetingReadAndCreateReturnOnlyStandardModels() {
+    protected void meetingReadAndCreateReturnOnlyStandardModels() {
         DocumentProvider provider = providerFactory().get();
         MeetingDocument document = provider.getMeeting("doc_meeting-1");
         assertEquals("doc_meeting-1", document.documentId());
@@ -87,7 +87,7 @@ public abstract class DocumentProviderContractTest {
     }
 
     @Test
-    void participantCommandsUseNeutralRosterModel() {
+    protected void participantCommandsUseNeutralRosterModel() {
         DocumentProvider provider = providerFactory().get();
         assertEquals(List.of(new Participant("pt_1", "A User", "a@example.test")), provider.listParticipants());
         assertEquals(new Participant("pt_new", "A User", "a@example.test"),
