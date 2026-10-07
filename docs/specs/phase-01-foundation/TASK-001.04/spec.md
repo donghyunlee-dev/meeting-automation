@@ -47,7 +47,7 @@
 - 오류 JSON 구조와 기본 코드 매핑은 [API Specification](../../../product/api-spec.md)의 공통 HTTP 규칙을 따른다. 작업은 공통 변환 기반만 제공하고 API 명세에 없는 업무 코드를 새로 정의하지 않는다.
 - 요청 추적은 [Architecture](../../../product/architecture.md)의 `X-Request-Id` 우선, 누락 시 생성 규칙을 따른다.
 - Health 경로는 Backend 설정 가이드가 확인하도록 안내하는 Actuator 기본 `/actuator/health`를 사용한다. Health 상세 노출 범위를 넓히지 않는다.
-- `TASK-001.03` Issue #3가 열려 있고 `status:todo`다. 이 작업의 구현은 선행 toolchain 작업 완료 후 시작한다.
+- `TASK-001.03` 선행 조건은 PR #81 및 merge commit `e0913db5dfed7db870578877fa0c6876a47e9b98`에서 완료됐다. TASK-001.04 구현을 진행할 수 있다.
 
 ## 연결된 문서
 
