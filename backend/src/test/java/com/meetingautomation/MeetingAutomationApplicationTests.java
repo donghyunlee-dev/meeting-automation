@@ -97,6 +97,8 @@ class MeetingAutomationApplicationTests {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error.code").value("VALIDATION_FAILED"))
                 .andExpect(jsonPath("$.error.category").value("VALIDATION"))
+                .andExpect(jsonPath("$.error.details.fieldErrors[0].field").value("count"))
+                .andExpect(jsonPath("$.error.details.fieldErrors[0].code").value("TypeMismatch"))
                 .andExpect(result -> {
                     String body = result.getResponse().getContentAsString();
                     org.junit.jupiter.api.Assertions.assertFalse(body.contains(INPUT_MARKER));

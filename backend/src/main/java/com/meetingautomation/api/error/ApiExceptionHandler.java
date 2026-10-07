@@ -55,6 +55,10 @@ public class ApiExceptionHandler {
     public ResponseEntity<ApiErrorResponse> handleInvalidRequest(
             Exception exception,
             HttpServletRequest request) {
+        Map<String, Object> details = exception instanceof MethodArgumentTypeMismatchException mismatch
+                ? validationDetails(List.of(new InvalidField(
+                        mismatch.getName() == null ? "parameter" : mismatch.getName(), "TypeMismatch")))
+                : Map.of();
         return errorResponse(
                 HttpStatus.BAD_REQUEST,
                 "VALIDATION_FAILED",
@@ -62,7 +66,7 @@ public class ApiExceptionHandler {
                 "VALIDATION",
                 false,
                 request,
-                Map.of());
+                details);
     }
 
     @ExceptionHandler(ConstraintViolationException.class)
