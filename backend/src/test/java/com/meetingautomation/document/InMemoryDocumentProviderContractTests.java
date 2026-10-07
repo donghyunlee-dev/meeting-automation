@@ -42,6 +42,9 @@ class InMemoryDocumentProviderContractTests extends DocumentProviderContractTest
 
         @Override
         public MeetingDocument getMeeting(String documentId) {
+            if ("meeting-not-found".equals(documentId)) {
+                throw DocumentProviderException.meetingNotFound();
+            }
             if ("provider-failure".equals(documentId)) {
                 throw DocumentProviderException.documentFailed(true);
             }

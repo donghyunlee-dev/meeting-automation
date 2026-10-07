@@ -41,6 +41,18 @@ class DocumentProviderErrorMappingTests {
         assertFalse(error(documentResponse).message().contains("raw-response-marker"));
     }
 
+    @Test
+    void missingMeetingMapsToSafeNonRetryable404() {
+        var response = handler.handleDocumentProviderFailure(
+                DocumentProviderException.meetingNotFound(), request());
+
+        assertEquals(404, response.getStatusCode().value());
+        assertEquals("MEETING_NOT_FOUND", error(response).code());
+        assertEquals("NOT_FOUND", error(response).category());
+        assertFalse(error(response).retryable());
+        assertFalse(error(response).message().contains("raw-response-marker"));
+    }
+
     private static MockHttpServletRequest request() {
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.addHeader("X-Request-Id", "document-contract-test");

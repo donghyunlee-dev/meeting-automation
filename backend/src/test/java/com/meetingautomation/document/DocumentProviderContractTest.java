@@ -68,6 +68,18 @@ public abstract class DocumentProviderContractTest {
     }
 
     @Test
+    protected void missingMeetingUsesNotFoundInsteadOfProviderFailure() {
+        DocumentProvider provider = failingProviderFactory().get();
+        DocumentProviderException missing = assertThrows(
+                DocumentProviderException.class, () -> provider.getMeeting("meeting-not-found"));
+
+        assertEquals("MEETING_NOT_FOUND", missing.code());
+        assertEquals(404, missing.statusCode());
+        assertEquals("NOT_FOUND", missing.category());
+        assertFalse(missing.retryable());
+    }
+
+    @Test
     protected void meetingReadAndCreateReturnOnlyStandardModels() {
         DocumentProvider provider = providerFactory().get();
         MeetingDocument document = provider.getMeeting("doc_meeting-1");
