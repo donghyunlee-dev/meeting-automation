@@ -65,7 +65,8 @@ public final class ConfluencePageHierarchyAdapter implements DocumentStructurePr
             readAllChildren(configuredRootId);
             return new ProviderHealth(true, true, true);
         } catch (ConfluenceApiFailure failure) {
-            return new ProviderHealth(true, failure.responseReceived(), false);
+            boolean reachable = failure.responseReceived() && !isAuthenticationFailure(failure.statusCode());
+            return new ProviderHealth(true, reachable, false);
         }
     }
 
@@ -270,6 +271,10 @@ public final class ConfluencePageHierarchyAdapter implements DocumentStructurePr
 
     private static boolean isRetryable(int statusCode) {
         return statusCode == 429 || statusCode >= 500;
+    }
+
+    private static boolean isAuthenticationFailure(int statusCode) {
+        return statusCode == 401 || statusCode == 403;
     }
 
     private static boolean isBlank(String value) {

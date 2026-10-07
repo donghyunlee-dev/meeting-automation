@@ -138,7 +138,8 @@ class ConfluencePageHierarchyAdapterTests extends com.meetingautomation.document
         TestClient healthClient = client(BASE_URL, EMAIL, TOKEN, ROOT_ID);
         healthClient.server().expect(confluenceRequest(FIRST_URL)).andRespond(withStatus(HttpStatusCode.valueOf(status))
                 .contentType(MediaType.APPLICATION_JSON).body("{\"secret\":\"provider-marker\"}"));
-        assertEquals(new ProviderHealth(true, true, false), healthClient.adapter().validateConnection());
+        boolean authenticated = status != 401 && status != 403;
+        assertEquals(new ProviderHealth(true, authenticated, false), healthClient.adapter().validateConnection());
         healthClient.server().verify();
     }
 
