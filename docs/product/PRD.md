@@ -2317,7 +2317,7 @@ Meeting UI
 | `TASK-001.05` | DONE | DONE | [Issue #5](https://github.com/donghyunlee-dev/meeting-automation/issues/5) / [PR #83](https://github.com/donghyunlee-dev/meeting-automation/pull/83) | [검증 증거](../evidence/TASK-001.05.md), tests/review/QA PASS at `bdb85af` | `7e4bc6d897ef9c2587caee13f33e514462925e03` | 2026-10-07 21:22 KST |
 | `TASK-002.01` | DONE | DONE | [Issue #6](https://github.com/donghyunlee-dev/meeting-automation/issues/6) / [PR #84](https://github.com/donghyunlee-dev/meeting-automation/pull/84) | [검증 증거](../evidence/TASK-002.01.md), tests/review/QA PASS at `538fb3f` | `4621e5267b76b908941f4bb75e847337dac5e6e1` | 2026-10-07 21:44 KST |
 | `TASK-002.02` | DONE | DONE | [Issue #7](https://github.com/donghyunlee-dev/meeting-automation/issues/7) / [PR #85](https://github.com/donghyunlee-dev/meeting-automation/pull/85) | [검증 증거](../evidence/TASK-002.02.md), tests/review/QA PASS at `148ec5b` | `1788ac05cd1cf071d414e8cbc2a4ff9d69b4022e` | 2026-10-07 22:34 KST |
-| `TASK-002.03` | TODO | DESIGN | [Issue #8](https://github.com/donghyunlee-dev/meeting-automation/issues/8) / — | — | — | — |
+| `TASK-002.03` | IN_PROGRESS | DEVELOPMENT | [Issue #8](https://github.com/donghyunlee-dev/meeting-automation/issues/8) / — | 선행 TASK-002.01·.02 완료; Confluence direct-child Adapter 구현 진행 중 | — | — |
 | `TASK-002.04` | TODO | DESIGN | [Issue #9](https://github.com/donghyunlee-dev/meeting-automation/issues/9) / — | — | — | — |
 | `TASK-003.01` | TODO | DESIGN | [Issue #10](https://github.com/donghyunlee-dev/meeting-automation/issues/10) / — | — | — | — |
 | `TASK-003.02` | TODO | DESIGN | [Issue #11](https://github.com/donghyunlee-dev/meeting-automation/issues/11) / — | — | — | — |

@@ -7,7 +7,7 @@
 - [ ] 설정 DTO/properties에 `CONFLUENCE_BASE_URL`, `CONFLUENCE_ACCOUNT_EMAIL`, `CONFLUENCE_AUTH_TOKEN`, `DOCUMENT_ROOT_ID`를 연결한다. 결과: 필수값 누락·잘못된 URL은 시작/설정 검증에서 명확히 실패하고 값 자체는 출력하지 않는다.
 - [ ] Confluence HTTP client를 fakeable한 경계로 둔다. 결과: 단위 테스트에서 네트워크 없이 status/header/body를 공급할 수 있다.
 - [ ] Basic 인증 생성과 요청을 테스트 우선으로 구현한다. 결과: `email:token` UTF-8 Base64 Authorization header가 전송되고 비밀값은 logger/예외에서 제거된다.
-- [ ] API v2 direct-children cursor pagination을 테스트 우선으로 구현한다. 결과: 후속 cursor를 순서대로 요청하고 종료 응답 후 호출을 멈춘다.
+- [ ] API v2 direct-children `_links.next`/`Link` pagination을 테스트 우선으로 구현한다. 결과: opaque next URL을 same-origin에서 순서대로 요청하고 반복 링크 또는 종료 응답 후 호출을 멈춘다.
 - [ ] Page 타입과 정확한 제목을 필터해 공통 `DocumentStructure`를 구성한다. 결과: `Meetings`, `Participants` 각 하나일 때 ID만 표준 DTO로 반환한다.
 - [ ] 빈/누락/중복 구조 오류를 매핑한다. 결과: 자동 생성 없이 `DOCUMENT_STRUCTURE_NOT_FOUND`가 일관되게 발생한다.
 - [ ] provider status 및 network error를 `ProviderHealth`, `DOCUMENT_FAILED`/`DOCUMENT_FAILURE`로 정규화한다. 결과: 응답 본문과 credentials는 오류 메시지에 없다.

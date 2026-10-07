@@ -13,7 +13,8 @@
 | `CONF-PAGE-03` 빈 구조 | 성공 HTTP 응답에 child 항목 없음 | Page 생성 없이 `DOCUMENT_STRUCTURE_NOT_FOUND`가 발생한다. | 오류 코드 및 생성 호출 0회 assertion |
 | `CONF-PAGE-04` 누락 구조 | Meetings만 또는 Participants만 반환 | `DOCUMENT_STRUCTURE_NOT_FOUND`; 누락 Page 생성 호출은 없다. | 오류 코드 및 POST 호출 0회 assertion |
 | `CONF-PAGE-05` 중복 제목 | 직속 `Meetings` 또는 `Participants` Page가 둘 이상 반환 | 임의의 Page를 선택하지 않고 `DOCUMENT_STRUCTURE_NOT_FOUND`가 발생한다. | 오류 코드 assertion |
-| `CONF-PAGE-06` 여러 cursor 페이지 | 첫 응답에 `cursor` 후속 항목, 다음 응답에 나머지 필수 Page 제공 | 다음 cursor를 사용해 후속 페이지를 읽고 두 Page를 완전하게 반환한다. | 요청 수/parameter 및 결과 assertion |
+| `CONF-PAGE-06` 여러 페이지 | 첫 응답에 `_links.next`/`Link` 후속 URL, 다음 응답에 나머지 필수 Page 제공 | opaque next URL을 same-origin으로 요청해 두 Page를 완전하게 반환한다. | 요청 수/URL 및 결과 assertion |
+| `CONF-PAGE-07` 반복 next URL | 두 페이지 응답이 같은 `_links.next`를 반복 | 무한 요청 없이 safe `DOCUMENT_FAILED`로 종료한다. | 요청 수/오류 assertion |
 | `CONF-HEALTH-01` 정상 Health | 인증 성공, Root child 목록 성공 | `configured=true`, `reachable=true`, `rootAccessible=true`; token/email 미포함 | ProviderHealth JSON assertion |
 | `CONF-HEALTH-02` 권한 거부 | API가 401 또는 403 반환 | 공통 Provider 실패로 변환되고 Health의 접근 상태가 실패를 나타낸다. 응답 원문/자격증명은 노출되지 않는다. | 예외/Health assertion 및 captured log 검사 |
 | `CONF-HTTP-01` Root 미발견/접근 거부 | API가 404 반환 | 세부 원인을 추측하지 않고 `DOCUMENT_FAILED`/`DOCUMENT_FAILURE`로 변환한다. | error code/category assertion |

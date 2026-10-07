@@ -20,7 +20,7 @@
 
 - Confluence Cloud REST API v2를 사용한다. `CONFLUENCE_BASE_URL`은 `https://<site>.atlassian.net` origin, `DOCUMENT_ROOT_ID`는 설정된 Root Page ID다.
 - Basic 인증은 `CONFLUENCE_ACCOUNT_EMAIL`과 Atlassian API token인 `CONFLUENCE_AUTH_TOKEN`으로 구성한다. UTF-8 `email:token`을 Base64로 인코딩해 `Authorization: Basic <credentials>` 헤더로 보낸다. 계정 비밀번호 인증은 금지한다.
-- Root 직속 child는 `GET /wiki/api/v2/pages/{id}/direct-children`으로 가져오며 `limit`/`cursor`를 사용해 다음 페이지가 없을 때까지 조회한다. 응답에서 `type=page` 항목의 `id`와 `title`만 구조 탐색에 사용한다.
+- Root 직속 child는 `GET /wiki/api/v2/pages/{id}/direct-children`으로 가져온다. `limit`을 설정하고 응답의 `_links.next` 또는 `Link` 헤더가 가리키는 다음 페이지를 끝까지 조회한다. 다음 링크는 opaque 값으로 취급하며 같은 base origin 안에서만 요청하고 반복 링크면 Provider 오류로 안전하게 종료한다. 응답에서 `type=page` 항목의 `id`와 `title`만 구조 탐색에 사용한다.
 - 대소문자까지 정확히 일치하는 `Meetings`, `Participants` 직속 Page가 각 하나씩 있을 때 `DocumentStructure(rootId, meetingsPageId, participantsPageId)`를 반환한다. 다른 content type은 무시한다.
 - 필수 Page가 없거나 같은 제목의 직속 Page가 중복되면 `DOCUMENT_STRUCTURE_NOT_FOUND`(HTTP 422, 재시도 불가)로 실패한다. 성공한 조회에서 보이지 않는 child도 사용할 수 없으므로 구조 누락으로 처리한다. Adapter는 Page를 생성/이름변경/복구하지 않는다.
 - `ProviderHealth`는 공통 계약의 `configured`, `reachable`, `rootAccessible`을 반환한다. `configured`는 base URL, account email, token, root ID의 존재와 형식 유효성이다. `reachable`은 인증 포함 API에서 HTTP 응답을 받았는지, `rootAccessible`은 Root 직속 child 목록을 성공적으로 조회했는지를 나타낸다. 설정값은 반환하지 않는다.
@@ -47,8 +47,8 @@
 
 - V1 배포 대상은 Confluence Cloud이며 직접 REST API Basic 인증을 사용한다. 인증 계약은 `CONFLUENCE_BASE_URL`, `CONFLUENCE_ACCOUNT_EMAIL`, `CONFLUENCE_AUTH_TOKEN` 세 Backend 설정값으로 확정했다.
 - 구조 이름과 위치는 PRD `DEC-013`/`DEC-014`에 따라 Root 직속 `Meetings`, `Participants` Page다.
-- 공식 API의 direct-children 응답은 권한이 있는 콘텐츠만 포함한다. 따라서 조회 성공 결과에 필수 Page가 없는 경우는 Adapter가 이용 가능한 구조 누락으로 처리하며, 목록 조회 자체의 인증/권한 실패는 Provider 실패로 처리한다.
-- API 참고: [Confluence Cloud REST API v2 — Get direct children of a page](https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-children/), [Atlassian Basic auth for REST APIs](https://developer.atlassian.com/cloud/confluence/basic-auth-for-rest-apis/). 2026-10-05 확인.
+- 공식 API의 direct-children 응답은 `results`와 `_links.next`를 제공하고 child content type으로 Database, Embed, Folder, Page, Whiteboard를 포함할 수 있다. 권한이 있는 콘텐츠만 반환하므로 조회 성공 결과에 필수 Page가 없는 경우는 Adapter가 이용 가능한 구조 누락으로 처리하며, 목록 조회 자체의 인증/권한 실패는 Provider 실패로 처리한다.
+- API 참고: [Confluence Cloud REST API v2 — Get direct children of a page](https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-children/), [Atlassian Basic auth for REST APIs](https://developer.atlassian.com/cloud/confluence/basic-auth-for-rest-apis/). 2026-10-07 확인.
 
 ## 연결된 문서
 
