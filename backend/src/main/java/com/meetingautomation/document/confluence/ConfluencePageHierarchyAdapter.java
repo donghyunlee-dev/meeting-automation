@@ -4,6 +4,9 @@ import com.meetingautomation.document.DocumentProviderException;
 import com.meetingautomation.document.DocumentStructure;
 import com.meetingautomation.document.DocumentStructureProvider;
 import com.meetingautomation.document.ProviderHealth;
+import com.meetingautomation.document.Participant;
+import com.meetingautomation.document.ParticipantListingProvider;
+import com.meetingautomation.document.ParticipantPageMapper;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -27,7 +30,7 @@ import org.springframework.web.client.RestClientException;
 
 /** Confluence Cloud implementation of the document hierarchy and health slice. */
 @Component
-public final class ConfluencePageHierarchyAdapter implements DocumentStructureProvider {
+public final class ConfluencePageHierarchyAdapter implements ParticipantListingProvider {
     private static final int PAGE_LIMIT = 100;
     private static final String DIRECT_CHILDREN_PATH = "/wiki/api/v2/pages/{id}/direct-children";
     private static final Pattern NEXT_LINK = Pattern.compile("<([^>]+)>\\s*;\\s*rel\\s*=\\s*\"?next\"?",
@@ -91,6 +94,40 @@ public final class ConfluencePageHierarchyAdapter implements DocumentStructurePr
         } catch (ConfluenceApiFailure failure) {
             throw DocumentProviderException.documentFailed(isRetryable(failure.statusCode()), failure);
         }
+    }
+
+    @Override
+    public List<Participant> listParticipants(String participantsPageId) {
+        if (!configured) {
+            throw DocumentProviderException.participantListFailed(false);
+        }
+        try {
+            List<Participant> result = new ArrayList<>();
+            for (ChildPage page : readAllChildren(participantsPageId)) {
+                result.add(ParticipantPageMapper.map(page.id(), page.title(), readPageText(page.id())));
+            }
+            return List.copyOf(result);
+        } catch (DocumentProviderException failure) {
+            throw failure;
+        } catch (ConfluenceApiFailure failure) {
+            throw DocumentProviderException.participantListFailed(
+                    isParticipantRetryable(failure.statusCode()), failure);
+        }
+    }
+
+    private String readPageText(String pageId) {
+        URI pageUri = baseUri.resolve("/wiki/api/v2/pages/" + encodePathSegment(pageId) + "?body-format=storage");
+        ResponseEnvelope response = get(pageUri);
+        JsonNode body = parseBody(response);
+        JsonNode storage = body.path("body").path("storage").path("value");
+        if (!storage.isTextual()) {
+            throw new ConfluenceApiFailure(true, response.statusCode());
+        }
+        String text = storage.textValue().replaceAll("(?i)<br\\s*/?>", "\n")
+                .replaceAll("(?i)</p\\s*>", "\n").replaceAll("<[^>]*>", " ")
+                .replace("&nbsp;", " ").replace("&amp;", "&").replace("&lt;", "<")
+                .replace("&gt;", ">").replace("&quot;", "\"").replace("&#39;", "'");
+        return text;
     }
 
     private List<ChildPage> readAllChildren(String rootId) {
@@ -275,6 +312,10 @@ public final class ConfluencePageHierarchyAdapter implements DocumentStructurePr
 
     private static boolean isRetryable(int statusCode) {
         return statusCode == 429 || statusCode >= 500;
+    }
+
+    private static boolean isParticipantRetryable(int statusCode) {
+        return statusCode == 0 || isRetryable(statusCode);
     }
 
     private static boolean isAuthenticationFailure(int statusCode) {
