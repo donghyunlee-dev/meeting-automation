@@ -1,3 +1,15 @@
 spring:
   application:
     name: meeting-automation-backend
+
+management:
+  endpoints:
+    web:
+      discovery:
+        enabled: false
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-components: never
+      show-details: never
