@@ -25,7 +25,7 @@ Notion/Confluence 세부 구현과 분리된 `DocumentProvider` Port 및 표준 
 - `CreateMeetingCommand`는 `title`, offset datetime `meetingAt`, 표준 Participant 참조, Structured Minutes, Transcript와 metadata `{schemaVersion, externalSessionId, meetingAt, templateId, participantIds}`를 가진다. `externalSessionId`는 Session ID를 사용한다. 생성 후 provider-assigned identity는 `MeetingDocumentRef`로 반환한다.
 - Participant DTO와 명령은 PRD/Data Specification/API-003~005 모델을 따른다. `Participant`는 `{id,name,email}`, 생성 명령은 `{name,email}`, 수정 명령은 `name`, `email` 중 하나 이상이다.
 - Root 구조, 표준 Meeting 읽기, Meeting 생성/참조, Participant 생성·수정의 공통 테스트 계약을 작성한다. 테스트는 Provider factory를 주입받는 재사용 가능한 JUnit 5 계약 모음과 결정적인 test fixture로 구성한다. TASK-002.02/.03에서 실제 Adapter를 해당 계약 모음에 연결한다.
-- 오류 코드는 기존 규약만 사용한다. 구조 누락은 `DOCUMENT_STRUCTURE_NOT_FOUND`(HTTP 422, 재시도 불가), Provider 작업 실패는 `DOCUMENT_FAILED`(HTTP 502, 상황별 재시도)와 운영 분류 `DOCUMENT_FAILURE`로 구분한다. 자격 증명·Provider 응답 원문은 오류에 포함하지 않는다.
+- 오류 코드는 기존 규약만 사용한다. 구조 누락은 `DOCUMENT_STRUCTURE_NOT_FOUND`(HTTP 422, 재시도 불가), `listParticipants` 조회 실패는 API-003의 `PARTICIPANT_LIST_FAILED`(HTTP 502, 조건부 재시도), 그 밖의 Provider 작업 실패는 `DOCUMENT_FAILED`(HTTP 502, 상황별 재시도)로 표현한다. Provider 작업 실패는 모두 운영 분류 `DOCUMENT_FAILURE`를 사용한다. 자격 증명·Provider 응답 원문은 오류에 포함하지 않는다.
 
 ## 명시적 제외 범위
 
@@ -40,7 +40,7 @@ Notion/Confluence 세부 구현과 분리된 `DocumentProvider` Port 및 표준 
 - `DocumentProvider`의 EXT-003 메서드와 입력/출력 타입이 Vendor SDK와 분리되어 선언된다.
 - 구조 결과는 root 및 직속 `Meetings`, `Participants` 참조를 표현하고 누락 구조를 생성하지 않는다.
 - Meeting 목록/읽기와 Participant 모델이 PRD/API/Data Specification의 필드와 일치한다. 생성 결과에는 `documentId`, `documentUrl`이 포함된다.
-- 구조 누락과 Provider 작업 실패가 각각 기존 `DOCUMENT_STRUCTURE_NOT_FOUND` 및 `DOCUMENT_FAILED` 계약으로 변환된다. 원 Provider 오류 본문과 Secret은 노출되지 않는다.
+- 구조 누락은 기존 `DOCUMENT_STRUCTURE_NOT_FOUND`, 참가자 목록 조회 실패는 API-003의 `PARTICIPANT_LIST_FAILED`, 나머지 Provider 작업 실패는 `DOCUMENT_FAILED` 계약을 사용한다. Provider 실패의 운영 분류는 `DOCUMENT_FAILURE`이며 원 Provider 오류 본문과 Secret은 노출되지 않는다.
 - 공통 계약 테스트는 Adapter 구현 전에 구조 탐색·표준 읽기·생성의 정상/오류 사례를 고정한다. 테스트 fixture에서 잘못된 계약 구현은 assertion 실패로 검출되고 테스트 자체는 독립 실행 가능하다.
 - Backend 단위 테스트와 `./gradlew clean build`가 성공한다. test fixture가 실제 Provider에 연결하지 않는다.
 - 결정 내용과 테스트 결과를 `docs/evidence/TASK-002.01.md`에 비민감 정보로 기록한다.
@@ -51,7 +51,7 @@ Notion/Confluence 세부 구현과 분리된 `DocumentProvider` Port 및 표준 
 - `DocumentStructure`의 최소 필드는 `rootId`, `meetingsPageId`, `participantsPageId`다. Page 제목이나 원본 응답을 추가 노출하지 않는다.
 - 구조 누락은 API Specification의 `DOCUMENT_STRUCTURE_NOT_FOUND`로 고정한다. 전송/권한 등 Provider 작업 실패는 기존 `DOCUMENT_FAILED`로 정규화하고 운영 분류는 `DOCUMENT_FAILURE`로 둔다.
 - `externalSessionId`와 `schemaVersion`, `meetingAt`, `templateId`, `participantIds` metadata는 Data Specification 계약을 따른다. Publish의 중복 방지 동작은 `findMeetingBySessionId`로 노출하고 전체 멱등 workflow는 후속 Publish 작업이 소유한다.
-- 선행 Issue #5는 열려 있다. 설계 및 Issue 등록은 진행하되 구현 착수는 #5 완료 후다.
+- 선행 Issue #5는 PR #83으로 병합되고 완료됐다. TASK-002.01 구현을 시작할 수 있다.
 
 ## 연결된 문서
 

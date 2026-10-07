@@ -17,7 +17,7 @@
 
 - [ ] `DocumentProviderContractTest`에 Root와 직속 `Meetings`/`Participants` 발견 및 누락 구조 사례를 작성한다.
 - [ ] Meeting 요약/상세 읽기, Participant 생성/수정, Meeting 생성 참조의 표준 DTO 필드를 assertion으로 고정한다.
-- [ ] Provider 실패 fixture에서 기존 오류 코드/운영 분류 매핑과 원문/Secret 비노출을 검증한다.
+- [ ] Provider 실패 fixture에서 구조 누락 `DOCUMENT_STRUCTURE_NOT_FOUND`, 참가자 목록 실패 `PARTICIPANT_LIST_FAILED`, 기타 작업 실패 `DOCUMENT_FAILED` 및 공통 운영 분류 `DOCUMENT_FAILURE`, 원문/Secret 비노출을 검증한다.
 - [ ] 의도적으로 불완전한 fake provider에 계약 모음을 실행한다. 결과: 테스트 로딩/컴파일은 성공하고 명세 assertion이 실패한다.
 
 ### 최소 구현
