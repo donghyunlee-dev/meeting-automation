@@ -8,9 +8,15 @@ APP_COMPANY_NAME=SFOOD
 APP_TIMEZONE=Asia/Seoul
 DOCUMENT_PROVIDER=NOTION
 DOCUMENT_ROOT_ID=<local-test-root-id>
+CONFLUENCE_BASE_URL=
+CONFLUENCE_ACCOUNT_EMAIL=
 TRANSCRIPTION_MODEL=<configured-model-id>
 MINUTES_MODEL=<configured-model-id>
 EMAIL_PROVIDER=GMAIL_API
+EMAIL_OAUTH_CLIENT_ID=
+EMAIL_OAUTH_CLIENT_SECRET=
+EMAIL_OAUTH_REFRESH_TOKEN=
+EMAIL_SENDER_ADDRESS=
 NOTIFICATION_PROVIDER=SLACK
 ALLOWED_ORIGINS=http://localhost:5173
 TEMP_AUDIO_DIR=<absolute-local-temp-directory>
@@ -19,10 +25,6 @@ CONFLUENCE_AUTH_TOKEN=
 OPENAI_API_KEY=
 SLACK_MEETING_WEBHOOK_URL=
 SLACK_ADMIN_WEBHOOK_URL=
-EMAIL_OAUTH_CLIENT_ID=
-EMAIL_OAUTH_CLIENT_SECRET=
-EMAIL_OAUTH_REFRESH_TOKEN=
-EMAIL_SENDER_ADDRESS=
 `;
 
 test('accepts the documented public frontend URL and secret-free backend sample', () => {
@@ -42,11 +44,15 @@ test('rejects frontend variables other than the public API URL', () => {
 });
 
 test('rejects nonempty backend credential values without returning their contents', () => {
-  const result = inspectEnvSamples(validFrontend, validBackend.replace('OPENAI_API_KEY=\n', 'OPENAI_API_KEY=secret-marker\n'));
+  const result = inspectEnvSamples(validFrontend, validBackend
+    .replace('OPENAI_API_KEY=\n', 'OPENAI_API_KEY=secret-marker\n')
+    .replace('CONFLUENCE_ACCOUNT_EMAIL=\n', 'CONFLUENCE_ACCOUNT_EMAIL=secret-marker\n'));
 
   assert.equal(result.valid, false);
   assert.ok(result.issues.some(issue => issue.file === 'backend/.env.example'
     && issue.key === 'OPENAI_API_KEY'));
+  assert.ok(result.issues.some(issue => issue.file === 'backend/.env.example'
+    && issue.key === 'CONFLUENCE_ACCOUNT_EMAIL'));
   assert.equal(JSON.stringify(result.issues).includes('secret-marker'), false);
 });
 
@@ -70,4 +76,13 @@ test('requires the frontend API URL and flags malformed sample lines safely', ()
   assert.ok(malformedBackend.issues.some(issue => issue.file === 'backend/.env.example'
     && issue.code === 'INVALID_LINE'));
   assert.equal(JSON.stringify(malformedBackend.issues).includes('not-an-env-entry'), false);
+});
+
+test('requires the documented non-secret backend settings', () => {
+  const result = inspectEnvSamples(validFrontend, validBackend.replace('CONFLUENCE_BASE_URL=\n', ''));
+
+  assert.equal(result.valid, false);
+  assert.ok(result.issues.some(issue => issue.file === 'backend/.env.example'
+    && issue.key === 'CONFLUENCE_BASE_URL'
+    && issue.code === 'MISSING_REQUIRED_KEY'));
 });
