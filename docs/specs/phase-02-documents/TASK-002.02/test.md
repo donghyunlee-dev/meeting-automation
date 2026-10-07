@@ -7,7 +7,7 @@
 - GitHub Issue: [#7](https://github.com/donghyunlee-dev/meeting-automation/issues/7)
 - 선행 조건: TASK-002.01 (#6) 구현 완료
 - 실행 위치: `backend/`
-- 공식 API 기준일: `2026-10-05`, `Notion-Version: 2026-03-11`
+- 공식 API 기준일: `2026-10-07`, `Notion-Version: 2026-03-11`
 
 ## 자동 테스트
 
@@ -20,8 +20,8 @@
 
 ### Pagination
 
-- 설정: 첫 child-list 응답은 `has_more=true`, `next_cursor=7c4c1e00-0000-4000-8000-000000000001`; 두 번째 응답에 `Participants`가 있다.
-- 기대 결과: 두 번째 요청에 같은 `start_cursor`가 포함되고 모든 페이지 탐색 후 구조가 완성된다.
+- 설정: 첫 child-list 응답은 `has_more=true`, `next_cursor=opaque-cursor-from-page-one`; 두 번째 응답에 `Participants`가 있다.
+- 기대 결과: 두 번째 요청에 cursor 문자열이 그대로 `start_cursor`로 포함되고 모든 페이지 탐색 후 구조가 완성된다. Cursor 형식을 파싱하거나 검증하지 않는다.
 - 경계: API가 page size보다 적은 결과를 반환해도 `has_more`가 true면 다음 cursor를 사용한다.
 - 증거: 호출 횟수, cursor 전달 및 최종 ID assertion.
 

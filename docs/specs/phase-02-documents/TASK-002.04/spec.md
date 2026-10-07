@@ -23,7 +23,7 @@ Backend는 `DOCUMENT_PROVIDER` 설정으로 Notion 또는 Confluence Adapter를 
 - `configured`는 선택된 Provider의 필수 설정/credentials가 존재하고 형식이 유효함을 뜻한다. `reachable`은 인증된 Health 요청이 Provider에 응답받았음을 뜻한다. `rootAccessible`은 설정 Root와 필수 직속 `Meetings`, `Participants` Page 구조를 모두 탐색할 수 있음을 뜻한다.
 - `GET /api/v1/app-config`는 기존 public app config의 Document 부분을 활성 Provider ID와 `configured`로 채운다. Secret, credentials, Root ID는 반환하지 않는다.
 - `GET /api/v1/integrations/health`는 HTTP 200에서 `document`, `email`, `notification`, `ai` 네 객체를 항상 반환한다. 각 객체의 Health contributor가 없는 영역은 `configured:false`, `reachable:false` 기본값으로 둔다. `notification.provider`는 기존 provider 설정을 반영한다. 후속 Email/Notification/AI 설계는 공통 assembler의 해당 contributor만 추가/교체한다.
-- Document Health contributor는 활성 `DocumentProvider`를 통해 연결과 구조를 확인한다. 외부 오류, 인증/Secret, Provider 응답 본문을 응답에 넣지 않는다. 구조 누락/중복과 외부 연결 실패는 API 오류 대신 상태 boolean으로 나타내고 다른 integration 상태를 중단시키지 않는다.
+- Document Health contributor는 활성 `DocumentStructureProvider`를 통해 연결과 구조를 확인한다. 외부 오류, 인증/Secret, Provider 응답 본문을 응답에 넣지 않는다. 구조 누락/중복과 외부 연결 실패는 API 오류 대신 상태 boolean으로 나타내고 다른 integration 상태를 중단시키지 않는다. CRUD를 갖춘 `DocumentProvider`는 같은 구조 Port를 확장한다.
 - Health 요청은 읽기 전용이다. Page/문서/메시지/메일을 생성하거나 수정하지 않는다.
 - Frontend 동작은 [SCR-011 Settings](../../../product/ui-design.md#scr-011-settings)을 따른다. `document.provider=null` 또는 `configured=false`이면 문서 저장 상태에 연결 필요를 표시하고 관리자에게 설정을 요청하는 다음 행동을 안내한다. 실제 Secret 입력 화면은 이 Backend 작업 범위가 아니다.
 

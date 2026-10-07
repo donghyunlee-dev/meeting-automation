@@ -23,7 +23,7 @@ Cloud Basic 인증으로 Root 직속 Page를 조회하고 표준 구조/Health/e
 
 | 경로/컴포넌트 | 책임 |
 |---|---|
-| `backend/src/main/java/.../document/confluence/ConfluencePageHierarchyAdapter.java` | 공통 Port의 Health/Root 구조 구현과 표준 타입 변환 |
+| `backend/src/main/java/.../document/confluence/ConfluencePageHierarchyAdapter.java` | 구조/Health Port의 Root 구조 구현과 표준 타입 변환 |
 | Confluence HTTP client 경계 | Cloud v2 endpoint, Basic Authorization, JSON 및 cursor pagination |
 | Confluence response DTO | 응답의 page `id`, `title`, `type`, cursor/next link만 Adapter 내부에서 역직렬화 |
 | Backend 설정 | base URL, account email, API token, Root ID 형식 검증 및 주입 |
@@ -39,7 +39,7 @@ Cloud Basic 인증으로 Root 직속 Page를 조회하고 표준 구조/Health/e
 3. **BE — 설정 검증과 인증 client 구현:** 유효한 base URL와 필수 설정을 검증하고 UTF-8 `email:token` Basic 헤더 및 API 요청을 구현한다. 결과: fake server가 헤더를 검증하며 비밀값은 logging interceptor에 나타나지 않는다.
 4. **BE — 전체 직속 Page 순회:** cursor가 이어지는 동안 direct-children 응답을 가져오고 `type=page` 후보만 수집한다. 결과: 여러 페이지 응답의 구조도 완전하게 탐색한다.
 5. **BE — 표준 구조 및 오류/Health 매핑:** 정확한 직속 제목과 중복/누락, Provider 상태를 공통 타입으로 변환한다. 결과: 잘못된 구조는 422 구조 오류, 외부 실패는 502 Provider 오류 계약에 맞는다.
-6. **BE — 공통 계약 연결/회귀:** TASK-002.01의 재사용 가능한 계약 테스트에 Adapter를 연결하고 단위/회귀 빌드를 실행한다. 결과: 로컬 fake만으로 전체 계약과 `./gradlew test`, `./gradlew clean build`가 통과하고 evidence가 작성된다.
+6. **BE — 구조 계약 연결/회귀:** TASK-002.01의 재사용 가능한 structure/Health 계약 slice에 Adapter를 연결하고 단위/회귀 빌드를 실행한다. Meeting/Participant CRUD slice는 해당 기능 task에서 검증한다. 결과: 로컬 fake만으로 구조 계약과 `./gradlew test`, `./gradlew clean build`가 통과하고 evidence가 작성된다.
 
 ## 의존성
 

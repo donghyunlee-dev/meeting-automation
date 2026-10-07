@@ -14,7 +14,7 @@
 
 ## 결과
 
-설정된 Confluence Cloud Root Page의 직속 `Meetings`, `Participants` Page를 탐색해 공통 `DocumentStructure`로 변환한다. 인증과 Vendor DTO는 Adapter 경계 안에 두고 공통 `DocumentProvider` 계약 및 오류 규칙을 따른다.
+설정된 Confluence Cloud Root Page의 직속 `Meetings`, `Participants` Page를 탐색해 공통 `DocumentStructure`로 변환한다. 인증과 Vendor DTO는 Adapter 경계 안에 두고 공통 `DocumentStructureProvider` slice 및 오류 규칙을 따른다. 완전한 `DocumentProvider` CRUD는 기능 task가 소유한다.
 
 ## 범위
 

@@ -20,11 +20,12 @@ Notion/Confluence 세부 구현과 분리된 `DocumentProvider` Port 및 표준 
 - Backend 내부에 `DocumentProvider` Port를 정의하고 EXT-003에 명시된 동작을 Provider-neutral 표준 타입으로 표현한다: 연결 확인, Root 구조 탐색, Meeting 목록/읽기/Session ID 조회/생성, Participant 목록/생성/수정.
 - Port 서명은 EXT-003을 따른다: `validateConnection() -> ProviderHealth`, `discoverStructure(rootId) -> DocumentStructure`, `listMeetings(max=100) -> MeetingSummary[]`, `getMeeting(documentId) -> MeetingDocument`, `findMeetingBySessionId(sessionId) -> Optional<MeetingDocumentRef>`, `createMeeting(command) -> MeetingDocumentRef`, `listParticipants() -> Participant[]`, `createParticipant(command) -> Participant`, `updateParticipant(participantId, command) -> Participant`.
 - `ProviderHealth`는 `configured`, `reachable`, `rootAccessible` 상태를 제공한다. `DocumentStructure`는 설정 Root와 그 직속 `Meetings`, `Participants` Page 참조를 제공한다. Root의 누락된 child는 자동 생성하지 않는다.
+- Interface segregation: Adapter 계층 작업은 `DocumentStructureProvider` (`validateConnection`, `discoverStructure`)를 구현한다. 완성된 `DocumentProvider`는 이 계층 Port를 확장하며 Meeting/Participant 계약을 모두 제공한다. 계층 단계에서 미구현 CRUD stub을 추가하지 않는다.
 - `MeetingSummary`는 API-017 필드(`documentId`, `title`, `meetingAt`, `participants[{id,name}]`, `documentUrl`)를, `MeetingDocument`는 API-018 필드(`documentId`, `title`, `meetingAt`, `participants`, `minutes`, `transcript`, `documentUrl`)를 제공한다.
 - `MeetingDocumentRef`는 `documentId`, `documentUrl`만 외부 경계로 반환한다. Provider Page ID는 표준 `documentId`로 변환하고 Page 원본 JSON, Vendor SDK 타입, 원본 오류 본문은 Port 밖으로 전달하지 않는다.
 - `CreateMeetingCommand`는 `title`, offset datetime `meetingAt`, 표준 Participant 참조, Structured Minutes, Transcript와 metadata `{schemaVersion, externalSessionId, meetingAt, templateId, participantIds}`를 가진다. `externalSessionId`는 Session ID를 사용한다. 생성 후 provider-assigned identity는 `MeetingDocumentRef`로 반환한다.
 - Participant DTO와 명령은 PRD/Data Specification/API-003~005 모델을 따른다. `Participant`는 `{id,name,email}`, 생성 명령은 `{name,email}`, 수정 명령은 `name`, `email` 중 하나 이상이다.
-- Root 구조, 표준 Meeting 읽기, Meeting 생성/참조, Participant 생성·수정의 공통 테스트 계약을 작성한다. 테스트는 Provider factory를 주입받는 재사용 가능한 JUnit 5 계약 모음과 결정적인 test fixture로 구성한다. TASK-002.02/.03에서 실제 Adapter를 해당 계약 모음에 연결한다.
+- Root 구조, 표준 Meeting 읽기, Meeting 생성/참조, Participant 생성·수정의 공통 테스트 계약을 작성한다. 테스트는 Provider factory를 주입받는 재사용 가능한 JUnit 5 계약 모음과 결정적인 test fixture로 구성한다. Adapter task는 완료된 기능 slice에 대응하는 계약 모음만 실행하며, TASK-002.02/.03은 구조/Health slice를 검증한다. CRUD slice는 해당 기능 구현 task에서 Adapter를 완성한 뒤 검증한다.
 - 오류 코드는 기존 규약만 사용한다. 구조 누락은 `DOCUMENT_STRUCTURE_NOT_FOUND`(HTTP 422, 재시도 불가), `getMeeting`의 미존재 문서는 API-018의 `MEETING_NOT_FOUND`(HTTP 404, 재시도 불가), `listParticipants` 조회 실패는 API-003의 `PARTICIPANT_LIST_FAILED`(HTTP 502, 조건부 재시도), 그 밖의 Provider 작업 실패는 `DOCUMENT_FAILED`(HTTP 502, 상황별 재시도)로 표현한다. Provider 작업 실패는 모두 운영 분류 `DOCUMENT_FAILURE`를 사용한다. 자격 증명·Provider 응답 원문은 오류에 포함하지 않는다.
 
 ## 명시적 제외 범위
@@ -62,5 +63,5 @@ Notion/Confluence 세부 구현과 분리된 `DocumentProvider` Port 및 표준 
 ## 인접 작업 계약
 
 - 선행 작업: #5가 Frontend/Backend 독립 빌드와 환경 경계를 제공한다.
-- 후속 작업: `TASK-002.02`와 `TASK-002.03`은 공통 계약 모음으로 각각 Notion/Confluence Adapter를 검증한다. `TASK-002.04`는 `ProviderHealth`를 이용해 선택 Provider 상태를 API에 연결한다.
+- 후속 작업: `TASK-002.02`와 `TASK-002.03`은 구조/Health Port 계약 모음으로 각각 Notion/Confluence hierarchy를 검증한다. `TASK-002.04`는 `DocumentStructureProvider`를 이용해 선택 Provider 상태를 API에 연결한다.
 - 기능 소비자: 참가자 작업은 표준 Participant 모델을, Publish/History 작업은 `MeetingSummary`, `MeetingDocument`, `MeetingDocumentRef`를 사용한다.
