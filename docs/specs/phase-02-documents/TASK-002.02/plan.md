@@ -16,7 +16,7 @@ Notion Root의 직속 child Page 목록을 안전하게 읽고 공통 `DocumentS
 - [DocumentProvider 공통 계약](./../TASK-002.01/spec.md)
 - [Notion Retrieve block children](https://developers.notion.com/reference/get-block-children): root child block 조회, pagination, read-content 권한, 필수 `Notion-Version`
 - [Notion Block objects](https://developers.notion.com/reference/block): `child_page` 타입의 `id`와 평문 `title`; Database와 Page 구분
-- [Notion Versioning](https://developers.notion.com/reference/versioning): 버전 헤더 의무와 `2026-03-11` 버전 baseline
+- [Notion Versioning](https://developers.notion.com/reference/versioning): 버전 헤더 의무와 2026-10-07 확인 시 최신 `2026-03-11` baseline
 
 ## 변경 대상과 소유 경계
 
@@ -33,7 +33,7 @@ Java 구현은 기존 Backend HTTP/JSON 설정을 재사용하고 새로운 Noti
 
 ## 구현 순서와 소유권
 
-1. **BE — 선행 계약/현재 API 확인:** #6과 관련 소스가 원격에 있고 Notion 공식 API 기준 버전이 최신인지 확인한다. 결과: 입력 설정, 공통 반환 타입, 필수 헤더를 고정한다.
+1. **BE — 선행 계약/현재 API 확인:** 완료된 #6과 관련 소스가 원격에 있고 Notion 공식 API 기준 버전이 최신인지 확인한다. 결과: 입력 설정, 공통 반환 타입, 필수 헤더를 고정한다.
 2. **BE — Adapter 실패 테스트 작성:** fake Notion HTTP 응답으로 Root/child 매핑, 페이지네이션, 빈 구조, 권한 오류를 먼저 작성한다. 결과: 테스트 harness는 실행되고 계약 assertion이 실패한다.
 3. **BE — 최소 HTTP 클라이언트:** child 목록 endpoint 호출, `Bearer` 인증, `Notion-Version: 2026-03-11`, `start_cursor` 요청을 구현한다. 결과: fake server/client가 페이지별 응답을 공급한다.
 4. **BE — 표준 구조 변환:** `type=child_page`이며 제목이 정확히 일치하는 직속 Page만 모아 공통 `DocumentStructure`로 바꾼다. 결과: DB 제외, 중복/누락 거부, 생성 부작용 없음.

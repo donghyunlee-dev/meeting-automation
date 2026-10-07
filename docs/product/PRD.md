@@ -2316,7 +2316,7 @@ Meeting UI
 | `TASK-001.04` | DONE | DONE | [Issue #4](https://github.com/donghyunlee-dev/meeting-automation/issues/4) / [PR #82](https://github.com/donghyunlee-dev/meeting-automation/pull/82) | [검증 증거](../evidence/TASK-001.04.md), tests/review/QA PASS at `b8af6ab` | `fb0a9d3306581c6d28747834f9dc01ba114c7306` | 2026-10-07 20:52 KST |
 | `TASK-001.05` | DONE | DONE | [Issue #5](https://github.com/donghyunlee-dev/meeting-automation/issues/5) / [PR #83](https://github.com/donghyunlee-dev/meeting-automation/pull/83) | [검증 증거](../evidence/TASK-001.05.md), tests/review/QA PASS at `bdb85af` | `7e4bc6d897ef9c2587caee13f33e514462925e03` | 2026-10-07 21:22 KST |
 | `TASK-002.01` | DONE | DONE | [Issue #6](https://github.com/donghyunlee-dev/meeting-automation/issues/6) / [PR #84](https://github.com/donghyunlee-dev/meeting-automation/pull/84) | [검증 증거](../evidence/TASK-002.01.md), tests/review/QA PASS at `538fb3f` | `4621e5267b76b908941f4bb75e847337dac5e6e1` | 2026-10-07 21:44 KST |
-| `TASK-002.02` | TODO | DESIGN | [Issue #7](https://github.com/donghyunlee-dev/meeting-automation/issues/7) / — | — | — | — |
+| `TASK-002.02` | IN_PROGRESS | DEVELOPMENT | [Issue #7](https://github.com/donghyunlee-dev/meeting-automation/issues/7) / — | 선행 TASK-002.01 완료; Notion Root hierarchy Adapter 구현 진행 중 | — | — |
 | `TASK-002.03` | TODO | DESIGN | [Issue #8](https://github.com/donghyunlee-dev/meeting-automation/issues/8) / — | — | — | — |
 | `TASK-002.04` | TODO | DESIGN | [Issue #9](https://github.com/donghyunlee-dev/meeting-automation/issues/9) / — | — | — | — |
 | `TASK-003.01` | TODO | DESIGN | [Issue #10](https://github.com/donghyunlee-dev/meeting-automation/issues/10) / — | — | — | — |
