@@ -7,7 +7,9 @@ import com.meetingautomation.document.ProviderHealth;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 import org.springframework.beans.factory.annotation.Value;
@@ -72,6 +74,7 @@ public final class NotionPageHierarchyAdapter implements DocumentStructureProvid
 
     private List<ChildPage> readAllChildren(String rootId) {
         List<ChildPage> pages = new ArrayList<>();
+        Set<String> seenCursors = new HashSet<>();
         String cursor = null;
         boolean hasMore;
         do {
@@ -129,6 +132,9 @@ public final class NotionPageHierarchyAdapter implements DocumentStructureProvid
                 throw new NotionApiFailure(true, response.statusCode());
             }
             cursor = hasMore ? nextCursor.textValue() : null;
+            if (cursor != null && !seenCursors.add(cursor)) {
+                throw new NotionApiFailure(true, response.statusCode());
+            }
         } while (hasMore);
         return List.copyOf(pages);
     }

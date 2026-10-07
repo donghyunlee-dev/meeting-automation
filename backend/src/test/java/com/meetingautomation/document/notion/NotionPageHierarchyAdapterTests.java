@@ -71,6 +71,30 @@ class NotionPageHierarchyAdapterTests extends com.meetingautomation.document.Doc
     }
 
     @Test
+    void repeatedOpaqueCursorFailsSafelyInsteadOfLooping() {
+        TestClient client = client(TOKEN, ROOT_ID);
+        String cursor = "loop-cursor-marker";
+        client.server().expect(notionRequest(URL))
+                .andRespond(jsonSuccess(childrenWithMore(cursor,
+                        block("meetings-child", "child_page", "Meetings"))));
+        client.server().expect(notionRequest(URL + "?start_cursor=" + cursor))
+                .andExpect(queryParam("start_cursor", cursor))
+                .andRespond(jsonSuccess(childrenWithMore(cursor,
+                        block("participants-child", "child_page", "Participants"))));
+
+        DocumentProviderException failure = assertThrows(DocumentProviderException.class,
+                () -> client.adapter().discoverStructure(ROOT_ID));
+
+        assertEquals("DOCUMENT_FAILED", failure.code());
+        assertEquals("DOCUMENT_FAILURE", failure.category());
+        assertEquals(502, failure.statusCode());
+        assertFalse(failure.retryable());
+        assertFalse(failure.getMessage().contains(cursor));
+        assertEquals(null, failure.getCause());
+        client.server().verify();
+    }
+
+    @Test
     void emptyMissingDuplicateAndDatabaseOnlyStructuresAreRejectedWithoutCreation() {
         assertStructureFailure(emptyChildren());
         assertStructureFailure(children(block("meetings-child", "child_page", "Meetings")));
