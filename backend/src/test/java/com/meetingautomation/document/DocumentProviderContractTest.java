@@ -14,9 +14,19 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.function.Executable;
 
 /** Reusable provider contract. Adapters can extend this class and provide a test factory. */
-public abstract class DocumentProviderContractTest {
+public abstract class DocumentProviderContractTest extends DocumentStructureProviderContractTest {
     protected abstract Supplier<DocumentProvider> providerFactory();
     protected abstract Supplier<DocumentProvider> failingProviderFactory();
+
+    @Override
+    protected Supplier<DocumentStructureProvider> structureProviderFactory() {
+        return providerFactory()::get;
+    }
+
+    @Override
+    protected Supplier<DocumentStructureProvider> failingStructureProviderFactory() {
+        return failingProviderFactory()::get;
+    }
 
     @Test
     protected void healthAndMeetingListUseStandardFieldsAndDefaultLimit() {
@@ -30,15 +40,6 @@ public abstract class DocumentProviderContractTest {
         assertEquals("pt_1", summary.participants().getFirst().id());
         assertEquals("https://documents.example/meeting-1", summary.documentUrl());
         assertEquals(1, provider.listMeetings(1).size());
-    }
-
-    @Test
-    protected void discoversOnlyConfiguredRootAndItsRequiredChildren() {
-        DocumentStructure structure = providerFactory().get().discoverStructure("root-configured");
-
-        assertEquals("root-configured", structure.rootId());
-        assertEquals("meetings-child", structure.meetingsPageId());
-        assertEquals("participants-child", structure.participantsPageId());
     }
 
     @Test

@@ -23,7 +23,8 @@ Provider 선택이나 Vendor SDK를 참조하지 않는 Backend Port와 표준 D
 | `backend/src/main/java/.../document/DocumentProvider.java` | EXT-003 공통 Port 메서드 |
 | 표준 document DTO | `ProviderHealth`, `DocumentStructure`, `MeetingSummary`, `MeetingDocument`, `MeetingDocumentRef`, `Participant` 및 생성/수정 명령 |
 | Provider 오류 타입/매퍼 | 구조 누락과 일반 Provider 실패를 기존 코드/분류로 변환하고 원문 격리 |
-| `backend/src/test/java/.../document/DocumentProviderContractTest.java` | 공통 Port 정상·오류 동작을 검증하는 재사용 JUnit 5 계약 모음 |
+| `backend/src/test/java/.../document/DocumentStructureProviderContractTest.java` | 구조/Health slice의 정상·오류를 검증하는 재사용 JUnit 5 계약 모음 |
+| `backend/src/test/java/.../document/DocumentProviderContractTest.java` | 완전한 Port의 CRUD 및 구조 동작을 검증하는 재사용 JUnit 5 계약 모음 |
 | test fixture | 결정적인 fake provider와 계약 위반 fixture. 네트워크/SKD 호출 없음 |
 | `docs/evidence/TASK-002.01.md` | 테스트/빌드와 비민감 계약 검증 결과 |
 
@@ -35,7 +36,7 @@ Provider 선택이나 Vendor SDK를 참조하지 않는 Backend Port와 표준 D
 2. **BE — 실패 테스트 작성:** 계약 모음과 test fixture에서 올바른 Root/child mapping, 읽기·생성 반환값, 구조 누락 및 Provider 실패 매핑을 먼저 단언한다. 일부러 불완전한 fixture는 계약 assertion에서 실패한다. 결과: 실패 원인이 compile/config 오류가 아닌 계약 assertion임을 확인한다.
 3. **BE — 최소 Port/DTO 구현:** 표준 필드와 EXT-003 signature를 구현한다. 결과: Vendor 타입이 없는 컴파일 가능한 interface와 DTO가 만들어진다.
 4. **BE — 오류 규칙 구현:** `DOCUMENT_STRUCTURE_NOT_FOUND`, `DOCUMENT_FAILED`, `DOCUMENT_FAILURE`의 역할을 고정하고 안전한 메시지/예외 경계를 둔다. 결과: Provider 원문/Secret이 노출되지 않는다.
-5. **BE — fixture 및 테스트 통과:** 계약 모음을 결정적인 fake provider에 적용하고 정상/경계 사례를 통과시킨다. 결과: 후속 Adapter 테스트가 같은 fixture 계약 베이스를 확장할 수 있다.
+5. **BE — fixture 및 테스트 통과:** 계약 slice들을 결정적인 fake provider에 적용하고 정상/경계 사례를 통과시킨다. 결과: 계층 Adapter는 구조 모음만 확장하고 완전한 Adapter는 전체 모음을 확장할 수 있다.
 6. **BE — 회귀/증거:** `./gradlew test`, `./gradlew clean build`와 dependency diff를 확인해 Evidence를 남긴다.
 
 이 작업은 서버 내부 Port/DTO와 후속 Adapter에 재사용될 테스트 경계를 먼저 고정한다. UI 작업은 없고 공개 API Controller도 만들지 않으므로 Backend 계약과 오류 모델을 먼저 확정한다.

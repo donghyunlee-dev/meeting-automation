@@ -4,10 +4,7 @@ import java.util.List;
 import java.util.Optional;
 
 /** Provider-neutral boundary for document storage. */
-public interface DocumentProvider {
-    ProviderHealth validateConnection();
-
-    DocumentStructure discoverStructure(String rootId);
+public interface DocumentProvider extends DocumentStructureProvider {
 
     List<MeetingSummary> listMeetings(int max);
 

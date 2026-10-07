@@ -36,7 +36,7 @@ Backend 설정의 Notion Root Page에서 직속 `Meetings`, `Participants` child
 
 ## 완료 기준
 
-- 공통 `DocumentProvider` 구조 계약에 맞는 Notion hierarchy 구현이 Root의 직속 Page만 조사한다.
+- `DocumentStructureProvider`의 구조/Health 계약에 맞는 Notion hierarchy 구현이 Root의 직속 Page만 조사한다. 완전한 `DocumentProvider` CRUD는 기능 task 범위로 남긴다.
 - 2개 이상의 페이지 응답에 걸친 cursor pagination 후에도 대상 child를 찾아 올바른 ID를 반환한다.
 - 빈 구조, 필수 Page 하나 누락, 중복 제목 또는 Database만 존재하는 경우 Page를 만들지 않고 `DOCUMENT_STRUCTURE_NOT_FOUND`를 반환한다.
 - 401/403/404와 전송 실패는 안전한 공통 오류/Health 값으로 변환되고 Secret 및 원 Provider 응답 본문은 외부에 노출되지 않는다.
@@ -61,5 +61,5 @@ Backend 설정의 Notion Root Page에서 직속 `Meetings`, `Participants` child
 
 ## 인접 작업 계약
 
-- 선행 작업: #6이 Provider-neutral Port와 `DocumentStructure`, `ProviderHealth`, 오류 코드를 제공한다.
+- 선행 작업: #6이 Provider-neutral 구조 Port와 상위 `DocumentProvider` Port, DTO, `DocumentStructure`, `ProviderHealth`, 오류 코드를 제공한다.
 - 후속 작업: `TASK-002.04`가 설정된 Provider의 API-019 상태에 Notion `configured`, `reachable`, `rootAccessible` 결과를 연결한다. Notion Meeting/Participant CRUD는 소유한 기능 TASK에서 별도로 연결한다.

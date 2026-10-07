@@ -28,7 +28,7 @@
 - [ ] cursor를 끝까지 순회하는 로직을 추가한다. 결과: 뒤쪽 페이지에 있는 target child도 발견한다.
 - [ ] `child_page` type과 정확한 title만 `DocumentStructure`로 바꾼다. 결과: Database/하위 단계 블록은 container로 선택되지 않는다.
 - [ ] 누락/중복 구조와 API 권한·전송 실패를 기존 오류 계약으로 매핑한다. 결과: 구조 오류와 Provider 작업 실패가 구분되고 민감 원문은 감춰진다.
-- [ ] Task 002.01 공통 hierarchy 계약 모음을 Notion adapter에 적용한다. 결과: 성공/오류 계약이 통과한다.
+- [ ] Task 002.01 공통 structure/Health 계약 slice를 Notion adapter에 적용한다. 결과: 성공/오류 계약이 통과한다. Meeting/Participant CRUD 계약은 해당 기능 task에서 Adapter 구현과 함께 연결한다.
 
 ### 통과 확인과 증거
 
