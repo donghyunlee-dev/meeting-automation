@@ -1,6 +1,7 @@
 package com.meetingautomation;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Size;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -30,6 +31,16 @@ class ErrorContractProbeController {
 
     @GetMapping("/type-mismatch")
     void integerParameter(@RequestParam int count) {
+    }
+
+    @GetMapping("/minimum")
+    void minimum(@RequestParam @Min(1) int count) {
+    }
+
+    @GetMapping("/invalid-return")
+    @Size(max = 8)
+    String invalidReturn() {
+        return "invalid-return-value-marker";
     }
 
     @PostMapping(value = "/json-only", consumes = MediaType.APPLICATION_JSON_VALUE)

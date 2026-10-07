@@ -105,6 +105,29 @@ class MeetingAutomationApplicationTests {
     }
 
     @Test
+    void handlerMethodParameterValidationRemainsBadRequest() throws Exception {
+        mockMvc.perform(get("/__test/errors/minimum").queryParam("count", "0"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("VALIDATION_FAILED"))
+                .andExpect(jsonPath("$.error.category").value("VALIDATION"));
+    }
+
+    @Test
+    void invalidControllerReturnValueIsInternalErrorWithoutValueLeak() throws Exception {
+        mockMvc.perform(get("/__test/errors/invalid-return"))
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.error.code").value("INTERNAL_ERROR"))
+                .andExpect(jsonPath("$.error.category").value("INTERNAL"))
+                .andExpect(jsonPath("$.error.retryable").value(false))
+                .andExpect(jsonPath("$.error.traceId", startsWith("tr_")))
+                .andExpect(result -> {
+                    String body = result.getResponse().getContentAsString();
+                    org.junit.jupiter.api.Assertions.assertFalse(body.contains("invalid-return-value-marker"));
+                    org.junit.jupiter.api.Assertions.assertFalse(body.contains("HandlerMethodValidationException"));
+                });
+    }
+
+    @Test
     void unsupportedMediaTypeAndMethodKeepFrameworkStatuses() throws Exception {
         mockMvc.perform(post("/__test/errors/json-only")
                         .contentType(MediaType.TEXT_PLAIN)

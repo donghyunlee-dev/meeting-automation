@@ -46,13 +46,30 @@ public class ApiExceptionHandler {
 
     @ExceptionHandler({
             ConstraintViolationException.class,
-            HandlerMethodValidationException.class,
             HttpMessageNotReadableException.class,
             MethodArgumentTypeMismatchException.class
     })
     public ResponseEntity<ApiErrorResponse> handleInvalidRequest(
             Exception exception,
             HttpServletRequest request) {
+        return errorResponse(
+                HttpStatus.BAD_REQUEST,
+                "VALIDATION_FAILED",
+                "요청 내용을 확인해 주세요.",
+                "VALIDATION",
+                false,
+                request,
+                Map.of());
+    }
+
+    @ExceptionHandler(HandlerMethodValidationException.class)
+    public ResponseEntity<ApiErrorResponse> handleHandlerMethodValidationFailure(
+            HandlerMethodValidationException exception,
+            HttpServletRequest request) {
+        if (exception.isForReturnValue()) {
+            return internalError(request);
+        }
+
         return errorResponse(
                 HttpStatus.BAD_REQUEST,
                 "VALIDATION_FAILED",
@@ -93,6 +110,10 @@ public class ApiExceptionHandler {
                     Map.of());
         }
 
+        return internalError(request);
+    }
+
+    private ResponseEntity<ApiErrorResponse> internalError(HttpServletRequest request) {
         return errorResponse(
                 HttpStatus.INTERNAL_SERVER_ERROR,
                 "INTERNAL_ERROR",
