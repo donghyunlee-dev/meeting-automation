@@ -2306,7 +2306,7 @@ Meeting UI
 
 구현 상태는 이 표와 GitHub Issue/PR, `docs/evidence/`의 head별 검증 기록으로 관리한다. 기존 세부 TASK 표의 `설계 상태 / 문서`와 설계 커서는 설계 상태만 나타내며 개발 상태를 대신하지 않는다.
 
-**다음 개발 대상 커서: `TASK-001.05`**
+**다음 개발 대상 커서: `TASK-002.01`**
 
 | TASK | 개발 상태 | 단계 | Issue / PR | 검증 증거 | 병합 commit | 완료 일시 (Asia/Seoul) |
 |---|---|---|---|---|---|---|
@@ -2314,7 +2314,7 @@ Meeting UI
 | `TASK-001.02` | DONE | DONE | [Issue #2](https://github.com/donghyunlee-dev/meeting-automation/issues/2) / [PR #70](https://github.com/donghyunlee-dev/meeting-automation/pull/70) | [검증 증거](../evidence/TASK-001.02.md), review/QA PASS at `47958d4` | `e5a608692fba23f2eb6e1e43b0b1054a8e746b02` | 2026-10-06 19:47 KST |
 | `TASK-001.03` | DONE | DONE | [Issue #3](https://github.com/donghyunlee-dev/meeting-automation/issues/3) / [PR #81](https://github.com/donghyunlee-dev/meeting-automation/pull/81) | [검증 증거](../evidence/TASK-001.03.md), tests/review/QA PASS at `968b0a5` | `e0913db5dfed7db870578877fa0c6876a47e9b98` | 2026-10-07 19:11 KST |
 | `TASK-001.04` | DONE | DONE | [Issue #4](https://github.com/donghyunlee-dev/meeting-automation/issues/4) / [PR #82](https://github.com/donghyunlee-dev/meeting-automation/pull/82) | [검증 증거](../evidence/TASK-001.04.md), tests/review/QA PASS at `b8af6ab` | `fb0a9d3306581c6d28747834f9dc01ba114c7306` | 2026-10-07 20:52 KST |
-| `TASK-001.05` | IN_PROGRESS | DEVELOPMENT | [Issue #5](https://github.com/donghyunlee-dev/meeting-automation/issues/5) / — | 선행 TASK-001.02~001.04 완료; FE/BE 독립 작업 진행 중 | — | — |
+| `TASK-001.05` | DONE | DONE | [Issue #5](https://github.com/donghyunlee-dev/meeting-automation/issues/5) / [PR #83](https://github.com/donghyunlee-dev/meeting-automation/pull/83) | [검증 증거](../evidence/TASK-001.05.md), tests/review/QA PASS at `bdb85af` | `7e4bc6d897ef9c2587caee13f33e514462925e03` | 2026-10-07 21:22 KST |
 | `TASK-002.01` | TODO | DESIGN | [Issue #6](https://github.com/donghyunlee-dev/meeting-automation/issues/6) / — | — | — | — |
 | `TASK-002.02` | TODO | DESIGN | [Issue #7](https://github.com/donghyunlee-dev/meeting-automation/issues/7) / — | — | — | — |
 | `TASK-002.03` | TODO | DESIGN | [Issue #8](https://github.com/donghyunlee-dev/meeting-automation/issues/8) / — | — | — | — |
