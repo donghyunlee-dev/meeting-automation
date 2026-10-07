@@ -7,13 +7,16 @@ import java.util.Map;
 import java.util.UUID;
 import jakarta.validation.ConstraintViolationException;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.BindException;
 import org.springframework.validation.FieldError;
+import org.springframework.web.ErrorResponse;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 @RestControllerAdvice
@@ -44,7 +47,8 @@ public class ApiExceptionHandler {
     @ExceptionHandler({
             ConstraintViolationException.class,
             HandlerMethodValidationException.class,
-            HttpMessageNotReadableException.class
+            HttpMessageNotReadableException.class,
+            MethodArgumentTypeMismatchException.class
     })
     public ResponseEntity<ApiErrorResponse> handleInvalidRequest(
             Exception exception,
@@ -77,6 +81,18 @@ public class ApiExceptionHandler {
     public ResponseEntity<ApiErrorResponse> handleUnexpectedFailure(
             Exception exception,
             HttpServletRequest request) {
+        if (exception instanceof ErrorResponse errorResponse
+                && errorResponse.getStatusCode().is4xxClientError()) {
+            return errorResponse(
+                    errorResponse.getStatusCode(),
+                    "VALIDATION_FAILED",
+                    "요청 내용을 확인해 주세요.",
+                    "VALIDATION",
+                    false,
+                    request,
+                    Map.of());
+        }
+
         return errorResponse(
                 HttpStatus.INTERNAL_SERVER_ERROR,
                 "INTERNAL_ERROR",
@@ -88,7 +104,7 @@ public class ApiExceptionHandler {
     }
 
     private ResponseEntity<ApiErrorResponse> errorResponse(
-            HttpStatus status,
+            HttpStatusCode status,
             String code,
             String message,
             String category,

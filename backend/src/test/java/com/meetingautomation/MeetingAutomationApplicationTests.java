@@ -77,6 +77,55 @@ class MeetingAutomationApplicationTests {
     }
 
     @Test
+    void missingRequiredHeaderKeepsClientErrorStatusAndReturnsSafeEnvelope() throws Exception {
+        mockMvc.perform(get("/__test/errors/required-header"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("VALIDATION_FAILED"))
+                .andExpect(jsonPath("$.error.message").isNotEmpty())
+                .andExpect(jsonPath("$.error.category").value("VALIDATION"))
+                .andExpect(jsonPath("$.error.retryable").value(false))
+                .andExpect(jsonPath("$.error.traceId", startsWith("tr_")))
+                .andExpect(jsonPath("$.error.details").isMap())
+                .andExpect(result -> org.junit.jupiter.api.Assertions.assertFalse(
+                        result.getResponse().getContentAsString().contains("MissingRequestHeaderException")));
+    }
+
+    @Test
+    void typeMismatchKeepsBadRequestStatusWithoutEchoingRejectedInput() throws Exception {
+        mockMvc.perform(get("/__test/errors/type-mismatch")
+                        .queryParam("count", INPUT_MARKER))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("VALIDATION_FAILED"))
+                .andExpect(jsonPath("$.error.category").value("VALIDATION"))
+                .andExpect(result -> {
+                    String body = result.getResponse().getContentAsString();
+                    org.junit.jupiter.api.Assertions.assertFalse(body.contains(INPUT_MARKER));
+                    org.junit.jupiter.api.Assertions.assertFalse(body.contains("MethodArgumentTypeMismatchException"));
+                });
+    }
+
+    @Test
+    void unsupportedMediaTypeAndMethodKeepFrameworkStatuses() throws Exception {
+        mockMvc.perform(post("/__test/errors/json-only")
+                        .contentType(MediaType.TEXT_PLAIN)
+                        .content(INPUT_MARKER))
+                .andExpect(status().isUnsupportedMediaType())
+                .andExpect(jsonPath("$.error.code").value("VALIDATION_FAILED"))
+                .andExpect(jsonPath("$.error.category").value("VALIDATION"))
+                .andExpect(result -> org.junit.jupiter.api.Assertions.assertFalse(
+                        result.getResponse().getContentAsString().contains(INPUT_MARKER)))
+                .andExpect(result -> org.junit.jupiter.api.Assertions.assertFalse(
+                        result.getResponse().getContentAsString().contains("HttpMediaTypeNotSupportedException")));
+
+        mockMvc.perform(get("/__test/errors/post-only"))
+                .andExpect(status().isMethodNotAllowed())
+                .andExpect(jsonPath("$.error.code").value("VALIDATION_FAILED"))
+                .andExpect(jsonPath("$.error.category").value("VALIDATION"))
+                .andExpect(result -> org.junit.jupiter.api.Assertions.assertFalse(
+                        result.getResponse().getContentAsString().contains("HttpRequestMethodNotSupportedException")));
+    }
+
+    @Test
     void healthIsUpWithoutDetailsAndOtherActuatorEndpointsAreHidden() throws Exception {
         mockMvc.perform(get("/actuator/health"))
                 .andExpect(status().isOk())

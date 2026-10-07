@@ -6,6 +6,8 @@ import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -20,6 +22,22 @@ class ErrorContractProbeController {
     @GetMapping("/unexpected")
     void unexpected() {
         throw new IllegalStateException("internal-exception-secret-marker");
+    }
+
+    @GetMapping("/required-header")
+    void requiredHeader(@RequestHeader("X-Required-Value") String value) {
+    }
+
+    @GetMapping("/type-mismatch")
+    void integerParameter(@RequestParam int count) {
+    }
+
+    @PostMapping(value = "/json-only", consumes = MediaType.APPLICATION_JSON_VALUE)
+    void jsonOnly(@RequestBody ValidationRequest request) {
+    }
+
+    @PostMapping("/post-only")
+    void postOnly() {
     }
 
     record ValidationRequest(@Size(max = 8) String value) {
