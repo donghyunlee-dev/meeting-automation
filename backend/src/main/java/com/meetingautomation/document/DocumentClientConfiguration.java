@@ -1,13 +1,14 @@
-package com.meetingautomation.document.notion;
+package com.meetingautomation.document;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.client.RestClient;
 
+/** Shared HTTP client builder for document provider adapters. */
 @Configuration(proxyBeanMethods = false)
-class NotionClientConfiguration {
+public class DocumentClientConfiguration {
     @Bean
-    RestClient.Builder notionRestClientBuilder() {
+    RestClient.Builder documentRestClientBuilder() {
         return RestClient.builder();
     }
 }
