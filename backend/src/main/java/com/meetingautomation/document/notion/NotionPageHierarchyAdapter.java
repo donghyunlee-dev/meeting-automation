@@ -165,7 +165,7 @@ public final class NotionPageHierarchyAdapter implements DocumentStructureProvid
                 .toList();
     }
 
-    private boolean isConfigured() {
+    public boolean isConfigured() {
         return !isBlank(token) && !isBlank(configuredRootId);
     }
 

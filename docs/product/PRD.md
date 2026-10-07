@@ -2318,7 +2318,7 @@ Meeting UI
 | `TASK-002.01` | DONE | DONE | [Issue #6](https://github.com/donghyunlee-dev/meeting-automation/issues/6) / [PR #84](https://github.com/donghyunlee-dev/meeting-automation/pull/84) | [검증 증거](../evidence/TASK-002.01.md), tests/review/QA PASS at `538fb3f` | `4621e5267b76b908941f4bb75e847337dac5e6e1` | 2026-10-07 21:44 KST |
 | `TASK-002.02` | DONE | DONE | [Issue #7](https://github.com/donghyunlee-dev/meeting-automation/issues/7) / [PR #85](https://github.com/donghyunlee-dev/meeting-automation/pull/85) | [검증 증거](../evidence/TASK-002.02.md), tests/review/QA PASS at `148ec5b` | `1788ac05cd1cf071d414e8cbc2a4ff9d69b4022e` | 2026-10-07 22:34 KST |
 | `TASK-002.03` | DONE | DONE | [Issue #8](https://github.com/donghyunlee-dev/meeting-automation/issues/8) / [PR #86](https://github.com/donghyunlee-dev/meeting-automation/pull/86) | [검증 증거](../evidence/TASK-002.03.md), tests/review/QA PASS at `f7a5060` | `00c28b484622827392e8f62cdf7b60d7088257e9` | 2026-10-07 23:41 KST |
-| `TASK-002.04` | TODO | DESIGN | [Issue #9](https://github.com/donghyunlee-dev/meeting-automation/issues/9) / — | — | — | — |
+| `TASK-002.04` | IN_PROGRESS | DEVELOPMENT | [Issue #9](https://github.com/donghyunlee-dev/meeting-automation/issues/9) / — | 선행 TASK-002.02·.03 완료; Provider selector와 API-001/019 Health 통합 진행 중 | — | — |
 | `TASK-003.01` | TODO | DESIGN | [Issue #10](https://github.com/donghyunlee-dev/meeting-automation/issues/10) / — | — | — | — |
 | `TASK-003.02` | TODO | DESIGN | [Issue #11](https://github.com/donghyunlee-dev/meeting-automation/issues/11) / — | — | — | — |
 | `TASK-003.03` | TODO | DESIGN | [Issue #12](https://github.com/donghyunlee-dev/meeting-automation/issues/12) / — | — | — | — |

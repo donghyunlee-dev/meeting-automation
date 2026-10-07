@@ -70,6 +70,10 @@ public final class ConfluencePageHierarchyAdapter implements DocumentStructurePr
         }
     }
 
+    public boolean isConfigured() {
+        return configured;
+    }
+
     @Override
     public DocumentStructure discoverStructure(String rootId) {
         if (!configured || !isNumericId(rootId)) {
