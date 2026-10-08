@@ -2,7 +2,6 @@ package com.meetingautomation.document.confluence;
 
 import com.meetingautomation.document.DocumentProviderException;
 import com.meetingautomation.document.DocumentStructure;
-import com.meetingautomation.document.DocumentStructureProvider;
 import com.meetingautomation.document.ProviderHealth;
 import com.meetingautomation.document.Participant;
 import com.meetingautomation.document.ParticipantListingProvider;
@@ -79,6 +78,15 @@ public final class ConfluencePageHierarchyAdapter implements ParticipantListingP
 
     @Override
     public DocumentStructure discoverStructure(String rootId) {
+        return discoverStructure(rootId, false);
+    }
+
+    @Override
+    public DocumentStructure discoverParticipantStructure(String rootId) {
+        return discoverStructure(rootId, true);
+    }
+
+    private DocumentStructure discoverStructure(String rootId, boolean participantOperation) {
         if (!configured || !isNumericId(rootId)) {
             throw DocumentProviderException.documentFailed(false);
         }
@@ -92,6 +100,10 @@ public final class ConfluencePageHierarchyAdapter implements ParticipantListingP
             }
             return new DocumentStructure(rootId, meetings.getFirst(), participants.getFirst());
         } catch (ConfluenceApiFailure failure) {
+            if (participantOperation) {
+                throw DocumentProviderException.participantListFailed(
+                        isParticipantRetryable(failure.statusCode()), failure);
+            }
             throw DocumentProviderException.documentFailed(isRetryable(failure.statusCode()), failure);
         }
     }
@@ -103,7 +115,7 @@ public final class ConfluencePageHierarchyAdapter implements ParticipantListingP
         }
         try {
             List<Participant> result = new ArrayList<>();
-            for (ChildPage page : readAllChildren(participantsPageId)) {
+            for (ChildPage page : readAllChildren(participantsPageId, true)) {
                 result.add(ParticipantPageMapper.map(page.id(), page.title(), readPageText(page.id())));
             }
             return List.copyOf(result);
@@ -131,6 +143,10 @@ public final class ConfluencePageHierarchyAdapter implements ParticipantListingP
     }
 
     private List<ChildPage> readAllChildren(String rootId) {
+        return readAllChildren(rootId, false);
+    }
+
+    private List<ChildPage> readAllChildren(String rootId, boolean strictParticipantPages) {
         List<ChildPage> pages = new ArrayList<>();
         URI currentUri = initialChildrenUri(rootId);
         Set<String> requestedUris = new HashSet<>();
@@ -143,7 +159,9 @@ public final class ConfluencePageHierarchyAdapter implements ParticipantListingP
             if (results == null || !results.isArray()) {
                 throw new ConfluenceApiFailure(true, response.statusCode());
             }
-            pages.addAll(pageChildren(results));
+            pages.addAll(strictParticipantPages
+                    ? participantPageChildren(results, response.statusCode())
+                    : pageChildren(results));
 
             URI nextUri = nextUri(responseBody, response.linkHeader(), currentUri, response.statusCode());
             if (nextUri == null) {
@@ -257,6 +275,23 @@ public final class ConfluencePageHierarchyAdapter implements ParticipantListingP
                     && id != null && id.isTextual() && title != null && title.isTextual()) {
                 pages.add(new ChildPage(id.textValue(), title.textValue()));
             }
+        }
+        return pages;
+    }
+
+    private static List<ChildPage> participantPageChildren(JsonNode results, int statusCode) {
+        List<ChildPage> pages = new ArrayList<>();
+        for (JsonNode result : results) {
+            if (!result.isObject()) continue;
+            JsonNode type = result.get("type");
+            if (type == null || !type.isTextual() || !"page".equals(type.textValue())) continue;
+            JsonNode id = result.get("id");
+            JsonNode title = result.get("title");
+            if (id == null || !id.isTextual() || isBlank(id.textValue())
+                    || title == null || !title.isTextual() || isBlank(title.textValue())) {
+                throw new ConfluenceApiFailure(true, statusCode);
+            }
+            pages.add(new ChildPage(id.textValue(), title.textValue()));
         }
         return pages;
     }

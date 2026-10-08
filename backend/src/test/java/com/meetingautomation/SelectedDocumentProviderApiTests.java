@@ -79,7 +79,7 @@ class SelectedDocumentProviderApiTests {
         mockServer.expect(notionRequestTo("https://api.notion.com/v1/blocks/person-page-id/children"))
                 .andRespond(jsonSuccess("{\"has_more\":false,\"next_cursor\":null,\"results\":["
                         + "{\"type\":\"paragraph\",\"paragraph\":{\"rich_text\":["
-                        + "{\"plain_text\":\"Email: ada@example.test\"}]}}]}"));
+                        + "{\"plain_text\":\"Email: ada@\"},{\"plain_text\":\"example.test\"}]}}]}"));
 
         mockMvc.perform(get("/api/v1/participants"))
                 .andExpect(status().isOk())
@@ -134,6 +134,60 @@ class SelectedDocumentProviderApiTests {
                     assertFalse(body.contains(TOKEN));
                     assertFalse(body.contains("private-provider-marker"));
                 });
+        mockServer.verify();
+    }
+
+    @Test
+    void transientStructureLookupFailureUsesParticipantListContract() throws Exception {
+        mockServer.expect(notionRequest())
+                .andRespond(withStatus(HttpStatus.SERVICE_UNAVAILABLE)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .body("{\"message\":\"" + TOKEN + " structure-provider-marker\"}"));
+
+        mockMvc.perform(get("/api/v1/participants"))
+                .andExpect(status().isBadGateway())
+                .andExpect(jsonPath("$.error.code").value("PARTICIPANT_LIST_FAILED"))
+                .andExpect(jsonPath("$.error.retryable").value(true))
+                .andExpect(result -> {
+                    String body = result.getResponse().getContentAsString();
+                    assertFalse(body.contains(TOKEN));
+                    assertFalse(body.contains("structure-provider-marker"));
+                });
+        mockServer.verify();
+    }
+
+    @Test
+    void participantStructureTransportFailureIsRetryableAndSanitized() throws Exception {
+        mockServer.expect(notionRequest()).andRespond(request -> {
+            throw new java.io.IOException("transport-secret-marker");
+        });
+
+        mockMvc.perform(get("/api/v1/participants"))
+                .andExpect(status().isBadGateway())
+                .andExpect(jsonPath("$.error.code").value("PARTICIPANT_LIST_FAILED"))
+                .andExpect(jsonPath("$.error.retryable").value(true))
+                .andExpect(result -> {
+                    String body = result.getResponse().getContentAsString();
+                    assertFalse(body.contains("transport-secret-marker"));
+                    assertFalse(body.contains(TOKEN));
+                });
+        mockServer.verify();
+    }
+
+    @Test
+    void malformedTypedParticipantChildFailsWholeRoster() throws Exception {
+        mockServer.expect(notionRequest()).andRespond(jsonSuccess(requiredChildren()));
+        mockServer.expect(notionRequestTo("https://api.notion.com/v1/blocks/participants-page/children"))
+                .andRespond(jsonSuccess("{\"has_more\":false,\"next_cursor\":null,\"results\":["
+                        + "{\"id\":\"good-id\",\"type\":\"child_page\","
+                        + "\"child_page\":{\"title\":\"Valid Person\"}},"
+                        + "{\"type\":\"child_page\",\"child_page\":{\"title\":\"Malformed Person\"}}]}"));
+
+        mockMvc.perform(get("/api/v1/participants"))
+                .andExpect(status().isBadGateway())
+                .andExpect(jsonPath("$.error.code").value("PARTICIPANT_LIST_FAILED"))
+                .andExpect(jsonPath("$.error.retryable").value(false))
+                .andExpect(result -> assertFalse(result.getResponse().getContentAsString().contains("Valid Person")));
         mockServer.verify();
     }
 

@@ -16,6 +16,7 @@ public final class ParticipantListService {
     }
 
     public List<Participant> listParticipants() {
+        providerResolver.validateSelection();
         ParticipantListingProvider provider = providerResolver.selectedProvider()
                 .filter(ParticipantListingProvider.class::isInstance)
                 .map(ParticipantListingProvider.class::cast)
@@ -23,7 +24,15 @@ public final class ParticipantListService {
         if (!providerResolver.configured()) {
             throw DocumentProviderException.structureNotFound();
         }
-        var structure = provider.discoverStructure(providerResolver.rootId());
+        com.meetingautomation.document.DocumentStructure structure;
+        try {
+            structure = provider.discoverParticipantStructure(providerResolver.rootId());
+        } catch (DocumentProviderException failure) {
+            if ("DOCUMENT_STRUCTURE_NOT_FOUND".equals(failure.code())) {
+                throw failure;
+            }
+            throw DocumentProviderException.participantListFailed(failure.retryable(), failure);
+        }
         return List.copyOf(provider.listParticipants(structure.participantsPageId()));
     }
 }

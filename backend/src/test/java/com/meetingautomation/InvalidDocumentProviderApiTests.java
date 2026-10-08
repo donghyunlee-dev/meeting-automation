@@ -36,4 +36,13 @@ class InvalidDocumentProviderApiTests {
                 .andExpect(jsonPath("$.error.category").value("INTERNAL"))
                 .andExpect(result -> assertFalse(result.getResponse().getContentAsString().contains("NOTIONN")));
     }
+
+    @Test
+    void unsupportedSelectorReturnsSafeInternalErrorFromParticipants() throws Exception {
+        mockMvc.perform(get("/api/v1/participants"))
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.error.code").value("INTERNAL_ERROR"))
+                .andExpect(jsonPath("$.error.category").value("INTERNAL"))
+                .andExpect(result -> assertFalse(result.getResponse().getContentAsString().contains("NOTIONN")));
+    }
 }

@@ -2,7 +2,6 @@ package com.meetingautomation.document.notion;
 
 import com.meetingautomation.document.DocumentProviderException;
 import com.meetingautomation.document.DocumentStructure;
-import com.meetingautomation.document.DocumentStructureProvider;
 import com.meetingautomation.document.ProviderHealth;
 import com.meetingautomation.document.Participant;
 import com.meetingautomation.document.ParticipantListingProvider;
@@ -59,6 +58,15 @@ public final class NotionPageHierarchyAdapter implements ParticipantListingProvi
 
     @Override
     public DocumentStructure discoverStructure(String rootId) {
+        return discoverStructure(rootId, false);
+    }
+
+    @Override
+    public DocumentStructure discoverParticipantStructure(String rootId) {
+        return discoverStructure(rootId, true);
+    }
+
+    private DocumentStructure discoverStructure(String rootId, boolean participantOperation) {
         if (isBlank(token) || isBlank(rootId)) {
             throw DocumentProviderException.documentFailed(false);
         }
@@ -72,6 +80,10 @@ public final class NotionPageHierarchyAdapter implements ParticipantListingProvi
             }
             return new DocumentStructure(rootId, meetings.getFirst(), participants.getFirst());
         } catch (NotionApiFailure failure) {
+            if (participantOperation) {
+                throw DocumentProviderException.participantListFailed(
+                        isParticipantRetryable(failure.statusCode()), failure);
+            }
             throw DocumentProviderException.documentFailed(isRetryable(failure.statusCode()), failure);
         }
     }
@@ -80,7 +92,7 @@ public final class NotionPageHierarchyAdapter implements ParticipantListingProvi
     public List<Participant> listParticipants(String participantsPageId) {
         try {
             List<Participant> result = new ArrayList<>();
-            for (ChildPage page : readAllChildren(participantsPageId)) {
+            for (ChildPage page : readAllChildren(participantsPageId, true)) {
                 result.add(ParticipantPageMapper.map(page.id(), page.title(), readPageText(page.id())));
             }
             return List.copyOf(result);
@@ -99,75 +111,83 @@ public final class NotionPageHierarchyAdapter implements ParticipantListingProvi
         do {
             ResponseEnvelope envelope;
             String startCursor = cursor;
-        try {
-            envelope = restClient.get()
-                    .uri(uriBuilder -> {
-                        var uri = uriBuilder.path(CHILDREN_PATH);
-                        if (startCursor != null) uri.queryParam("start_cursor", startCursor);
-                        return uri.build(pageId);
-                    })
-                    .headers(headers -> {
-                        headers.setBearerAuth(token);
-                        headers.set("Notion-Version", API_VERSION);
-                    })
-                    .exchange((request, response) -> {
-                        int status = response.getStatusCode().value();
-                        if (HttpStatusCode.valueOf(status).isError()) {
-                            throw new NotionApiFailure(true, status);
-                        }
-                        try {
-                            return new ResponseEnvelope(status,
-                                    StreamUtils.copyToString(response.getBody(), StandardCharsets.UTF_8));
-                        } catch (IOException readFailure) {
-                            throw new NotionApiFailure(true, status);
-                        }
-                    });
-        } catch (NotionApiFailure failure) {
-            throw failure;
-        } catch (RestClientException transportFailure) {
-            throw new NotionApiFailure(false, 0);
-        }
-
-        try {
-            JsonNode response = JSON_MAPPER.readTree(envelope.body());
-            JsonNode results = response == null ? null : response.get("results");
-            if (results == null || !results.isArray()) {
-                throw new NotionApiFailure(true, envelope.statusCode());
+            try {
+                envelope = restClient.get()
+                        .uri(uriBuilder -> {
+                            var uri = uriBuilder.path(CHILDREN_PATH);
+                            if (startCursor != null) uri.queryParam("start_cursor", startCursor);
+                            return uri.build(pageId);
+                        })
+                        .headers(headers -> {
+                            headers.setBearerAuth(token);
+                            headers.set("Notion-Version", API_VERSION);
+                        })
+                        .exchange((request, response) -> {
+                            int status = response.getStatusCode().value();
+                            if (HttpStatusCode.valueOf(status).isError()) {
+                                throw new NotionApiFailure(true, status);
+                            }
+                            try {
+                                return new ResponseEnvelope(status,
+                                        StreamUtils.copyToString(response.getBody(), StandardCharsets.UTF_8));
+                            } catch (IOException readFailure) {
+                                throw new NotionApiFailure(true, status);
+                            }
+                        });
+            } catch (NotionApiFailure failure) {
+                throw failure;
+            } catch (RestClientException transportFailure) {
+                throw new NotionApiFailure(false, 0);
             }
-            for (JsonNode block : results) {
-                JsonNode type = block.get("type");
-                JsonNode content = type != null && type.isTextual() ? block.get(type.textValue()) : null;
-                JsonNode richText = content == null ? null : content.get("rich_text");
-                if (richText != null && richText.isArray()) {
-                    for (JsonNode text : richText) {
-                        JsonNode plainText = text.get("plain_text");
-                        if (plainText != null && plainText.isTextual()) lines.add(plainText.textValue());
+
+            try {
+                JsonNode response = JSON_MAPPER.readTree(envelope.body());
+                JsonNode results = response == null ? null : response.get("results");
+                if (results == null || !results.isArray()) {
+                    throw new NotionApiFailure(true, envelope.statusCode());
+                }
+                for (JsonNode block : results) {
+                    JsonNode type = block.get("type");
+                    JsonNode content = type != null && type.isTextual() ? block.get(type.textValue()) : null;
+                    JsonNode richText = content == null ? null : content.get("rich_text");
+                    if (richText != null && richText.isArray()) {
+                        StringBuilder blockText = new StringBuilder();
+                        for (JsonNode text : richText) {
+                            JsonNode plainText = text.get("plain_text");
+                            if (plainText != null && plainText.isTextual()) {
+                                blockText.append(plainText.textValue());
+                            }
+                        }
+                        if (!blockText.isEmpty()) lines.add(blockText.toString());
                     }
                 }
-            }
-            JsonNode hasMoreNode = response.get("has_more");
-            JsonNode nextCursor = response.get("next_cursor");
-            if (hasMoreNode == null || !hasMoreNode.isBoolean()) {
+                JsonNode hasMoreNode = response.get("has_more");
+                JsonNode nextCursor = response.get("next_cursor");
+                if (hasMoreNode == null || !hasMoreNode.isBoolean()) {
+                    throw new NotionApiFailure(true, envelope.statusCode());
+                }
+                hasMore = hasMoreNode.booleanValue();
+                if (hasMore && (nextCursor == null || !nextCursor.isTextual())) {
+                    throw new NotionApiFailure(true, envelope.statusCode());
+                }
+                cursor = hasMore ? nextCursor.textValue() : null;
+                if (cursor != null && !seenCursors.add(cursor)) {
+                    throw new NotionApiFailure(true, envelope.statusCode());
+                }
+            } catch (NotionApiFailure failure) {
+                throw failure;
+            } catch (Exception failure) {
                 throw new NotionApiFailure(true, envelope.statusCode());
             }
-            hasMore = hasMoreNode.booleanValue();
-            if (hasMore && (nextCursor == null || !nextCursor.isTextual())) {
-                throw new NotionApiFailure(true, envelope.statusCode());
-            }
-            cursor = hasMore ? nextCursor.textValue() : null;
-            if (cursor != null && !seenCursors.add(cursor)) {
-                throw new NotionApiFailure(true, envelope.statusCode());
-            }
-        } catch (NotionApiFailure failure) {
-            throw failure;
-        } catch (Exception failure) {
-            throw new NotionApiFailure(true, envelope.statusCode());
-        }
         } while (hasMore);
         return String.join("\n", lines);
     }
 
     private List<ChildPage> readAllChildren(String rootId) {
+        return readAllChildren(rootId, false);
+    }
+
+    private List<ChildPage> readAllChildren(String rootId, boolean strictParticipantPages) {
         List<ChildPage> pages = new ArrayList<>();
         Set<String> seenCursors = new HashSet<>();
         String cursor = null;
@@ -219,7 +239,9 @@ public final class NotionPageHierarchyAdapter implements ParticipantListingProvi
             if (resultsNode == null || !resultsNode.isArray() || hasMoreNode == null || !hasMoreNode.isBoolean()) {
                 throw new NotionApiFailure(true, response.statusCode());
             }
-            pages.addAll(childPages(resultsNode));
+            pages.addAll(strictParticipantPages
+                    ? participantChildPages(resultsNode, response.statusCode())
+                    : childPages(resultsNode));
             boolean more = hasMoreNode.booleanValue();
             hasMore = more;
             JsonNode nextCursor = responseBody.get("next_cursor");
@@ -248,6 +270,25 @@ public final class NotionPageHierarchyAdapter implements ParticipantListingProvi
                     && title != null && title.isTextual()) {
                 pages.add(new ChildPage(id.textValue(), title.textValue()));
             }
+        }
+        return pages;
+    }
+
+    private static List<ChildPage> participantChildPages(JsonNode results, int statusCode) {
+        List<ChildPage> pages = new ArrayList<>();
+        for (JsonNode block : results) {
+            if (!block.isObject()) continue;
+            JsonNode type = block.get("type");
+            if (type == null || !type.isTextual() || !"child_page".equals(type.textValue())) continue;
+            JsonNode id = block.get("id");
+            JsonNode page = block.get("child_page");
+            JsonNode title = page == null ? null : page.get("title");
+            if (id == null || !id.isTextual() || isBlank(id.textValue())
+                    || page == null || !page.isObject() || title == null || !title.isTextual()
+                    || isBlank(title.textValue())) {
+                throw new NotionApiFailure(true, statusCode);
+            }
+            pages.add(new ChildPage(id.textValue(), title.textValue()));
         }
         return pages;
     }
