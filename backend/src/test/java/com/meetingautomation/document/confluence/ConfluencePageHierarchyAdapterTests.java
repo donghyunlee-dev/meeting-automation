@@ -94,6 +94,27 @@ class ConfluencePageHierarchyAdapterTests extends com.meetingautomation.document
     }
 
     @Test
+    void participantCreationPreflightTransportFailureIsRetryableAndNeverPosts() {
+        TestClient client = client(BASE_URL, EMAIL, TOKEN, ROOT_ID);
+        String parentUrl = BASE_URL + "/wiki/api/v2/pages/888?body-format=storage";
+        client.server().expect(confluenceRequest(parentUrl)).andRespond(request -> {
+            throw new IOException("preflight-transport-secret-marker");
+        });
+
+        DocumentProviderException failure = assertThrows(DocumentProviderException.class,
+                () -> client.adapter().createParticipant("888",
+                        new CreateParticipantCommand("Ada", "ada@example.test")));
+
+        assertEquals("DOCUMENT_FAILED", failure.code());
+        assertEquals(502, failure.statusCode());
+        assertEquals("DOCUMENT_FAILURE", failure.category());
+        assertEquals(true, failure.retryable());
+        assertFalse(failure.getMessage().contains("preflight-transport-secret-marker"));
+        assertEquals(null, failure.getCause());
+        client.server().verify();
+    }
+
+    @Test
     void malformedParticipantPageFailsWithoutReturningPartialRoster() {
         TestClient client = client(BASE_URL, EMAIL, TOKEN, ROOT_ID);
         String participantsUrl = BASE_URL + "/wiki/api/v2/pages/participants-id/direct-children?limit=100";

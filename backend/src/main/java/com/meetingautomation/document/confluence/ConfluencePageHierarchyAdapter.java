@@ -156,7 +156,8 @@ public final class ConfluencePageHierarchyAdapter implements ParticipantCreation
             }
             spaceId = spaceIdNode.asText();
         } catch (ConfluenceApiFailure failure) {
-            throw DocumentProviderException.documentFailed(isRetryable(failure.statusCode()), failure);
+            // This is a read-only preflight, so a transport failure is safe for clients to retry.
+            throw DocumentProviderException.documentFailed(isParticipantRetryable(failure.statusCode()), failure);
         }
 
         ResponseEnvelope response;
