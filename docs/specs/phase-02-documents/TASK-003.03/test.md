@@ -13,6 +13,8 @@
 | API-005-07 | Provider update 실패 | HTTP 502 `DOCUMENT_FAILED`, 안전한 오류 본문 | Error mapping 테스트 |
 | API-005-08 | Provider Page 부분 갱신 | title=name, Email 본문=email, 미수정 값 보존 | Adapter contract 테스트 |
 | API-005-09 | 오류 응답과 로그 확인 | Provider 원문/인증정보 미노출 | 예외/로그 테스트 |
+| API-005-10 | 다른 parent의 페이지 ID | 404, 해당 페이지 mutation 미호출 | 소속 검증 테스트 |
+| API-005-11 | 추가 본문이 있는 Participant | 수정하지 않은 본문·필드 보존 | Adapter contract 테스트 |
 
 구현 후 `./gradlew test`, `./gradlew clean build`를 실행한다. 문서 작성 단계에서는 테스트를 실행하지 않는다.
 
