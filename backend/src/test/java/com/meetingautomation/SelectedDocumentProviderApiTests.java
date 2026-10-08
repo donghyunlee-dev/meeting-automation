@@ -69,6 +69,173 @@ class SelectedDocumentProviderApiTests {
     }
 
     @Test
+    void participantsApiReturnsRosterItemsMappedFromProviderPages() throws Exception {
+        mockServer.expect(notionRequest())
+                .andRespond(jsonSuccess(requiredChildren()));
+        mockServer.expect(notionRequestTo("https://api.notion.com/v1/blocks/participants-page/children"))
+                .andRespond(jsonSuccess("{\"has_more\":false,\"next_cursor\":null,\"results\":["
+                        + "{\"id\":\"person-page-id\",\"type\":\"child_page\","
+                        + "\"child_page\":{\"title\":\"Ada Lovelace\"}}]}"));
+        mockServer.expect(notionRequestTo("https://api.notion.com/v1/blocks/person-page-id/children"))
+                .andRespond(jsonSuccess("{\"has_more\":false,\"next_cursor\":null,\"results\":["
+                        + "{\"type\":\"paragraph\",\"paragraph\":{\"rich_text\":["
+                        + "{\"plain_text\":\"Email: ada@\"},{\"plain_text\":\"example.test\"}]}}]}"));
+
+        mockMvc.perform(get("/api/v1/participants"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items.length()").value(1))
+                .andExpect(jsonPath("$.data.items[0].id").value("person-page-id"))
+                .andExpect(jsonPath("$.data.items[0].name").value("Ada Lovelace"))
+                .andExpect(jsonPath("$.data.items[0].email").value("ada@example.test"))
+                .andExpect(jsonPath("$.data.items[0].length()").value(3));
+        mockServer.verify();
+    }
+
+    @Test
+    void emptyParticipantsPageReturnsEmptyItems() throws Exception {
+        mockServer.expect(notionRequest()).andRespond(jsonSuccess(requiredChildren()));
+        mockServer.expect(notionRequestTo("https://api.notion.com/v1/blocks/participants-page/children"))
+                .andRespond(jsonSuccess("{\"has_more\":false,\"next_cursor\":null,\"results\":[]}"));
+
+        mockMvc.perform(get("/api/v1/participants"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items").isArray())
+                .andExpect(jsonPath("$.data.items.length()").value(0));
+        mockServer.verify();
+    }
+
+    @Test
+    void missingParticipantsStructureReturnsSafe422() throws Exception {
+        mockServer.expect(notionRequest()).andRespond(jsonSuccess(
+                "{\"has_more\":false,\"next_cursor\":null,\"results\":[]}"));
+
+        mockMvc.perform(get("/api/v1/participants"))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.error.code").value("DOCUMENT_STRUCTURE_NOT_FOUND"))
+                .andExpect(jsonPath("$.error.retryable").value(false));
+        mockServer.verify();
+    }
+
+    @Test
+    void participantProviderFailureReturnsSanitizedRetryableError() throws Exception {
+        mockServer.expect(notionRequest()).andRespond(jsonSuccess(requiredChildren()));
+        mockServer.expect(notionRequestTo("https://api.notion.com/v1/blocks/participants-page/children"))
+                .andRespond(withStatus(HttpStatus.SERVICE_UNAVAILABLE)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .body("{\"message\":\"" + TOKEN + " private-provider-marker\"}"));
+
+        mockMvc.perform(get("/api/v1/participants"))
+                .andExpect(status().isBadGateway())
+                .andExpect(jsonPath("$.error.code").value("PARTICIPANT_LIST_FAILED"))
+                .andExpect(jsonPath("$.error.category").value("DOCUMENT_FAILURE"))
+                .andExpect(jsonPath("$.error.retryable").value(true))
+                .andExpect(result -> {
+                    String body = result.getResponse().getContentAsString();
+                    assertFalse(body.contains(TOKEN));
+                    assertFalse(body.contains("private-provider-marker"));
+                });
+        mockServer.verify();
+    }
+
+    @Test
+    void transientStructureLookupFailureUsesParticipantListContract() throws Exception {
+        mockServer.expect(notionRequest())
+                .andRespond(withStatus(HttpStatus.SERVICE_UNAVAILABLE)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .body("{\"message\":\"" + TOKEN + " structure-provider-marker\"}"));
+
+        mockMvc.perform(get("/api/v1/participants"))
+                .andExpect(status().isBadGateway())
+                .andExpect(jsonPath("$.error.code").value("PARTICIPANT_LIST_FAILED"))
+                .andExpect(jsonPath("$.error.retryable").value(true))
+                .andExpect(result -> {
+                    String body = result.getResponse().getContentAsString();
+                    assertFalse(body.contains(TOKEN));
+                    assertFalse(body.contains("structure-provider-marker"));
+                });
+        mockServer.verify();
+    }
+
+    @Test
+    void participantStructureTransportFailureIsRetryableAndSanitized() throws Exception {
+        mockServer.expect(notionRequest()).andRespond(request -> {
+            throw new java.io.IOException("transport-secret-marker");
+        });
+
+        mockMvc.perform(get("/api/v1/participants"))
+                .andExpect(status().isBadGateway())
+                .andExpect(jsonPath("$.error.code").value("PARTICIPANT_LIST_FAILED"))
+                .andExpect(jsonPath("$.error.retryable").value(true))
+                .andExpect(result -> {
+                    String body = result.getResponse().getContentAsString();
+                    assertFalse(body.contains("transport-secret-marker"));
+                    assertFalse(body.contains(TOKEN));
+                });
+        mockServer.verify();
+    }
+
+    @Test
+    void malformedTypedParticipantChildFailsWholeRoster() throws Exception {
+        mockServer.expect(notionRequest()).andRespond(jsonSuccess(requiredChildren()));
+        mockServer.expect(notionRequestTo("https://api.notion.com/v1/blocks/participants-page/children"))
+                .andRespond(jsonSuccess("{\"has_more\":false,\"next_cursor\":null,\"results\":["
+                        + "{\"id\":\"good-id\",\"type\":\"child_page\","
+                        + "\"child_page\":{\"title\":\"Valid Person\"}},"
+                        + "{\"type\":\"child_page\",\"child_page\":{\"title\":\"Malformed Person\"}}]}"));
+
+        mockMvc.perform(get("/api/v1/participants"))
+                .andExpect(status().isBadGateway())
+                .andExpect(jsonPath("$.error.code").value("PARTICIPANT_LIST_FAILED"))
+                .andExpect(jsonPath("$.error.retryable").value(false))
+                .andExpect(result -> assertFalse(result.getResponse().getContentAsString().contains("Valid Person")));
+        mockServer.verify();
+    }
+
+    @Test
+    void permanentParticipantProviderFailureIsNotRetryable() throws Exception {
+        mockServer.expect(notionRequest()).andRespond(jsonSuccess(requiredChildren()));
+        mockServer.expect(notionRequestTo("https://api.notion.com/v1/blocks/participants-page/children"))
+                .andRespond(withStatus(HttpStatus.FORBIDDEN)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .body("{\"message\":\"" + TOKEN + " access-denied-marker\"}"));
+
+        mockMvc.perform(get("/api/v1/participants"))
+                .andExpect(status().isBadGateway())
+                .andExpect(jsonPath("$.error.code").value("PARTICIPANT_LIST_FAILED"))
+                .andExpect(jsonPath("$.error.retryable").value(false))
+                .andExpect(result -> {
+                    String body = result.getResponse().getContentAsString();
+                    assertFalse(body.contains(TOKEN));
+                    assertFalse(body.contains("access-denied-marker"));
+                });
+        mockServer.verify();
+    }
+
+    @Test
+    void malformedParticipantPageFailsTheWholeListWithoutLeakingPageText() throws Exception {
+        mockServer.expect(notionRequest()).andRespond(jsonSuccess(requiredChildren()));
+        mockServer.expect(notionRequestTo("https://api.notion.com/v1/blocks/participants-page/children"))
+                .andRespond(jsonSuccess("{\"has_more\":false,\"next_cursor\":null,\"results\":["
+                        + "{\"id\":\"person-page-id\",\"type\":\"child_page\","
+                        + "\"child_page\":{\"title\":\"Ada Lovelace\"}}]}"));
+        mockServer.expect(notionRequestTo("https://api.notion.com/v1/blocks/person-page-id/children"))
+                .andRespond(jsonSuccess("{\"has_more\":false,\"next_cursor\":null,\"results\":["
+                        + "{\"type\":\"paragraph\",\"paragraph\":{\"rich_text\":["
+                        + "{\"plain_text\":\"Email unavailable private-page-marker\"}]}}]}"));
+
+        mockMvc.perform(get("/api/v1/participants"))
+                .andExpect(status().isBadGateway())
+                .andExpect(jsonPath("$.error.code").value("PARTICIPANT_LIST_FAILED"))
+                .andExpect(jsonPath("$.error.retryable").value(false))
+                .andExpect(result -> {
+                    String body = result.getResponse().getContentAsString();
+                    assertFalse(body.contains("private-page-marker"));
+                    assertFalse(body.contains("Email unavailable"));
+                });
+        mockServer.verify();
+    }
+
+    @Test
     void authenticatedDocumentHealthChecksStructureAndKeepsOtherAreasPresent() throws Exception {
         mockServer.expect(notionRequest())
                 .andRespond(jsonSuccess(requiredChildren()));
@@ -148,8 +315,12 @@ class SelectedDocumentProviderApiTests {
     }
 
     private static org.springframework.test.web.client.RequestMatcher notionRequest() {
+        return notionRequestTo(URL);
+    }
+
+    private static org.springframework.test.web.client.RequestMatcher notionRequestTo(String url) {
         return request -> {
-            requestTo(URL).match(request);
+            requestTo(url).match(request);
             method(HttpMethod.GET).match(request);
             header(HttpHeaders.AUTHORIZATION, "Bearer " + TOKEN).match(request);
             header("Notion-Version", "2026-03-11").match(request);

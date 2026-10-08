@@ -13,6 +13,7 @@ import com.meetingautomation.document.DocumentProviderException;
 import com.meetingautomation.document.DocumentStructure;
 import com.meetingautomation.document.DocumentStructureProvider;
 import com.meetingautomation.document.ProviderHealth;
+import com.meetingautomation.document.Participant;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -40,6 +41,59 @@ class ConfluencePageHierarchyAdapterTests extends com.meetingautomation.document
             + "/direct-children?limit=100";
     private static final String AUTHORIZATION = "Basic " + Base64.getEncoder().encodeToString(
             (EMAIL + ":" + TOKEN).getBytes(StandardCharsets.UTF_8));
+
+    @Test
+    void listsParticipantsByReadingPageTitleAndStorageBody() {
+        TestClient client = client(BASE_URL, EMAIL, TOKEN, ROOT_ID);
+        String participantsUrl = BASE_URL + "/wiki/api/v2/pages/participants-id/direct-children?limit=100";
+        String bodyUrl = BASE_URL + "/wiki/api/v2/pages/person-id?body-format=storage";
+        client.server().expect(confluenceRequest(participantsUrl))
+                .andRespond(jsonSuccess(children(page("person-id", "Ada Lovelace"))));
+        client.server().expect(confluenceRequest(bodyUrl))
+                .andRespond(jsonSuccess("{\"body\":{\"storage\":{\"value\":\"<p>Role: Engineer</p>"
+                        + "<p>Email: ada@example.test</p>\"}}}"));
+
+        assertEquals(java.util.List.of(new Participant("person-id", "Ada Lovelace", "ada@example.test")),
+                client.adapter().listParticipants("participants-id"));
+        client.server().verify();
+    }
+
+    @Test
+    void malformedParticipantPageFailsWithoutReturningPartialRoster() {
+        TestClient client = client(BASE_URL, EMAIL, TOKEN, ROOT_ID);
+        String participantsUrl = BASE_URL + "/wiki/api/v2/pages/participants-id/direct-children?limit=100";
+        String bodyUrl = BASE_URL + "/wiki/api/v2/pages/person-id?body-format=storage";
+        client.server().expect(confluenceRequest(participantsUrl))
+                .andRespond(jsonSuccess(children(page("person-id", "Ada Lovelace"))));
+        client.server().expect(confluenceRequest(bodyUrl))
+                .andRespond(jsonSuccess("{\"body\":{\"storage\":{\"value\":\"<p>Email unavailable</p>\"}}}"));
+
+        DocumentProviderException failure = assertThrows(DocumentProviderException.class,
+                () -> client.adapter().listParticipants("participants-id"));
+
+        assertEquals("PARTICIPANT_LIST_FAILED", failure.code());
+        assertEquals(502, failure.statusCode());
+        assertFalse(failure.retryable());
+        assertFalse(failure.getMessage().contains("Email unavailable"));
+        client.server().verify();
+    }
+
+    @Test
+    void malformedTypedParticipantPageFailsWholeRosterInsteadOfSkippingIt() {
+        TestClient client = client(BASE_URL, EMAIL, TOKEN, ROOT_ID);
+        String participantsUrl = BASE_URL + "/wiki/api/v2/pages/participants-id/direct-children?limit=100";
+        client.server().expect(confluenceRequest(participantsUrl))
+                .andRespond(jsonSuccess(children(page("good-id", "Valid Person"),
+                        "{\"type\":\"page\",\"id\":\"missing-title-id\"}")));
+
+        DocumentProviderException failure = assertThrows(DocumentProviderException.class,
+                () -> client.adapter().listParticipants("participants-id"));
+
+        assertEquals("PARTICIPANT_LIST_FAILED", failure.code());
+        assertEquals(502, failure.statusCode());
+        assertFalse(failure.retryable());
+        client.server().verify();
+    }
 
     @Test
     void mapsOnlyDirectPageChildrenAndUsesUtf8BasicAuthentication() {
