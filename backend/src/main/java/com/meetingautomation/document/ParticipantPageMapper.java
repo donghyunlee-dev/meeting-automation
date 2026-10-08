@@ -1,11 +1,9 @@
 package com.meetingautomation.document;
 
-import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /** Converts provider page fields into the public participant model without retaining source content. */
 public final class ParticipantPageMapper {
-    private static final Pattern EMAIL_LINE = Pattern.compile("(?m)^\\s*Email:\\s*(\\S+)\\s*$");
     private static final Pattern EMAIL_ADDRESS = Pattern.compile("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$");
 
     private ParticipantPageMapper() { }
@@ -14,11 +12,21 @@ public final class ParticipantPageMapper {
         if (isBlank(id) || isBlank(title) || bodyText == null) {
             throw DocumentProviderException.participantListFailed(false);
         }
-        Matcher emailLine = EMAIL_LINE.matcher(bodyText);
-        if (!emailLine.find() || !EMAIL_ADDRESS.matcher(emailLine.group(1)).matches()) {
+        String email = firstEmailLine(bodyText);
+        if (email == null || !EMAIL_ADDRESS.matcher(email).matches()) {
             throw DocumentProviderException.participantListFailed(false);
         }
-        return new Participant(id, title.trim(), emailLine.group(1));
+        return new Participant(id, title.trim(), email);
+    }
+
+    private static String firstEmailLine(String bodyText) {
+        for (String line : bodyText.split("\\R", -1)) {
+            String trimmedLine = line.trim();
+            if (trimmedLine.startsWith("Email:")) {
+                return trimmedLine.substring("Email:".length()).trim();
+            }
+        }
+        return null;
     }
 
     private static boolean isBlank(String value) {
