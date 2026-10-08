@@ -8,6 +8,7 @@ import java.util.Map;
 import java.util.UUID;
 import com.meetingautomation.document.DocumentProviderException;
 import com.meetingautomation.api.idempotency.IdempotencyKeyConflictException;
+import com.meetingautomation.api.participant.ParticipantNotFoundException;
 import jakarta.validation.ConstraintViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
@@ -144,6 +145,20 @@ public class ApiExceptionHandler {
                 "IDEMPOTENCY_KEY_CONFLICT",
                 "같은 요청 키가 다른 내용에 사용되었습니다.",
                 "CONFLICT",
+                false,
+                request,
+                Map.of());
+    }
+
+    @ExceptionHandler(ParticipantNotFoundException.class)
+    public ResponseEntity<ApiErrorResponse> handleParticipantNotFound(
+            ParticipantNotFoundException exception,
+            HttpServletRequest request) {
+        return errorResponse(
+                HttpStatus.NOT_FOUND,
+                "PARTICIPANT_NOT_FOUND",
+                "요청한 참가자를 찾을 수 없습니다.",
+                "NOT_FOUND",
                 false,
                 request,
                 Map.of());

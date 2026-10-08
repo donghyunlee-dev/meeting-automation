@@ -6,12 +6,15 @@ import com.meetingautomation.document.CreateParticipantCommand;
 import com.meetingautomation.document.ProviderHealth;
 import com.meetingautomation.document.Participant;
 import com.meetingautomation.document.ParticipantCreationProvider;
+import com.meetingautomation.document.ParticipantUpdateCommand;
+import com.meetingautomation.document.ParticipantUpdatingProvider;
 import com.meetingautomation.document.ParticipantPageMapper;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
@@ -24,7 +27,7 @@ import org.springframework.web.client.RestClientException;
 
 /** Notion implementation for the root hierarchy and connection health slice. */
 @Component
-public final class NotionPageHierarchyAdapter implements ParticipantCreationProvider {
+public final class NotionPageHierarchyAdapter implements ParticipantCreationProvider, ParticipantUpdatingProvider {
     public static final String API_VERSION = "2026-03-11";
     private static final String API_BASE_URL = "https://api.notion.com";
     private static final String CHILDREN_PATH = "/v1/blocks/{block_id}/children";
@@ -169,6 +172,203 @@ public final class NotionPageHierarchyAdapter implements ParticipantCreationProv
             throw failure;
         } catch (Exception malformedResponse) {
             throw DocumentProviderException.documentFailed(false, malformedResponse);
+        }
+    }
+
+    @Override
+    public Participant updateParticipant(String participantId, ParticipantUpdateCommand command) {
+        if (isBlank(token) || isBlank(participantId)) {
+            throw DocumentProviderException.documentFailed(false);
+        }
+
+        if (command.email() != null) {
+            PageBlock emailBlock = readPageBlocks(participantId).stream()
+                    .filter(block -> block.emailLine() != null)
+                    .findFirst()
+                    .orElseThrow(() -> DocumentProviderException.documentFailed(false));
+            List<Map<String, Object>> richText = replaceEmailRichText(emailBlock, command.updatedEmail());
+            patchBlock(emailBlock.id(), Map.of(emailBlock.type(), Map.of("rich_text", richText)), false);
+        }
+
+        if (command.name() != null) {
+            patchBlock(participantId, Map.of("properties", Map.of("title", Map.of("title", List.of(Map.of(
+                    "text", Map.of("content", command.updatedName())))))), true);
+        }
+        return new Participant(participantId, command.updatedName(), command.updatedEmail());
+    }
+
+    private List<PageBlock> readPageBlocks(String pageId) {
+        List<PageBlock> blocks = new ArrayList<>();
+        Set<String> seenCursors = new HashSet<>();
+        String cursor = null;
+        boolean hasMore;
+        do {
+            String startCursor = cursor;
+            ResponseEnvelope envelope;
+            try {
+                envelope = restClient.get()
+                        .uri(uriBuilder -> {
+                            var uri = uriBuilder.path(CHILDREN_PATH);
+                            if (startCursor != null) uri.queryParam("start_cursor", startCursor);
+                            return uri.build(pageId);
+                        })
+                        .headers(headers -> {
+                            headers.setBearerAuth(token);
+                            headers.set("Notion-Version", API_VERSION);
+                        })
+                        .exchange((request, response) -> {
+                            int status = response.getStatusCode().value();
+                            if (HttpStatusCode.valueOf(status).isError()) {
+                                throw new NotionApiFailure(true, status);
+                            }
+                            try {
+                                return new ResponseEnvelope(status,
+                                        StreamUtils.copyToString(response.getBody(), StandardCharsets.UTF_8));
+                            } catch (IOException readFailure) {
+                                throw new NotionApiFailure(true, status);
+                            }
+                        });
+            } catch (NotionApiFailure failure) {
+                throw DocumentProviderException.documentFailed(
+                        isParticipantRetryable(failure.statusCode()), failure);
+            } catch (RestClientException transportFailure) {
+                throw DocumentProviderException.documentFailed(true, transportFailure);
+            }
+
+            try {
+                JsonNode response = JSON_MAPPER.readTree(envelope.body());
+                JsonNode results = response == null ? null : response.get("results");
+                JsonNode more = response == null ? null : response.get("has_more");
+                if (results == null || !results.isArray() || more == null || !more.isBoolean()) {
+                    throw DocumentProviderException.documentFailed(false);
+                }
+                for (JsonNode block : results) {
+                    String id = text(block.get("id"));
+                    String type = text(block.get("type"));
+                    JsonNode content = type == null ? null : block.get(type);
+                    JsonNode richText = content == null ? null : content.get("rich_text");
+                    if (id == null || richText == null || !richText.isArray()) continue;
+                    StringBuilder text = new StringBuilder();
+                    for (JsonNode run : richText) {
+                        String plainText = text(run.get("plain_text"));
+                        if (plainText == null) {
+                            JsonNode runText = run.get("text");
+                            plainText = runText == null ? "" : text(runText.get("content"));
+                        }
+                        if (plainText != null) text.append(plainText);
+                    }
+                    blocks.add(new PageBlock(id, type, text.toString(), richText));
+                }
+                hasMore = more.booleanValue();
+                JsonNode next = response.get("next_cursor");
+                if (hasMore && (next == null || !next.isTextual() || isBlank(next.textValue()))) {
+                    throw DocumentProviderException.documentFailed(false);
+                }
+                cursor = hasMore ? next.textValue() : null;
+                if (cursor != null && !seenCursors.add(cursor)) {
+                    throw DocumentProviderException.documentFailed(false);
+                }
+            } catch (DocumentProviderException failure) {
+                throw failure;
+            } catch (Exception malformedResponse) {
+                throw DocumentProviderException.documentFailed(false, malformedResponse);
+            }
+        } while (hasMore);
+        return List.copyOf(blocks);
+    }
+
+    private void patchBlock(String blockId, Object body, boolean page) {
+        try {
+            String json = JSON_MAPPER.writeValueAsString(body);
+            restClient.patch()
+                    .uri(uriBuilder -> uriBuilder.path("/v1/" + (page ? "pages/{id}" : "blocks/{id}"))
+                            .build(blockId))
+                    .headers(headers -> {
+                        headers.setBearerAuth(token);
+                        headers.set("Notion-Version", API_VERSION);
+                        headers.setContentType(org.springframework.http.MediaType.APPLICATION_JSON);
+                    })
+                    .body(json)
+                    .exchange((request, response) -> {
+                        if (HttpStatusCode.valueOf(response.getStatusCode().value()).isError()) {
+                            throw new NotionApiFailure(true, response.getStatusCode().value());
+                        }
+                        return null;
+                    });
+        } catch (Exception mutationFailure) {
+            throw DocumentProviderException.documentFailed(false, mutationFailure);
+        }
+    }
+
+    private static List<Map<String, Object>> replaceEmailRichText(PageBlock block, String email) {
+        int emailLabel = block.text().indexOf("Email:");
+        if (emailLabel < 0) throw DocumentProviderException.documentFailed(false);
+        int start = emailLabel + "Email:".length();
+        while (start < block.text().length() && Character.isWhitespace(block.text().charAt(start))) start++;
+        int end = block.text().indexOf('\n', start);
+        if (end < 0) end = block.text().length();
+        while (end > start && Character.isWhitespace(block.text().charAt(end - 1))) end--;
+        if (start >= end) throw DocumentProviderException.documentFailed(false);
+
+        List<Map<String, Object>> result = new ArrayList<>();
+        int offset = 0;
+        boolean inserted = false;
+        for (JsonNode run : block.richText()) {
+            String content = richTextContent(run);
+            int runEnd = offset + content.length();
+            if (runEnd <= start || offset >= end) {
+                result.add(copyRichTextRun(run, content));
+            } else {
+                int prefixEnd = Math.max(0, Math.min(content.length(), start - offset));
+                if (prefixEnd > 0) result.add(copyRichTextRun(run, content.substring(0, prefixEnd)));
+                if (!inserted) {
+                    result.add(copyRichTextRun(run, email));
+                    inserted = true;
+                }
+                int suffixStart = Math.max(0, Math.min(content.length(), end - offset));
+                if (suffixStart < content.length()) {
+                    result.add(copyRichTextRun(run, content.substring(suffixStart)));
+                }
+            }
+            offset = runEnd;
+        }
+        if (!inserted) throw DocumentProviderException.documentFailed(false);
+        return List.copyOf(result);
+    }
+
+    private static Map<String, Object> copyRichTextRun(JsonNode source, String content) {
+        Map<String, Object> result = new java.util.LinkedHashMap<>();
+        String type = text(source.get("type"));
+        result.put("type", type == null ? "text" : type);
+        JsonNode annotations = source.get("annotations");
+        if (annotations != null) result.put("annotations", annotations);
+        if (type != null && !"text".equals(type)) {
+            if (source.get(type) != null) result.put(type, source.get(type));
+            return result;
+        }
+        Map<String, Object> text = new java.util.LinkedHashMap<>();
+        text.put("content", content);
+        JsonNode sourceText = source.get("text");
+        if (sourceText != null && sourceText.get("link") != null) {
+            text.put("link", sourceText.get("link"));
+        }
+        result.put("text", text);
+        return result;
+    }
+
+    private static String richTextContent(JsonNode run) {
+        JsonNode text = run.get("text");
+        String content = text == null ? null : text(text.get("content"));
+        return content == null ? java.util.Objects.toString(text(run.get("plain_text")), "") : content;
+    }
+
+    private static String text(JsonNode node) {
+        return node != null && node.isTextual() ? node.textValue() : null;
+    }
+
+    private record PageBlock(String id, String type, String text, JsonNode richText) {
+        private String emailLine() {
+            return text.lines().map(String::trim).filter(line -> line.startsWith("Email:")).findFirst().orElse(null);
         }
     }
 

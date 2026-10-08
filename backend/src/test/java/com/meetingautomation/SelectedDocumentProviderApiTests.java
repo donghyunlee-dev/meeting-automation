@@ -3,6 +3,7 @@ package com.meetingautomation;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.header;
@@ -30,6 +31,7 @@ import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
+import java.util.List;
 
 @SpringBootTest(properties = {
         "DOCUMENT_PROVIDER=NOTION",
@@ -266,6 +268,180 @@ class SelectedDocumentProviderApiTests {
                     String body = result.getResponse().getContentAsString();
                     assertFalse(body.contains(TOKEN));
                     assertFalse(body.contains("permission-marker"));
+                });
+        mockServer.verify();
+    }
+
+    @Test
+    void participantNameOnlyPatchPreservesExistingEmailAndUpdatesNotionTitle() throws Exception {
+        mockServer.expect(notionRequest()).andRespond(jsonSuccess(requiredChildren()));
+        mockServer.expect(notionRequestTo("https://api.notion.com/v1/blocks/participants-page/children"))
+                .andRespond(jsonSuccess("{\"has_more\":false,\"next_cursor\":null,\"results\":["
+                        + "{\"id\":\"person-page-id\",\"type\":\"child_page\","
+                        + "\"child_page\":{\"title\":\"Old Name\"}}]}"));
+        mockServer.expect(notionRequestTo("https://api.notion.com/v1/blocks/person-page-id/children"))
+                .andRespond(jsonSuccess("{\"has_more\":false,\"next_cursor\":null,\"results\":["
+                        + "{\"id\":\"email-block-id\",\"type\":\"paragraph\",\"paragraph\":{"
+                        + "\"rich_text\":[{\"plain_text\":\"Email: old@example.test\"}]}}]}"));
+        mockServer.expect(requestTo("https://api.notion.com/v1/pages/person-page-id"))
+                .andExpect(method(HttpMethod.PATCH))
+                .andExpect(content().json("""
+                        {"properties":{"title":{"title":[{"text":{"content":"New Name"}}]}}}
+                        """))
+                .andRespond(jsonSuccess("{\"id\":\"person-page-id\"}"));
+
+        mockMvc.perform(patch("/api/v1/participants/person-page-id")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\" New Name \"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value("person-page-id"))
+                .andExpect(jsonPath("$.data.name").value("New Name"))
+                .andExpect(jsonPath("$.data.email").value("old@example.test"));
+        mockServer.verify();
+    }
+
+    @Test
+    void participantEmailOnlyPatchPreservesNameAndOtherNotionBodyText() throws Exception {
+        String roster = "https://api.notion.com/v1/blocks/participants-page/children";
+        String pageChildren = "https://api.notion.com/v1/blocks/person-page-id/children";
+        String currentText = "Email: old@example.test\nRole: Engineer";
+        mockServer.expect(notionRequest()).andRespond(jsonSuccess(requiredChildren()));
+        mockServer.expect(notionRequestTo(roster)).andRespond(jsonSuccess(participantChildPage()));
+        mockServer.expect(notionRequestTo(pageChildren)).andRespond(jsonSuccess(participantText(currentText)));
+        mockServer.expect(notionRequestTo(pageChildren)).andRespond(jsonSuccess(participantText(currentText)));
+        mockServer.expect(requestTo("https://api.notion.com/v1/blocks/email-block-id"))
+                .andExpect(method(HttpMethod.PATCH))
+                .andExpect(content().json("""
+                        {"paragraph":{"rich_text":[
+                          {"type":"text","text":{"content":"Email: "}},
+                          {"type":"text","text":{"content":"new@example.test"}},
+                          {"type":"text","text":{"content":"\\nRole: Engineer"}}
+                        ]}}
+                        """))
+                .andRespond(jsonSuccess("{\"id\":\"email-block-id\"}"));
+
+        mockMvc.perform(patch("/api/v1/participants/person-page-id")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\" new@example.test \"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value("person-page-id"))
+                .andExpect(jsonPath("$.data.name").value("Old Name"))
+                .andExpect(jsonPath("$.data.email").value("new@example.test"));
+        mockServer.verify();
+    }
+
+    @Test
+    void invalidParticipantPatchBodiesAreRejectedBeforeProviderCalls() throws Exception {
+        mockMvc.perform(patch("/api/v1/participants/person-page-id")
+                        .contentType(MediaType.APPLICATION_JSON).content(""))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("VALIDATION_FAILED"));
+        for (String body : List.of("{}", "{\"name\":null}", "{\"email\":null}",
+                "{\"name\":\"  \"}", "{\"email\":\"invalid\"}")) {
+            mockMvc.perform(patch("/api/v1/participants/person-page-id")
+                            .contentType(MediaType.APPLICATION_JSON).content(body))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.error.code").value("VALIDATION_FAILED"));
+        }
+        mockServer.verify();
+    }
+
+    @Test
+    void participantOutsideSelectedRosterReturns404WithoutMutation() throws Exception {
+        mockServer.expect(notionRequest()).andRespond(jsonSuccess(requiredChildren()));
+        mockServer.expect(notionRequestTo("https://api.notion.com/v1/blocks/participants-page/children"))
+                .andRespond(jsonSuccess("{\"has_more\":false,\"next_cursor\":null,\"results\":[]}"));
+
+        mockMvc.perform(patch("/api/v1/participants/not-a-roster-member")
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"New Name\"}"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error.code").value("PARTICIPANT_NOT_FOUND"));
+        mockServer.verify();
+    }
+
+    @Test
+    void participantUpdateMapsRosterReadFailureToSafeDocumentFailure() throws Exception {
+        mockServer.expect(notionRequest()).andRespond(jsonSuccess(requiredChildren()));
+        mockServer.expect(notionRequestTo("https://api.notion.com/v1/blocks/participants-page/children"))
+                .andRespond(withStatus(HttpStatus.SERVICE_UNAVAILABLE).contentType(MediaType.APPLICATION_JSON)
+                        .body("{\"message\":\"" + TOKEN + " roster-read-marker\"}"));
+
+        mockMvc.perform(patch("/api/v1/participants/person-page-id")
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"New Name\"}"))
+                .andExpect(status().isBadGateway())
+                .andExpect(jsonPath("$.error.code").value("DOCUMENT_FAILED"))
+                .andExpect(jsonPath("$.error.retryable").value(true))
+                .andExpect(result -> {
+                    String response = result.getResponse().getContentAsString();
+                    assertFalse(response.contains(TOKEN));
+                    assertFalse(response.contains("roster-read-marker"));
+                });
+        mockServer.verify();
+    }
+
+    @Test
+    void participantUpdateMissingStructureReturns422BeforeRosterReadOrMutation() throws Exception {
+        mockServer.expect(notionRequest()).andRespond(jsonSuccess(
+                "{\"has_more\":false,\"next_cursor\":null,\"results\":[]}"));
+
+        mockMvc.perform(patch("/api/v1/participants/person-page-id")
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"New Name\"}"))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.error.code").value("DOCUMENT_STRUCTURE_NOT_FOUND"))
+                .andExpect(jsonPath("$.error.retryable").value(false));
+        mockServer.verify();
+    }
+
+    @Test
+    void participantBothFieldsPatchReturnsCompleteUpdatedDto() throws Exception {
+        String roster = "https://api.notion.com/v1/blocks/participants-page/children";
+        String pageChildren = "https://api.notion.com/v1/blocks/person-page-id/children";
+        mockServer.expect(notionRequest()).andRespond(jsonSuccess(requiredChildren()));
+        mockServer.expect(notionRequestTo(roster)).andRespond(jsonSuccess(participantChildPage()));
+        mockServer.expect(notionRequestTo(pageChildren)).andRespond(jsonSuccess(participantText("Email: old@example.test")));
+        mockServer.expect(notionRequestTo(pageChildren)).andRespond(jsonSuccess(participantText("Email: old@example.test")));
+        mockServer.expect(requestTo("https://api.notion.com/v1/blocks/email-block-id"))
+                .andExpect(method(HttpMethod.PATCH))
+                .andRespond(jsonSuccess("{\"id\":\"email-block-id\"}"));
+        mockServer.expect(requestTo("https://api.notion.com/v1/pages/person-page-id"))
+                .andExpect(method(HttpMethod.PATCH))
+                .andRespond(jsonSuccess("{\"id\":\"person-page-id\"}"));
+
+        mockMvc.perform(patch("/api/v1/participants/person-page-id")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"New Name\",\"email\":\"new@example.test\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value("person-page-id"))
+                .andExpect(jsonPath("$.data.name").value("New Name"))
+                .andExpect(jsonPath("$.data.email").value("new@example.test"));
+        mockServer.verify();
+    }
+
+    @Test
+    void failedSecondNotionMutationReturnsSafeNonRetryableFailure() throws Exception {
+        String roster = "https://api.notion.com/v1/blocks/participants-page/children";
+        String pageChildren = "https://api.notion.com/v1/blocks/person-page-id/children";
+        mockServer.expect(notionRequest()).andRespond(jsonSuccess(requiredChildren()));
+        mockServer.expect(notionRequestTo(roster)).andRespond(jsonSuccess(participantChildPage()));
+        mockServer.expect(notionRequestTo(pageChildren)).andRespond(jsonSuccess(participantText("Email: old@example.test")));
+        mockServer.expect(notionRequestTo(pageChildren)).andRespond(jsonSuccess(participantText("Email: old@example.test")));
+        mockServer.expect(requestTo("https://api.notion.com/v1/blocks/email-block-id"))
+                .andExpect(method(HttpMethod.PATCH))
+                .andRespond(jsonSuccess("{\"id\":\"email-block-id\"}"));
+        mockServer.expect(requestTo("https://api.notion.com/v1/pages/person-page-id"))
+                .andExpect(method(HttpMethod.PATCH))
+                .andRespond(request -> { throw new java.io.IOException("mutation-outcome-secret-marker"); });
+
+        mockMvc.perform(patch("/api/v1/participants/person-page-id")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"New Name\",\"email\":\"new@example.test\"}"))
+                .andExpect(status().isBadGateway())
+                .andExpect(jsonPath("$.error.code").value("DOCUMENT_FAILED"))
+                .andExpect(jsonPath("$.error.retryable").value(false))
+                .andExpect(result -> {
+                    String response = result.getResponse().getContentAsString();
+                    assertFalse(response.contains("mutation-outcome-secret-marker"));
+                    assertFalse(response.contains(TOKEN));
                 });
         mockServer.verify();
     }
@@ -545,6 +721,19 @@ class SelectedDocumentProviderApiTests {
         return "{\"has_more\":false,\"next_cursor\":null,\"results\":["
                 + "{\"id\":\"meetings-page\",\"type\":\"child_page\",\"child_page\":{\"title\":\"Meetings\"}},"
                 + "{\"id\":\"participants-page\",\"type\":\"child_page\",\"child_page\":{\"title\":\"Participants\"}}]}";
+    }
+
+    private static String participantChildPage() {
+        return "{\"has_more\":false,\"next_cursor\":null,\"results\":["
+                + "{\"id\":\"person-page-id\",\"type\":\"child_page\","
+                + "\"child_page\":{\"title\":\"Old Name\"}}]}";
+    }
+
+    private static String participantText(String text) {
+        String escaped = text.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n");
+        return "{\"has_more\":false,\"next_cursor\":null,\"results\":["
+                + "{\"id\":\"email-block-id\",\"type\":\"paragraph\",\"paragraph\":{"
+                + "\"rich_text\":[{\"plain_text\":\"" + escaped + "\"}]}}]}";
     }
 
     @TestConfiguration(proxyBeanMethods = false)

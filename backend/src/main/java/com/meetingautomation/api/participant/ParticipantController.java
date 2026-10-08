@@ -10,6 +10,10 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import tools.jackson.databind.JsonNode;
+import org.springframework.validation.BindException;
 
 @RestController
 @RequestMapping("/api/v1/participants")
@@ -32,5 +36,13 @@ public final class ParticipantController {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(new ParticipantCreateResponse(
                         participantService.createParticipant(idempotencyKey, request)));
+    }
+
+    @PatchMapping("/{participantId}")
+    public ParticipantResponse updateParticipant(
+            @PathVariable String participantId,
+            @RequestBody JsonNode body) throws BindException {
+        return new ParticipantResponse(participantService.updateParticipant(
+                participantId, ParticipantUpdateRequest.parse(body)));
     }
 }
