@@ -2,9 +2,10 @@ package com.meetingautomation.document.notion;
 
 import com.meetingautomation.document.DocumentProviderException;
 import com.meetingautomation.document.DocumentStructure;
+import com.meetingautomation.document.CreateParticipantCommand;
 import com.meetingautomation.document.ProviderHealth;
 import com.meetingautomation.document.Participant;
-import com.meetingautomation.document.ParticipantListingProvider;
+import com.meetingautomation.document.ParticipantCreationProvider;
 import com.meetingautomation.document.ParticipantPageMapper;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -23,7 +24,7 @@ import org.springframework.web.client.RestClientException;
 
 /** Notion implementation for the root hierarchy and connection health slice. */
 @Component
-public final class NotionPageHierarchyAdapter implements ParticipantListingProvider {
+public final class NotionPageHierarchyAdapter implements ParticipantCreationProvider {
     public static final String API_VERSION = "2026-03-11";
     private static final String API_BASE_URL = "https://api.notion.com";
     private static final String CHILDREN_PATH = "/v1/blocks/{block_id}/children";
@@ -58,15 +59,21 @@ public final class NotionPageHierarchyAdapter implements ParticipantListingProvi
 
     @Override
     public DocumentStructure discoverStructure(String rootId) {
-        return discoverStructure(rootId, false);
+        return discoverStructure(rootId, false, false);
     }
 
     @Override
     public DocumentStructure discoverParticipantStructure(String rootId) {
-        return discoverStructure(rootId, true);
+        return discoverStructure(rootId, true, false);
     }
 
-    private DocumentStructure discoverStructure(String rootId, boolean participantOperation) {
+    @Override
+    public DocumentStructure discoverParticipantCreateStructure(String rootId) {
+        return discoverStructure(rootId, false, true);
+    }
+
+    private DocumentStructure discoverStructure(
+            String rootId, boolean participantListingOperation, boolean participantCreatePreflight) {
         if (isBlank(token) || isBlank(rootId)) {
             throw DocumentProviderException.documentFailed(false);
         }
@@ -80,8 +87,12 @@ public final class NotionPageHierarchyAdapter implements ParticipantListingProvi
             }
             return new DocumentStructure(rootId, meetings.getFirst(), participants.getFirst());
         } catch (NotionApiFailure failure) {
-            if (participantOperation) {
+            if (participantListingOperation) {
                 throw DocumentProviderException.participantListFailed(
+                        isParticipantRetryable(failure.statusCode()), failure);
+            }
+            if (participantCreatePreflight) {
+                throw DocumentProviderException.documentFailed(
                         isParticipantRetryable(failure.statusCode()), failure);
             }
             throw DocumentProviderException.documentFailed(isRetryable(failure.statusCode()), failure);
@@ -100,6 +111,64 @@ public final class NotionPageHierarchyAdapter implements ParticipantListingProvi
             throw failure;
         } catch (NotionApiFailure failure) {
             throw DocumentProviderException.participantListFailed(isParticipantRetryable(failure.statusCode()), failure);
+        }
+    }
+
+    @Override
+    public Participant createParticipant(String participantsPageId, CreateParticipantCommand command) {
+        if (isBlank(token) || isBlank(participantsPageId)) {
+            throw DocumentProviderException.documentFailed(false);
+        }
+        ResponseEnvelope response;
+        try {
+            String requestBody = JSON_MAPPER.writeValueAsString(java.util.Map.of(
+                    "parent", java.util.Map.of("page_id", participantsPageId),
+                    "properties", java.util.Map.of("title", java.util.Map.of("title", java.util.List.of(
+                            java.util.Map.of("text", java.util.Map.of("content", command.name()))))),
+                    "children", java.util.List.of(java.util.Map.of(
+                            "object", "block", "type", "paragraph",
+                            "paragraph", java.util.Map.of("rich_text", java.util.List.of(
+                                    java.util.Map.of("type", "text", "text",
+                                            java.util.Map.of("content", "Email: " + command.email()))))))));
+            response = restClient.post()
+                    .uri("/v1/pages")
+                    .headers(headers -> {
+                        headers.setBearerAuth(token);
+                        headers.set("Notion-Version", API_VERSION);
+                        headers.setContentType(org.springframework.http.MediaType.APPLICATION_JSON);
+                    })
+                    .body(requestBody)
+                    .exchange((request, httpResponse) -> {
+                        int status = httpResponse.getStatusCode().value();
+                        if (HttpStatusCode.valueOf(status).isError()) {
+                            throw new NotionApiFailure(true, status);
+                        }
+                        try {
+                            return new ResponseEnvelope(status,
+                                    StreamUtils.copyToString(httpResponse.getBody(), StandardCharsets.UTF_8));
+                        } catch (IOException readFailure) {
+                            throw new NotionApiFailure(true, status);
+                        }
+                    });
+        } catch (NotionApiFailure failure) {
+            throw DocumentProviderException.documentFailed(isCreateRetryable(failure.statusCode()), failure);
+        } catch (RestClientException transportFailure) {
+            throw DocumentProviderException.documentFailed(false, transportFailure);
+        } catch (Exception invalidRequestBody) {
+            throw DocumentProviderException.documentFailed(false, invalidRequestBody);
+        }
+
+        try {
+            JsonNode responseBody = JSON_MAPPER.readTree(response.body());
+            JsonNode id = responseBody == null ? null : responseBody.get("id");
+            if (id == null || !id.isTextual() || isBlank(id.textValue())) {
+                throw DocumentProviderException.documentFailed(false);
+            }
+            return new Participant(id.textValue(), command.name(), command.email());
+        } catch (DocumentProviderException failure) {
+            throw failure;
+        } catch (Exception malformedResponse) {
+            throw DocumentProviderException.documentFailed(false, malformedResponse);
         }
     }
 
@@ -314,6 +383,10 @@ public final class NotionPageHierarchyAdapter implements ParticipantListingProvi
 
     private static boolean isParticipantRetryable(int statusCode) {
         return statusCode == 0 || isRetryable(statusCode);
+    }
+
+    private static boolean isCreateRetryable(int statusCode) {
+        return statusCode == 429;
     }
 
     private record ChildPage(String id, String title) {

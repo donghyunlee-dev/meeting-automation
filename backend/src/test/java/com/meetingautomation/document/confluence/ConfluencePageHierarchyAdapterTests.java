@@ -11,6 +11,8 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 
 import com.meetingautomation.document.DocumentProviderException;
 import com.meetingautomation.document.DocumentStructure;
+import com.meetingautomation.document.CreateParticipantCommand;
+import com.meetingautomation.document.Participant;
 import com.meetingautomation.document.DocumentStructureProvider;
 import com.meetingautomation.document.ProviderHealth;
 import com.meetingautomation.document.Participant;
@@ -55,6 +57,39 @@ class ConfluencePageHierarchyAdapterTests extends com.meetingautomation.document
 
         assertEquals(java.util.List.of(new Participant("person-id", "Ada Lovelace", "ada@example.test")),
                 client.adapter().listParticipants("participants-id"));
+        client.server().verify();
+    }
+
+    @Test
+    void createsParticipantWithParentSpaceAndEscapedEmailStorage() {
+        TestClient client = client(BASE_URL, EMAIL, TOKEN, ROOT_ID);
+        String parentUrl = BASE_URL + "/wiki/api/v2/pages/888?body-format=storage";
+        String createUrl = BASE_URL + "/wiki/api/v2/pages";
+        client.server().expect(confluenceRequest(parentUrl))
+                .andRespond(jsonSuccess("{\"id\":\"888\",\"spaceId\":\"SPACE-KEY\"}"));
+        client.server().expect(request -> {
+            requestTo(createUrl).match(request);
+            method(HttpMethod.POST).match(request);
+            header(HttpHeaders.AUTHORIZATION, AUTHORIZATION).match(request);
+            header(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE).match(request);
+            org.springframework.test.web.client.match.MockRestRequestMatchers.content().json("""
+                    {"spaceId":"SPACE-KEY","status":"current","title":"Ada Lovelace",
+                     "parentId":"888","body":{"representation":"storage",
+                     "value":"<p>Email: ada&amp;co@example.test</p>"}}
+                    """).match(request);
+        }).andRespond(jsonSuccess("{\"id\":98765}"));
+        client.server().expect(confluenceRequest(BASE_URL
+                        + "/wiki/api/v2/pages/888/direct-children?limit=100"))
+                .andRespond(jsonSuccess(children(page("98765", "Ada Lovelace"))));
+        client.server().expect(confluenceRequest(BASE_URL + "/wiki/api/v2/pages/98765?body-format=storage"))
+                .andRespond(jsonSuccess("{\"id\":\"98765\",\"spaceId\":\"SPACE-KEY\","
+                        + "\"body\":{\"storage\":{\"value\":\"<p>Email: ada&amp;co@example.test</p>\"}}}"));
+
+        assertEquals(new Participant("98765", "Ada Lovelace", "ada&co@example.test"),
+                client.adapter().createParticipant("888",
+                        new CreateParticipantCommand("Ada Lovelace", "ada&co@example.test")));
+        assertEquals(java.util.List.of(new Participant("98765", "Ada Lovelace", "ada&co@example.test")),
+                client.adapter().listParticipants("888"));
         client.server().verify();
     }
 
