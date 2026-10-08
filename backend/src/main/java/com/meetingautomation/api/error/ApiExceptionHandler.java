@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import com.meetingautomation.document.DocumentProviderException;
+import com.meetingautomation.api.idempotency.IdempotencyKeyConflictException;
 import jakarta.validation.ConstraintViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
@@ -130,6 +131,20 @@ public class ApiExceptionHandler {
                 exception.getMessage(),
                 exception.category(),
                 exception.retryable(),
+                request,
+                Map.of());
+    }
+
+    @ExceptionHandler(IdempotencyKeyConflictException.class)
+    public ResponseEntity<ApiErrorResponse> handleIdempotencyConflict(
+            IdempotencyKeyConflictException exception,
+            HttpServletRequest request) {
+        return errorResponse(
+                HttpStatus.CONFLICT,
+                "IDEMPOTENCY_KEY_CONFLICT",
+                "같은 요청 키가 다른 내용에 사용되었습니다.",
+                "CONFLICT",
+                false,
                 request,
                 Map.of());
     }

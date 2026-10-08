@@ -9,7 +9,7 @@
 - `POST /api/v1/participants` Controller와 application Service
 - Request `{name,email}`, 성공 `201` 및 `{id,name,email}` 응답
 - 공백 제거/필수값 및 email 형식 검증
-- `DocumentProvider.createParticipant(command)` 호출 및 Provider 오류 변환
+- 선택된 Provider의 참가자 생성 capability 호출 및 Provider 오류 변환
 - `Idempotency-Key` 동일 요청 재전송 및 payload 충돌 처리
 
 ## 비범위
@@ -21,6 +21,10 @@
 이름/email을 trim한 뒤 저장하고 응답한다. name은 비어 있지 않아야 하고 email은 단일 주소 형식이어야 한다. 유효한 요청은 TASK-003.01 저장 규칙을 따라 Participants child page를 만든다: title은 name, 본문 `Email: <address>` 항목은 email, provider page ID는 표준 id다.
 
 동일 Idempotency-Key와 동일한 정규화 payload는 최초 생성 결과를 재사용한다. 같은 키로 다른 payload가 오면 409 `IDEMPOTENCY_KEY_CONFLICT`다. 서로 다른 키로 같은 요청을 보내는 경우 별도 생성 요청으로 처리한다.
+
+현재 운영 Adapter는 TASK-003.01의 단계별 capability를 사용한다. 이 Task는 참가자 생성 capability를 추가하고 Application Service가 구조 탐색으로 얻은 Participants Page ID와 공통 명령을 전달한다. 아직 구현하지 않은 Meeting CRUD를 runtime stub으로 제공하지 않는다.
+
+현재 checkout에는 idempotency 조정 구현이 없어 이 Task에서 생성 요청용 thread-safe memory coordinator를 도입한다. V1의 별도 DB 없는 단일 Backend 프로세스 수명 안에서 key/payload를 예약하고 동시·재전송을 조정하며 최초 결과를 재사용한다. 프로세스 재시작 이후 key 기록 복원을 보장하지 않는다. Provider 호출 결과가 불명확한 실패도 같은 key로 blind retry하지 않으며 안전한 실패 결과를 재사용한다. Adapter 내부 자동 재시도는 없다.
 
 필수 Participants 구조 누락은 422 `DOCUMENT_STRUCTURE_NOT_FOUND`; Provider 생성 실패는 502 `DOCUMENT_FAILED`, 운영 분류 `DOCUMENT_FAILURE`로 변환한다. Retryable은 오류가 일시적일 때만 true다. 원문과 인증정보는 응답/로그에 넣지 않는다.
 

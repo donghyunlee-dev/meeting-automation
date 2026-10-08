@@ -13,6 +13,8 @@
 | API-004-07 | 일시 및 영구 Provider 생성 실패 | HTTP 502 `DOCUMENT_FAILED`, 원인에 따른 retryable 값 | Provider/error mapping 테스트 |
 | API-004-08 | 유효 입력 Provider 전달 | title=name, `Email: <address>` 본문, page ID가 표준 id | Adapter contract 테스트 |
 | API-004-09 | Provider 예외/로그 확인 | Provider 원문과 자격 정보가 응답/로그에 없음 | 예외/로그 테스트 |
+| API-004-10 | 동일 key/정규화 payload의 동시 요청 | 동일 결과, Provider 생성 1회 | Idempotency concurrency 테스트 |
+| API-004-11 | 결과가 불명확한 Provider 실패 뒤 동일 key 재전송 | 안전한 최초 실패 재사용, 추가 create 없음 | Idempotency failure replay 테스트 |
 
 구현 완료 시 `./gradlew test`, `./gradlew clean build`를 실행한다. 이 설계 단계에서는 테스트를 실행하지 않는다.
 

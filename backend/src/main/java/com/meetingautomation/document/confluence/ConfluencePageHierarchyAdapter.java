@@ -2,9 +2,10 @@ package com.meetingautomation.document.confluence;
 
 import com.meetingautomation.document.DocumentProviderException;
 import com.meetingautomation.document.DocumentStructure;
+import com.meetingautomation.document.CreateParticipantCommand;
 import com.meetingautomation.document.ProviderHealth;
 import com.meetingautomation.document.Participant;
-import com.meetingautomation.document.ParticipantListingProvider;
+import com.meetingautomation.document.ParticipantCreationProvider;
 import com.meetingautomation.document.ParticipantPageMapper;
 import java.io.IOException;
 import java.net.URI;
@@ -29,7 +30,7 @@ import org.springframework.web.client.RestClientException;
 
 /** Confluence Cloud implementation of the document hierarchy and health slice. */
 @Component
-public final class ConfluencePageHierarchyAdapter implements ParticipantListingProvider {
+public final class ConfluencePageHierarchyAdapter implements ParticipantCreationProvider {
     private static final int PAGE_LIMIT = 100;
     private static final String DIRECT_CHILDREN_PATH = "/wiki/api/v2/pages/{id}/direct-children";
     private static final Pattern NEXT_LINK = Pattern.compile("<([^>]+)>\\s*;\\s*rel\\s*=\\s*\"?next\"?",
@@ -78,15 +79,21 @@ public final class ConfluencePageHierarchyAdapter implements ParticipantListingP
 
     @Override
     public DocumentStructure discoverStructure(String rootId) {
-        return discoverStructure(rootId, false);
+        return discoverStructure(rootId, false, false);
     }
 
     @Override
     public DocumentStructure discoverParticipantStructure(String rootId) {
-        return discoverStructure(rootId, true);
+        return discoverStructure(rootId, true, false);
     }
 
-    private DocumentStructure discoverStructure(String rootId, boolean participantOperation) {
+    @Override
+    public DocumentStructure discoverParticipantCreateStructure(String rootId) {
+        return discoverStructure(rootId, false, true);
+    }
+
+    private DocumentStructure discoverStructure(
+            String rootId, boolean participantListingOperation, boolean participantCreatePreflight) {
         if (!configured || !isNumericId(rootId)) {
             throw DocumentProviderException.documentFailed(false);
         }
@@ -100,8 +107,12 @@ public final class ConfluencePageHierarchyAdapter implements ParticipantListingP
             }
             return new DocumentStructure(rootId, meetings.getFirst(), participants.getFirst());
         } catch (ConfluenceApiFailure failure) {
-            if (participantOperation) {
+            if (participantListingOperation) {
                 throw DocumentProviderException.participantListFailed(
+                        isParticipantRetryable(failure.statusCode()), failure);
+            }
+            if (participantCreatePreflight) {
+                throw DocumentProviderException.documentFailed(
                         isParticipantRetryable(failure.statusCode()), failure);
             }
             throw DocumentProviderException.documentFailed(isRetryable(failure.statusCode()), failure);
@@ -124,6 +135,82 @@ public final class ConfluencePageHierarchyAdapter implements ParticipantListingP
         } catch (ConfluenceApiFailure failure) {
             throw DocumentProviderException.participantListFailed(
                     isParticipantRetryable(failure.statusCode()), failure);
+        }
+    }
+
+    @Override
+    public Participant createParticipant(String participantsPageId, CreateParticipantCommand command) {
+        if (!configured || !isNumericId(participantsPageId)) {
+            throw DocumentProviderException.documentFailed(false);
+        }
+
+        String spaceId;
+        try {
+            URI parentUri = baseUri.resolve("/wiki/api/v2/pages/" + encodePathSegment(participantsPageId)
+                    + "?body-format=storage");
+            JsonNode parentPage = parseBody(get(parentUri));
+            JsonNode spaceIdNode = parentPage.get("spaceId");
+            if (spaceIdNode == null || (!spaceIdNode.isTextual() && !spaceIdNode.isNumber())
+                    || isBlank(spaceIdNode.asText())) {
+                throw DocumentProviderException.documentFailed(false);
+            }
+            spaceId = spaceIdNode.asText();
+        } catch (ConfluenceApiFailure failure) {
+            // This is a read-only preflight, so a transport failure is safe for clients to retry.
+            throw DocumentProviderException.documentFailed(isParticipantRetryable(failure.statusCode()), failure);
+        }
+
+        ResponseEnvelope response;
+        try {
+            String requestBody = JSON_MAPPER.writeValueAsString(java.util.Map.of(
+                    "spaceId", spaceId,
+                    "status", "current",
+                    "title", command.name(),
+                    "parentId", participantsPageId,
+                    "body", java.util.Map.of(
+                            "representation", "storage",
+                            "value", "<p>Email: " + escapeHtml(command.email()) + "</p>")));
+            URI createUri = baseUri.resolve("/wiki/api/v2/pages");
+            response = restClient.post()
+                    .uri(createUri)
+                    .headers(headers -> {
+                        headers.setBasicAuth(accountEmail, authToken, StandardCharsets.UTF_8);
+                        headers.setAccept(List.of(org.springframework.http.MediaType.APPLICATION_JSON));
+                        headers.setContentType(org.springframework.http.MediaType.APPLICATION_JSON);
+                    })
+                    .body(requestBody)
+                    .exchange((request, httpResponse) -> {
+                        int status = httpResponse.getStatusCode().value();
+                        if (HttpStatusCode.valueOf(status).isError()) {
+                            throw new ConfluenceApiFailure(true, status);
+                        }
+                        try {
+                            return new ResponseEnvelope(status,
+                                    StreamUtils.copyToString(httpResponse.getBody(), StandardCharsets.UTF_8), null);
+                        } catch (IOException readFailure) {
+                            throw new ConfluenceApiFailure(true, status);
+                        }
+                    });
+        } catch (ConfluenceApiFailure failure) {
+            throw DocumentProviderException.documentFailed(isCreateRetryable(failure.statusCode()), failure);
+        } catch (RestClientException transportFailure) {
+            throw DocumentProviderException.documentFailed(false, transportFailure);
+        } catch (Exception invalidRequestBody) {
+            throw DocumentProviderException.documentFailed(false, invalidRequestBody);
+        }
+
+        try {
+            JsonNode responseBody = JSON_MAPPER.readTree(response.body());
+            JsonNode id = responseBody == null ? null : responseBody.get("id");
+            String participantId = id != null && (id.isTextual() || id.isNumber()) ? id.asText() : null;
+            if (!isNumericId(participantId)) {
+                throw DocumentProviderException.documentFailed(false);
+            }
+            return new Participant(participantId, command.name(), command.email());
+        } catch (DocumentProviderException failure) {
+            throw failure;
+        } catch (Exception malformedResponse) {
+            throw DocumentProviderException.documentFailed(false, malformedResponse);
         }
     }
 
@@ -351,6 +438,15 @@ public final class ConfluencePageHierarchyAdapter implements ParticipantListingP
 
     private static boolean isParticipantRetryable(int statusCode) {
         return statusCode == 0 || isRetryable(statusCode);
+    }
+
+    private static boolean isCreateRetryable(int statusCode) {
+        return statusCode == 429;
+    }
+
+    private static String escapeHtml(String value) {
+        return value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+                .replace("\"", "&quot;").replace("'", "&#39;");
     }
 
     private static boolean isAuthenticationFailure(int statusCode) {

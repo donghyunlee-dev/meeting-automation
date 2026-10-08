@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.content;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.queryParam;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
@@ -11,6 +12,8 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 
 import com.meetingautomation.document.DocumentProviderException;
 import com.meetingautomation.document.DocumentStructure;
+import com.meetingautomation.document.CreateParticipantCommand;
+import com.meetingautomation.document.Participant;
 import java.io.IOException;
 import java.util.List;
 import java.util.function.Supplier;
@@ -29,6 +32,48 @@ class NotionPageHierarchyAdapterTests extends com.meetingautomation.document.Doc
     private static final String TOKEN = "test-secret-token";
     private static final String ROOT_ID = "root-configured";
     private static final String URL = "https://api.notion.com/v1/blocks/root-configured/children";
+
+    @Test
+    void createsParticipantPageWithTitleAndEmailContent() {
+        TestClient client = client(TOKEN, ROOT_ID);
+        client.server().expect(requestTo("https://api.notion.com/v1/pages"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(org.springframework.test.web.client.match.MockRestRequestMatchers.header(
+                        "Authorization", "Bearer " + TOKEN))
+                .andExpect(org.springframework.test.web.client.match.MockRestRequestMatchers.header(
+                        "Notion-Version", NotionPageHierarchyAdapter.API_VERSION))
+                .andExpect(content().json("""
+                        {"parent":{"page_id":"participants-page"},
+                         "properties":{"title":{"title":[{"text":{"content":"Ada Lovelace"}}]}},
+                         "children":[{"object":"block","type":"paragraph","paragraph":{"rich_text":[
+                           {"type":"text","text":{"content":"Email: ada@example.test"}}]}}]}
+                        """))
+                .andRespond(jsonSuccess("{\"id\":\"new-notion-page\"}"));
+
+        assertEquals(new Participant("new-notion-page", "Ada Lovelace", "ada@example.test"),
+                client.adapter().createParticipant("participants-page",
+                        new CreateParticipantCommand("Ada Lovelace", "ada@example.test")));
+        client.server().verify();
+    }
+
+    @Test
+    void notionRateLimitCreateFailureIsRetryableAndSanitized() {
+        TestClient client = client(TOKEN, ROOT_ID);
+        client.server().expect(requestTo("https://api.notion.com/v1/pages"))
+                .andRespond(withStatus(HttpStatusCode.valueOf(429))
+                        .contentType(MediaType.APPLICATION_JSON).body("notion-secret-marker"));
+
+        DocumentProviderException failure = assertThrows(DocumentProviderException.class,
+                () -> client.adapter().createParticipant("participants-page",
+                        new CreateParticipantCommand("Ada", "ada@example.test")));
+
+        assertEquals("DOCUMENT_FAILED", failure.code());
+        assertEquals(502, failure.statusCode());
+        assertEquals(true, failure.retryable());
+        assertFalse(failure.getMessage().contains("notion-secret-marker"));
+        assertEquals(null, failure.getCause());
+        client.server().verify();
+    }
 
     @Test
     void readsExactDirectChildPagesAndIgnoresDatabaseAndOtherBlocks() {

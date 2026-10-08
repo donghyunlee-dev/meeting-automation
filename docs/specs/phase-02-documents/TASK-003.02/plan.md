@@ -10,7 +10,7 @@
 
 ## 변경 대상
 
-Backend Participant Controller, application Service와 request validator, 기존 idempotency 구성요소 연결, Provider adapter 계약 테스트 및 API 문서. 구체적인 코드 파일 경로는 구현 전 모듈 구조에서 확인한다.
+Backend Participant Controller, application Service와 request validator, 생성 요청용 memory idempotency 조정 구성요소, Provider adapter 계약 테스트 및 API 문서. 현재 checkout에는 idempotency 구성요소가 없어 이번 Task에서 도입한다.
 
 ## 소유권과 계약
 
@@ -26,6 +26,6 @@ UI는 이 Task에서 변경하지 않는다. 목록을 제공하는 TASK-003.01 
 
 1. Validator, Controller, Service 및 idempotency 테스트를 실패 우선으로 추가한다.
 2. 요청 정규화와 필드 검증을 구현한다. 잘못된 입력은 Provider를 호출하지 않아야 한다.
-3. Service가 기존 idempotency 저장/조정 구성요소를 사용해 Provider create를 한 번만 실행하도록 연결한다.
-4. `DocumentProvider.createParticipant`와 Adapter가 TASK-003.01의 Page 저장 형식을 사용하도록 계약을 확인한다.
+3. Service가 생성 요청용 memory idempotency 조정 구성요소를 사용해 동일 key의 Provider create를 한 번만 실행하고 최초 결과를 재사용하도록 연결한다.
+4. 단계별 참가자 생성 capability와 두 Adapter가 TASK-003.01의 Page 저장 형식을 사용하도록 계약을 확인한다.
 5. 오류 변환, 중복 재전송/충돌, secret 및 Provider 원문 비노출 테스트를 실행한다.

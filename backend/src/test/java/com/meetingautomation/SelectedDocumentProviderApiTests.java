@@ -2,9 +2,11 @@ package com.meetingautomation;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.header;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.content;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
@@ -66,6 +68,214 @@ class SelectedDocumentProviderApiTests {
                     assertFalse(body.contains(TOKEN));
                     assertFalse(body.contains(ROOT_ID));
                 });
+    }
+
+    @Test
+    void validParticipantCreateReturnsNormalizedResourceAndCreatesNotionPage() throws Exception {
+        mockServer.expect(notionRequest()).andRespond(jsonSuccess(requiredChildren()));
+        mockServer.expect(requestTo("https://api.notion.com/v1/pages"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(header(HttpHeaders.AUTHORIZATION, "Bearer " + TOKEN))
+                .andExpect(header("Notion-Version", "2026-03-11"))
+                .andExpect(content().json("""
+                        {
+                          "parent":{"page_id":"participants-page"},
+                          "properties":{"title":{"title":[{"text":{"content":"Ada Lovelace"}}]}},
+                          "children":[{"object":"block","type":"paragraph","paragraph":{"rich_text":[
+                            {"type":"text","text":{"content":"Email: ada@example.test"}}
+                          ]}}]
+                        }
+                        """))
+                .andRespond(jsonSuccess("{\"id\":\"created-participant-id\"}"));
+
+        mockMvc.perform(post("/api/v1/participants")
+                        .header("Idempotency-Key", "create-participant-1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\" Ada Lovelace \",\"email\":\" ada@example.test \"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.id").value("created-participant-id"))
+                .andExpect(jsonPath("$.data.name").value("Ada Lovelace"))
+                .andExpect(jsonPath("$.data.email").value("ada@example.test"));
+        mockServer.verify();
+    }
+
+    @Test
+    void createdNotionParticipantCanBeReadBackByRosterList() throws Exception {
+        mockServer.expect(notionRequest()).andRespond(jsonSuccess(requiredChildren()));
+        mockServer.expect(requestTo("https://api.notion.com/v1/pages"))
+                .andExpect(method(HttpMethod.POST))
+                .andRespond(jsonSuccess("{\"id\":\"created-roundtrip-id\"}"));
+        mockServer.expect(notionRequest()).andRespond(jsonSuccess(requiredChildren()));
+        mockServer.expect(notionRequestTo("https://api.notion.com/v1/blocks/participants-page/children"))
+                .andRespond(jsonSuccess("{\"has_more\":false,\"next_cursor\":null,\"results\":["
+                        + "{\"id\":\"created-roundtrip-id\",\"type\":\"child_page\","
+                        + "\"child_page\":{\"title\":\"Ada Lovelace\"}}]}"));
+        mockServer.expect(notionRequestTo("https://api.notion.com/v1/blocks/created-roundtrip-id/children"))
+                .andRespond(jsonSuccess("{\"has_more\":false,\"next_cursor\":null,\"results\":["
+                        + "{\"type\":\"paragraph\",\"paragraph\":{\"rich_text\":["
+                        + "{\"plain_text\":\"Email: ada@example.test\"}]}}]}"));
+
+        mockMvc.perform(createParticipantRequest("roundtrip-key", "Ada Lovelace", "ada@example.test"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.id").value("created-roundtrip-id"));
+        mockMvc.perform(get("/api/v1/participants"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[0].id").value("created-roundtrip-id"))
+                .andExpect(jsonPath("$.data.items[0].name").value("Ada Lovelace"))
+                .andExpect(jsonPath("$.data.items[0].email").value("ada@example.test"));
+        mockServer.verify();
+    }
+
+    @Test
+    void normalizedDuplicateRequestReplaysFirstCreateWithoutAnotherProviderCall() throws Exception {
+        mockServer.expect(notionRequest()).andRespond(jsonSuccess(requiredChildren()));
+        mockServer.expect(requestTo("https://api.notion.com/v1/pages"))
+                .andExpect(method(HttpMethod.POST))
+                .andRespond(jsonSuccess("{\"id\":\"created-once\"}"));
+
+        mockMvc.perform(createParticipantRequest("same-key", "Ada", "ada@example.test"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.id").value("created-once"));
+        mockMvc.perform(createParticipantRequest("same-key", " Ada ", " ada@example.test "))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.id").value("created-once"));
+        mockServer.verify();
+    }
+
+    @Test
+    void sameKeyWithDifferentNormalizedPayloadReturnsConflictWithoutCreatingAgain() throws Exception {
+        mockServer.expect(notionRequest()).andRespond(jsonSuccess(requiredChildren()));
+        mockServer.expect(requestTo("https://api.notion.com/v1/pages"))
+                .andExpect(method(HttpMethod.POST))
+                .andRespond(jsonSuccess("{\"id\":\"created-once\"}"));
+
+        mockMvc.perform(createParticipantRequest("different-payload-key", "Ada", "ada@example.test"))
+                .andExpect(status().isCreated());
+        mockMvc.perform(createParticipantRequest("different-payload-key", "Grace", "grace@example.test"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error.code").value("IDEMPOTENCY_KEY_CONFLICT"))
+                .andExpect(jsonPath("$.error.retryable").value(false));
+        mockServer.verify();
+    }
+
+    @Test
+    void invalidCreateFieldsAreRejectedBeforeProviderCalls() throws Exception {
+        mockMvc.perform(post("/api/v1/participants").header("Idempotency-Key", "invalid-name")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"  \",\"email\":\"ada@example.test\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("VALIDATION_FAILED"));
+        mockMvc.perform(post("/api/v1/participants").header("Idempotency-Key", "invalid-email")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Ada\",\"email\":\"not-an-email\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("VALIDATION_FAILED"));
+        mockMvc.perform(post("/api/v1/participants").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Ada\",\"email\":\"ada@example.test\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("VALIDATION_FAILED"));
+        mockServer.verify();
+    }
+
+    @Test
+    void missingParticipantStructureReturns422BeforeCreate() throws Exception {
+        mockServer.expect(notionRequest()).andRespond(jsonSuccess(
+                "{\"has_more\":false,\"next_cursor\":null,\"results\":[]}"));
+
+        mockMvc.perform(createParticipantRequest("missing-structure", "Ada", "ada@example.test"))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.error.code").value("DOCUMENT_STRUCTURE_NOT_FOUND"));
+        mockServer.verify();
+    }
+
+    @Test
+    void transientStructurePreflightFailureIsRetryableAndDoesNotAttemptCreate() throws Exception {
+        mockServer.expect(notionRequest())
+                .andRespond(withStatus(HttpStatus.SERVICE_UNAVAILABLE)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .body("{\"message\":\"provider-secret-marker\"}"));
+
+        mockMvc.perform(createParticipantRequest("preflight-transient-key", "Ada", "ada@example.test"))
+                .andExpect(status().isBadGateway())
+                .andExpect(jsonPath("$.error.code").value("DOCUMENT_FAILED"))
+                .andExpect(jsonPath("$.error.category").value("DOCUMENT_FAILURE"))
+                .andExpect(jsonPath("$.error.retryable").value(true))
+                .andExpect(result -> assertFalse(result.getResponse().getContentAsString()
+                        .contains("provider-secret-marker")));
+        mockServer.verify();
+    }
+
+    @Test
+    void uncertainCreateFailureIsCachedAndNeverRetriedForSameKey() throws Exception {
+        mockServer.expect(notionRequest()).andRespond(jsonSuccess(requiredChildren()));
+        mockServer.expect(requestTo("https://api.notion.com/v1/pages"))
+                .andExpect(method(HttpMethod.POST))
+                .andRespond(request -> { throw new java.io.IOException("uncertain-create-secret"); });
+
+        mockMvc.perform(createParticipantRequest("uncertain-key", "Ada", "ada@example.test"))
+                .andExpect(status().isBadGateway())
+                .andExpect(jsonPath("$.error.code").value("DOCUMENT_FAILED"))
+                .andExpect(jsonPath("$.error.retryable").value(false));
+        mockMvc.perform(createParticipantRequest("uncertain-key", "Ada", "ada@example.test"))
+                .andExpect(status().isBadGateway())
+                .andExpect(jsonPath("$.error.code").value("DOCUMENT_FAILED"))
+                .andExpect(result -> assertFalse(result.getResponse().getContentAsString()
+                        .contains("uncertain-create-secret")));
+        mockServer.verify();
+    }
+
+    @Test
+    void rateLimitedCreateReturnsRetryableDocumentFailureAndReplaysSameOutcome() throws Exception {
+        mockServer.expect(notionRequest()).andRespond(jsonSuccess(requiredChildren()));
+        mockServer.expect(requestTo("https://api.notion.com/v1/pages"))
+                .andExpect(method(HttpMethod.POST))
+                .andRespond(withStatus(HttpStatus.TOO_MANY_REQUESTS)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .body("{\"message\":\"" + TOKEN + " rate-limit-marker\"}"));
+
+        mockMvc.perform(createParticipantRequest("rate-limited-key", "Ada", "ada@example.test"))
+                .andExpect(status().isBadGateway())
+                .andExpect(jsonPath("$.error.code").value("DOCUMENT_FAILED"))
+                .andExpect(jsonPath("$.error.category").value("DOCUMENT_FAILURE"))
+                .andExpect(jsonPath("$.error.retryable").value(true))
+                .andExpect(result -> {
+                    String body = result.getResponse().getContentAsString();
+                    assertFalse(body.contains(TOKEN));
+                    assertFalse(body.contains("rate-limit-marker"));
+                });
+        mockMvc.perform(createParticipantRequest("rate-limited-key", "Ada", "ada@example.test"))
+                .andExpect(status().isBadGateway())
+                .andExpect(jsonPath("$.error.retryable").value(true));
+        mockServer.verify();
+    }
+
+    @Test
+    void permanentCreateFailureIsNonRetryable() throws Exception {
+        mockServer.expect(notionRequest()).andRespond(jsonSuccess(requiredChildren()));
+        mockServer.expect(requestTo("https://api.notion.com/v1/pages"))
+                .andExpect(method(HttpMethod.POST))
+                .andRespond(withStatus(HttpStatus.FORBIDDEN)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .body("{\"message\":\"" + TOKEN + " permission-marker\"}"));
+
+        mockMvc.perform(createParticipantRequest("permanent-create-key", "Ada", "ada@example.test"))
+                .andExpect(status().isBadGateway())
+                .andExpect(jsonPath("$.error.code").value("DOCUMENT_FAILED"))
+                .andExpect(jsonPath("$.error.retryable").value(false))
+                .andExpect(result -> {
+                    String body = result.getResponse().getContentAsString();
+                    assertFalse(body.contains(TOKEN));
+                    assertFalse(body.contains("permission-marker"));
+                });
+        mockServer.verify();
+    }
+
+    private static org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder createParticipantRequest(
+            String idempotencyKey, String name, String email) {
+        return post("/api/v1/participants")
+                .header("Idempotency-Key", idempotencyKey)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"name\":\"" + name + "\",\"email\":\"" + email + "\"}");
     }
 
     @Test
