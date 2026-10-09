@@ -35,15 +35,35 @@ class MeetingAutomationApplicationTests {
     void appConfigExposesOnlyUnselectedDocumentProviderAndConfigured() throws Exception {
         mockMvc.perform(get("/api/v1/app-config"))
                 .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.company.id").value("sfood"))
+                .andExpect(jsonPath("$.data.company.name").value("SFOOD"))
+                .andExpect(jsonPath("$.data.company.timezone").value("Asia/Seoul"))
                 .andExpect(jsonPath("$.data.document.provider").value(org.hamcrest.Matchers.nullValue()))
                 .andExpect(jsonPath("$.data.document.configured").value(false))
+                .andExpect(jsonPath("$.data.email.enabled").value(false))
+                .andExpect(jsonPath("$.data.email.configured").value(false))
                 .andExpect(jsonPath("$.data.notification.provider").value("SLACK"))
                 .andExpect(jsonPath("$.data.notification.enabled").value(true))
+                .andExpect(jsonPath("$.data.recording.chunkDurationSeconds").value(15))
+                .andExpect(jsonPath("$.data.recording.maxMeetingDurationMinutes").value(60))
                 .andExpect(result -> {
                     String body = result.getResponse().getContentAsString();
                     org.junit.jupiter.api.Assertions.assertFalse(body.contains("NOTION_TOKEN"));
                     org.junit.jupiter.api.Assertions.assertFalse(body.contains("DOCUMENT_ROOT_ID"));
                 });
+    }
+
+    @Test
+    void templatesEndpointReturnsRequiredStaticTemplateMetadataInOrder() throws Exception {
+        mockMvc.perform(get("/api/v1/templates"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items.length()").value(2))
+                .andExpect(jsonPath("$.data.items[0].id").value("default.md"))
+                .andExpect(jsonPath("$.data.items[0].name").value("기본 회의록"))
+                .andExpect(jsonPath("$.data.items[0].version").value("1.0.0"))
+                .andExpect(jsonPath("$.data.items[1].id").value("project.md"))
+                .andExpect(jsonPath("$.data.items[1].name").value("프로젝트 회의"))
+                .andExpect(jsonPath("$.data.items[1].version").value("1.0.0"));
     }
 
     @Test
