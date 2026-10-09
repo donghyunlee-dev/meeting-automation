@@ -26,4 +26,6 @@ Backend configuration properties/value objects, App Config Controller/Service/DT
 5. 공통 예외 처리와 Secret/stack trace 비노출을 확인한다.
 6. `./gradlew test`, `./gradlew clean build`와 문서 응답 비교를 수행한다.
 
+The repository's wrapper-validation workflow verifies the Gradle Wrapper JAR but does not execute backend tests. A dedicated backend validation workflow runs these same test and build commands on pull requests that change backend files. If the local executor cannot start Gradle, use the exact-head GitHub Actions result as the independent test/build evidence; do not report an unstarted local command as passed.
+
 API가 `SCR-002` 입력 선택과 Settings 연결 안내의 안정된 공통 응답을 제공하므로 Backend API/DTO를 먼저 구현한다.

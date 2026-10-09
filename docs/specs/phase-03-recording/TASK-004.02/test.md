@@ -14,7 +14,7 @@
 | API-002-02 | 한 required resource 누락/읽기 실패 | 부분 응답 대신 HTTP 500 `INTERNAL_ERROR` | Resource/error test |
 | API-002-03 | config/templates endpoint 호출 | Document Provider와 외부 서비스 호출 없음 | Mock verification |
 
-구현 후 `./gradlew test`, `./gradlew clean build`를 실행한다. 설계 문서 작성 중에는 실행하지 않는다.
+구현 후 `./gradlew test`, `./gradlew clean build`를 실행하고 PR의 Backend Validation workflow에서 같은 명령의 exact-head 결과를 확인한다. 설계 문서 작성 중에는 실행하지 않는다. 로컬 Gradle 초기화가 실행 환경 제한으로 실패하면 성공으로 간주하지 않고, PR CI의 해당 head 결과를 테스트/build 증거로 사용한다.
 
 ## 수동 QA
 
