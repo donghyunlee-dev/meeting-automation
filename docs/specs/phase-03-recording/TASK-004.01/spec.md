@@ -7,9 +7,11 @@ React Router 앱의 Home shell을 제공하고 주요 CTA에서 New Meeting 화�
 ## 범위
 
 - `/` Home route와 기본 화면 shell
+- 현재 앱에 없는 React Router와 공유 App shell/Bottom Navigation 연결
 - 제목 `Meeting Automation`, SCR-001 안내 문구, `새 회의 시작` Primary button
 - 하단 navigation
 - 클릭 시 `/meetings/new`로 React Router 이동
+- 기존 TASK-003.04 Participants 화면을 Settings 하위 `/settings/participants`에서 계속 사용할 수 있도록 route 연결
 - component/router automated tests
 
 ## 비범위
@@ -24,12 +26,13 @@ React Router 앱의 Home shell을 제공하고 주요 CTA에서 New Meeting 화�
 - 주요 CTA: `새 회의 시작`
 - 최소 360 CSS px viewport에서 가로 overflow 없이 표시하고 기존 UI 접근성 토큰을 따른다.
 
-CTA는 링크 의미의 접근 가능한 이름을 제공하고 router navigation을 사용한다. 전체 화면 navigation은 기존 app shell과 Bottom Navigation 구성을 따른다.
+CTA는 링크 의미의 접근 가능한 이름을 제공하고 router navigation을 사용한다. 현재 코드에는 Router와 Bottom Navigation이 없으므로 PRD/UI Design의 세 항목(홈, 회의록, 설정)으로 새 공유 shell을 구성한다. 기존 Participants 화면은 Settings 하위 경로에 연결해 Home 추가로 접근성을 잃지 않게 한다. `/meetings/new` 페이지 본문과 Meetings 목록은 후속 task 범위다. CTA 이동 테스트에서는 목적 경로 fixture를 사용한다.
 
 ## 수용 기준
 
 - `/` 진입 시 제목, 안내 문구, Primary CTA가 렌더링된다.
 - CTA는 `/meetings/new`로 이동한다.
 - Bottom Navigation이 기본 UI 설계와 일치한다.
+- 기존 Participants 화면은 `/settings/participants`에서 계속 접근 가능하다.
 - component 및 router 테스트가 렌더링과 이동을 확인한다.
 - 화면이 360px viewport에서 가로로 넘치지 않고 CTA에 접근 가능한 이름이 있다.
