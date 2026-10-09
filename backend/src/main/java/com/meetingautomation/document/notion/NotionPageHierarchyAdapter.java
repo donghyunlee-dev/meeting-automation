@@ -229,6 +229,9 @@ public final class NotionPageHierarchyAdapter implements ParticipantCreationProv
                             }
                         });
             } catch (NotionApiFailure failure) {
+                if (failure.statusCode() == 404) {
+                    throw DocumentProviderException.participantNotFound();
+                }
                 throw DocumentProviderException.documentFailed(
                         isParticipantRetryable(failure.statusCode()), failure);
             } catch (RestClientException transportFailure) {
@@ -291,11 +294,18 @@ public final class NotionPageHierarchyAdapter implements ParticipantCreationProv
                     .body(json)
                     .exchange((request, response) -> {
                         if (HttpStatusCode.valueOf(response.getStatusCode().value()).isError()) {
+                            if (page && response.getStatusCode().value() == 404) {
+                                throw DocumentProviderException.participantNotFound();
+                            }
                             throw new NotionApiFailure(true, response.getStatusCode().value());
                         }
                         return null;
                     });
         } catch (Exception mutationFailure) {
+            if (mutationFailure instanceof DocumentProviderException providerFailure
+                    && "PARTICIPANT_NOT_FOUND".equals(providerFailure.code())) {
+                throw providerFailure;
+            }
             throw DocumentProviderException.documentFailed(false, mutationFailure);
         }
     }

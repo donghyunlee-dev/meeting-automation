@@ -231,6 +231,9 @@ public final class ConfluencePageHierarchyAdapter implements ParticipantCreation
             try {
                 page = parseBody(get(pageUri));
             } catch (ConfluenceApiFailure readFailure) {
+                if (readFailure.statusCode() == 404) {
+                    throw DocumentProviderException.participantNotFound();
+                }
                 throw DocumentProviderException.documentFailed(isParticipantRetryable(readFailure.statusCode()),
                         readFailure);
             }
@@ -276,6 +279,14 @@ public final class ConfluencePageHierarchyAdapter implements ParticipantCreation
                         return null;
                     });
         } catch (Exception mutationFailure) {
+            if (mutationFailure instanceof ConfluenceApiFailure providerFailure
+                    && providerFailure.statusCode() == 404) {
+                throw DocumentProviderException.participantNotFound();
+            }
+            if (mutationFailure instanceof DocumentProviderException providerFailure
+                    && "PARTICIPANT_NOT_FOUND".equals(providerFailure.code())) {
+                throw providerFailure;
+            }
             // Any failure after a mutation request begins has an unknown outcome; never advise blind retries.
             throw DocumentProviderException.documentFailed(false, mutationFailure);
         }

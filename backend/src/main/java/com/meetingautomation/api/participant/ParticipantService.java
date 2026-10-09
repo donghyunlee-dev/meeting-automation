@@ -116,7 +116,8 @@ public final class ParticipantService {
             }
             return updated;
         } catch (DocumentProviderException failure) {
-            if ("DOCUMENT_FAILED".equals(failure.code())) {
+            if ("DOCUMENT_FAILED".equals(failure.code())
+                    || "PARTICIPANT_NOT_FOUND".equals(failure.code())) {
                 throw failure;
             }
             throw DocumentProviderException.documentFailed(failure.retryable(), failure);

@@ -331,6 +331,29 @@ class SelectedDocumentProviderApiTests {
     }
 
     @Test
+    void participantDeletedAfterRosterReadReturnsSafeNotFoundWithoutMutation() throws Exception {
+        mockServer.expect(notionRequest()).andRespond(jsonSuccess(requiredChildren()));
+        mockServer.expect(notionRequestTo("https://api.notion.com/v1/blocks/participants-page/children"))
+                .andRespond(jsonSuccess(participantChildPage()));
+        mockServer.expect(notionRequestTo("https://api.notion.com/v1/blocks/person-page-id/children"))
+                .andRespond(jsonSuccess(participantText("Email: old@example.test")));
+        mockServer.expect(notionRequestTo("https://api.notion.com/v1/blocks/person-page-id/children"))
+                .andRespond(withStatus(HttpStatus.NOT_FOUND).contentType(MediaType.APPLICATION_JSON)
+                        .body("{\"message\":\"notion-page-secret-marker\"}"));
+
+        mockMvc.perform(patch("/api/v1/participants/person-page-id")
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"email\":\"new@example.test\"}"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error.code").value("PARTICIPANT_NOT_FOUND"))
+                .andExpect(result -> {
+                    String response = result.getResponse().getContentAsString();
+                    assertFalse(response.contains("notion-page-secret-marker"));
+                    assertFalse(response.contains(TOKEN));
+                });
+        mockServer.verify();
+    }
+
+    @Test
     void invalidParticipantPatchBodiesAreRejectedBeforeProviderCalls() throws Exception {
         mockMvc.perform(patch("/api/v1/participants/person-page-id")
                         .contentType(MediaType.APPLICATION_JSON).content(""))

@@ -103,6 +103,27 @@ class NotionPageHierarchyAdapterTests extends com.meetingautomation.document.Doc
     }
 
     @Test
+    void missingNotionTargetOnPageMutationReturnsParticipantNotFound() {
+        TestClient client = client(TOKEN, ROOT_ID);
+        client.server().expect(requestTo("https://api.notion.com/v1/pages/person-page"))
+                .andExpect(method(HttpMethod.PATCH))
+                .andRespond(withStatus(HttpStatusCode.valueOf(404)).contentType(MediaType.APPLICATION_JSON)
+                        .body("{\"message\":\"notion-page-secret-marker\"}"));
+
+        DocumentProviderException failure = assertThrows(DocumentProviderException.class,
+                () -> client.adapter().updateParticipant("person-page", new ParticipantUpdateCommand(
+                        "Grace Hopper", null,
+                        new Participant("person-page", "Ada Lovelace", "ada@example.test"))));
+
+        assertEquals("PARTICIPANT_NOT_FOUND", failure.code());
+        assertEquals(404, failure.statusCode());
+        assertFalse(failure.retryable());
+        assertFalse(failure.getMessage().contains("notion-page-secret-marker"));
+        assertEquals(null, failure.getCause());
+        client.server().verify();
+    }
+
+    @Test
     void notionRateLimitCreateFailureIsRetryableAndSanitized() {
         TestClient client = client(TOKEN, ROOT_ID);
         client.server().expect(requestTo("https://api.notion.com/v1/pages"))

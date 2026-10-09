@@ -132,6 +132,36 @@ class ConfluencePageHierarchyAdapterTests extends com.meetingautomation.document
     }
 
     @Test
+    void targetDeletedAfterRosterReadReturnsSafeNotFoundWithoutAnotherWrite() {
+        TestClient client = client(BASE_URL, EMAIL, TOKEN, ROOT_ID);
+        String participantsUri = BASE_URL + "/wiki/api/v2/pages/participants-id/direct-children?limit=100";
+        String pageUri = BASE_URL + "/wiki/api/v2/pages/888?body-format=storage";
+        client.server().expect(confluenceRequest(participantsUri))
+                .andRespond(jsonSuccess(children(page("888", "Ada Lovelace"))));
+        client.server().expect(confluenceRequest(pageUri)).andRespond(jsonSuccess(
+                "{\"body\":{\"storage\":{\"value\":\"<p>Email: ada@example.test</p>\"}}}"));
+        client.server().expect(request -> {
+            requestTo(BASE_URL + "/wiki/api/v2/pages/888/title").match(request);
+            method(HttpMethod.PUT).match(request);
+        }).andRespond(withStatus(HttpStatusCode.valueOf(404)).contentType(MediaType.APPLICATION_JSON)
+                .body("{\"message\":\"confluence-page-secret-marker\"}"));
+
+        assertEquals(java.util.List.of(new Participant("888", "Ada Lovelace", "ada@example.test")),
+                client.adapter().listParticipants("participants-id"));
+        DocumentProviderException failure = assertThrows(DocumentProviderException.class,
+                () -> client.adapter().updateParticipant("888", new ParticipantUpdateCommand(
+                        "Grace Hopper", null,
+                        new Participant("888", "Ada Lovelace", "ada@example.test"))));
+
+        assertEquals("PARTICIPANT_NOT_FOUND", failure.code());
+        assertEquals(404, failure.statusCode());
+        assertFalse(failure.retryable());
+        assertFalse(failure.getMessage().contains("confluence-page-secret-marker"));
+        assertEquals(null, failure.getCause());
+        client.server().verify();
+    }
+
+    @Test
     void updatesConfluenceEmailWithVersionIncrementAndPreservesOtherStorageContent() {
         TestClient client = client(BASE_URL, EMAIL, TOKEN, ROOT_ID);
         String pageUri = BASE_URL + "/wiki/api/v2/pages/888?body-format=storage";
