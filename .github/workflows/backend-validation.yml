@@ -40,6 +40,15 @@ jobs:
         working-directory: backend
         run: ./gradlew test
 
+      - name: Publish test reports for diagnosis
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: backend-test-reports
+          path: backend/build/test-results/test
+          if-no-files-found: ignore
+          retention-days: 1
+
       - name: Build backend
         working-directory: backend
         run: ./gradlew clean build
