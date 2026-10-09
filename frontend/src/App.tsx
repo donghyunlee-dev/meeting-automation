@@ -9,6 +9,7 @@ import {
 } from './participantsApi';
 import './app.css';
 import { Link, NavLink, Route, Routes } from 'react-router';
+import { NewMeetingPage, type NewMeetingPayload } from './NewMeetingPage';
 
 type ViewState = 'loading' | 'ready' | 'error';
 type FormState = { mode: 'create' } | { mode: 'edit'; participant: Participant };
@@ -311,11 +312,12 @@ function BottomNavigation() {
   );
 }
 
-export function App() {
+export function App({ onNewMeetingSubmit = () => undefined }: { onNewMeetingSubmit?: (payload: NewMeetingPayload) => void } = {}) {
   return (
     <div className="app-shell">
       <Routes>
         <Route path="/" element={<HomePage />} />
+        <Route path="/meetings/new" element={<NewMeetingPage onSubmit={onNewMeetingSubmit} />} />
         <Route path="/settings/participants" element={<ParticipantsPage />} />
         <Route path="*" element={<FutureRouteNotice />} />
       </Routes>
