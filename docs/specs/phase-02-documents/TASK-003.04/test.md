@@ -17,7 +17,7 @@
 | SCR-012-11 | 수정 400/404/502 오류 | 오류 종류에 맞는 안전한 복구 안내, 폼 값 유지 | Component/API mock test |
 | SCR-012-12 | viewport/keyboard 검사 | 44×44px target, visible focus, label/error association, 모바일 overflow 없음 | DOM/accessibility 및 browser QA |
 
-현재 앱이 존재하지 않아 검증 명령은 구현 시 확정한다. 프로젝트에 test/build script가 없으면 이 Task에서 설정한 뒤 해당 script를 실행하고 증거를 남긴다.
+현재 프론트엔드는 `frontend/`의 React/Vite/TypeScript/Vitest 앱이며 `test`, `lint`, `build` scripts가 이미 설정되어 있다. frontend/package.json의 지원 Node engine을 사용하고 `npm test`, `npm run lint`, `npm run build`를 실행한다. 새 toolchain이나 중복 scripts를 만들지 않는다.
 
 ## 수동 QA
 
