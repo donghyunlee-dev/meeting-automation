@@ -15,7 +15,21 @@ body { min-width: 320px; min-height: 100vh; margin: 0; }
 button, input { font: inherit; }
 button { cursor: pointer; }
 button:disabled { cursor: not-allowed; opacity: .6; }
-.app-shell { min-height: 100vh; }
+.app-shell { min-height: 100vh; padding-bottom: calc(74px + env(safe-area-inset-bottom)); }
+.home-page { display: grid; min-height: calc(100vh - 74px - env(safe-area-inset-bottom)); place-items: center; padding: 48px 24px; }
+.home-content { width: min(100%, 620px); text-align: center; }
+.home-content h1 { margin: 10px 0 44px; color: #182230; font-size: clamp(28px, 7vw, 42px); letter-spacing: -.045em; }
+.home-message { margin-bottom: 30px; }
+.home-message h2 { margin: 0 0 10px; color: #253044; font-size: clamp(23px, 5vw, 30px); letter-spacing: -.035em; }
+.home-message p { margin: 0; color: #697586; font-size: 15px; line-height: 1.65; }
+.home-cta { min-height: 52px; padding: 0 24px; text-decoration: none; font-size: 15px; }
+.future-page { max-width: 920px; margin: 0 auto; padding: 64px 24px; }
+.future-page h1 { color: #182230; }
+.future-page p { color: #697586; }
+.bottom-navigation { position: fixed; z-index: 5; right: 0; bottom: 0; left: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); min-height: calc(68px + env(safe-area-inset-bottom)); padding: 4px 12px env(safe-area-inset-bottom); border-top: 1px solid #e8ebef; background: #fff; }
+.bottom-navigation a { display: flex; min-width: 0; min-height: 60px; flex-direction: column; align-items: center; justify-content: center; gap: 2px; border-radius: 10px; color: #737f90; text-decoration: none; font-size: 11px; font-weight: 600; }
+.bottom-navigation a span { font-size: 21px; line-height: 1.1; }
+.bottom-navigation a[aria-current='page'] { color: #5267d9; }
 .topbar { display: flex; align-items: center; gap: 13px; height: 76px; padding: 0 max(24px, calc((100vw - 1120px) / 2)); background: #fff; border-bottom: 1px solid #e8ebef; }
 .brand { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 12px; color: white; background: #5267d9; text-decoration: none; font-weight: 700; }
 .topbar h1 { margin: 1px 0 0; font-size: 17px; line-height: 1.2; font-weight: 650; }
@@ -103,4 +117,6 @@ button:disabled { cursor: not-allowed; opacity: .6; }
   .participant-info p { font-size: 11px; }
   .edit-button { min-width: 52px; padding: 0 8px; }
   .participant-form-panel { padding: 22px 20px 20px; }
+  .home-page { padding: 36px 20px; }
+  .home-content h1 { margin-bottom: 36px; }
 }

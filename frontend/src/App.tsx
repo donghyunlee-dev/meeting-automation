@@ -8,6 +8,7 @@ import {
   updateParticipant,
 } from './participantsApi';
 import './app.css';
+import { Link, NavLink, Route, Routes } from 'react-router';
 
 type ViewState = 'loading' | 'ready' | 'error';
 type FormState = { mode: 'create' } | { mode: 'edit'; participant: Participant };
@@ -35,7 +36,7 @@ function createKey(): string {
   return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
-export function App() {
+function ParticipantsPage() {
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [viewState, setViewState] = useState<ViewState>('loading');
   const [listError, setListError] = useState('');
@@ -209,9 +210,9 @@ export function App() {
   }
 
   return (
-    <main className="app-shell">
+    <>
       <header className="topbar">
-        <a className="brand" href="#participants" aria-label="Meeting Automation 홈">M</a>
+        <Link className="brand" to="/" aria-label="Meeting Automation 홈">M</Link>
         <div>
           <p className="eyebrow">MEETING AUTOMATION</p>
           <h1>설정</h1>
@@ -276,6 +277,49 @@ export function App() {
           </section>
         </div>}
       </section>
+    </>
+  );
+}
+
+function HomePage() {
+  return (
+    <main className="home-page">
+      <div className="home-content">
+        <p className="eyebrow">MEETING AUTOMATION</p>
+        <h1>Meeting Automation</h1>
+        <div className="home-message">
+          <h2>회의를 시작할까요?</h2>
+          <p>회의 내용을 녹음하고 자동으로 정리합니다.</p>
+        </div>
+        <Link className="button button-primary home-cta" to="/meetings/new">새 회의 시작</Link>
+      </div>
     </main>
+  );
+}
+
+function FutureRouteNotice() {
+  return <main className="future-page"><h1>화면 준비 중</h1><p>이 화면은 다음 작업에서 제공됩니다.</p></main>;
+}
+
+function BottomNavigation() {
+  return (
+    <nav className="bottom-navigation" aria-label="주요 메뉴">
+      <NavLink to="/" end aria-label="홈"><span aria-hidden="true">⌂</span>홈</NavLink>
+      <NavLink to="/meetings" aria-label="회의록"><span aria-hidden="true">▤</span>회의록</NavLink>
+      <NavLink to="/settings/participants" aria-label="설정"><span aria-hidden="true">⚙</span>설정</NavLink>
+    </nav>
+  );
+}
+
+export function App() {
+  return (
+    <div className="app-shell">
+      <Routes>
+        <Route path="/" element={<HomePage />} />
+        <Route path="/settings/participants" element={<ParticipantsPage />} />
+        <Route path="*" element={<FutureRouteNotice />} />
+      </Routes>
+      <BottomNavigation />
+    </div>
   );
 }
