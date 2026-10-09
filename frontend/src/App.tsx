@@ -127,6 +127,7 @@ export function App() {
   function handleDialogKeyDown(event: KeyboardEvent<HTMLElement>) {
     if (event.key === 'Escape') {
       event.preventDefault();
+      if (submitting) return;
       closeForm();
       return;
     }

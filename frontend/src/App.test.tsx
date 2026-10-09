@@ -154,6 +154,35 @@ describe('Participants settings', () => {
     expect(document.activeElement).toBe(launcher);
   });
 
+  it('keeps an in-flight create open on Escape and reuses its idempotency key after failure', async () => {
+    let rejectCreate!: (reason: Error) => void;
+    const pendingCreate = new Promise<Response>((_resolve, reject) => { rejectCreate = reject; });
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(response({ data: { items: [] } }))
+      .mockReturnValueOnce(pendingCreate)
+      .mockResolvedValueOnce(response({ data: { id: 'p3', name: 'Lin Chen', email: 'lin@example.com' } }, 201));
+    vi.stubGlobal('fetch', fetchMock);
+    render(<App />);
+    await screen.findByText(/등록된 참석자가 없습니다/);
+    fireEvent.click(screen.getByRole('button', { name: '새 참석자 추가' }));
+    fireEvent.change(screen.getByLabelText('이름'), { target: { value: 'Lin Chen' } });
+    fireEvent.change(screen.getByLabelText('이메일'), { target: { value: 'lin@example.com' } });
+    fireEvent.click(screen.getByRole('button', { name: '저장' }));
+    const dialog = screen.getByRole('dialog');
+    const firstKey = (fetchMock.mock.calls[1][1]?.headers as Record<string, string>)['Idempotency-Key'];
+
+    fireEvent.keyDown(dialog, { key: 'Escape' });
+    expect(screen.getByRole('dialog')).toBeTruthy();
+    expect(screen.getByRole('button', { name: '저장 중…' })).toBeTruthy();
+
+    rejectCreate(new Error('connection lost after request dispatch'));
+    expect((await screen.findByRole('alert')).textContent).toMatch(/저장하지 못했습니다/);
+    fireEvent.click(screen.getByRole('button', { name: '저장' }));
+    await screen.findByText('Lin Chen');
+    const retryKey = (fetchMock.mock.calls[2][1]?.headers as Record<string, string>)['Idempotency-Key'];
+    expect(retryKey).toBe(firstKey);
+  });
+
   it('bounds the sheet to a short viewport and keeps its actions in the scrollable panel', async () => {
     const originalHeight = window.innerHeight;
     try {
