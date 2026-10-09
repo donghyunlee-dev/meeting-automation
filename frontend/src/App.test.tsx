@@ -70,6 +70,7 @@ describe('Participants settings', () => {
     mockList(pending);
     renderParticipantsApp();
 
+    expect(screen.getAllByRole('main')).toHaveLength(1);
     expect(screen.getByRole('status').textContent).toMatch(/불러오는 중/);
     resolve(response({ data: { items: participants } }));
     expect(await screen.findByText('Ada Lovelace')).toBeTruthy();

@@ -210,7 +210,7 @@ function ParticipantsPage() {
   }
 
   return (
-    <>
+    <main className="participants-main">
       <header className="topbar">
         <Link className="brand" to="/" aria-label="Meeting Automation 홈">M</Link>
         <div>
@@ -277,7 +277,7 @@ function ParticipantsPage() {
           </section>
         </div>}
       </section>
-    </>
+    </main>
   );
 }
 
