@@ -67,6 +67,11 @@ class TemplateControllerTests {
                     public boolean exists() {
                         return true;
                     }
+
+                    @Override
+                    public String getDescription() {
+                        return "unreadable template test resource";
+                    }
                 }
                 : new ByteArrayResource("# project".getBytes()));
     }
