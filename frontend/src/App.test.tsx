@@ -127,6 +127,55 @@ describe('Participants settings', () => {
     expect(screen.getByText('ada@example.com')).toBeTruthy();
   });
 
+  it('places focus in the dialog, contains keyboard focus, closes on Escape and restores focus', async () => {
+    mockList(response({ data: { items: participants } }));
+    render(<App />);
+    await screen.findByText('Ada Lovelace');
+    const launcher = screen.getByRole('button', { name: '새 참석자 추가' });
+    launcher.focus();
+    fireEvent.click(launcher);
+
+    const dialog = screen.getByRole('dialog');
+    const nameInput = screen.getByLabelText('이름');
+    const closeButton = screen.getByRole('button', { name: '닫기' });
+    const saveButton = screen.getByRole('button', { name: '저장' });
+    expect(document.activeElement).toBe(nameInput);
+
+    saveButton.focus();
+    fireEvent.keyDown(dialog, { key: 'Tab' });
+    expect(document.activeElement).toBe(closeButton);
+
+    closeButton.focus();
+    fireEvent.keyDown(dialog, { key: 'Tab', shiftKey: true });
+    expect(document.activeElement).toBe(saveButton);
+
+    fireEvent.keyDown(dialog, { key: 'Escape' });
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(document.activeElement).toBe(launcher);
+  });
+
+  it('bounds the sheet to a short viewport and keeps its actions in the scrollable panel', async () => {
+    const originalHeight = window.innerHeight;
+    try {
+      Object.defineProperty(window, 'innerHeight', { configurable: true, value: 640 });
+      mockList(response({ data: { items: participants } }));
+      render(<App />);
+      await screen.findByText('Ada Lovelace');
+      fireEvent.click(screen.getByRole('button', { name: '새 참석자 추가' }));
+
+      const dialog = screen.getByRole('dialog');
+      expect(dialog.style.maxHeight).toContain('616px');
+      expect(dialog.style.overflowY).toBe('auto');
+      Object.defineProperty(window, 'innerHeight', { configurable: true, value: 360 });
+      fireEvent(window, new Event('resize'));
+      await waitFor(() => expect(dialog.style.maxHeight).toContain('336px'));
+      expect(dialog.contains(screen.getByRole('button', { name: '저장' }))).toBe(true);
+      expect(dialog.contains(screen.getByRole('button', { name: '취소' }))).toBe(true);
+    } finally {
+      Object.defineProperty(window, 'innerHeight', { configurable: true, value: originalHeight });
+    }
+  });
+
   it('validates fields and patches only changed values; retains edit values after 404', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(response({ data: { items: participants } }))

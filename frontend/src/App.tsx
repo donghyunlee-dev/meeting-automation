@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import {
   createParticipant,
   listParticipants,
@@ -46,7 +46,11 @@ export function App() {
   const [formError, setFormError] = useState('');
   const [notice, setNotice] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [viewportHeight, setViewportHeight] = useState(() => window.visualViewport?.height ?? window.innerHeight);
   const createAttempt = useRef<{ payload: string; key: string } | null>(null);
+  const dialogRef = useRef<HTMLElement | null>(null);
+  const nameInputRef = useRef<HTMLInputElement | null>(null);
+  const returnFocusRef = useRef<HTMLElement | null>(null);
 
   async function refreshParticipants() {
     setViewState('loading');
@@ -74,13 +78,24 @@ export function App() {
     return () => { mounted = false; };
   }, []);
 
+  useEffect(() => {
+    const updateViewportHeight = () => setViewportHeight(window.visualViewport?.height ?? window.innerHeight);
+    window.addEventListener('resize', updateViewportHeight);
+    window.visualViewport?.addEventListener('resize', updateViewportHeight);
+    return () => {
+      window.removeEventListener('resize', updateViewportHeight);
+      window.visualViewport?.removeEventListener('resize', updateViewportHeight);
+    };
+  }, []);
+
   const filteredParticipants = useMemo(() => {
     const query = search.trim().toLocaleLowerCase();
     if (!query) return participants;
     return participants.filter(({ name, email }) => `${name} ${email}`.toLocaleLowerCase().includes(query));
   }, [participants, search]);
 
-  function openCreate() {
+  function openCreate(trigger: HTMLElement) {
+    returnFocusRef.current = trigger;
     setForm({ mode: 'create' });
     setFields(EMPTY_FIELDS);
     setFieldErrors({});
@@ -88,7 +103,8 @@ export function App() {
     setNotice('');
   }
 
-  function openEdit(participant: Participant) {
+  function openEdit(participant: Participant, trigger: HTMLElement) {
+    returnFocusRef.current = trigger;
     setForm({ mode: 'edit', participant });
     setFields({ name: participant.name, email: participant.email });
     setFieldErrors({});
@@ -101,6 +117,35 @@ export function App() {
     setFormError('');
     setFieldErrors({});
     createAttempt.current = null;
+    returnFocusRef.current?.focus();
+  }
+
+  useLayoutEffect(() => {
+    if (form) nameInputRef.current?.focus();
+  }, [form]);
+
+  function handleDialogKeyDown(event: KeyboardEvent<HTMLElement>) {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      closeForm();
+      return;
+    }
+    if (event.key !== 'Tab') return;
+
+    const focusable = dialogRef.current?.querySelectorAll<HTMLElement>(
+      'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    );
+    if (!focusable?.length) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    const active = document.activeElement;
+    if (event.shiftKey && (active === first || !dialogRef.current?.contains(active))) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && (active === last || !dialogRef.current?.contains(active))) {
+      event.preventDefault();
+      first.focus();
+    }
   }
 
   function changeField(field: ParticipantField, value: string) {
@@ -183,7 +228,7 @@ export function App() {
             <h2 id="page-title">참석자</h2>
             <p className="page-description">회의에서 사용할 참석자 정보를 관리합니다.</p>
           </div>
-          <button className="button button-primary add-button" type="button" aria-label="새 참석자 추가" onClick={openCreate}>
+          <button className="button button-primary add-button" type="button" aria-label="새 참석자 추가" onClick={(event) => openCreate(event.currentTarget)}>
             <span aria-hidden="true">＋</span> 참석자 추가
           </button>
         </div>
@@ -194,7 +239,7 @@ export function App() {
 
         {viewState === 'error' && <div className="state-card error-card" role="alert"><p>{listError}</p><button className="button button-secondary" type="button" onClick={() => void refreshParticipants()}>다시 시도</button></div>}
 
-        {viewState === 'ready' && participants.length === 0 && <div className="state-card empty-card"><div className="empty-icon" aria-hidden="true">◎</div><h3>등록된 참석자가 없습니다</h3><p>참석자를 추가하면 회의에서 선택할 수 있습니다.</p><button className="button button-primary" type="button" onClick={openCreate}>참석자 추가</button></div>}
+        {viewState === 'ready' && participants.length === 0 && <div className="state-card empty-card"><div className="empty-icon" aria-hidden="true">◎</div><h3>등록된 참석자가 없습니다</h3><p>참석자를 추가하면 회의에서 선택할 수 있습니다.</p><button className="button button-primary" type="button" onClick={(event) => openCreate(event.currentTarget)}>참석자 추가</button></div>}
 
         {viewState === 'ready' && participants.length > 0 && <>
           <label className="search-field">
@@ -210,18 +255,18 @@ export function App() {
               {filteredParticipants.map((participant) => <article className="participant-card" key={participant.id} aria-label={`${participant.name} ${participant.email}`}>
                 <div className="avatar" aria-hidden="true">{participant.name.trim().charAt(0).toLocaleUpperCase()}</div>
                 <div className="participant-info"><h4>{participant.name}</h4><p>{participant.email}</p></div>
-                <button className="button button-secondary edit-button" type="button" aria-label="수정" onClick={() => openEdit(participant)}>수정</button>
+                <button className="button button-secondary edit-button" type="button" aria-label="수정" onClick={(event) => openEdit(participant, event.currentTarget)}>수정</button>
               </article>)}
             </div>
           </>}
         </>}
 
         {form && <div className="form-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !submitting) closeForm(); }}>
-          <section className="participant-form-panel" role="dialog" aria-modal="true" aria-labelledby="form-title">
+          <section ref={dialogRef} className="participant-form-panel" role="dialog" aria-modal="true" aria-labelledby="form-title" onKeyDown={handleDialogKeyDown} style={{ maxHeight: `calc(${viewportHeight}px - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 24px)`, overflowY: 'auto' }}>
             <div className="form-heading"><div><p className="eyebrow">PARTICIPANT</p><h3 id="form-title">{form.mode === 'create' ? '참석자 추가' : '참석자 수정'}</h3></div><button type="button" className="icon-button" aria-label="닫기" onClick={closeForm} disabled={submitting}>×</button></div>
             <p className="form-description">이름과 이메일 정보를 입력해 주세요.</p>
             <form onSubmit={(event) => void handleSubmit(event)} noValidate>
-              <div className="form-field"><label htmlFor="participant-name">이름</label><input id="participant-name" autoComplete="name" value={fields.name} onChange={(event) => changeField('name', event.target.value)} aria-invalid={Boolean(fieldErrors.name)} aria-describedby={fieldErrors.name ? 'name-error' : undefined} />{fieldErrors.name && <p className="field-error" id="name-error">{fieldMessage('name', fieldErrors.name)}</p>}</div>
+              <div className="form-field"><label htmlFor="participant-name">이름</label><input ref={nameInputRef} id="participant-name" autoComplete="name" value={fields.name} onChange={(event) => changeField('name', event.target.value)} aria-invalid={Boolean(fieldErrors.name)} aria-describedby={fieldErrors.name ? 'name-error' : undefined} />{fieldErrors.name && <p className="field-error" id="name-error">{fieldMessage('name', fieldErrors.name)}</p>}</div>
               <div className="form-field"><label htmlFor="participant-email">이메일</label><input id="participant-email" type="email" autoComplete="email" value={fields.email} onChange={(event) => changeField('email', event.target.value)} aria-invalid={Boolean(fieldErrors.email)} aria-describedby={fieldErrors.email ? 'email-error' : undefined} />{fieldErrors.email && <p className="field-error" id="email-error">{fieldMessage('email', fieldErrors.email)}</p>}</div>
               {formError && <p className="form-error" role="alert">{formError}</p>}
               {formError.includes('새로고침') && <button className="button button-secondary refresh-button" type="button" onClick={() => void refreshParticipants()}>목록 새로고침</button>}

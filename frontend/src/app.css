@@ -64,7 +64,10 @@ button:disabled { cursor: not-allowed; opacity: .6; }
 .participant-info p { overflow: hidden; margin: 0; color: #818c9c; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 .edit-button { min-width: 62px; padding: 0 13px; }
 .form-backdrop { position: fixed; z-index: 10; inset: 0; display: flex; align-items: flex-end; justify-content: center; background: #18223070; }
-.participant-form-panel { width: min(100%, 520px); border: 1px solid #edf0f4; border-bottom: 0; border-radius: 20px 20px 0 0; padding: 27px 30px 30px; background: #fff; box-shadow: 0 -10px 40px #1018281c; animation: rise .2s ease-out; }
+.participant-form-panel { width: min(100%, 520px); max-height: calc(100vh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 24px); overflow-y: auto; overscroll-behavior: contain; border: 1px solid #edf0f4; border-bottom: 0; border-radius: 20px 20px 0 0; padding: 27px 30px max(30px, env(safe-area-inset-bottom)); background: #fff; box-shadow: 0 -10px 40px #1018281c; animation: rise .2s ease-out; }
+@supports (height: 100dvh) {
+  .participant-form-panel { max-height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 24px); }
+}
 @keyframes rise { from { transform: translateY(20px); opacity: .7; } to { transform: translateY(0); opacity: 1; } }
 .form-heading { display: flex; align-items: center; justify-content: space-between; }
 .form-heading h3 { margin: 5px 0 0; color: #202b3b; font-size: 21px; letter-spacing: -.025em; }
