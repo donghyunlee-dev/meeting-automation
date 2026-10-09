@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { NewMeetingPage, type NewMeetingPayload } from './NewMeetingPage';
+import { MeetingParticipantSelector } from './MeetingParticipantSelector';
 
 const templates = [
   { id: 'default.md', name: '기본 회의록', version: '1.0.0' },
@@ -40,7 +41,32 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+function participantSelector(isDisabled: boolean) {
+  return <MeetingParticipantSelector
+    participants={participants}
+    selectedIds={['p1']}
+    isDisabled={isDisabled}
+    isReady
+    pickerOpen
+    onTogglePicker={() => undefined}
+    onToggleParticipant={() => undefined}
+  />;
+}
+
 describe('New Meeting input and selection', () => {
+  it('locks selected-item removal and participant changes during retry, preserving selection', () => {
+    const view = render(participantSelector(true));
+    const removeButton = screen.getByRole('button', { name: 'Ada Lovelace 선택 해제' });
+    const adaCheckbox = screen.getByRole('checkbox', { name: 'Ada Lovelace ada@example.com' });
+    const pickerToggle = screen.getByRole('button', { name: '참석자 선택 닫기' });
+    expect(removeButton).toHaveProperty('disabled', true);
+    expect(adaCheckbox).toHaveProperty('disabled', true);
+    expect(pickerToggle).toHaveProperty('disabled', true);
+
+    view.rerender(participantSelector(false));
+    expect(screen.getByRole('checkbox', { name: 'Ada Lovelace ada@example.com' })).toHaveProperty('checked', true);
+  });
+
   it('loads the timezone, default template, and existing roster independently', async () => {
     const fetchMock = mockSuccess();
     renderPage();

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { Link } from 'react-router';
 import type { Participant } from './participantsApi';
+import { MeetingParticipantSelector } from './MeetingParticipantSelector';
 import {
   getCompanyConfig,
   listMeetingParticipants,
@@ -95,7 +96,6 @@ export function NewMeetingPage({ onSubmit }: { onSubmit: (payload: NewMeetingPay
   const anyLoading = configLoading || templatesLoading || participantsLoading;
   const availableTemplates = templates.data ?? [];
   const availableParticipants = participants.data ?? [];
-  const selectedParticipants = availableParticipants.filter(({ id }) => participantIds.includes(id));
   const unavailable = config.status === 'error' || templates.status === 'error' || participants.status === 'error'
     || (templates.status === 'ready' && availableTemplates.length === 0)
     || (participants.status === 'ready' && availableParticipants.length === 0)
@@ -158,24 +158,16 @@ export function NewMeetingPage({ onSubmit }: { onSubmit: (payload: NewMeetingPay
           {participants.status === 'error' && <div className="meeting-query-error" role="alert"><p>{QUERY_MESSAGES.participants}</p><button className="button button-secondary" type="button" onClick={() => void loadParticipants()} disabled={participantsLoading}>참석자 목록 다시 시도</button></div>}
           {participants.status === 'ready' && availableParticipants.length === 0 && <p className="meeting-empty-state">참석자가 없습니다. <Link to="/settings/participants">참석자 관리에서 목록을 준비해 주세요.</Link></p>}
 
-          {selectedParticipants.length > 0 && <ul className="selected-participants" aria-label="선택한 참석자">
-            {selectedParticipants.map((participant) => <li key={participant.id}>
-              <span>{participant.name}<small>{participant.email}</small></span>
-              <button type="button" className="remove-participant" aria-label={`${participant.name} 선택 해제`} onClick={() => toggleParticipant(participant.id)}>×</button>
-            </li>)}
-          </ul>}
-
-          {availableParticipants.length > 0 && <button className="button button-secondary picker-toggle" type="button" aria-expanded={pickerOpen} aria-invalid={participantError} aria-describedby={participantError ? 'meeting-participants-error' : undefined} onClick={() => setPickerOpen((open) => !open)} disabled={participantsLoading}>
-            {pickerOpen ? '참석자 선택 닫기' : '참석자 추가'}
-          </button>}
-
-          {pickerOpen && participants.status === 'ready' && availableParticipants.length > 0 && <fieldset className="participant-picker" aria-invalid={participantError} aria-describedby={participantError ? 'meeting-participants-error' : undefined}>
-            <legend>참석자 선택</legend>
-            {availableParticipants.map((participant) => <label className="participant-option" key={participant.id}>
-              <input type="checkbox" aria-label={`${participant.name} ${participant.email}`} checked={participantIds.includes(participant.id)} onChange={() => toggleParticipant(participant.id)} />
-              <span>{participant.name}<small>{participant.email}</small></span>
-            </label>)}
-          </fieldset>}
+          <MeetingParticipantSelector
+            participants={availableParticipants}
+            selectedIds={participantIds}
+            isDisabled={participants.status !== 'ready'}
+            isReady={participants.status === 'ready'}
+            pickerOpen={pickerOpen}
+            participantError={participantError}
+            onTogglePicker={() => setPickerOpen((open) => !open)}
+            onToggleParticipant={toggleParticipant}
+          />
           {participantError && <p className="meeting-field-error" id="meeting-participants-error">참석자를 한 명 이상 추가해 주세요.</p>}
         </section>
 
