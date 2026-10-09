@@ -18,6 +18,7 @@ Participant API Controller, application Service, update request 검증, Provider
 - 입력: `name`, `email` 중 적어도 하나. 생략된 값은 유지
 - Service: Provider에서 기존 레코드를 찾아 부분 갱신을 수행하고 전체 DTO 반환
 - Adapter: Provider page title 또는 Email 본문만 바꾸면서 나머지 필드 보존
+- Port: ParticipantUpdatingProvider capability를 확장하며 후속 CRUD stub은 추가하지 않는다. Service는 선택된 root의 Participants 구조와 대상 소속을 확인한다.
 - 오류: 400 `VALIDATION_FAILED`, 404 `PARTICIPANT_NOT_FOUND`, 502 `DOCUMENT_FAILED`
 
 ## 구현 순서

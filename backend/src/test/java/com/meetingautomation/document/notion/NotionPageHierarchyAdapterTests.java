@@ -14,6 +14,7 @@ import com.meetingautomation.document.DocumentProviderException;
 import com.meetingautomation.document.DocumentStructure;
 import com.meetingautomation.document.CreateParticipantCommand;
 import com.meetingautomation.document.Participant;
+import com.meetingautomation.document.ParticipantUpdateCommand;
 import java.io.IOException;
 import java.util.List;
 import java.util.function.Supplier;
@@ -53,6 +54,72 @@ class NotionPageHierarchyAdapterTests extends com.meetingautomation.document.Doc
         assertEquals(new Participant("new-notion-page", "Ada Lovelace", "ada@example.test"),
                 client.adapter().createParticipant("participants-page",
                         new CreateParticipantCommand("Ada Lovelace", "ada@example.test")));
+        client.server().verify();
+    }
+
+    @Test
+    void updatesOnlyRequestedNotionParticipantFieldsAndPreservesOtherBlockText() {
+        TestClient client = client(TOKEN, ROOT_ID);
+        String childrenUrl = "https://api.notion.com/v1/blocks/person-page/children";
+        client.server().expect(notionRequest(childrenUrl)).andRespond(jsonSuccess(
+                "{\"has_more\":false,\"next_cursor\":null,\"results\":["
+                        + "{\"id\":\"email-block\",\"type\":\"paragraph\",\"paragraph\":{"
+                        + "\"rich_text\":["
+                        + "{\"type\":\"text\",\"text\":{\"content\":\"Email: old@\"},"
+                        + "\"annotations\":{\"bold\":true}},"
+                        + "{\"type\":\"text\",\"text\":{\"content\":\"example.test\\nRole: Engineer\"},"
+                        + "\"annotations\":{\"italic\":true}}]}}]}"));
+        client.server().expect(requestTo("https://api.notion.com/v1/blocks/email-block"))
+                .andExpect(method(HttpMethod.PATCH))
+                .andExpect(content().json("""
+                        {"paragraph":{"rich_text":[
+                          {"type":"text","text":{"content":"Email: "}},
+                          {"type":"text","text":{"content":"new@example.test"},"annotations":{"bold":true}},
+                          {"type":"text","text":{"content":"\\nRole: Engineer"}}
+                        ]}}
+                        """))
+                .andRespond(jsonSuccess("{\"id\":\"email-block\"}"));
+
+        assertEquals(new Participant("person-page", "Ada Lovelace", "new@example.test"),
+                client.adapter().updateParticipant("person-page", new ParticipantUpdateCommand(
+                        null, "new@example.test", new Participant("person-page", "Ada Lovelace", "old@example.test"))));
+        client.server().verify();
+    }
+
+    @Test
+    void updatesNotionTitleWithoutRewritingParticipantBody() {
+        TestClient client = client(TOKEN, ROOT_ID);
+        client.server().expect(requestTo("https://api.notion.com/v1/pages/person-page"))
+                .andExpect(method(HttpMethod.PATCH))
+                .andExpect(content().json("""
+                        {"properties":{"title":{"title":[{"text":{"content":"Grace Hopper"}}]}}}
+                        """))
+                .andRespond(jsonSuccess("{\"id\":\"person-page\"}"));
+
+        assertEquals(new Participant("person-page", "Grace Hopper", "ada@example.test"),
+                client.adapter().updateParticipant("person-page", new ParticipantUpdateCommand(
+                        "Grace Hopper", null, new Participant("person-page", "Ada Lovelace", "ada@example.test"))));
+        client.server().verify();
+    }
+
+    @Test
+    void missingNotionTargetOnPageMutationReturnsParticipantNotFound() {
+        TestClient client = client(TOKEN, ROOT_ID);
+        client.server().expect(requestTo("https://api.notion.com/v1/pages/person-page"))
+                .andExpect(method(HttpMethod.PATCH))
+                .andRespond(withStatus(HttpStatusCode.valueOf(404)).contentType(MediaType.APPLICATION_JSON)
+                        .body("{\"message\":\"notion-page-secret-marker\"}"));
+
+        DocumentProviderException failure = assertThrows(DocumentProviderException.class,
+                () -> client.adapter().updateParticipant("person-page", new ParticipantUpdateCommand(
+                        "Grace Hopper", null,
+                        new Participant("person-page", "Ada Lovelace", "ada@example.test"))));
+
+        assertEquals("PARTICIPANT_NOT_FOUND", failure.code());
+        assertEquals(404, failure.statusCode());
+        assertFalse(failure.retryable());
+        assertFalse(failure.getMessage().contains("notion-page-secret-marker"));
+        assertEquals(null, failure.getCause());
         client.server().verify();
     }
 

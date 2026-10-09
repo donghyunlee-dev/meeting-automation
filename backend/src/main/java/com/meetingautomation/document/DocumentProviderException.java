@@ -27,6 +27,12 @@ public final class DocumentProviderException extends RuntimeException {
                 404);
     }
 
+    public static DocumentProviderException participantNotFound() {
+        return new DocumentProviderException(
+                "PARTICIPANT_NOT_FOUND", "요청한 참가자를 찾을 수 없습니다.", "NOT_FOUND", false,
+                404);
+    }
+
     public static DocumentProviderException participantListFailed(boolean retryable) {
         return participantListFailed(retryable, null);
     }

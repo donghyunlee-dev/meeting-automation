@@ -6,6 +6,8 @@ import com.meetingautomation.document.CreateParticipantCommand;
 import com.meetingautomation.document.ProviderHealth;
 import com.meetingautomation.document.Participant;
 import com.meetingautomation.document.ParticipantCreationProvider;
+import com.meetingautomation.document.ParticipantUpdateCommand;
+import com.meetingautomation.document.ParticipantUpdatingProvider;
 import com.meetingautomation.document.ParticipantPageMapper;
 import java.io.IOException;
 import java.net.URI;
@@ -30,7 +32,7 @@ import org.springframework.web.client.RestClientException;
 
 /** Confluence Cloud implementation of the document hierarchy and health slice. */
 @Component
-public final class ConfluencePageHierarchyAdapter implements ParticipantCreationProvider {
+public final class ConfluencePageHierarchyAdapter implements ParticipantCreationProvider, ParticipantUpdatingProvider {
     private static final int PAGE_LIMIT = 100;
     private static final String DIRECT_CHILDREN_PATH = "/wiki/api/v2/pages/{id}/direct-children";
     private static final Pattern NEXT_LINK = Pattern.compile("<([^>]+)>\\s*;\\s*rel\\s*=\\s*\"?next\"?",
@@ -212,6 +214,92 @@ public final class ConfluencePageHierarchyAdapter implements ParticipantCreation
         } catch (Exception malformedResponse) {
             throw DocumentProviderException.documentFailed(false, malformedResponse);
         }
+    }
+
+    @Override
+    public Participant updateParticipant(String participantId, ParticipantUpdateCommand command) {
+        if (!configured || !isNumericId(participantId)) {
+            throw DocumentProviderException.documentFailed(false);
+        }
+        if (command.email() == null) {
+            String uri = "/wiki/api/v2/pages/" + encodePathSegment(participantId) + "/title";
+            mutate(uri, java.util.Map.of("status", "current", "title", command.updatedName()));
+        } else {
+            URI pageUri = baseUri.resolve("/wiki/api/v2/pages/" + encodePathSegment(participantId)
+                    + "?body-format=storage");
+            JsonNode page;
+            try {
+                page = parseBody(get(pageUri));
+            } catch (ConfluenceApiFailure readFailure) {
+                if (readFailure.statusCode() == 404) {
+                    throw DocumentProviderException.participantNotFound();
+                }
+                throw DocumentProviderException.documentFailed(isParticipantRetryable(readFailure.statusCode()),
+                        readFailure);
+            }
+            JsonNode version = page.path("version").path("number");
+            JsonNode bodyNode = page.path("body").path("storage").path("value");
+            JsonNode titleNode = page.get("title");
+            JsonNode statusNode = page.get("status");
+            JsonNode spaceNode = page.get("spaceId");
+            JsonNode parentNode = page.get("parentId");
+            if (!version.canConvertToInt() || !bodyNode.isTextual() || !titleNode.isTextual()
+                    || !statusNode.isTextual() || spaceNode == null || parentNode == null) {
+                throw DocumentProviderException.documentFailed(false);
+            }
+            String updatedBody = replaceEmailLine(bodyNode.textValue(), command.updatedEmail());
+            java.util.Map<String, Object> requestBody = new java.util.LinkedHashMap<>();
+            requestBody.put("id", participantId);
+            requestBody.put("status", statusNode.textValue());
+            requestBody.put("title", command.name() == null ? titleNode.textValue() : command.updatedName());
+            requestBody.put("spaceId", spaceNode.isNumber() ? spaceNode.numberValue() : spaceNode.asText());
+            requestBody.put("parentId", parentNode.isNumber() ? parentNode.numberValue() : parentNode.asText());
+            requestBody.put("body", java.util.Map.of("representation", "storage", "value", updatedBody));
+            requestBody.put("version", java.util.Map.of("number", version.intValue() + 1));
+            mutate("/wiki/api/v2/pages/" + encodePathSegment(participantId), requestBody);
+        }
+        return new Participant(participantId, command.updatedName(), command.updatedEmail());
+    }
+
+    private void mutate(String path, Object body) {
+        try {
+            String requestBody = JSON_MAPPER.writeValueAsString(body);
+            restClient.put()
+                    .uri(baseUri.resolve(path))
+                    .headers(headers -> {
+                        headers.setBasicAuth(accountEmail, authToken, StandardCharsets.UTF_8);
+                        headers.setAccept(List.of(org.springframework.http.MediaType.APPLICATION_JSON));
+                        headers.setContentType(org.springframework.http.MediaType.APPLICATION_JSON);
+                    })
+                    .body(requestBody)
+                    .exchange((request, response) -> {
+                        if (HttpStatusCode.valueOf(response.getStatusCode().value()).isError()) {
+                            throw new ConfluenceApiFailure(true, response.getStatusCode().value());
+                        }
+                        return null;
+                    });
+        } catch (Exception mutationFailure) {
+            if (mutationFailure instanceof ConfluenceApiFailure providerFailure
+                    && providerFailure.statusCode() == 404) {
+                throw DocumentProviderException.participantNotFound();
+            }
+            if (mutationFailure instanceof DocumentProviderException providerFailure
+                    && "PARTICIPANT_NOT_FOUND".equals(providerFailure.code())) {
+                throw providerFailure;
+            }
+            // Any failure after a mutation request begins has an unknown outcome; never advise blind retries.
+            throw DocumentProviderException.documentFailed(false, mutationFailure);
+        }
+    }
+
+    private static String replaceEmailLine(String body, String email) {
+        Matcher matcher = Pattern.compile("(?i)(Email:\\s*)([^<\\r\\n]*?)(\\s*(?:</p>|<br\\s*/?>|\\r?\\n|$))")
+                .matcher(body);
+        if (!matcher.find()) {
+            throw DocumentProviderException.documentFailed(false);
+        }
+        String replacement = matcher.group(1) + escapeHtml(email) + matcher.group(3);
+        return matcher.replaceFirst(Matcher.quoteReplacement(replacement));
     }
 
     private String readPageText(String pageId) {

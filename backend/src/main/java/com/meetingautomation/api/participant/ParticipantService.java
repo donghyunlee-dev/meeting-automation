@@ -7,6 +7,8 @@ import com.meetingautomation.document.DocumentProviderResolver;
 import com.meetingautomation.document.Participant;
 import com.meetingautomation.document.ParticipantCreationProvider;
 import com.meetingautomation.document.ParticipantListingProvider;
+import com.meetingautomation.document.ParticipantUpdateCommand;
+import com.meetingautomation.document.ParticipantUpdatingProvider;
 import java.util.List;
 import org.springframework.stereotype.Service;
 
@@ -63,5 +65,64 @@ public final class ParticipantService {
                 throw DocumentProviderException.documentFailed(false, providerFailure);
             }
         });
+    }
+
+    public Participant updateParticipant(String participantId, ParticipantUpdateRequest request) {
+        providerResolver.validateSelection();
+        ParticipantUpdatingProvider provider = providerResolver.selectedProvider()
+                .filter(ParticipantUpdatingProvider.class::isInstance)
+                .map(ParticipantUpdatingProvider.class::cast)
+                .orElseThrow(() -> new IllegalStateException("Selected provider cannot update participants."));
+        if (!providerResolver.configured()) {
+            throw DocumentProviderException.structureNotFound();
+        }
+
+        com.meetingautomation.document.DocumentStructure structure;
+        try {
+            structure = provider.discoverStructure(providerResolver.rootId());
+        } catch (DocumentProviderException failure) {
+            if ("DOCUMENT_STRUCTURE_NOT_FOUND".equals(failure.code())) {
+                throw failure;
+            }
+            throw DocumentProviderException.documentFailed(failure.retryable(), failure);
+        } catch (RuntimeException providerFailure) {
+            throw DocumentProviderException.documentFailed(false, providerFailure);
+        }
+
+        List<Participant> roster;
+        try {
+            roster = List.copyOf(provider.listParticipants(structure.participantsPageId()));
+        } catch (DocumentProviderException failure) {
+            if ("DOCUMENT_STRUCTURE_NOT_FOUND".equals(failure.code())) {
+                throw failure;
+            }
+            throw DocumentProviderException.documentFailed(failure.retryable(), failure);
+        } catch (RuntimeException providerFailure) {
+            throw DocumentProviderException.documentFailed(false, providerFailure);
+        }
+        Participant existing = roster.stream()
+                .filter(participant -> participant.id().equals(participantId))
+                .findFirst()
+                .orElseThrow(ParticipantNotFoundException::new);
+
+        String name = request.name() == null ? existing.name() : request.name();
+        String email = request.email() == null ? existing.email() : request.email();
+        ParticipantUpdateCommand command = new ParticipantUpdateCommand(request.name(), request.email(), existing);
+        try {
+            Participant updated = provider.updateParticipant(participantId, command);
+            if (updated == null || !participantId.equals(updated.id())
+                    || !name.equals(updated.name()) || !email.equals(updated.email())) {
+                throw DocumentProviderException.documentFailed(false);
+            }
+            return updated;
+        } catch (DocumentProviderException failure) {
+            if ("DOCUMENT_FAILED".equals(failure.code())
+                    || "PARTICIPANT_NOT_FOUND".equals(failure.code())) {
+                throw failure;
+            }
+            throw DocumentProviderException.documentFailed(failure.retryable(), failure);
+        } catch (RuntimeException providerFailure) {
+            throw DocumentProviderException.documentFailed(false, providerFailure);
+        }
     }
 }

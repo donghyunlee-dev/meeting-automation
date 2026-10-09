@@ -13,6 +13,7 @@ import com.meetingautomation.document.DocumentProviderException;
 import com.meetingautomation.document.DocumentStructure;
 import com.meetingautomation.document.CreateParticipantCommand;
 import com.meetingautomation.document.Participant;
+import com.meetingautomation.document.ParticipantUpdateCommand;
 import com.meetingautomation.document.DocumentStructureProvider;
 import com.meetingautomation.document.ProviderHealth;
 import com.meetingautomation.document.Participant;
@@ -110,6 +111,142 @@ class ConfluencePageHierarchyAdapterTests extends com.meetingautomation.document
         assertEquals("DOCUMENT_FAILURE", failure.category());
         assertEquals(true, failure.retryable());
         assertFalse(failure.getMessage().contains("preflight-transport-secret-marker"));
+        assertEquals(null, failure.getCause());
+        client.server().verify();
+    }
+
+    @Test
+    void updatesConfluenceTitleOnlyWithoutRewritingPageBody() {
+        TestClient client = client(BASE_URL, EMAIL, TOKEN, ROOT_ID);
+        client.server().expect(request -> {
+            requestTo(BASE_URL + "/wiki/api/v2/pages/888/title").match(request);
+            method(HttpMethod.PUT).match(request);
+            org.springframework.test.web.client.match.MockRestRequestMatchers.content().json(
+                    "{\"status\":\"current\",\"title\":\"Grace Hopper\"}").match(request);
+        }).andRespond(jsonSuccess("{}"));
+
+        assertEquals(new Participant("888", "Grace Hopper", "ada@example.test"),
+                client.adapter().updateParticipant("888", new ParticipantUpdateCommand(
+                        "Grace Hopper", null, new Participant("888", "Ada Lovelace", "ada@example.test"))));
+        client.server().verify();
+    }
+
+    @Test
+    void targetDeletedAfterRosterReadReturnsSafeNotFoundWithoutAnotherWrite() {
+        TestClient client = client(BASE_URL, EMAIL, TOKEN, ROOT_ID);
+        String participantsUri = BASE_URL + "/wiki/api/v2/pages/participants-id/direct-children?limit=100";
+        String pageUri = BASE_URL + "/wiki/api/v2/pages/888?body-format=storage";
+        client.server().expect(confluenceRequest(participantsUri))
+                .andRespond(jsonSuccess(children(page("888", "Ada Lovelace"))));
+        client.server().expect(confluenceRequest(pageUri)).andRespond(jsonSuccess(
+                "{\"body\":{\"storage\":{\"value\":\"<p>Email: ada@example.test</p>\"}}}"));
+        client.server().expect(request -> {
+            requestTo(BASE_URL + "/wiki/api/v2/pages/888/title").match(request);
+            method(HttpMethod.PUT).match(request);
+        }).andRespond(withStatus(HttpStatusCode.valueOf(404)).contentType(MediaType.APPLICATION_JSON)
+                .body("{\"message\":\"confluence-page-secret-marker\"}"));
+
+        assertEquals(java.util.List.of(new Participant("888", "Ada Lovelace", "ada@example.test")),
+                client.adapter().listParticipants("participants-id"));
+        DocumentProviderException failure = assertThrows(DocumentProviderException.class,
+                () -> client.adapter().updateParticipant("888", new ParticipantUpdateCommand(
+                        "Grace Hopper", null,
+                        new Participant("888", "Ada Lovelace", "ada@example.test"))));
+
+        assertEquals("PARTICIPANT_NOT_FOUND", failure.code());
+        assertEquals(404, failure.statusCode());
+        assertFalse(failure.retryable());
+        assertFalse(failure.getMessage().contains("confluence-page-secret-marker"));
+        assertEquals(null, failure.getCause());
+        client.server().verify();
+    }
+
+    @Test
+    void updatesConfluenceEmailWithVersionIncrementAndPreservesOtherStorageContent() {
+        TestClient client = client(BASE_URL, EMAIL, TOKEN, ROOT_ID);
+        String pageUri = BASE_URL + "/wiki/api/v2/pages/888?body-format=storage";
+        client.server().expect(confluenceRequest(pageUri)).andRespond(jsonSuccess("""
+                {"id":"888","status":"current","title":"Ada Lovelace","spaceId":"SPACE-KEY",
+                 "parentId":"777","version":{"number":4},"body":{"storage":{"value":
+                 "<p>Role: Engineer</p><p>Email: old@example.test</p><p>Keep this section</p>"}}}
+                """));
+        client.server().expect(request -> {
+            requestTo(BASE_URL + "/wiki/api/v2/pages/888").match(request);
+            method(HttpMethod.PUT).match(request);
+            org.springframework.test.web.client.match.MockRestRequestMatchers.content().json("""
+                    {"id":"888","status":"current","title":"Ada Lovelace","spaceId":"SPACE-KEY",
+                     "parentId":"777","body":{"representation":"storage","value":
+                     "<p>Role: Engineer</p><p>Email: new&amp;co@example.test</p><p>Keep this section</p>"},
+                     "version":{"number":5}}
+                    """).match(request);
+        }).andRespond(jsonSuccess("{}"));
+
+        assertEquals(new Participant("888", "Ada Lovelace", "new&co@example.test"),
+                client.adapter().updateParticipant("888", new ParticipantUpdateCommand(
+                        null, "new&co@example.test", new Participant("888", "Ada Lovelace", "old@example.test"))));
+        client.server().verify();
+    }
+
+    @Test
+    void updatesBothConfluenceFieldsInOneVersionedPageMutation() {
+        TestClient client = client(BASE_URL, EMAIL, TOKEN, ROOT_ID);
+        String pageUri = BASE_URL + "/wiki/api/v2/pages/888?body-format=storage";
+        client.server().expect(confluenceRequest(pageUri)).andRespond(jsonSuccess("""
+                {"id":"888","status":"current","title":"Ada Lovelace","spaceId":"SPACE-KEY",
+                 "parentId":"777","version":{"number":8},"body":{"storage":{"value":
+                 "<p>Email: old@example.test</p><p>Keep this section</p>"}}}
+                """));
+        client.server().expect(request -> {
+            requestTo(BASE_URL + "/wiki/api/v2/pages/888").match(request);
+            method(HttpMethod.PUT).match(request);
+            org.springframework.test.web.client.match.MockRestRequestMatchers.content().json("""
+                    {"id":"888","status":"current","title":"Grace Hopper","spaceId":"SPACE-KEY",
+                     "parentId":"777","body":{"representation":"storage","value":
+                     "<p>Email: new@example.test</p><p>Keep this section</p>"},"version":{"number":9}}
+                    """).match(request);
+        }).andRespond(jsonSuccess("{}"));
+
+        assertEquals(new Participant("888", "Grace Hopper", "new@example.test"),
+                client.adapter().updateParticipant("888", new ParticipantUpdateCommand(
+                        "Grace Hopper", "new@example.test", new Participant("888", "Ada Lovelace", "old@example.test"))));
+        client.server().verify();
+    }
+
+    @Test
+    void malformedConfluenceParticipantPageFailsBeforeMutation() {
+        TestClient client = client(BASE_URL, EMAIL, TOKEN, ROOT_ID);
+        String pageUri = BASE_URL + "/wiki/api/v2/pages/888?body-format=storage";
+        client.server().expect(confluenceRequest(pageUri)).andRespond(jsonSuccess(
+                "{\"id\":\"888\",\"status\":\"current\",\"title\":\"Ada\","
+                        + "\"body\":{\"storage\":{\"value\":\"<p>Email: old@example.test</p>\"}}}"));
+
+        DocumentProviderException failure = assertThrows(DocumentProviderException.class,
+                () -> client.adapter().updateParticipant("888", new ParticipantUpdateCommand(
+                        null, "new@example.test", new Participant("888", "Ada", "old@example.test"))));
+
+        assertEquals("DOCUMENT_FAILED", failure.code());
+        assertEquals(502, failure.statusCode());
+        assertFalse(failure.retryable());
+        client.server().verify();
+    }
+
+    @Test
+    void confluenceMutationFailureIsSafeAndNeverMarkedRetryable() {
+        TestClient client = client(BASE_URL, EMAIL, TOKEN, ROOT_ID);
+        client.server().expect(request -> {
+            requestTo(BASE_URL + "/wiki/api/v2/pages/888/title").match(request);
+            method(HttpMethod.PUT).match(request);
+        }).andRespond(withStatus(HttpStatusCode.valueOf(503)).contentType(MediaType.APPLICATION_JSON)
+                .body("{\"message\":\"provider-secret-marker\"}"));
+
+        DocumentProviderException failure = assertThrows(DocumentProviderException.class,
+                () -> client.adapter().updateParticipant("888", new ParticipantUpdateCommand(
+                        "Grace Hopper", null, new Participant("888", "Ada Lovelace", "ada@example.test"))));
+
+        assertEquals("DOCUMENT_FAILED", failure.code());
+        assertEquals(502, failure.statusCode());
+        assertFalse(failure.retryable());
+        assertFalse(failure.getMessage().contains("provider-secret-marker"));
         assertEquals(null, failure.getCause());
         client.server().verify();
     }
