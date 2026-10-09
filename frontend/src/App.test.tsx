@@ -64,6 +64,23 @@ describe('Participants settings', () => {
     expect(await screen.findByText('New Meeting fixture: /meetings/new')).toBeTruthy();
   });
 
+  it('serves the New Meeting screen at /meetings/new through the application router', async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const path = String(input);
+      if (path.endsWith('/app-config')) return Promise.resolve(response({ data: { company: { id: 'c1', name: 'Example', timezone: 'Asia/Seoul' } } }));
+      if (path.endsWith('/templates')) return Promise.resolve(response({ data: { items: [{ id: 'default.md', name: '기본 회의록', version: '1.0.0' }] } }));
+      return Promise.resolve(response({ data: { items: participants } }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<MemoryRouter initialEntries={['/meetings/new']}><App onNewMeetingSubmit={vi.fn()} /></MemoryRouter>);
+
+    expect(await screen.findByRole('heading', { level: 1, name: '새 회의' })).toBeTruthy();
+    expect(await screen.findByText('Asia/Seoul')).toBeTruthy();
+    expect(fetchMock.mock.calls.map(([url]) => new URL(String(url)).pathname)).toEqual([
+      '/api/v1/app-config', '/api/v1/templates', '/api/v1/participants',
+    ]);
+  });
+
   it('shows loading and then renders roster items', async () => {
     let resolve!: (value: Response) => void;
     const pending = new Promise<Response>((done) => { resolve = done; });
