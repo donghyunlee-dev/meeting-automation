@@ -52,6 +52,15 @@ public class ApiExceptionHandler {
                 validationDetails(fieldErrors));
     }
 
+    @ExceptionHandler(ApiValidationException.class)
+    public ResponseEntity<ApiErrorResponse> handleApiValidationFailure(
+            ApiValidationException exception,
+            HttpServletRequest request) {
+        BindException bindingResult = new BindException("request", "CreateMeetingSessionRequest");
+        bindingResult.addError(new FieldError("request", exception.field(), "INVALID"));
+        return handleValidationFailure(bindingResult, request);
+    }
+
     @ExceptionHandler({
             HttpMessageNotReadableException.class,
             MethodArgumentTypeMismatchException.class
