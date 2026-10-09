@@ -52,3 +52,22 @@ QA 에이전트가 headless Chrome과 Playwright로 최종 production bundle을 
 최종 코드 리뷰는 [PR review #5468858140](https://github.com/donghyunlee-dev/meeting-automation/pull/91#pullrequestreview-5468858140)에서 PASS했다. 포커스 관리, 제한된 viewport, 요청 중 Escape와 멱등성 키에 관한 세 P2 지적은 회귀 테스트와 함께 수정하고 모두 해결했다.
 
 PR #91은 `master`를 대상으로 열렸고 테스트·리뷰·QA의 exact head를 확인한 뒤 `2026-10-09 20:02 KST`에 병합됐다. Issue #13은 completed로 닫고 `status:in-progress` label을 제거했다. PRD 상태를 DONE으로 바꾸고 다음 개발 커서를 TASK-004.01로 이동했다.
+
+## 🔄 사용자 요청에 따른 실제 백엔드 재검증
+
+초기 QA 기록 이후 백엔드가 sandbox executor에서 실행되지 않았던 원인을 다시 확인했다. 기본 실행 경로에서는 loopback 소켓 접근이 거부됐지만, 문서에 기록된 CMD TTY 실행 경로를 승인된 권한으로 실행하자 코드나 PC 설정 변경 없이 Spring Boot 4.1.1/JDK 25.0.3 서버가 정상 기동했다. PID 10028이 `127.0.0.1:18080`에서 실행됐고 Tomcat 시작 로그를 확인했다. 따라서 앞선 실패 원인은 PC의 backend 설정이나 코드가 아니라 기본 executor의 loopback 제한이었다.
+
+현재 로컬 환경에는 `backend/.env.local`이 없고 Document Provider 환경 변수도 설정되지 않았다. 실제 `GET /api/v1/app-config`는 `document.provider=null`, `configured=false`를 반환했다. 이에 따라 실제 `GET /api/v1/participants`는 422 `DOCUMENT_STRUCTURE_NOT_FOUND`를 반환했다. 성공 목록/생성/PATCH를 확인할 Provider workspace와 자격 증명은 이 QA 실행 환경에 없으므로 해당 성공 경로는 검증하지 않았다.
+
+2026-10-09, production frontend build를 `http://localhost:8080`에서 제공하고 `/api`를 실제 Spring 서버 `http://127.0.0.1:18080`로 전달한 same-origin proxy를 사용해 Playwright/Chrome으로 다시 확인했다. 브라우저의 API 요청을 mock 또는 route interception하지 않았다.
+
+| 확인 | 결과 |
+|---|---|
+| 실제 backend `GET /actuator/health` | 200 / UP |
+| 실제 backend `GET /api/v1/app-config` | 200 / provider 미설정 명시 |
+| Browser → frontend → proxy → 실제 backend `GET /api/v1/participants` | 422 `DOCUMENT_STRUCTURE_NOT_FOUND`가 브라우저에 도달 |
+| 실패 안내 및 민감한 backend 오류 원문 비노출 | PASS — 안전한 참석자 목록 오류 문구 표시 |
+| 다시 시도 action | PASS — 재요청이 실제 backend에 도달해 같은 422 계약 반환 |
+| Browser page errors | 0 |
+
+이 보충 검증은 UI와 실제 backend 간 HTTP 경로 및 Provider 미설정 오류 처리를 확인한다. Provider 자격 증명 없이 참석자 성공 응답을 만들거나 외부 문서에 쓰지 않았다. 최초 QA의 mock 기반 성공 시나리오는 기존 자동화/브라우저 검증으로 남고, 이 기록은 실제 backend에 연결한 오류 경로 검증을 추가한다.
