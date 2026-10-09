@@ -24,7 +24,8 @@ import org.springframework.test.web.servlet.MockMvc;
         "NOTIFICATION_PROVIDER=SLACK"
 })
 @AutoConfigureMockMvc
-@Import(SelectedDocumentProviderApiTests.MockProviderHttpConfiguration.class)
+@Import({SelectedDocumentProviderApiTests.MockProviderHttpConfiguration.class,
+        ErrorContractProbeController.class, ConstraintViolationProbeService.class})
 class ConfiguredSecretsAppConfigApiTests {
     @Autowired
     private MockMvc mockMvc;
