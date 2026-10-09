@@ -7,10 +7,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.meetingautomation.api.error.ApiExceptionHandler;
-import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import org.junit.jupiter.api.Test;
+import org.springframework.core.io.AbstractResource;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.Resource;
@@ -57,20 +57,20 @@ class TemplateControllerTests {
 
     private static ResourceLoader resourceLoaderWithUnreadableDefaultTemplate() {
         return resourceLoader(location -> location.endsWith("default.md")
-                ? new Resource() {
+                ? new AbstractResource() {
                     @Override
                     public InputStream getInputStream() throws IOException {
                         throw new IOException("private file path marker");
                     }
 
                     @Override
-                    public boolean exists() {
-                        return true;
+                    public String getDescription() {
+                        return "unreadable template test resource";
                     }
 
                     @Override
-                    public String getDescription() {
-                        return "unreadable template test resource";
+                    public String getFilename() {
+                        return "default.md";
                     }
                 }
                 : new ByteArrayResource("# project".getBytes()));
