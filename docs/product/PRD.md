@@ -2324,7 +2324,9 @@ Meeting UI
 
 각 세부 TASK 표의 `설계 상태 / 문서` 열은 **설계 진행 상태**를 기록한다. 구현 진행 상태는 계속 GitHub Issue의 상태 라벨과 종료 상태가 기준이며, 두 상태를 혼합하지 않는다.
 
-**다음 설계 대상 커서: `TASK-022.01` (v1.9.0 변경 패키지 원격 게시 확인 후 완료 처리)**
+**다음 설계 대상 커서: `TASK-022.01` (v1.9.0 변경 패키지의 master 게시 확인 후 완료 처리)**
+
+**설계 게시 상태:** [설계 PR #102](https://github.com/donghyunlee-dev/meeting-automation/pull/102)에 신규 TASK-022.01~06 네 문서와 관련 계약을 게시했다. master 직접 push는 프로젝트 게시 훅의 `Master push requires FINALIZE` 조건으로 차단됐다. PR 병합 후 여섯 패키지의 master 경로와 Issue를 원격 확인하고 `설계완료`로 바꾼 뒤 설계 커서를 `없음`으로 복원한다. 이 문서 요청은 제품 구현을 시작하거나 구현 TASK를 DONE으로 처리하지 않는다.
 
 ## 📊 개발 진행 현황
 
