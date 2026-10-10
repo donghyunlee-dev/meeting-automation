@@ -1,5 +1,7 @@
 # 작업 목록
 
+> 📌 v1.9.0 변경 계약: 활성 전역 connection과 TASK-022.04의 문서 codec을 사용한다. 전환 완료 후 이전 Provider cache와 ID를 재사용하지 않는다. 일반 History의 목록 제한을 자료 이전 completeness 판정으로 사용하지 않는다. 상세 기준은 [문서 연결·이전 설계](../../../product/document-setup.md)다. 아래의 과거 기준과 충돌하면 이 변경 계약을 우선 적용한다.
+
 ## 사전 조건
 
 - Backend Java 21 / Gradle 기반 프로젝트에서 진행한다.
@@ -20,3 +22,5 @@
 - 모든 단계의 테스트 결과가 [검증 계획](./test.md)에 기록되어 있다.
 - `git diff --check` 및 변경 파일 검토가 통과한다.
 - API-017 및 Data/DocumentProvider 계약과 구현 DTO가 일치한다.
+
+- [ ] TASK-022의 후속 실제 소비자 검증을 수행하고 [검증 계획](./test.md)에 결과를 남긴다: 이 작업은 TASK-022.06에서 계약 fixture로만 검증한 실제 API-017을 연결한다. 이전된 target 문서를 조회하고 전환 전 source 목록/cache를 재사용하지 않으며 참석자 참조가 target roster와 일치하는지 실제 요청으로 검증한다.

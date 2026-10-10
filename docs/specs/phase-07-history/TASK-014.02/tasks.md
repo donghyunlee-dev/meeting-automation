@@ -1,5 +1,7 @@
 # 작업 목록
 
+> 📌 v1.9.0 변경 계약: 활성 전역 connection의 documentId를 사용하고 TASK-022.04의 표준 codec을 재사용한다. 전환 뒤 원본 링크는 외부에서 유효하지만 새 Provider ID로 목록/상세를 다시 조회한다. 상세 기준은 [문서 연결·이전 설계](../../../product/document-setup.md)다. 아래의 과거 기준과 충돌하면 이 변경 계약을 우선 적용한다.
+
 ## 사전 조건
 
 - TASK-014.01 및 DocumentProvider 공통 계약이 병합되어 있다.
@@ -20,3 +22,5 @@
 - 완료 기준 각각에 자동화 사례가 있다.
 - PRD/API/Data/Provider port와 표준 DTO 필드가 일치한다.
 - `git diff --check`와 변경 파일/로그 검토를 통과한다.
+
+- [ ] TASK-022의 후속 실제 소비자 검증을 수행하고 [검증 계획](./test.md)에 결과를 남긴다: 이 작업은 TASK-022.06에서 계약 fixture로만 검증한 실제 API-018을 연결한다. 이전된 target documentId의 Minutes/Transcript/참석자 참조와 새 Provider 원문 URL을 실제 요청으로 검증하고 source 자료가 보존된 것도 확인한다.

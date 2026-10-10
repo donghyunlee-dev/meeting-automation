@@ -1,5 +1,7 @@
 # 구현 작업 목록
 
+> 📌 v1.9.0 변경 계약: TASK-022.04/.05의 공통 문서 codec과 활성 connection snapshot을 사용한다. 전환 lock 중 Publish를 차단하며 export/import와 같은 metadata/본문 round-trip 계약을 따른다. 이전으로 전달을 재발송하지 않는다. 상세 기준은 [문서 연결·이전 설계](../../../product/document-setup.md)다. 아래의 과거 기준과 충돌하면 이 변경 계약을 우선 적용한다.
+
 ## 사전 조건
 
 - [ ] TASK-010.01 Issue #43 완료 결과에서 Session `CONFIRMED`, version, `allowedActions` 계약을 확인한다.
@@ -25,3 +27,5 @@
 - 같은 Session으로 문서가 두 개 생기는 테스트가 없다.
 - 동기 API 응답은 접수 상태이고, 최종 상태/document reference는 API-010으로 확인된다.
 - 후속 작업의 소유 경계가 지켜지고 secrets/provider raw payload가 노출되지 않는다.
+
+- [ ] TASK-022의 후속 실제 소비자 검증을 수행하고 [검증 계획](./test.md)에 결과를 남긴다: 이 작업은 TASK-022에서 계약 fixture로 검증한 실제 Publish 소비자를 연결한다. active connection snapshot과 표준 codec을 사용하고, 전환 lock 중 실제 API-015 요청을 차단하며 쓰기 lease를 안전하게 해제하는 회귀를 필수로 수행한다.

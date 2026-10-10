@@ -1,5 +1,7 @@
 # 검증 계획
 
+> 📌 v1.9.0 변경 계약: TASK-022.06을 선행으로 추가한다. 문서 연결/변경 위저드와 상태 gate는 TASK-022가 소유한다. 이 작업은 그 route/action을 재사용하고 Company/Email/Notification health 조회를 보충한다. credential form을 별도로 복제하지 않으며 새 연결을 금지하는 옛 범위 문장은 적용하지 않는다. 상세 기준은 [문서 연결·이전 설계](../../../product/document-setup.md)다. 아래의 과거 기준과 충돌하면 이 변경 계약을 우선 적용한다.
+
 ## 자동화 테스트
 
 Frontend unit/component/router tests에서 API-001/API-019 mock 응답을 사용한다. 테스트에서 Gmail API, Slack webhook 또는 Document Provider에 실제 연결하지 않는다.
@@ -8,7 +10,7 @@ Frontend unit/component/router tests에서 API-001/API-019 mock 응답을 사용
 |---|---|---|---|
 | SCR011-LOAD | Settings route, 두 API pending | API-001/API-019 병렬 호출, skeleton 표시 | query/page test |
 | SCR011-COMPANY | Company fixture | Company name 및 공개 timezone 표시, credential 없음 | component test |
-| SCR011-DOC-NULL | provider null, configured false | Provider 미선택 연결 안내 및 관리자에게 Notion/Confluence 설정을 요청하는 다음 행동 | component assertion |
+| SCR011-DOC-NULL | provider null, configured false | Provider 미선택 연결 안내 및 공용 Notion/Confluence 위저드를 여는 다음 행동 | component assertion |
 | SCR011-DOC-UNCONFIGURED | provider 지정, configured false | Provider 이름 유지, 설정 확인 안내, 자동 전환 없음 | selector/component test |
 | SCR011-DOC-UNREACHABLE | configured true, reachable false | 연결 확인 필요 안내와 GET refresh action, secret 미표시 | interaction test |
 | SCR011-DOC-ROOT | reachable true, rootAccessible false | Provider 접근과 Meetings/Participants 구조 문제를 구분 | selector/component test |

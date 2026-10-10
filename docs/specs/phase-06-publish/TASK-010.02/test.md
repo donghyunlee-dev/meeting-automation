@@ -1,5 +1,7 @@
 # 검증 계획
 
+> 📌 v1.9.0 변경 계약: TASK-022.04/.05의 공통 문서 codec과 활성 connection snapshot을 사용한다. 전환 lock 중 Publish를 차단하며 export/import와 같은 metadata/본문 round-trip 계약을 따른다. 이전으로 전달을 재발송하지 않는다. 상세 기준은 [문서 연결·이전 설계](../../../product/document-setup.md)다. 아래의 과거 기준과 충돌하면 이 변경 계약을 우선 적용한다.
+
 ## 자동화 검증
 
 Backend 구현 시 JUnit 5로 API/application/provider 경계를 검증한다. 실제 실행 명령은 repository의 Backend build 설정 및 TASK-001.05 결과에 따라 확정한다. 설계 단계에서는 테스트를 실행하지 않는다.
@@ -39,3 +41,7 @@ Backend 구현 시 JUnit 5로 API/application/provider 경계를 검증한다. �
 - 기본 Confluence Cloud 구성은 REST API v2 및 Basic(email/API token) 설정을 기존 Adapter 경계에서 사용하며 secret은 API 응답/로그에 없어야 한다.
 - 문서 생성의 externalSessionId가 Session ID와 일치하는지 검토한다.
 - 자동화/manual evidence와 실제 명령 결과를 Issue #44에 기록한다. 실제 Provider 사용 여부는 구현 단계의 별도 승인 절차를 따른다.
+
+## 🔗 전역 연결 소비자 실제 연동 회귀
+
+이 작업은 TASK-022에서 계약 fixture로 검증한 실제 Publish 소비자를 연결한다. active connection snapshot과 표준 codec을 사용하고, 전환 lock 중 실제 API-015 요청을 차단하며 쓰기 lease를 안전하게 해제하는 회귀를 필수로 수행한다.

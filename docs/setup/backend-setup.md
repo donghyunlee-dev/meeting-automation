@@ -17,7 +17,7 @@ meeting-automation/
 └─ docs/
 ```
 
-Gradle Wrapper를 통해 저장소가 지정한 Gradle 버전을 사용한다. 별도 전역 Gradle 설치는 필요하지 않다. Backend만 OpenAI, Document, Email, Notification Provider와 연동하고, 모든 Provider Secret은 로컬 환경 또는 Render Secret에 둔다.
+Gradle Wrapper를 통해 저장소 버전을 사용한다. Backend만 외부 Provider에 연결한다. Document 연결은 화면 위저드로 등록한 암호화 전역 설정을 사용하고 나머지 Provider Secret과 설정 암호화 키는 로컬 환경/Render Secret에 둔다.
 
 ## 사전 준비
 
@@ -89,7 +89,7 @@ Wrapper가 지원하는 작업:
 
 ## 환경변수
 
-Backend는 PRD의 Provider 설정을 환경변수로 읽는다. 로컬 개발에서는 `backend/.env.local` 파일을 사용할 수 있도록 애플리케이션 실행 설정을 구성하거나 IntelliJ Run Configuration에 값을 입력한다. Spring Boot가 `.env` 파일을 자동 로딩한다고 가정하지 않는다. 프로젝트가 로컬 dotenv loader를 포함하지 않으면 Run Configuration의 Environment variables에 직접 설정한다.
+Backend는 AI/Email/Slack과 저장 기반 설정을 환경변수로 읽는다. Document Provider·Root·인증 정보는 최초 연결 위저드에서 등록한다. TASK-022 구현 전 legacy 코드의 실행 방법과 새 설계의 차이를 구분하며 새 기능이 구현됐다고 가정하지 않는다. 로컬 개발에서는 `backend/.env.local` 파일을 사용할 수 있도록 애플리케이션 실행 설정을 구성하거나 IntelliJ Run Configuration에 값을 입력한다. Spring Boot가 `.env` 파일을 자동 로딩한다고 가정하지 않는다. 프로젝트가 로컬 dotenv loader를 포함하지 않으면 Run Configuration의 Environment variables에 직접 설정한다.
 
 비밀이 아닌 설정의 예:
 
@@ -97,8 +97,7 @@ Backend는 PRD의 Provider 설정을 환경변수로 읽는다. 로컬 개발에
 APP_COMPANY_ID=sfood
 APP_COMPANY_NAME=SFOOD
 APP_TIMEZONE=Asia/Seoul
-DOCUMENT_PROVIDER=NOTION
-DOCUMENT_ROOT_ID=<local-test-root-id>
+DOCUMENT_SETTINGS_DIR=<git-outside-persistent-directory>
 TRANSCRIPTION_MODEL=<configured-model-id>
 MINUTES_MODEL=<configured-model-id>
 EMAIL_PROVIDER=GMAIL_API
@@ -114,9 +113,7 @@ TEMP_AUDIO_DIR=<absolute-local-temp-directory>
 Secret 설정 이름의 예:
 
 ```text
-NOTION_TOKEN
-CONFLUENCE_AUTH_TOKEN
-CONFLUENCE_ACCOUNT_EMAIL
+DOCUMENT_SETTINGS_ENCRYPTION_KEY
 OPENAI_API_KEY
 EMAIL_*
 SLACK_MEETING_WEBHOOK_URL
@@ -207,3 +204,9 @@ Health endpoint 노출 설정이 scaffold에 없다면 PRD의 Actuator 기준을
 - [Gradle Wrapper](https://docs.gradle.org/current/userguide/gradle_wrapper.html)
 - [IntelliJ IDEA Gradle 설정](https://www.jetbrains.com/help/idea/gradle-settings.html)
 - [IntelliJ IDEA Java 지원 버전](https://www.jetbrains.com/help/idea/supported-java-versions.html)
+
+## ⚙️ 문서 연결 위저드 운영 준비
+
+TASK-022 이후 문서 연결은 화면에서 설정한다. Render는 Persistent Disk mount 아래 DOCUMENT_SETTINGS_DIR를 사용하고 로컬은 저장소/Git 밖의 디렉터리를 사용한다. 설정 키는 Backend secret으로 유지한다. Disk는 유료·단일 인스턴스·재배포 중단 제약이 있으며 임시 파일로 대체하지 않는다. 이 문서 변경으로 실제 배포/요금 지출을 실행하지 않는다.
+
+앱 계정은 없으며 신뢰된 사내 배포 접근 경계를 유지한다. Notion 부모 페이지 접근 부여, Confluence space와 페이지 생성 권한은 [문서 연결 설계](../product/document-setup.md)의 가이드를 따른다. 기존 env 기반 연결은 화면에 다시 입력하고 기존 루트 재사용을 선택한다. 초기 완료·양방향 변경·재배포 복원은 synthetic 테스트 문서로 확인한다.

@@ -1,5 +1,7 @@
 # Confluence Cloud Adapter 테스트 계획
 
+> 📌 v1.9.0 변경 안내: 이 문서는 완료된 TASK-002.03의 당시 구현/검증 이력이다. Backend env로 선택·credential을 고정하는 계약과 초기 구조 생성 제외 범위는 새 TASK-022에서 변경한다. 현재 구현 기준은 [문서 연결·이전 설계](../../../product/document-setup.md)와 TASK-022 패키지다. 일반 Health/탐색은 계속 읽기 전용이며 명시적 초기화만 구조를 생성한다. 기존 DONE/검증 증거는 보존한다.
+
 자동화 테스트는 Backend의 JUnit/Gradle 테스트 구성과 fake HTTP 경계를 사용한다. 실제 Cloud tenant, 계정 이메일, API token에 연결하지 않는다. 공통 결과 필드 및 오류 코드는 [공통 계약](../TASK-002.01/spec.md)을 따른다.
 
 ## 자동화 테스트

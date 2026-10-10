@@ -1,5 +1,7 @@
 # 검증 계획
 
+> 📌 v1.9.0 변경 계약: 활성 전역 connection과 TASK-022.04의 문서 codec을 사용한다. 전환 완료 후 이전 Provider cache와 ID를 재사용하지 않는다. 일반 History의 목록 제한을 자료 이전 completeness 판정으로 사용하지 않는다. 상세 기준은 [문서 연결·이전 설계](../../../product/document-setup.md)다. 아래의 과거 기준과 충돌하면 이 변경 계약을 우선 적용한다.
+
 ## 자동화 테스트
 
 구현 단계에서 Backend 표준 JUnit/Gradle 테스트를 실행한다. 정확한 명령은 Backend 프로젝트 설정에 따른다. Provider 호출은 fake HTTP/client fixture를 사용하며 실계정 Provider에 연결하지 않는다.
@@ -28,3 +30,7 @@
 
 - `./gradlew test` 및 저장소의 Backend build 명령을 실행하고 결과를 Evidence 문서에 남긴다.
 - 선택된 Provider의 정상 자식 페이지 pagination을 비생산 데이터에서 확인한다. 운영 Secret이나 실제 민감 회의 데이터를 로그에 남기지 않는다.
+
+## 🔗 전역 연결 소비자 실제 연동 회귀
+
+이 작업은 TASK-022.06에서 계약 fixture로만 검증한 실제 API-017을 연결한다. 이전된 target 문서를 조회하고 전환 전 source 목록/cache를 재사용하지 않으며 참석자 참조가 target roster와 일치하는지 실제 요청으로 검증한다.

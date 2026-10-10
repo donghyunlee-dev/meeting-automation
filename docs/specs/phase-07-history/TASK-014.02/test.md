@@ -1,5 +1,7 @@
 # 검증 계획
 
+> 📌 v1.9.0 변경 계약: 활성 전역 connection의 documentId를 사용하고 TASK-022.04의 표준 codec을 재사용한다. 전환 뒤 원본 링크는 외부에서 유효하지만 새 Provider ID로 목록/상세를 다시 조회한다. 상세 기준은 [문서 연결·이전 설계](../../../product/document-setup.md)다. 아래의 과거 기준과 충돌하면 이 변경 계약을 우선 적용한다.
+
 ## 자동화 테스트
 
 Backend 표준 JUnit/Gradle 테스트에서 fake DocumentProvider 및 Provider HTTP fixture를 사용한다. 실제 Provider 계정/회의 문서는 자동화 테스트에 사용하지 않는다.
@@ -28,3 +30,7 @@ Backend 표준 JUnit/Gradle 테스트에서 fake DocumentProvider 및 Provider H
 - `./gradlew test`와 Backend build 명령을 실행하고 Evidence 문서에 결과를 기록한다.
 - Notion page child/body pagination 및 Confluence page detail body-format 처리가 선택된 Adapter에서 확인된다.
 - Log/trace 설정에서 요청/응답 본문과 Secret이 기록되지 않는지 확인한다.
+
+## 🔗 전역 연결 소비자 실제 연동 회귀
+
+이 작업은 TASK-022.06에서 계약 fixture로만 검증한 실제 API-018을 연결한다. 이전된 target documentId의 Minutes/Transcript/참석자 참조와 새 Provider 원문 URL을 실제 요청으로 검증하고 source 자료가 보존된 것도 확인한다.

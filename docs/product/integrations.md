@@ -10,7 +10,7 @@
 
 - Domain과 Application은 Notion, Confluence, OpenAI, Slack 또는 Email Vendor SDK 모델을 참조하지 않는다.
 - 각 외부 Adapter는 provider-specific Request/Response를 내부 표준 DTO로 변환한다.
-- credential은 Backend 런타임 secret에서만 읽고 frontend로 보내지 않는다.
+- AI/Email/Notification credential은 Backend runtime secret에서 읽는다. Document credential은 위저드 요청으로 받아 암호화한 전역 설정에서 읽으며 저장된 값을 Frontend 조회 응답에 보내지 않는다.
 - 외부 오류 본문을 그대로 사용자 응답, 일반 로그, Admin Slack에 넣지 않는다.
 - timeout, 재시도 횟수, rate limit backoff는 외부 API의 현행 공식 제한 및 배포 설정에 맞춘다. 안전한 멱등성을 확보한 호출만 재시도한다.
 - Provider 변경은 Port 구현 교체로 제한한다. Domain 공통 모델은 provider의 특수 기능을 흡수하지 않는다.
@@ -107,7 +107,7 @@ Provider capability는 root 검증, child page 탐색/생성/읽기, 최소 meta
 
 1. 설정된 root 식별자 접근 가능 여부를 확인한다.
 2. root 직속 `Meetings`, `Participants` child page를 발견한다.
-3. `Meetings` 또는 `Participants` child가 빠졌으면 health를 unhealthy로 보고하고 요청을 `DOCUMENT_STRUCTURE_NOT_FOUND`로 실패시킨다. V1 Adapter는 누락 구조를 묵시적으로 생성하지 않는다.
+3. 일반 Health/업무 조회에서는 누락 구조를 DOCUMENT_STRUCTURE_NOT_FOUND로 실패시키고 생성하지 않는다. 최초 위저드 완료 또는 명시적 재설정 초기화 유스케이스는 root/Meetings/Participants를 생성·재사용한다.
 4. 새 Participant/Meeting은 각 지정 child 아래에만 생성한다.
 
 ### Publish 멱등성
@@ -126,11 +126,11 @@ Provider capability는 root 검증, child page 탐색/생성/읽기, 최소 meta
 
 ### Confluence Adapter
 
-- V1 대상은 Confluence Cloud이며 REST API v2를 사용한다. `CONFLUENCE_BASE_URL`은 `https://<site>.atlassian.net` 형식의 사이트 origin이다.
-- `CONFLUENCE_ACCOUNT_EMAIL`과 `CONFLUENCE_AUTH_TOKEN`으로 Basic 인증을 구성한다. Authorization 값은 UTF-8 `email:API token`을 Base64 인코딩한 뒤 `Basic` scheme으로 전송한다. Password 기반 인증은 사용하지 않는다.
-- 설정된 `DOCUMENT_ROOT_ID`의 직속 자식은 `GET /wiki/api/v2/pages/{id}/direct-children`으로 페이지네이션해 조회한다. 응답 중 `type=page`인 항목만 사용하며 Database, Folder, Whiteboard, Embed 등은 무시한다.
-- 정확한 제목 `Meetings`, `Participants`의 직속 Page가 각각 하나씩 있어야 한다. 누락 또는 중복이면 `DOCUMENT_STRUCTURE_NOT_FOUND`를 반환하고 생성/복구하지 않는다.
-- Basic 자격 증명은 Backend runtime secret/config에서만 읽는다. Authorization header, email, token, 원본 오류 본문을 응답이나 로그에 남기지 않는다.
+- V1 대상은 Confluence Cloud이며 REST API v2를 사용한다. 저장된 connection의 `baseUrl`은 `https://<site>.atlassian.net` 형식의 사이트 origin이다.
+- 저장된 connection의 `accountEmail`과 `apiToken`으로 Basic 인증을 구성한다. Authorization 값은 UTF-8 `email:API token`을 Base64 인코딩한 뒤 `Basic` scheme으로 전송한다. Password 기반 인증은 사용하지 않는다.
+- 활성 또는 draft connection의 root/parent 식별자의 직속 자식은 `GET /wiki/api/v2/pages/{id}/direct-children`으로 페이지네이션해 조회한다. 응답 중 `type=page`인 항목만 사용하며 Database, Folder, Whiteboard, Embed 등은 무시한다.
+- 일반 구조 탐색에서 정확한 제목 `Meetings`, `Participants`의 직속 Page가 각각 하나씩 있어야 한다. 누락이면 `DOCUMENT_STRUCTURE_NOT_FOUND`, 중복이면 `DOCUMENT_STRUCTURE_CONFLICT`를 반환하며 조회는 생성/복구하지 않는다. 명시적 초기화의 생성·재사용은 별도 Bootstrap Port가 담당한다.
+- Basic 자격 증명은 위저드 입력으로 등록한 암호화 전역 connection에서 읽는다. Authorization header, email, token, 원본 오류 본문을 응답이나 로그에 남기지 않는다.
 - child page 조회/읽기/생성/갱신, 최소 content metadata/property를 처리한다.
 - 내부 `documentId`와 URL로 변환하며 vendor response는 Adapter에 격리한다.
 
@@ -194,7 +194,7 @@ Payload는 Slack Incoming Webhook의 JSON `text`로 허용된 incident 필드만
 - `configured`: 필수 설정값이 존재하고 형식이 유효함.
 - `reachable`: 안전한 확인 요청이 Provider에 도달하고 인증됨.
 - `rootAccessible`: Document root와 필수 child 구조 접근 가능함.
-- `DOCUMENT_PROVIDER`가 비었거나 공백이면 자동 선택하지 않는다. App Config는 `document.provider=null`, `configured=false`를 반환하며 Frontend가 연결 안내를 제공한다. 비어 있지 않은 미지원 enum은 Backend 설정 오류다.
+- 활성 전역 connection이 없으면 provider:null/configured:false와 setup.required:true다. Provider와 credential은 화면 입력으로 등록하고 env 자동 선택/fallback은 없다. unsupported Provider 입력은 400이다.
 - Integration Health는 `document`, `email`, `notification`, `ai` 영역을 항상 포함한다. Provider Health contributor가 없는 영역은 `configured=false`, `reachable=false`로 시작하고 해당 Provider 설계/구현이 공통 aggregator에 contributor를 추가한다.
 - Document Health의 `rootAccessible`은 Root와 필수 직속 `Meetings`/`Participants` 구조를 모두 탐색할 수 있을 때만 true다. 구조 누락/중복은 Health 조회를 실패시키지 않고 false 상태로 표현한다.
 - Health endpoint는 key 자체, 외부 상세 오류 본문, 개인정보를 반환하지 않는다.
@@ -206,12 +206,9 @@ Payload는 Slack Incoming Webhook의 JSON `text`로 허용된 incident 필드만
 APP_COMPANY_ID
 APP_COMPANY_NAME
 APP_TIMEZONE
-DOCUMENT_PROVIDER
-DOCUMENT_ROOT_ID
-NOTION_TOKEN
-CONFLUENCE_BASE_URL
-CONFLUENCE_ACCOUNT_EMAIL
-CONFLUENCE_AUTH_TOKEN
+DOCUMENT_SETTINGS_DIR
+DOCUMENT_SETTINGS_ENCRYPTION_KEY
+# 문서 Provider/credential/location은 위저드 전역 설정에 암호화 저장
 OPENAI_API_KEY
 TRANSCRIPTION_MODEL
 MINUTES_MODEL
@@ -227,7 +224,7 @@ ALLOWED_ORIGINS
 TEMP_AUDIO_DIR
 ```
 
-실제 값은 Render Secret/환경 설정에 저장한다. sample 파일은 값 없는 placeholder만 담는다. Frontend에는 Backend public URL 외 Provider 설정을 넣지 않는다.
+AI/Email/Slack과 설정 암호화 키는 Render Secret/환경 설정에 저장한다. Document 연결 입력은 암호화 전역 설정에 저장한다. sample 파일은 값 없는 placeholder만 담는다. Frontend에는 Backend public URL 외 Provider 설정을 넣지 않는다.
 
 ## 실패 분류와 재시도
 
@@ -243,3 +240,13 @@ TEMP_AUDIO_DIR
 ## 추적성
 
 PRD 외부 계약 `EXT-001~005`, API-019, FR-007~009, FR-016~019, FR-024~026, FR-029~030, TASK-002, TASK-006, TASK-010~017과 연결된다.
+
+## 🏗️ 구조 생성과 자료 전송 Port
+
+DocumentBootstrapPort는 initializeStructure(connection, reuseExistingRootId?)를 제공하고 연결 테스트/구조 조회와 분리한다. DocumentTransferPort는 readManifest, exportParticipant, exportMeeting, findTransfer, importParticipant, importMeeting, readBackDigest를 제공한다. 모든 메서드는 표준 DTO를 사용하며 SDK payload는 Adapter 내부에 격리한다.
+
+Notion은 지정 부모 아래 Page를 생성한다. Confluence Cloud는 spaceId가 필수이고 parentId는 선택이다. 초기 루트는 Meeting Automation이며 두 child 이름은 Meetings/Participants다. 이미 완전한 기존 루트는 사용자 명시 선택 후 재사용한다. 누락/중복/응답 유실의 복구는 [문서 연결 설계](./document-setup.md)의 journal 규칙을 따른다.
+
+양 Adapter는 표준 회의 내용/최소 metadata와 실패 문서 형식을 round-trip해야 한다. import 생성 payload에 transferKey를 포함하고 participant ID map으로 새 provider 참조를 적용한다. 이 과정은 AI/Email/Slack Provider를 호출하지 않는다. Public Health는 활성 연결만 검사하며 draft 테스트 실패가 기존 active 상태를 덮어쓰지 않는다.
+
+생성 식별자·schemaVersion·externalSessionId·transferKey는 Notion의 전용 JSON code block과 Confluence storage 본문의 전용 metadata 영역에 생성 payload와 함께 기록한다. Notion의 page-parent에 임의 custom property를 요구하지 않는다. metadata 후속 쓰기 성공 여부에 의존해 최초 생성 결과를 식별하지 않는다. Participants의 첫 Email 항목 계약은 유지한다. Meeting 표준 본문 codec이 편집 가능한 표시 본문을 읽어 structured Minutes/Transcript를 구성하고 metadata에 별도의 본문 정본을 중복 보관하지 않는다. 표시 본문이 지원 문법을 벗어나면 명시적 export 오류로 처리한다.

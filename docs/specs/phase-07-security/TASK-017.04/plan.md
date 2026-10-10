@@ -1,5 +1,7 @@
 # 구현 계획
 
+> 📌 v1.9.0 변경 계약: 최초 연결·양방향 변경·부분 실패·source 보존·설정 암호화·Secret 웹 저장소 미보관을 TASK-022와 연계해 검증한다. password 입력 요청을 금지하는 것으로 오해하지 않는다. 상세 기준은 [문서 연결·이전 설계](../../../product/document-setup.md)다. 아래의 과거 기준과 충돌하면 이 변경 계약을 우선 적용한다.
+
 ## 선행 조건
 
 - TASK-017.01 Issue #60: Backend Secret 경계, DTO/log redaction, synthetic canary 정책

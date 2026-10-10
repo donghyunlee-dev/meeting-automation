@@ -30,7 +30,7 @@ flowchart LR
   NOTIFY --> SLACK[Slack]
 ```
 
-V1은 단일 회사용 모바일 웹이다. 브라우저는 녹음 권한 획득, MediaRecorder 운용, chunk 임시 보관/전송, 검토 UI를 담당한다. Backend는 업무 규칙, 세션 상태, Audio assembly, AI 호출, 문서/메일/알림 연동을 담당한다. Provider Secret은 Backend만 보유한다.
+V1은 단일 회사용 모바일 웹이다. 브라우저는 녹음 권한 획득, MediaRecorder 운용, chunk 임시 보관/전송, 검토 UI를 담당한다. Backend는 업무 규칙, 세션 상태, Audio assembly, AI 호출, 문서/메일/알림 연동을 담당한다. 저장된 Provider Secret은 Backend만 보유한다. 입력 때 브라우저 메모리에서 백엔드로 전달하고 저장/조회 시 원문을 반환하지 않는다. 제품 계정·로그인·사용자별 설정은 없다.
 
 ## 런타임 및 배포 단위
 
@@ -41,6 +41,7 @@ V1은 단일 회사용 모바일 웹이다. 브라우저는 녹음 권한 획득
 | Frontend 배포 | Vercel | 정적 웹 자산 제공 |
 | Backend 배포 | Render | Spring Boot 프로세스와 작업 실행 |
 | 임시 Audio 저장 | 비공개 객체 저장소 | Chunk 및 assembled Audio의 실패 복구용 임시 보존, expiry cleanup |
+| 전역 연결 설정 | 단일 Backend 영속 디렉터리 / Render Persistent Disk | 암호화한 연결 설정·초기화/이전 journal, 재시작 복원 |
 | 외부 영속 저장 | Notion 또는 Confluence | Participant와 완료된 회의 문서의 Source of Truth |
 
 Frontend와 Backend는 독립 build/deploy한다. Node.js는 Frontend toolchain이며 업무 API 서버가 아니다. 데이터베이스, JPA, Redis, queue, message broker, batch는 도입하지 않는다.
@@ -63,7 +64,7 @@ configuration/
 - `application`: 유스케이스 실행과 트랜잭션 경계. Port에만 의존한다.
 - `adapter/in/web`: API DTO, validation, HTTP status/header 변환.
 - `adapter/out/*`: 외부 API 및 임시 저장소 구현. Provider 타입은 Adapter 내부 DTO에서 표준 DTO로 변환한다.
-- `configuration`: 환경 설정, Provider 선택, CORS, HTTP client, 실행기 구성.
+- `configuration`: 배포 기반 설정, 전역 문서 설정 저장 Port, 저장된 활성 연결 Resolver, CORS, HTTP client, 실행기 구성.
 
 의존성은 `adapter → application → domain` 방향으로만 흐른다. Provider 구현 교체가 Domain/API DTO 변경을 요구하지 않도록 한다. 외부 HTTP client는 프로젝트에서 선택한 한 가지 기본 방식(Spring RestClient 또는 Apache HttpClient5)을 공통 사용한다.
 
@@ -130,7 +131,7 @@ configuration/
 ## 보안 및 관측성
 
 - HTTPS만 사용한다. CORS는 `ALLOWED_ORIGINS`로 제한한다.
-- Secret은 Render 환경 설정에 두고 Frontend 설정 및 API 응답에 포함하지 않는다.
+- AI/Email/Slack 및 전역 설정 암호화 키는 Render Secret에 둔다. 화면에서 등록한 Document credential은 Backend 영속 디렉터리에 암호화 저장하고 조회 API/로그/Frontend 영속 저장에 포함하지 않는다.
 - 일반 로그에는 `traceId`, `sessionId`, stage, 안전한 오류 코드/메시지만 기록한다.
 - Audio, Transcript, Minutes, Authorization 값, webhook URL, 전체 이메일 주소는 로그 및 Admin Slack에서 제외하거나 마스킹한다.
 - Audio object storage는 private access만 허용하고 공개 URL을 노출하지 않는다. API-021은 Backend의 Session 상태/action 검증 뒤 stream하며 Audio key는 서버 생성 opaque ID다. Object storage credential은 Backend service만 사용한다.
@@ -145,3 +146,11 @@ configuration/
 ## 구현 추적
 
 이 문서의 구현 기반은 PRD의 `DEC-001~020`, `NFR-004~014`, `TASK-001`, `TASK-005~017`이다. 모바일 실기기와 회의실 품질 검증은 PRD `TASK-018~019`에서 수행한다.
+
+## ⚙️ 문서 설정과 전환 경계
+
+GlobalSettingsUseCase는 전역 설정/검증을, DocumentBootstrapUseCase는 명시적 초기 구조를, DocumentMigrationUseCase는 자료 복사와 active 전환을 담당한다. DocumentStructureProvider의 read-only 탐색과 생성 Port는 분리한다. credential을 생성자에서 고정하는 Adapter 대신 connection snapshot으로 HTTP client를 구성하며 미선택 env fallback은 없다.
+
+GlobalSettingsStore와 MigrationJournal은 단일 암호화 snapshot/원자 교체를 공유한다. 프로세스 전역 lock으로 Session 생성, roster 쓰기, 전환의 경쟁을 보호한다. source와 candidate Adapter를 동시에 생성할 수 있지만 active 전환은 검증 후 한 번만 수행한다. queue/batch/DB 없이 기존 Backend 작업 실행기를 사용하고 restart 후 외부 쓰기는 사용자 재개 때만 이어간다.
+
+Render Persistent Disk 사용은 단일 인스턴스·재배포 중단을 전제로 한다. 임시 파일시스템을 영속 저장으로 사용하지 않는다. 계정 없이 신뢰된 사내 배포 접근 정책을 적용한다. 상세 상태와 API/복사 불변식은 [문서 연결·이전 설계](./document-setup.md)를 따른다.

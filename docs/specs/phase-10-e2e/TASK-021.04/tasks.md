@@ -1,5 +1,7 @@
 # Release Acceptance 작업 목록
 
+> 📌 v1.9.0 변경 계약: PRD v1.9.0의 최초 위저드, 양방향 이전, source 보존, durable 설정/journal Release DoD를 추가한다. 기존 v1.8.1 DoD 개수 고정을 기준으로 누락하지 않는다. 상세 기준은 [문서 연결·이전 설계](../../../product/document-setup.md)다. 아래의 과거 기준과 충돌하면 이 변경 계약을 우선 적용한다.
+
 - [ ] TASK-021.01~.03, TASK-018.04, TASK-019.03, TASK-020.04 Issue와 원격 Evidence 상태를 확인한다. 의존: #77~#79, #68/#72/#76. 결과: predecessor completeness 표가 만들어지고 미완료 의존이 보인다.
 - [ ] PRD Section 24 항목과 task-local Evidence 경로를 20행 matrix로 연결한다. 의존: PRD v1.8.1. 결과: 각 DoD에 source task/evidence/review question이 있다.
 - [ ] Release Candidate commit/build/config/environment provenance를 고정한다. 의존: candidate artifact. 결과: secret 없이 동일 candidate를 재현할 식별자를 남긴다.

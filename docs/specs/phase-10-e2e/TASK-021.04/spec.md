@@ -1,5 +1,7 @@
 # Release Acceptance 및 Evidence 검토
 
+> 📌 v1.9.0 변경 계약: PRD v1.9.0의 최초 위저드, 양방향 이전, source 보존, durable 설정/journal Release DoD를 추가한다. 기존 v1.8.1 DoD 개수 고정을 기준으로 누락하지 않는다. 상세 기준은 [문서 연결·이전 설계](../../../product/document-setup.md)다. 아래의 과거 기준과 충돌하면 이 변경 계약을 우선 적용한다.
+
 ## 작업 식별 정보
 
 - 작업: TASK-021.04
@@ -74,4 +76,4 @@ Evidence가 현재 저장소에 없으면 추정해 PASS로 만들지 않고 `BL
 - [핵심 E2E](../TASK-021.01/spec.md)
 - [Document/Email/Slack E2E](../TASK-021.02/spec.md)
 - [History/보안/Audio E2E](../TASK-021.03/spec.md)
-- [PRD Release Definition of Done](../../../product/PRD.md#24-release-definition-of-done)
+- [PRD Release Definition of Done](../../../product/PRD.md#release-definition-of-done)

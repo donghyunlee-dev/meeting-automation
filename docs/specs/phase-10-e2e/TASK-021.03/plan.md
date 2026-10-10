@@ -1,5 +1,7 @@
 # History·보안·임시 Audio E2E 구현 계획
 
+> 📌 v1.9.0 변경 계약: TASK-022.06의 최초 연결·양방향 이전·참조 무결성·source 보존·재시작 journal 사례를 회귀한다. release는 계정 없는 설정 UI와 durable 설정을 포함한다. 상세 기준은 [문서 연결·이전 설계](../../../product/document-setup.md)다. 아래의 과거 기준과 충돌하면 이 변경 계약을 우선 적용한다.
+
 ## 선행 조건 및 소유권
 
 TASK-021.01의 dual-server Playwright harness, TASK-021.02의 API/provider fixture 경계와 `TASK-014.*`, `TASK-017.*` 계약 구현이 선행한다. QA가 통합 scenario와 evidence를 소유한다. FE/API는 이미 정해진 계약을 browser 경로에서 연결하고, private storage/clock/sweeper는 backend test fixture가 제어한다. UI/API 통합 시나리오가 주 deliverable이므로 새 API나 UI를 먼저 설계하지 않고, 기존 계약 표를 fixture로 고정한 뒤 실패-first E2E를 만든다.

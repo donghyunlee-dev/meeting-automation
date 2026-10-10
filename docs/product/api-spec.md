@@ -4,7 +4,7 @@
 > **기준 문서:** [PRD.md](./PRD.md)
 > **데이터 정의:** [data-spec.md](./data-spec.md)
 > **외부 Provider 계약:** [integrations.md](./integrations.md)
-> **기준일:** 2026-10-06
+> **기준일:** 2026-10-10 · PRD v1.9.0
 
 ## 공통 HTTP 규칙
 
@@ -52,6 +52,18 @@ Session 상태와 전이 규칙은 [architecture.md](./architecture.md)의 상�
 
 | 코드 | HTTP | 재시도 | 의미 |
 |---|---:|---:|---|
+| `DOCUMENT_SETUP_REQUIRED` | 409 | N | 활성 연결 없음 |
+| `DOCUMENT_CHANGE_BUSY` | 409 | 조건부 | 진행 Session·쓰기·전환 lock 충돌 |
+| `DOCUMENT_CONNECTION_CHANGED` | 409 | N | 입력의 연결 version이 오래됨 |
+| `DOCUMENT_SETTINGS_VERSION_CONFLICT` | 412 | N | 전역 설정 If-Match 충돌 |
+| `DOCUMENT_SETTINGS_UNAVAILABLE` | 503 | 조건부 | 영속 저장/복호화/키 오류 |
+| `DOCUMENT_SETUP_ORIGIN_REJECTED` | 403 | N | 허용되지 않은 설정 요청 Origin |
+| `DOCUMENT_DRAFT_NOT_FOUND` | 404 | N | 없거나 만료된 draft |
+| `DOCUMENT_TEST_REQUIRED` | 409 | N | 동일 revision의 유효 테스트 없음 |
+| `DOCUMENT_STRUCTURE_CONFLICT` | 409 | N | 루트 또는 child 후보가 중복 |
+| `DOCUMENT_MIGRATION_CONFLICT` | 409 | N | 대상 키의 다른 내용·원본 변경·깨진 참조 |
+| `DOCUMENT_OPERATION_NOT_FOUND` | 404 | N | 없는 operation |
+| `DOCUMENT_RECONCILIATION_REQUIRED` | 409 | N | 외부 쓰기 결과 불명확 |
 | `VALIDATION_FAILED` | 400 | N | 요청 필드 검증 실패 |
 | `INTERNAL_ERROR` | 500 | N | 처리되지 않은 서버 설정 또는 필수 리소스 오류 |
 | `PARTICIPANT_NOT_FOUND` | 404 | N | 존재하지 않는 Participant ID |
@@ -108,6 +120,14 @@ Session 상태와 전이 규칙은 [architecture.md](./architecture.md)의 상�
 | API-020 | `POST /meeting-sessions/{sessionId}/processing/retry` | 처리 명시 재시도 |
 | API-021 | `GET /meeting-sessions/{sessionId}/audio/download` | 원본 Audio 다운로드 |
 | API-022 | `POST /meeting-sessions/{sessionId}/processing/finalize-failure` | 변환 실패 문서 기록 및 종료 |
+| API-023 | `GET /document-setup` | 전역 설정과 공용 위저드 상태 |
+| API-024 | `POST /document-setup/drafts` | 연결 후보 입력 저장 |
+| API-025 | `POST /document-setup/drafts/{draftId}/test` | 읽기 전용 연결 테스트 |
+| API-026 | `POST /document-setup/drafts/{draftId}/initialize` | 명시적 구조 생성·초기 활성화 |
+| API-027 | `GET /document-setup/operations/{operationId}` | 초기화/이전 진행 요약 |
+| API-028 | `POST /document-setup/switch` | 자료 복사 또는 새 시작 후 전환 |
+| API-029 | `POST /document-setup/operations/{operationId}/retry` | 중단·실패 작업 명시 재개 |
+| API-030 | `POST /document-setup/operations/{operationId}/cancel` | 작업 안전 취소 |
 
 ## Endpoint 계약
 
@@ -116,12 +136,12 @@ Session 상태와 전이 규칙은 [architecture.md](./architecture.md)의 상�
 `GET /api/v1/app-config` → `200`
 
 ```json
-{"data":{"company":{"id":"sfood","name":"SFOOD","timezone":"Asia/Seoul"},"document":{"provider":null,"configured":false},"email":{"enabled":true,"configured":true},"notification":{"provider":"SLACK","enabled":true},"recording":{"chunkDurationSeconds":15,"maxMeetingDurationMinutes":60}}}
+{"data":{"company":{"id":"sfood","name":"SFOOD","timezone":"Asia/Seoul"},"document":{"provider":null,"configured":false,"connectionVersion":0,"rootUrl":null},"setup":{"status":"UNCONFIGURED","required":true,"canCreateMeeting":false},"email":{"enabled":true,"configured":true},"notification":{"provider":"SLACK","enabled":true},"recording":{"chunkDurationSeconds":15,"maxMeetingDurationMinutes":60}}}
 ```
 
-공개 설정만 반환한다. Secret, Provider token, root credential은 절대 응답하지 않는다.
+공개 설정만 반환한다. 저장된 Secret과 Provider token은 응답하지 않는다. 문서 rootUrl/parent 위치의 공개 요약은 위저드 결과 확인에 사용하며 credential과 분리한다.
 
-`DOCUMENT_PROVIDER`가 없거나 빈 값이면 자동 Provider 선택을 하지 않고 `document.provider=null`, `document.configured=false`를 반환한다. 유효 Provider가 선택됐지만 해당 credentials가 없거나 형식이 잘못되면 선택된 Provider ID와 `configured=false`를 반환한다. 지원하지 않는 비어 있지 않은 enum은 HTTP 500 `INTERNAL_ERROR`로 변환한다.
+Document는 전역 영속 active 설정에서 읽는다. 미설정은 provider:null/configured:false다. 추가 필드는 document.connectionVersion (초기 0), document.rootUrl (없으면 null), setup:{status,required,canCreateMeeting,operationId?}다. status는 document-setup.md의 공개 enum을 따른다. config loading/storage 오류는 STORAGE_UNAVAILABLE로 구분하고 Provider 장애만으로 최초 설정을 강제하지 않는다. legacy DOCUMENT_PROVIDER env는 선택에 사용하지 않는다.
 
 ### API-002 Templates
 
@@ -158,8 +178,10 @@ Request는 `name`, `email` 중 하나 이상이며 제공된 필드만 수정한
 `POST /api/v1/meeting-sessions` (`Idempotency-Key`) → `201`
 
 ```json
-{"title":"AX 주간회의","templateId":"default.md","participantIds":["pt_001","pt_002"],"timezone":"Asia/Seoul","recoveryKey":"browser_generated_key"}
+{"title":"AX 주간회의","templateId":"default.md","participantIds":["pt_001","pt_002"],"timezone":"Asia/Seoul","documentConnectionVersion":1,"recoveryKey":"browser_generated_key"}
 ```
+
+Request의 documentConnectionVersion은 API-001에서 읽은 1 이상의 정수이며 필수다. 서버는 활성 연결 READY와 전환 lock을 먼저 검사한다. 미설정은 409 DOCUMENT_SETUP_REQUIRED, 전환 작업 중에는 409 DOCUMENT_CHANGE_BUSY, 오래된 연결 version은 409 DOCUMENT_CONNECTION_CHANGED다. 성공 Session에 생성 시점 connectionVersion을 보관한다.
 
 Backend는 trim한 title, `default.md`/`project.md` Template, 1개 이상인 중복 없는 Participant roster ID, IANA timezone, 비어 있지 않은 `recoveryKey`를 검증한다. 잘못된 입력은 400 `VALIDATION_FAILED`; Participant 목록 Provider 오류는 502 `PARTICIPANT_LIST_FAILED`다. Session은 memory에 `CREATED`/version 1로 생성한다. 같은 `Idempotency-Key`·동일 payload는 기존 결과를 반환하고 같은 key의 다른 payload는 409 `IDEMPOTENCY_KEY_CONFLICT`다. `recoveryKey`는 Provider 문서에 기록하지 않는다. `201` 응답은 `{sessionId,version:1,status:"CREATED",uploadPolicy:{chunkDurationSeconds,maxChunkBytes,acceptedMimeTypes}}`다. Session/idempotency 결과는 memory-only이며 process restart 이후 복구되지 않는다.
 
@@ -284,3 +306,24 @@ API-009, API-013, API-015, API-016은 작업 개시 응답에 `202 Accepted`를 
 ## 요구사항 추적
 
 PRD Traceability Matrix를 기준으로 한다. 핵심 연결: API-006은 FR-002, API-007~009는 FR-003~008, API-010~014는 FR-009~015, API-015~016은 FR-016~019/027, API-017~018은 FR-020~023, API-003~005는 FR-024, API-001/019는 FR-025~026이다.
+
+## 문서 서비스 설정 API
+
+모든 mutation은 `If-Match: "<전역 version>"`, `Idempotency-Key`, `X-Document-Setup-Request: true`를 요구한다. 필수 version/header 누락은 400 VALIDATION_FAILED, 허용되지 않은 Origin은 403 DOCUMENT_SETUP_ORIGIN_REJECTED다. Session version과 전역 revision은 별도다. 저장 성공마다 전역 version이 증가하며 응답은 최신 version/ETag를 반환한다. 사용자 계정 인증이나 사용자별 namespace는 추가하지 않는다. HTTP 오류는 기존 envelope와 안전한 category를 사용한다. Provider 통신 실패는 DOCUMENT_FAILURE, 입력은 VALIDATION, 상태/version은 CONFLICT, 저장소는 INTERNAL이다.
+
+| API | 입력 | 성공 응답 | 조건 |
+|---|---|---|---|
+| API-023 | 없음 | 200 `{version,status,active:{provider,connectionVersion,rootUrl}|null,draft:{draftId,revision,provider,state}|null,operation:{operationId,type,status}|null,canCreateMeeting}` | credential·email·본문 제외; 빈 저장소 version=0 |
+| API-024 | `{provider,location,credentials,reuseExistingRootId?}` | 201 `{draftId,revision,state:"DRAFT",version}` | 단일 draft 교체, 작업 실행/중단 lock 중 거절; 수정하면 테스트 무효 |
+| API-025 | `{draftRevision}` | 200 `{draftId,revision,testedAt,expiresAt,authenticated,parentAccessible,writeCapability:"VERIFIED"|"UNVERIFIED",version}` | 읽기 전용; 권한/연결 실패 502 DOCUMENT_FAILED, 잘못된 위치 400 |
+| API-026 | `{draftRevision,confirmStructure:true}` | 202 `{operationId,status:"PENDING",version}` | 유효 TESTED 필요; 최초 연결만 성공 후 active 설정, 운영 중은 PREPARED |
+| API-027 | 없음 | 200 `{operationId,type,status,stage,counts:{participantsTotal,participantsCopied,meetingsTotal,meetingsCopied},cancelRequested,errorCode?,retryable,allowedActions,version}` | stage=STRUCTURE/PREFLIGHT/PARTICIPANTS/MEETINGS/VERIFY/ACTIVATE; 본문·계정 정보 제외 |
+| API-028 | `{draftId,draftRevision,mode:"COPY_ALL"|"START_EMPTY",confirmSourcePreserved:true}` | 202 `{operationId,status:"PENDING",version}` | PREPARED 대상, 기존 active 필요, Session/쓰기 없음; 동시 검사와 lock 원자 처리 |
+| API-029 | `{}` | 202 `{operationId,status:"PENDING",version}` | FAILED/INTERRUPTED, allowedActions에 RETRY 필요; marker 조정 전 신규 생성 금지 |
+| API-030 | `{}` | 202 `{operationId,status,version}` | CANCEL_REQUESTED 상태는 status 대신 allowedActions/단계 설명으로 알리고 안전 지점 후 CANCELLED; source 보존 |
+
+Notion location은 `{parentPageId}` 또는 입력 URL을 Backend에서 ID로 정규화하며 credentials는 `{token}`이다. Confluence location은 `{baseUrl,spaceId,parentPageId?}`, credentials는 `{accountEmail,apiToken}`이다. Root 재사용 ID는 공개 위치 선택 정보다. 비지원 Provider·필수값 누락·URL 내 credential·허용되지 않은 host는 400 VALIDATION_FAILED다.
+
+Operation의 type은 INITIALIZE 또는 SWITCH이며 allowedActions는 RETRY/CANCEL/REVIEW_PROVIDER 중 해당 안전 action만 포함한다. RECONCILIATION_REQUIRED는 자동 RETRY를 제공하지 않고 marker 조회 결과를 확인할 REVIEW_PROVIDER와 CANCEL을 표시한다. API-024 draft는 마지막 변경 후 24시간 보관하며 활성 operation에 연결된 draft는 작업 종료까지 만료시키지 않는다. 전역 operation status/version 변경은 API-023/027에서 최신 revision으로 읽는다.
+
+미설정은 업무 API-003~006/015/017/018에 DOCUMENT_SETUP_REQUIRED다. 전환 lock은 쓰기 API-004~006/015/016/022에 DOCUMENT_CHANGE_BUSY다. 목록 조회와 Health는 구조를 생성하지 않는다. 업무 요청은 활성 connection snapshot을 사용하고 완료 후 cache를 무효화한다. 자세한 초기화·복사·취소 규칙은 [문서 연결 설계](./document-setup.md)를 따른다.

@@ -1,5 +1,7 @@
 # History·보안·임시 Audio E2E 검증 계획
 
+> 📌 v1.9.0 변경 계약: TASK-022.06의 최초 연결·양방향 이전·참조 무결성·source 보존·재시작 journal 사례를 회귀한다. release는 계정 없는 설정 UI와 durable 설정을 포함한다. 상세 기준은 [문서 연결·이전 설계](../../../product/document-setup.md)다. 아래의 과거 기준과 충돌하면 이 변경 계약을 우선 적용한다.
+
 ## 격리와 실행
 
 - Frontend: `frontend/`에서 `npm run test`, `npm run lint`, `npm run build`, `npm run test:e2e`; 신규 명령 `npm run test:e2e:history-security`.
@@ -38,3 +40,7 @@
 - 성공: 자동 시나리오 모두 통과, public egress 0, 만료/성공/실패 cleanup 완료, retry/download/discard 조건이 API/화면에서 일치, 실패 경로 attendee send 0.
 - 실패: read-only GET이 상태를 변경, 미승인 retry/download 노출, 만료 Audio 접근 성공, public storage/key 노출, 실패 문서/증거에 민감값 포함, attendee delivery 발생 또는 cleanup 비멱등.
 - Evidence `docs/evidence/TASK-021.03.md`에는 command/환경/commit, scenario ID/pass count, 상태/errorCode, 호출 횟수, fixture cleanup 집계만 기록한다. raw secret, URL, key, address, audio/transcript/minutes text 및 browser download bytes는 남기지 않는다.
+
+## 🔗 전역 연결 소비자 실제 연동 회귀
+
+회의 생성과 History 구현 이후 서비스 전환→새 회의 생성→이전된 자료 목록·상세 재조회 흐름을 실제 FE/BE로 검증한다. TASK-022.06의 소비자 fixture 합격으로 이 실제 연동 회귀를 대체하지 않는다.
