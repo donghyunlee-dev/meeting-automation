@@ -25,7 +25,7 @@ public final class ParticipantService {
     }
 
     public List<Participant> listParticipants() {
-        providerResolver.validateSelection();
+        providerResolver.requireActive();
         ParticipantListingProvider provider = providerResolver.selectedProvider()
                 .filter(ParticipantListingProvider.class::isInstance)
                 .map(ParticipantListingProvider.class::cast)
@@ -46,7 +46,7 @@ public final class ParticipantService {
     }
 
     public Participant createParticipant(String idempotencyKey, ParticipantCreateRequest request) {
-        providerResolver.validateSelection();
+        providerResolver.requireActive();
         ParticipantCreationProvider provider = providerResolver.selectedProvider()
                 .filter(ParticipantCreationProvider.class::isInstance)
                 .map(ParticipantCreationProvider.class::cast)
@@ -68,7 +68,7 @@ public final class ParticipantService {
     }
 
     public Participant updateParticipant(String participantId, ParticipantUpdateRequest request) {
-        providerResolver.validateSelection();
+        providerResolver.requireActive();
         ParticipantUpdatingProvider provider = providerResolver.selectedProvider()
                 .filter(ParticipantUpdatingProvider.class::isInstance)
                 .map(ParticipantUpdatingProvider.class::cast)

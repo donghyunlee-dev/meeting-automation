@@ -6,10 +6,8 @@ const validFrontend = 'VITE_API_BASE_URL=http://localhost:8080\n';
 const validBackend = `APP_COMPANY_ID=sfood
 APP_COMPANY_NAME=SFOOD
 APP_TIMEZONE=Asia/Seoul
-DOCUMENT_PROVIDER=NOTION
-DOCUMENT_ROOT_ID=<local-test-root-id>
-CONFLUENCE_BASE_URL=
-CONFLUENCE_ACCOUNT_EMAIL=
+DOCUMENT_SETTINGS_DIR=<absolute-persistent-directory>
+DOCUMENT_SETTINGS_ENCRYPTION_KEY=
 TRANSCRIPTION_MODEL=<configured-model-id>
 MINUTES_MODEL=<configured-model-id>
 EMAIL_PROVIDER=GMAIL_API
@@ -20,8 +18,6 @@ EMAIL_SENDER_ADDRESS=
 NOTIFICATION_PROVIDER=SLACK
 ALLOWED_ORIGINS=http://localhost:5173
 TEMP_AUDIO_DIR=<absolute-local-temp-directory>
-NOTION_TOKEN=
-CONFLUENCE_AUTH_TOKEN=
 OPENAI_API_KEY=
 SLACK_MEETING_WEBHOOK_URL=
 SLACK_ADMIN_WEBHOOK_URL=
@@ -46,13 +42,13 @@ test('rejects frontend variables other than the public API URL', () => {
 test('rejects nonempty backend credential values without returning their contents', () => {
   const result = inspectEnvSamples(validFrontend, validBackend
     .replace('OPENAI_API_KEY=\n', 'OPENAI_API_KEY=secret-marker\n')
-    .replace('CONFLUENCE_ACCOUNT_EMAIL=\n', 'CONFLUENCE_ACCOUNT_EMAIL=secret-marker\n'));
+    .replace('DOCUMENT_SETTINGS_ENCRYPTION_KEY=\n', 'DOCUMENT_SETTINGS_ENCRYPTION_KEY=secret-marker\n'));
 
   assert.equal(result.valid, false);
   assert.ok(result.issues.some(issue => issue.file === 'backend/.env.example'
     && issue.key === 'OPENAI_API_KEY'));
   assert.ok(result.issues.some(issue => issue.file === 'backend/.env.example'
-    && issue.key === 'CONFLUENCE_ACCOUNT_EMAIL'));
+    && issue.key === 'DOCUMENT_SETTINGS_ENCRYPTION_KEY'));
   assert.equal(JSON.stringify(result.issues).includes('secret-marker'), false);
 });
 
@@ -79,10 +75,10 @@ test('requires the frontend API URL and flags malformed sample lines safely', ()
 });
 
 test('requires the documented non-secret backend settings', () => {
-  const result = inspectEnvSamples(validFrontend, validBackend.replace('CONFLUENCE_BASE_URL=\n', ''));
+  const result = inspectEnvSamples(validFrontend, validBackend.replace('DOCUMENT_SETTINGS_DIR=<absolute-persistent-directory>\n', ''));
 
   assert.equal(result.valid, false);
   assert.ok(result.issues.some(issue => issue.file === 'backend/.env.example'
-    && issue.key === 'CONFLUENCE_BASE_URL'
+    && issue.key === 'DOCUMENT_SETTINGS_DIR'
     && issue.code === 'MISSING_REQUIRED_KEY'));
 });

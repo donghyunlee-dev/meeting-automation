@@ -2356,7 +2356,7 @@ Meeting UI
 | `TASK-004.01` | DONE | DONE | [Issue #14](https://github.com/donghyunlee-dev/meeting-automation/issues/14) / [PR #92](https://github.com/donghyunlee-dev/meeting-automation/pull/92) | [검증 증거](../evidence/TASK-004.01/verification.md), tests/review/QA PASS at `5c122bb` | `79287928a18b06124f74116433d38fdc63b7e91c` | 2026-10-09 20:56 KST |
 | `TASK-004.02` | DONE | DONE | [Issue #15](https://github.com/donghyunlee-dev/meeting-automation/issues/15) / [PR #93](https://github.com/donghyunlee-dev/meeting-automation/pull/93) | [검증 증거](../evidence/TASK-004.02/verification.md), tests/review/QA PASS at `d43543c` | `c2b06eb82bfaa155f1025fd47d16097fe6d7143a` | 2026-10-09 22:03 KST |
 | `TASK-004.03` | DONE | DONE | [Issue #16](https://github.com/donghyunlee-dev/meeting-automation/issues/16) / [PR #94](https://github.com/donghyunlee-dev/meeting-automation/pull/94) | [검증 증거](../evidence/TASK-004.03/verification.md), tests/review/QA PASS at `b043f1a` | `cea7902fb10cb0ea44c3c845cd9636ad0ebb2f0c` | 2026-10-10 00:04 KST |
-| `TASK-022.01` | TODO | DESIGN_READY | [Issue #96](https://github.com/donghyunlee-dev/meeting-automation/issues/96) / — | — | — | — |
+| `TASK-022.01` | IN_PROGRESS | IMPLEMENT | [Issue #96](https://github.com/donghyunlee-dev/meeting-automation/issues/96) / — | — | — | — |
 | `TASK-022.02` | TODO | DESIGN_READY | [Issue #97](https://github.com/donghyunlee-dev/meeting-automation/issues/97) / — | — | — | — |
 | `TASK-022.03` | TODO | DESIGN_READY | [Issue #98](https://github.com/donghyunlee-dev/meeting-automation/issues/98) / — | — | — | — |
 | `TASK-022.04` | TODO | DESIGN_READY | [Issue #99](https://github.com/donghyunlee-dev/meeting-automation/issues/99) / — | — | — | — |
