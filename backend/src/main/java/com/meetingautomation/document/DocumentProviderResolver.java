@@ -1,76 +1,26 @@
 package com.meetingautomation.document;
 
-import com.meetingautomation.document.confluence.ConfluencePageHierarchyAdapter;
-import com.meetingautomation.document.notion.NotionPageHierarchyAdapter;
+import com.meetingautomation.document.settings.*;
 import java.util.Optional;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
-/** Resolves the single document provider selected by backend configuration. */
+/** Resolves only the durable active connection. Drafts and legacy env never select a provider. */
 @Component
 public final class DocumentProviderResolver {
-    private final String provider;
-    private final DocumentStructureProvider selectedProvider;
-    private final boolean configured;
-    private final String rootId;
-    private final boolean selectionValid;
-
-    public DocumentProviderResolver(
-            @Value("${DOCUMENT_PROVIDER:}") String selection,
-            @Value("${DOCUMENT_ROOT_ID:}") String rootId,
-            NotionPageHierarchyAdapter notionProvider,
-            ConfluencePageHierarchyAdapter confluenceProvider) {
-        this.rootId = rootId;
-        String normalized = selection == null ? "" : selection.trim();
-        if (normalized.isEmpty()) {
-            this.provider = null;
-            this.selectedProvider = null;
-            this.configured = false;
-            this.selectionValid = true;
-            return;
-        }
-
-        switch (normalized) {
-            case "NOTION" -> {
-                this.provider = normalized;
-                this.selectedProvider = notionProvider;
-                this.configured = notionProvider.isConfigured();
-                this.selectionValid = true;
-            }
-            case "CONFLUENCE" -> {
-                this.provider = normalized;
-                this.selectedProvider = confluenceProvider;
-                this.configured = confluenceProvider.isConfigured();
-                this.selectionValid = true;
-            }
-            default -> {
-                this.provider = null;
-                this.selectedProvider = null;
-                this.configured = false;
-                this.selectionValid = false;
-            }
-        }
+    private final GlobalSettingsStore store;
+    private final DocumentProviderFactory factory;
+    public DocumentProviderResolver(GlobalSettingsStore store, DocumentProviderFactory factory) {
+        this.store = store; this.factory = factory;
     }
-
-    public void validateSelection() {
-        if (!selectionValid) {
-            throw new IllegalStateException("Unsupported DOCUMENT_PROVIDER configuration.");
-        }
+    public void requireActive() {
+        if (store.read().active() == null) throw new SettingsException("DOCUMENT_SETUP_REQUIRED", 409);
     }
-
-    public String providerId() {
-        return provider;
+    public Optional<GlobalDocumentSettings.Connection> active() {
+        try { return Optional.ofNullable(store.read().active()); }
+        catch (SettingsException failure) { return Optional.empty(); }
     }
-
-    public boolean configured() {
-        return configured;
-    }
-
-    public Optional<DocumentStructureProvider> selectedProvider() {
-        return Optional.ofNullable(selectedProvider);
-    }
-
-    public String rootId() {
-        return rootId;
-    }
+    public String providerId() { return active().map(GlobalDocumentSettings.Connection::provider).orElse(null); }
+    public boolean configured() { return active().isPresent(); }
+    public Optional<DocumentStructureProvider> selectedProvider() { return active().map(factory::create); }
+    public String rootId() { return active().map(GlobalDocumentSettings.Connection::rootId).orElse(null); }
 }

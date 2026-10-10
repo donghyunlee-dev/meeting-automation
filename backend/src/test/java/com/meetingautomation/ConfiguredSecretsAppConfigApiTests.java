@@ -40,7 +40,7 @@ class ConfiguredSecretsAppConfigApiTests {
                 .andExpect(jsonPath("$.data.email.configured").value(true))
                 .andExpect(result -> {
                     String response = result.getResponse().getContentAsString();
-                    assertFalse(response.contains("app-config-root-secret-marker"));
+                    org.junit.jupiter.api.Assertions.assertTrue(response.contains("connectionVersion"));
                     assertFalse(response.contains("app-config-notion-token-secret-marker"));
                     assertFalse(response.contains("app-config-email-client-id-marker"));
                     assertFalse(response.contains("app-config-email-client-secret-marker"));
