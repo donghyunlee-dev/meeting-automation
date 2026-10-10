@@ -122,6 +122,102 @@ class GlobalSettingsTests {
         assertThrows(DocumentProviderException.class, () -> useCase.testDraft(1, "test", store().read().draft().draftId(), 1));
         assertArrayEquals(before, Files.readAllBytes(directory.resolve("settings.enc")));
     }
+    @Test void setupTestProviderWaitDoesNotBlockSettingsStatusOrStoreReads() throws Exception {
+        useCase().saveDraft(0, "draft", notion("secret"));
+        String draftId = store().read().draft().draftId();
+        var entered = new CountDownLatch(1);
+        var release = new CountDownLatch(1);
+        var settings = new GlobalSettingsUseCase(store(), draft -> awaitProvider(entered, release));
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            var testing = executor.submit(() -> settings.testDraft(1, "test", draftId, 1));
+            try {
+                assertTrue(entered.await(5, TimeUnit.SECONDS), "Provider verification did not start");
+                var reading = executor.submit(() -> List.of(settings.status().version(), store().read().version()));
+                assertEquals(List.of(1L, 1L), reading.get(2, TimeUnit.SECONDS));
+            } finally { release.countDown(); }
+            assertEquals(200, testing.get(5, TimeUnit.SECONDS).status());
+        }
+    }
+    @Test void setupTestConcurrentDraftChangeRejectsStaleVerificationWithoutSavingTestedState() throws Exception {
+        useCase().saveDraft(0, "draft", notion("secret"));
+        String draftId = store().read().draft().draftId();
+        var entered = new CountDownLatch(1);
+        var release = new CountDownLatch(1);
+        var settings = new GlobalSettingsUseCase(store(), draft -> awaitProvider(entered, release));
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            var testing = executor.submit(() -> settings.testDraft(1, "test", draftId, 1));
+            try {
+                assertTrue(entered.await(5, TimeUnit.SECONDS));
+                var editing = executor.submit(() -> useCase().saveDraft(1, "edit", confluence()));
+                assertEquals(201, editing.get(2, TimeUnit.SECONDS).status());
+            } finally { release.countDown(); }
+            var error = assertThrows(ExecutionException.class, () -> testing.get(5, TimeUnit.SECONDS));
+            assertEquals(412, ((SettingsException) error.getCause()).status());
+            assertEquals(2, store().read().version());
+            assertEquals("CONFLUENCE", store().read().draft().provider());
+            assertEquals("DRAFT", store().read().draft().state());
+            assertNull(store().read().draft().testResult());
+            assertFalse(store().read().idempotencyRecords().containsKey("test"));
+        }
+    }
+    @Test void setupTestConcurrentSameKeyReturnsOneDurableResult() throws Exception {
+        useCase().saveDraft(0, "draft", notion("secret"));
+        String draftId = store().read().draft().draftId();
+        var entered = new CountDownLatch(2);
+        var release = new CountDownLatch(1);
+        var settings = new GlobalSettingsUseCase(store(), draft -> awaitProvider(entered, release));
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            var first = executor.submit(() -> settings.testDraft(1, "test", draftId, 1));
+            var second = executor.submit(() -> settings.testDraft(1, "test", draftId, 1));
+            try { assertTrue(entered.await(5, TimeUnit.SECONDS)); }
+            finally { release.countDown(); }
+            var result = first.get(5, TimeUnit.SECONDS);
+            assertEquals(result, second.get(5, TimeUnit.SECONDS));
+            assertEquals(2, store().read().version());
+            assertEquals(result, useCase().testDraft(1, "test", draftId, 1));
+        }
+    }
+    @Test void setupTestDraftExpiryDuringProviderCallRejectsVerification() throws Exception {
+        var time = new java.util.concurrent.atomic.AtomicReference<>(Instant.parse("2026-10-10T00:00:00Z"));
+        Clock clock = new Clock() {
+            @Override public ZoneId getZone() { return ZoneOffset.UTC; }
+            @Override public Clock withZone(ZoneId zone) { return this; }
+            @Override public Instant instant() { return time.get(); }
+        };
+        var entered = new CountDownLatch(1);
+        var release = new CountDownLatch(1);
+        var settings = new GlobalSettingsUseCase(store(), draft -> awaitProvider(entered, release), clock);
+        settings.saveDraft(0, "draft", notion("secret"));
+        String draftId = store().read().draft().draftId();
+        try (var executor = Executors.newSingleThreadExecutor()) {
+            var testing = executor.submit(() -> settings.testDraft(1, "test", draftId, 1));
+            try {
+                assertTrue(entered.await(5, TimeUnit.SECONDS));
+                time.updateAndGet(now -> now.plusSeconds(86401));
+            } finally { release.countDown(); }
+            var error = assertThrows(ExecutionException.class, () -> testing.get(5, TimeUnit.SECONDS));
+            assertEquals(412, ((SettingsException) error.getCause()).status());
+            assertEquals(1, store().read().version());
+            assertNull(store().read().draft().testResult());
+            assertFalse(store().read().idempotencyRecords().containsKey("test"));
+        }
+    }
+    @Test void setupTestProviderReceivesAnImmutableDraftSnapshot() {
+        useCase().saveDraft(0, "draft", notion("secret"));
+        String draftId = store().read().draft().draftId();
+        var settings = new GlobalSettingsUseCase(store(), draft -> {
+            assertThrows(UnsupportedOperationException.class, () -> draft.credentials().put("token", "mutated"));
+            assertThrows(UnsupportedOperationException.class, () -> draft.location().put("parentPageId", "mutated"));
+        });
+        assertEquals(200, settings.testDraft(1, "test", draftId, 1).status());
+        assertEquals("secret", store().read().draft().credentials().get("token"));
+    }
+    private static void awaitProvider(CountDownLatch entered, CountDownLatch release) {
+        entered.countDown();
+        try {
+            if (!release.await(15, TimeUnit.SECONDS)) throw new IllegalStateException("Provider test was not released");
+        } catch (InterruptedException failure) { Thread.currentThread().interrupt(); throw new IllegalStateException(failure); }
+    }
     @Test void setupSecretExpiredDraftCredentialsAreRemovedDurably() {
         Instant now = Instant.parse("2026-10-10T00:00:00Z");
         new GlobalSettingsUseCase(store(), draft -> {}, Clock.fixed(now, ZoneOffset.UTC)).saveDraft(0, "draft", notion("expired-secret"));

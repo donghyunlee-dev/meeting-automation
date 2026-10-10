@@ -60,15 +60,32 @@ public final class GlobalSettingsUseCase {
     }
     public MutationResult testDraft(long version, String key, String draftId, long revision) {
         String hmac = store.fingerprint("test:" + draftId + ":" + revision);
+        TestPreparation preparation = store.transaction(current -> {
+            var replay = replay(current, key, hmac);
+            if (replay != null) return new GlobalSettingsStore.Change<>(current, new TestPreparation(null, replay));
+            checkVersion(current, version);
+            if (locked(current)) throw new SettingsException("DOCUMENT_CHANGE_BUSY", 409);
+            var draft = liveDraft(current);
+            if (draft == null || !draft.draftId().equals(draftId)) throw new SettingsException("DOCUMENT_DRAFT_NOT_FOUND", 404);
+            if (draft.revision() != revision) throw new SettingsException("DOCUMENT_SETTINGS_VERSION_CONFLICT", 412);
+            var snapshot = new GlobalDocumentSettings.Draft(draft.draftId(), draft.revision(), draft.provider(),
+                Map.copyOf(draft.location()), Map.copyOf(draft.credentials()), draft.reuseExistingRootId(),
+                draft.state(), draft.testResult(), draft.expiresAt());
+            return new GlobalSettingsStore.Change<>(current, new TestPreparation(snapshot, null));
+        });
+        if (preparation.replay() != null) return preparation.replay();
+
+        // Provider I/O must never hold the process-wide snapshot lock.
+        tester.verify(preparation.draft());
+
         return store.transaction(current -> {
             var replay = replay(current, key, hmac);
             if (replay != null) return new GlobalSettingsStore.Change<>(current, replay);
             checkVersion(current, version);
             if (locked(current)) throw new SettingsException("DOCUMENT_CHANGE_BUSY", 409);
             var draft = liveDraft(current);
-            if (draft == null || !draft.draftId().equals(draftId)) throw new SettingsException("DOCUMENT_DRAFT_NOT_FOUND", 404);
-            if (draft.revision() != revision) throw new SettingsException("DOCUMENT_SETTINGS_VERSION_CONFLICT", 412);
-            tester.verify(draft);
+            if (draft == null || !draft.draftId().equals(draftId) || draft.revision() != revision)
+                throw new SettingsException("DOCUMENT_SETTINGS_VERSION_CONFLICT", 412);
             Instant now = clock.instant();
             var test = new GlobalDocumentSettings.TestResult(now, now.plus(Duration.ofMinutes(10)), true, true, "UNVERIFIED");
             var tested = new GlobalDocumentSettings.Draft(draft.draftId(), draft.revision(), draft.provider(), draft.location(),
@@ -79,6 +96,7 @@ public final class GlobalSettingsUseCase {
             return changed(current, tested, key, hmac, 200, response);
         });
     }
+    private record TestPreparation(GlobalDocumentSettings.Draft draft, MutationResult replay) { }
     private GlobalDocumentSettings.Draft liveDraft(GlobalDocumentSettings state) {
         var draft = state.draft();
         return draft != null && (draft.expiresAt().isAfter(clock.instant()) || locked(state)) ? draft : null;
