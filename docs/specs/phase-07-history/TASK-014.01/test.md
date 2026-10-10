@@ -30,3 +30,7 @@
 
 - `./gradlew test` 및 저장소의 Backend build 명령을 실행하고 결과를 Evidence 문서에 남긴다.
 - 선택된 Provider의 정상 자식 페이지 pagination을 비생산 데이터에서 확인한다. 운영 Secret이나 실제 민감 회의 데이터를 로그에 남기지 않는다.
+
+## 🔗 전역 연결 소비자 실제 연동 회귀
+
+이 작업은 TASK-022.06에서 계약 fixture로만 검증한 실제 API-017을 연결한다. 이전된 target 문서를 조회하고 전환 전 source 목록/cache를 재사용하지 않으며 참석자 참조가 target roster와 일치하는지 실제 요청으로 검증한다.

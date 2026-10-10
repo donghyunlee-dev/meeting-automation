@@ -22,3 +22,5 @@
 - 모든 단계의 테스트 결과가 [검증 계획](./test.md)에 기록되어 있다.
 - `git diff --check` 및 변경 파일 검토가 통과한다.
 - API-017 및 Data/DocumentProvider 계약과 구현 DTO가 일치한다.
+
+- [ ] TASK-022의 후속 실제 소비자 검증을 수행하고 [검증 계획](./test.md)에 결과를 남긴다: 이 작업은 TASK-022.06에서 계약 fixture로만 검증한 실제 API-017을 연결한다. 이전된 target 문서를 조회하고 전환 전 source 목록/cache를 재사용하지 않으며 참석자 참조가 target roster와 일치하는지 실제 요청으로 검증한다.

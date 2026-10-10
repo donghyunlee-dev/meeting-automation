@@ -15,6 +15,8 @@ Frontend가 화면·typed client·컴포넌트 테스트를 소유한다. 검증
 
 ## 🧭 구현 순서
 
+이 시점의 실통합 범위는 API-001/003~005/019/023~030과 Provider의 초기 구조·전체 복사·read-back이다. 아직 구현되지 않은 API-006/015~018/022와 녹음 화면은 후속 소비자 계약 fixture로만 검증한다. History cache 무효화 이벤트/새 connectionVersion 계약은 이 단계에서 검증하고 실제 목록 API 연결은 TASK-014에서 검증한다. 존재하지 않는 endpoint를 호출한 404를 이 작업의 구현 장애로 판정하지 않는다.
+
 - spec의 수용 기준별 실패 fixture와 테스트를 먼저 추가하고 실패 원인을 확인한다.
 - Frontend Settings 문서 연결 row, wizard switching mode, MigrationProgress, operation polling, cache invalidation, browser QA 시나리오에 필요한 최소 변경을 적용한다. 다른 진행자의 수정이나 기존 검증 기록을 되돌리지 않는다.
 - 상태/멱등/오류/보안 회귀를 통과시키고 공통 명세와 실제 요청·응답을 대조한다.

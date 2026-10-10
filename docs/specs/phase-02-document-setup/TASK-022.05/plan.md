@@ -15,6 +15,8 @@ Backend가 Port/유스케이스/Adapter와 unit·계약 테스트를 소유한�
 
 ## 🧭 구현 순서
 
+Session/Publish/Delivery 업무 API는 이 시점에 아직 구현되지 않았으므로 공용 DocumentConnectionGate와 업무 등록/쓰기 lease 계약을 먼저 만든다. gate의 beginSession(expectedConnectionVersion, sessionId)은 전환 잠금 검사와 Session 등록을 동일 전역 lock에서 처리하며, 종료 통지는 Session 등록을 제거한다. in-flight 쓰기는 같은 경계에서 lease를 획득·해제한다. 기존 Participant 쓰기는 즉시 연결한다. 후속 TASK-004.04/010.02와 Delivery/실패 종료 작업은 이 gate를 연결하고 실제 요청 회귀를 검증한다. 이 단계에서 누락된 업무 Controller를 선행 구현하거나 기존 PR #95를 병합하지 않는다.
+
 - spec의 수용 기준별 실패 fixture와 테스트를 먼저 추가하고 실패 원인을 확인한다.
 - DocumentSwitchUseCase, MigrationCoordinator, 전역 상태 store/journal, operation retry/cancel, Session/Participant/Publish/Delivery 연결 gate에 필요한 최소 변경을 적용한다. 다른 진행자의 수정이나 기존 검증 기록을 되돌리지 않는다.
 - 상태/멱등/오류/보안 회귀를 통과시키고 공통 명세와 실제 요청·응답을 대조한다.

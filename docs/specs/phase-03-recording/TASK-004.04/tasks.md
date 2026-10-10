@@ -12,3 +12,5 @@
 8. process restart 후 memory store의 복구를 기대하지 않는 경계를 검증하고 Backend test/build를 실행한다.
 
 각 수용 조건과 오류는 [test.md](./test.md)에 연결한다.
+
+- [ ] TASK-022의 후속 실제 소비자 검증을 수행하고 [검증 계획](./test.md)에 결과를 남긴다: 이 작업은 TASK-022에서 계약 fixture로만 검증한 실제 API-006 소비자를 연결한다. READY 성공 생성, 미설정/전환 중/stale connectionVersion 409, 생성과 전환의 원자 경쟁 및 Session 등록/종료 gate 사용을 실제 요청과 공용 registry 계약으로 검증한다.

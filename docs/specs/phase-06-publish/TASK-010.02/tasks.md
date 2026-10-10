@@ -27,3 +27,5 @@
 - 같은 Session으로 문서가 두 개 생기는 테스트가 없다.
 - 동기 API 응답은 접수 상태이고, 최종 상태/document reference는 API-010으로 확인된다.
 - 후속 작업의 소유 경계가 지켜지고 secrets/provider raw payload가 노출되지 않는다.
+
+- [ ] TASK-022의 후속 실제 소비자 검증을 수행하고 [검증 계획](./test.md)에 결과를 남긴다: 이 작업은 TASK-022에서 계약 fixture로 검증한 실제 Publish 소비자를 연결한다. active connection snapshot과 표준 codec을 사용하고, 전환 lock 중 실제 API-015 요청을 차단하며 쓰기 lease를 안전하게 해제하는 회귀를 필수로 수행한다.

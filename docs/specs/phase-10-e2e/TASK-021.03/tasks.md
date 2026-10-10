@@ -11,3 +11,5 @@
 - [ ] 24시간 전후 action/API 경계, TTL reset/pause, sweeper 및 재시작 cleanup을 작성한다. 의존: DEC-020 및 durable expiry 구현. 결과: 만료 즉시 재시도/다운로드 불가, 객체 삭제와 Discarded 확정이 멱등이다.
 - [ ] 민감 canary 비노출, `provider:null` 화면 연결, no-egress와 sanitized evidence를 통합한다. 의존: API-001/019, TASK-017.01/.04. 결과: 비밀 값이 없는 scan 결과 및 setup 안내 화면 검증.
 - [ ] `npm run test:e2e:history-security`를 2회 실행해 증거를 작성한다. 의존: 전체 scenario. 결과: `docs/evidence/TASK-021.03.md`에 안전한 집계 및 환경/commit 정보만 기록한다.
+
+- [ ] TASK-022의 후속 실제 소비자 검증을 수행하고 [검증 계획](./test.md)에 결과를 남긴다: 회의 생성과 History 구현 이후 서비스 전환→새 회의 생성→이전된 자료 목록·상세 재조회 흐름을 실제 FE/BE로 검증한다. TASK-022.06의 소비자 fixture 합격으로 이 실제 연동 회귀를 대체하지 않는다.

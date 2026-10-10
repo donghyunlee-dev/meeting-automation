@@ -30,3 +30,7 @@ Backend 표준 JUnit/Gradle 테스트에서 fake DocumentProvider 및 Provider H
 - `./gradlew test`와 Backend build 명령을 실행하고 Evidence 문서에 결과를 기록한다.
 - Notion page child/body pagination 및 Confluence page detail body-format 처리가 선택된 Adapter에서 확인된다.
 - Log/trace 설정에서 요청/응답 본문과 Secret이 기록되지 않는지 확인한다.
+
+## 🔗 전역 연결 소비자 실제 연동 회귀
+
+이 작업은 TASK-022.06에서 계약 fixture로만 검증한 실제 API-018을 연결한다. 이전된 target documentId의 Minutes/Transcript/참석자 참조와 새 Provider 원문 URL을 실제 요청으로 검증하고 source 자료가 보존된 것도 확인한다.

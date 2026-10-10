@@ -2336,6 +2336,8 @@ Meeting UI
 
 **실행 우선순위:** TASK-022.01 → TASK-022.02 → TASK-022.03 → TASK-022.04 → TASK-022.05 → TASK-022.06 → TASK-004.04 재검증 → 기존 커서 순서. 새 변경 작업이 모두 완료되기 전 일반 기능 개발과 PR #95 병합을 진행하지 않는다. GitHub Issue 번호나 생성일 정렬을 실행 순서로 해석하지 않는다.
 
+**재개 선택 규칙:** 새 세션과 기존 세션 모두 최신 master의 개발 커서·실행 우선순위와 GitHub 선행 관계를 로컬 checkpoint보다 먼저 적용한다. `Resume existing work`는 기존 작업이 여전히 실행 가능한 경우에만 적용한다. TASK-004.04가 checkpoint나 열린 PR에 남아 있어도 TASK-022.06 완료 전에는 보존 상태로 두고 TASK-022 중 가장 앞의 실행 가능한 작업을 선택한다. 과거의 `Provider 수동 설정 대기`는 재개 조건으로 사용하지 않는다. TASK-022.01의 첫 개발·mock 검증을 시작하기 위해 사용자가 먼저 문서 서비스나 키를 준비할 필요는 없으며, 실제 연동 QA에서 필요한 환경만 별도로 확인한다.
+
 | TASK | 개발 상태 | 단계 | Issue / PR | 검증 증거 | 병합 commit | 완료 일시 (Asia/Seoul) |
 |---|---|---|---|---|---|---|
 | `TASK-001.01` | DONE | DONE | [Issue #1](https://github.com/donghyunlee-dev/meeting-automation/issues/1) / [PR #63](https://github.com/donghyunlee-dev/meeting-automation/pull/63) | [검증 증거](../evidence/TASK-001.01.md), review/QA PASS at `af14fd0` | `220d419ce94f705d97970c7cfdee7e32f3eaf67c` | 2026-10-06 19:08 KST |

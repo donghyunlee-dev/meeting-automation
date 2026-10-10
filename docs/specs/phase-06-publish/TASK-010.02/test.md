@@ -41,3 +41,7 @@ Backend 구현 시 JUnit 5로 API/application/provider 경계를 검증한다. �
 - 기본 Confluence Cloud 구성은 REST API v2 및 Basic(email/API token) 설정을 기존 Adapter 경계에서 사용하며 secret은 API 응답/로그에 없어야 한다.
 - 문서 생성의 externalSessionId가 Session ID와 일치하는지 검토한다.
 - 자동화/manual evidence와 실제 명령 결과를 Issue #44에 기록한다. 실제 Provider 사용 여부는 구현 단계의 별도 승인 절차를 따른다.
+
+## 🔗 전역 연결 소비자 실제 연동 회귀
+
+이 작업은 TASK-022에서 계약 fixture로 검증한 실제 Publish 소비자를 연결한다. active connection snapshot과 표준 codec을 사용하고, 전환 lock 중 실제 API-015 요청을 차단하며 쓰기 lease를 안전하게 해제하는 회귀를 필수로 수행한다.

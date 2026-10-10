@@ -83,6 +83,8 @@ Operation은 `PENDING → RUNNING → SUCCEEDED` 또는 `FAILED`, `INTERRUPTED`,
 | TASK-022.05 | COPY_ALL/START_EMPTY 전환, durable journal, 재개·취소, 동시성 gate | TASK-022.04, TASK-022.01 |
 | TASK-022.06 | Settings 재설정·이전 화면, 최초/양방향 전환 통합 QA | TASK-022.03, TASK-022.05 |
 
+TASK-022.05는 공용 연결 gate와 업무 등록/쓰기 lease 계약을 만들고 기존 Participant API에 연결한다. 아직 없는 Session/Publish/Delivery API는 소비자 fixture로 검증한다. TASK-022.06의 실제 통합은 설정·참석자 API와 Provider 초기화/복사/read-back이며, Session/History UI는 계약 fixture로 검증한다. 실제 API-006/015/017/018 연동 회귀는 TASK-004.04/010.02/014.01/014.02/021.03의 필수 후속 검증이다. 이 구분으로 설정 작업이 미구현 후속 기능을 선행 조건으로 요구하지 않는다.
+
 개발 순서는 이 표 순서다. TASK-022.06 완료 전 TASK-004.04와 PR #95를 병합하지 않는다. 재개 때 새 master를 반영하고 변경된 연결 gate/API 계약에 맞춰 테스트·리뷰·QA를 다시 수행한다. DONE인 기존 TASK는 역사적 증거로 보존하고 새 변경 TASK에서 수정한다.
 
 ## 🔎 공식 기준 확인

@@ -21,9 +21,13 @@ Fixture는 synthetic 문서/참석자를 사용하고 외부 Provider 요청은 
 
 backend에서 Windows `.\gradlew.bat test`, `.\gradlew.bat clean build`; macOS/Linux `./gradlew test`, `./gradlew clean build`를 실행한다.
 
+## 🔌 선행 구현이 없는 소비자 검증
+
+SWITCH-BUSY는 실제 전환 유스케이스와 공용 gate/등록 registry에 Session 상태·쓰기 lease fixture를 주입해 검증한다. CREATE와 SWITCH를 같은 lock에서 경쟁시키며 기존 Participant API 쓰기도 실제 연결한다. API-006/015/016/022 실요청 검증은 해당 후속 작업에 남기고 이 단계에서 필수로 요구하지 않는다.
+
 ## 👀 수동 QA
 
-로컬 단일 Backend를 중단·재시작해 실패 이전을 수동 재개하고 두 브라우저의 전환/회의 시작 경쟁을 재현한다. 앱 밖 원본 편집을 감지하고 원본 링크가 계속 열리는지 확인한다.
+로컬 단일 Backend를 중단·재시작해 실패 이전을 수동 재개하고 두 브라우저의 전환/참석자 쓰기 경쟁과 Session 등록 contract fixture 경쟁을 재현한다. 앱 밖 원본 편집을 감지하고 원본 링크가 계속 열리는지 확인한다.
 
 ## 📋 증거와 합격 조건
 

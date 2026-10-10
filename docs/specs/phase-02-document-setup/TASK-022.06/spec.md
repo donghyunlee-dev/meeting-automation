@@ -21,8 +21,8 @@ Settings에서 같은 위저드를 재사용해 새 연결 준비·전체 복사
 - **CHANGE-CHOICE**: 복사 범위와 원본 보존 안내, 선택에 맞는 API-028 한 번 요청.
 - **CHANGE-PROGRESS**: 안전한 상태·재개/취소 안내; 불명확한 생성 자동 재시도 없음.
 - **CHANGE-REFRESH**: 같은 operation을 조회, 중복 switch 방지, revision 충돌 재읽기.
-- **CHANGE-INTEGRATION**: 기본 구조·자료·참조·source 보존 검증, 완료 뒤 새 roster/history 조회.
-- **CHANGE-GATE**: 신규 회의/참석자 쓰기 차단 및 최신 목록 재조회, 로그인 화면 없음.
+- **CHANGE-INTEGRATION**: 설정/참석자 API 실통합과 Provider 복사본 read-back 검증, 새 roster 조회 및 후속 History 소비자 계약 fixture 검증.
+- **CHANGE-GATE**: 참석자 실제 쓰기 차단과 새 roster 조회, 후속 Session/History 상태 gate 계약 fixture 검증, 로그인 화면 없음.
 - **CHANGE-ACCESSIBILITY**: 영역별 오류/재시도·focus·상태 알림, 키 저장·재노출 없음.
 
 ## 📐 경계

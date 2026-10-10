@@ -12,9 +12,9 @@
 - [ ] **CHANGE-REFRESH** 실패 테스트를 작성하고 기대한 이유로 실패하는지 기록한다.
 - [ ] 해당 최소 구현으로 **CHANGE-REFRESH**을 통과시킨다: 같은 operation을 조회, 중복 switch 방지, revision 충돌 재읽기.
 - [ ] **CHANGE-INTEGRATION** 실패 테스트를 작성하고 기대한 이유로 실패하는지 기록한다.
-- [ ] 해당 최소 구현으로 **CHANGE-INTEGRATION**을 통과시킨다: 기본 구조·자료·참조·source 보존 검증, 완료 뒤 새 roster/history 조회.
+- [ ] 해당 최소 구현으로 **CHANGE-INTEGRATION**을 통과시킨다: 설정/참석자 API 실통합과 Provider 복사본 read-back 검증, 새 roster 조회 및 후속 History 소비자 계약 fixture 검증.
 - [ ] **CHANGE-GATE** 실패 테스트를 작성하고 기대한 이유로 실패하는지 기록한다.
-- [ ] 해당 최소 구현으로 **CHANGE-GATE**을 통과시킨다: 신규 회의/참석자 쓰기 차단 및 최신 목록 재조회, 로그인 화면 없음.
+- [ ] 해당 최소 구현으로 **CHANGE-GATE**을 통과시킨다: 참석자 실제 쓰기 차단과 새 roster 조회, 후속 Session/History 상태 gate 계약 fixture 검증, 로그인 화면 없음.
 - [ ] **CHANGE-ACCESSIBILITY** 실패 테스트를 작성하고 기대한 이유로 실패하는지 기록한다.
 - [ ] 해당 최소 구현으로 **CHANGE-ACCESSIBILITY**을 통과시킨다: 영역별 오류/재시도·focus·상태 알림, 키 저장·재노출 없음.
 - [ ] 관련 Provider/API/화면 회귀를 한 번 수행하고 저장된 Secret·원본 삭제·불필요 전달이 없는지 검증한다.
