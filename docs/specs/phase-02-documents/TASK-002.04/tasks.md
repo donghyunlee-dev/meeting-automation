@@ -1,5 +1,7 @@
 # Provider 선택 및 Health 작업 목록
 
+> 📌 v1.9.0 변경 안내: 이 문서는 완료된 TASK-002.04의 당시 구현/검증 이력이다. Backend env로 선택·credential을 고정하는 계약과 초기 구조 생성 제외 범위는 새 TASK-022에서 변경한다. 현재 구현 기준은 [문서 연결·이전 설계](../../../product/document-setup.md)와 TASK-022 패키지다. 일반 Health/탐색은 계속 읽기 전용이며 명시적 초기화만 구조를 생성한다. 기존 DONE/검증 증거는 보존한다.
+
 구현 순서는 [구현 계획](./plan.md), 응답과 경계는 [명세](./spec.md), 검증은 [테스트 계획](./test.md)을 따른다. Provider 구현은 선행 Issue #7과 #8의 Adapter를 소비한다.
 
 ## Backend 구현

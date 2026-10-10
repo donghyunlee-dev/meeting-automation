@@ -1,5 +1,7 @@
 # History·보안·임시 Audio E2E 검증
 
+> 📌 v1.9.0 변경 계약: TASK-022.06의 최초 연결·양방향 이전·참조 무결성·source 보존·재시작 journal 사례를 회귀한다. release는 계정 없는 설정 UI와 durable 설정을 포함한다. 상세 기준은 [문서 연결·이전 설계](../../../product/document-setup.md)다. 아래의 과거 기준과 충돌하면 이 변경 계약을 우선 적용한다.
+
 ## 작업 식별 정보
 
 - 작업: TASK-021.03

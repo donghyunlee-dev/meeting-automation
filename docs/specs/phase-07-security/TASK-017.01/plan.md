@@ -1,5 +1,7 @@
 # 구현 계획
 
+> 📌 v1.9.0 변경 계약: Document credential은 password 입력 중 메모리와 요청에서만 허용하고 저장된 credential의 GET/log/bundle/웹 영속 저장 노출을 금지한다. 화면 입력 자체를 보안 위반으로 처리하지 않는다. 설정 snapshot 암호화와 Origin 검증을 회귀에 포함한다. 상세 기준은 [문서 연결·이전 설계](../../../product/document-setup.md)다. 아래의 과거 기준과 충돌하면 이 변경 계약을 우선 적용한다.
+
 ## 의존성
 
 - TASK-001.05 env sample checker/local env boundary (#5)

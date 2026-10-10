@@ -1,5 +1,7 @@
 # Release Acceptance 검증 계획
 
+> 📌 v1.9.0 변경 계약: PRD v1.9.0의 최초 위저드, 양방향 이전, source 보존, durable 설정/journal Release DoD를 추가한다. 기존 v1.8.1 DoD 개수 고정을 기준으로 누락하지 않는다. 상세 기준은 [문서 연결·이전 설계](../../../product/document-setup.md)다. 아래의 과거 기준과 충돌하면 이 변경 계약을 우선 적용한다.
+
 ## 자동 Evidence audit
 
 - 신규 명령: `npm run audit:release-evidence` (저장소 기존 script 위치와 parser convention에 맞게 구현 시 등록).

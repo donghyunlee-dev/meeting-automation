@@ -1,5 +1,7 @@
 # 작업 목록
 
+> 📌 v1.9.0 변경 계약: 활성 전역 connection과 TASK-022.04의 문서 codec을 사용한다. 전환 완료 후 이전 Provider cache와 ID를 재사용하지 않는다. 일반 History의 목록 제한을 자료 이전 completeness 판정으로 사용하지 않는다. 상세 기준은 [문서 연결·이전 설계](../../../product/document-setup.md)다. 아래의 과거 기준과 충돌하면 이 변경 계약을 우선 적용한다.
+
 ## 사전 조건
 
 - Backend Java 21 / Gradle 기반 프로젝트에서 진행한다.

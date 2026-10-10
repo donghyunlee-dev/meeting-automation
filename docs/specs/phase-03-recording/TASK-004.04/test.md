@@ -1,5 +1,7 @@
 # 검증 계획
 
+> 📌 v1.9.0 변경 계약: TASK-022.06 완료 후 재개한다. API-006에 documentConnectionVersion과 전역 READY/전환 lock guard를 적용하고 기존 201·멱등성·검증과 함께 미설정/전환 중/stale connection 409를 검증한다. PR #95는 보존하고 새 master 반영 후 테스트·리뷰·QA를 다시 수행한다. 상세 기준은 [문서 연결·이전 설계](../../../product/document-setup.md)다. 아래의 과거 기준과 충돌하면 이 변경 계약을 우선 적용한다.
+
 ## 자동화 테스트
 
 | ID | 준비/입력 | 기대 결과 | 증거 |

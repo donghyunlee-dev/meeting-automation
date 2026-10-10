@@ -1,5 +1,7 @@
 # New Meeting API 연결 설계
 
+> 📌 v1.9.0 변경 계약: TASK-022.06과 TASK-004.04 변경 완료 후 API-001의 documentConnectionVersion을 불변 제출 snapshot에 포함한다. 미설정·전환 중에는 제출을 차단하고, DOCUMENT_CONNECTION_CHANGED는 참석자 목록과 설정을 다시 읽어 새 시도/key를 만들도록 안내한다. 동일 연결의 응답 유실 재시도만 기존 snapshot/key를 재사용한다. 계정이나 사용자별 설정은 추가하지 않는다. 상세는 [문서 연결·이전 설계](../../../product/document-setup.md)와 [API 명세](../../../product/api-spec.md#api-006-meeting-session-create)를 따른다.
+
 ## 목표
 
 New Meeting에서 검증한 폼을 API-006에 제출하고 생성된 Session 정보를 보존해 Recording 화면으로 이동한다. PRD v1.7.0 (2026-10-05), `FR-002`, `SCR-002`, `API-006`, `TASK-004.05`를 구체화한다. Issue [#18](https://github.com/donghyunlee-dev/meeting-automation/issues/18).
@@ -18,11 +20,11 @@ API-006 Backend 구현, 녹음/MediaRecorder/Audio upload, Session 복구 endpoi
 
 ## 제출 계약
 
-유효 form payload에 browser-generated 비어 있지 않은 `recoveryKey`와 `Idempotency-Key`를 추가해 `POST /api/v1/meeting-sessions`로 보낸다. 하나의 논리 제출 시도는 불변 snapshot `{title,templateId,participantIds,timezone,recoveryKey,idempotencyKey}`를 가진다. 전송 중 버튼은 disabled이며 request는 한 번만 진행한다. 응답 불명 네트워크 오류 뒤 사용자 재시도는 동일 snapshot과 두 key를 그대로 사용한다. 사용자 수정으로 payload가 바뀌면 새 논리 시도로 간주해 새 key pair를 생성한다. 자동 backoff/retry는 수행하지 않는다.
+유효 form payload에 browser-generated 비어 있지 않은 `recoveryKey`와 `Idempotency-Key`를 추가해 `POST /api/v1/meeting-sessions`로 보낸다. 하나의 논리 제출 시도는 불변 snapshot `{title,templateId,participantIds,timezone,documentConnectionVersion,recoveryKey,idempotencyKey}`를 가진다. 전송 중 버튼은 disabled이며 request는 한 번만 진행한다. 응답 불명 네트워크 오류 뒤 사용자 재시도는 동일 snapshot과 두 key를 그대로 사용한다. 사용자 수정으로 payload가 바뀌면 새 논리 시도로 간주해 새 key pair를 생성한다. 자동 backoff/retry는 수행하지 않는다.
 
 201 응답 `{sessionId,version,status,uploadPolicy}`는 Session Context에 저장하고 `/meetings/{sessionId}/recording`으로 이동한다. `recoveryKey`나 Idempotency-Key는 Provider나 URL에 노출하지 않는다. Session context는 Browser runtime memory이며 page reload/process restart 복구를 보장하지 않는다.
 
-400 검증, 409 key conflict, 500 내부 오류, 502 roster Provider 오류는 API 공통 envelope의 안전한 `message`를 사용해 표시한다. 실패 시 사용자가 입력한 폼 draft를 보존하고 수정 또는 같은 시도 재전송을 제공한다. Provider raw body/stack/secret은 표시하지 않는다. Document `provider:null`은 회의 Session 생성 요청을 막지 않는다.
+400 검증, 409 key conflict, 500 내부 오류, 502 roster Provider 오류는 API 공통 envelope의 안전한 `message`를 사용해 표시한다. 실패 시 사용자가 입력한 폼 draft를 보존하고 수정 또는 같은 시도 재전송을 제공한다. Provider raw body/stack/secret은 표시하지 않는다. Document `provider:null`은 최초 설정 위저드로 안내하며 Session 생성 요청을 차단한다.
 
 ## 수용 기준
 

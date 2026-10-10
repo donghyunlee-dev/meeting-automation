@@ -1,5 +1,7 @@
 # 구현 작업 목록
 
+> 📌 v1.9.0 변경 계약: TASK-022.06 완료 후 재개한다. API-006에 documentConnectionVersion과 전역 READY/전환 lock guard를 적용하고 기존 201·멱등성·검증과 함께 미설정/전환 중/stale connection 409를 검증한다. PR #95는 보존하고 새 master 반영 후 테스트·리뷰·QA를 다시 수행한다. 상세 기준은 [문서 연결·이전 설계](../../../product/document-setup.md)다. 아래의 과거 기준과 충돌하면 이 변경 계약을 우선 적용한다.
+
 1. 유효 요청의 Service/API 테스트를 작성한다. 기대 결과: Session snapshot의 title/template/participant IDs/timezone과 201 response를 검증한다.
 2. 필수값, 잘못된 Template, 빈/중복/알 수 없는 Participant ID, 잘못된 timezone/recoveryKey 입력 테스트를 작성한다. 기대 결과: 각 케이스는 400이고 store는 비어 있다.
 3. Participant/Template lookup 오류 및 오류 원문 비노출 테스트를 작성한다. 기대 결과: lookup 오류가 정의한 표준 오류로 변환된다.

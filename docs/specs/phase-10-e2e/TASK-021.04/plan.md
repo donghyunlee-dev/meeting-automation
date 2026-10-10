@@ -1,5 +1,7 @@
 # Release Acceptance 구현 계획
 
+> 📌 v1.9.0 변경 계약: PRD v1.9.0의 최초 위저드, 양방향 이전, source 보존, durable 설정/journal Release DoD를 추가한다. 기존 v1.8.1 DoD 개수 고정을 기준으로 누락하지 않는다. 상세 기준은 [문서 연결·이전 설계](../../../product/document-setup.md)다. 아래의 과거 기준과 충돌하면 이 변경 계약을 우선 적용한다.
+
 ## 선행 조건 및 책임
 
 TASK-021.01~.03 E2E Evidence와 TASK-018.04, TASK-019.03, TASK-020.04 현장/품질/화면 Evidence를 수집한다. 그 이전 구현 Task의 Evidence도 PRD Section 24 항목에 연결해야 한다. QA가 matrix, provenance, gap 및 aggregate 판정을 소유한다. feature 구현이 없는 문서/검토 작업이므로 새 product UI/API를 만들지 않는다.

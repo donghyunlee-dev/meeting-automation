@@ -347,7 +347,7 @@ font-family:
 - 회사 정보, Document Provider, Email, Notification 상태를 읽기 쉬운 설정 row로 표시한다.
 - Participants 관리로 이동하는 항목을 제공한다.
 - `설정됨`, `연결 확인 필요`, `확인 실패` 같은 텍스트와 아이콘을 함께 쓴다.
-- `document.provider=null` 또는 `document.configured=false`이면 Settings의 문서 저장 row에 연결이 필요하다는 안내와 관리자에게 연결 설정을 요청하는 다음 행동을 표시한다. 설정을 자동 선택하거나 화면에서 Secret 입력값을 재노출하지 않는다.
+- 미설정은 공용 연결 위저드로 안내하고 설정 완료 후에는 문서 서비스 변경 버튼을 제공한다. 저장된 키를 다시 표시하지 않고 재입력이 필요한 password 필드를 사용한다. 회사 공통 설정이며 관리자/사용자 계정 화면은 없다.
 - API Key, Token, Webhook URL 등 Secret 원문을 표시하지 않는다.
 - Bottom Navigation을 표시한다.
 
@@ -399,3 +399,17 @@ font-family:
 ## 추적성
 
 이 문서는 PRD의 `SCR-001~012`, `FR-001~030`, `NFR-001~003`, `NFR-010`, `NFR-012`를 시각/상호작용 규칙으로 구체화한다. 화면 기능과 API 연결은 PRD Traceability Matrix 및 [API Specification](./api-spec.md)을 따른다.
+
+## 문서 연결 위저드
+
+SCR-013은 `/setup/document`, `/settings/document`에서 재사용한다. 최초 App Config가 setup.required=true면 setup 화면으로 이동한다. 선택→가이드/입력→테스트→구조 확인/완료의 단계 표시와 뒤로/다음/완료를 제공한다. Notion과 Confluence별 입력은 document-setup.md를 따르고 Provider 변경 시 이전 입력을 비운다. 회사 공통 설정임을 첫 화면에 설명한다.
+
+Secret은 password 입력 중 메모리에서만 유지하고 단계 이탈/성공/새로고침 시 비운다. TESTED revision이 바뀌면 완료를 비활성화한다. 읽기 테스트 성공과 실제 페이지 생성 권한을 구분한다. 최종 확인은 생성/재사용되는 루트와 Meetings/Participants를 보여준다. HTTP 202 뒤 operationId로 progress를 조회하고 완료까지 중복 요청을 막는다. STORAGE_UNAVAILABLE는 재설정 화면으로 오인시키지 않고 안전한 저장소 복구 안내를 제공한다.
+
+## 🔄 문서 서비스 변경과 자료 이전
+
+SCR-014는 `/settings/document/transfer`다. 기존 연결과 준비된 새 연결을 함께 표시하고 전체 자료 복사(COPY_ALL)를 기본 선택한다. 새 서비스에서 시작(START_EMPTY)은 원본 자료가 새 앱 목록에 나타나지 않음을 별도 확인한다. 두 선택 모두 원본 보존을 안내한다.
+
+진행 화면은 단계·참석자/회의록 건수·안전 오류·재개/취소를 표시한다. RECONCILIATION_REQUIRED에서는 확인 안내만 제공하고 자동 재시도하지 않는다. 새로고침/재접속은 API-023 operation 요약으로 동일 진행을 복원한다. source는 성공 전까지 active이며 lock 도중 새 회의/참석자 쓰기를 막는다. 완료 뒤 연결·roster·history cache를 비우고 새 목록을 읽는다. 화면을 떠나거나 terminal이 되면 polling을 멈춘다. 제품 로그인·사용자별 설정 UI는 추가하지 않는다.
+
+모든 단계는 360px, label/error 연결, keyboard focus, live status 안내를 검증한다. Provider 가이드 링크는 최신 공식 문서이며 외부 인증 비밀번호를 받지 않고 API token만 받는다.

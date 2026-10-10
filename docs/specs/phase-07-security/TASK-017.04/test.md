@@ -1,5 +1,7 @@
 # 검증 계획
 
+> 📌 v1.9.0 변경 계약: 최초 연결·양방향 변경·부분 실패·source 보존·설정 암호화·Secret 웹 저장소 미보관을 TASK-022와 연계해 검증한다. password 입력 요청을 금지하는 것으로 오해하지 않는다. 상세 기준은 [문서 연결·이전 설계](../../../product/document-setup.md)다. 아래의 과거 기준과 충돌하면 이 변경 계약을 우선 적용한다.
+
 ## 자동화 테스트
 
 모든 fixture는 가짜 canary 값, synthetic transcript/audio metadata, fake provider를 사용한다. 실패 assertion과 실행 report는 원문 값을 출력하지 않는다.

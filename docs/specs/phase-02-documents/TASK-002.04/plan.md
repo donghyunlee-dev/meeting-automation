@@ -1,5 +1,7 @@
 # Provider 선택 및 통합 Health 구현 계획
 
+> 📌 v1.9.0 변경 안내: 이 문서는 완료된 TASK-002.04의 당시 구현/검증 이력이다. Backend env로 선택·credential을 고정하는 계약과 초기 구조 생성 제외 범위는 새 TASK-022에서 변경한다. 현재 구현 기준은 [문서 연결·이전 설계](../../../product/document-setup.md)와 TASK-022 패키지다. 일반 Health/탐색은 계속 읽기 전용이며 명시적 초기화만 구조를 생성한다. 기존 DONE/검증 증거는 보존한다.
+
 ## 목표
 
 Provider selector와 공통 통합 Health 응답을 구현해 API consumers가 선택된 Document 상태 또는 미설정 상태를 안전하게 확인하도록 한다.

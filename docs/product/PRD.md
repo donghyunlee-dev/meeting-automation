@@ -1,8 +1,8 @@
 # Meeting Automation Product Requirements Document
 
 > **문서 ID:** PRD-MA-001\
-> **버전:** 1.8.1\
-> **기준일:** 2026-10-06\
+> **버전:** 1.9.0\
+> **기준일:** 2026-10-10\
 > **상태:** Approved Baseline Candidate\
 > **문서 역할:** Meeting Automation V1의
 > 제품·UX·디자인·아키텍처·데이터·API·개발 일정 Single Source of Truth\
@@ -19,6 +19,7 @@
 - [Data Specification](./data-spec.md): 표준 모델, 저장 위치, 수명주기
 - [API Specification](./api-spec.md): Frontend/Backend REST 계약
 - [Integrations](./integrations.md): 외부 Provider Port와 Adapter 계약
+- [문서 연결·이전 설계](./document-setup.md): 전역 설정, 최초 위저드, 구조 생성, 서비스 변경과 자료 이전
 - [UI Design](./ui-design.md): A안 기반 화면·컴포넌트·시각 토큰 명세
 
 개발 PC 설정 순서는 [Frontend Setup](../setup/frontend-setup.md)과 [Backend Setup](../setup/backend-setup.md)을 따른다.
@@ -33,17 +34,18 @@
 > **변경 이력 v1.7.0:** Participant를 회의 작성자 지정형 `{id,name,email}` roster로 정의\
 > **변경 이력 v1.8.0:** 처리 실패 시 사용자 명시 재시도, Audio 24시간 임시 보존·다운로드·실패 문서 종료와 참석자 전달 억제 규칙 추가\
 > **변경 이력 v1.8.1:** 변환 실패 Audio를 비공개 객체 저장소에 최대 24시간 보존해 재시도·다운로드를 지원하고 만료 정리를 추가\
+> **변경 이력 v1.9.0:** 제품 계정 없이 공유하는 문서 연결 위저드·명시적 구조 생성·자료 복사 후 서비스 전환을 추가하고 TASK-022를 개발 최우선으로 지정\
 > **변경 이력 v1.1.0:** Technology Baseline 확정, Monorepo/Node.js/React/Spring Boot 역할 명시, 실제 모바일·회의실 품질 검증을 개발 선행 Gate에서 Phase 8로 이동
 
 ------------------------------------------------------------------------
 
-## 1. 문서 운영 원칙
+## 문서 운영 원칙
 
 이 문서는 Meeting Automation V1 개발의 최상위 구현 기준이다. Codex를
 포함한 개발 주체는 작업 시작 전에 관련 `DEC-*`, `FR-*`, `NFR-*`,
 `SCR-*`, `API-*`, `TASK-*`를 확인한다.
 
-### 1.1 ID 체계
+### ID 체계
 
   Prefix     의미
   ---------- ----------------------------------
@@ -56,7 +58,7 @@
   `TASK-*`   개발 작업 묶음 및 실행 작업 (`TASK-001.01` 형식의 세부 작업 포함)
   `ERR-*`    표준 오류
 
-### 1.2 작업 상태
+### 작업 상태
 
 `TODO → IN_PROGRESS → VERIFY → DONE`
 
@@ -71,7 +73,7 @@
 
 ------------------------------------------------------------------------
 
-# 2. 서비스 정의
+# 서비스 정의
 
 Meeting Automation은 **사내 오프라인 회의를 스마트폰 웹에서 녹음하고,
 음성을 STT와 Speaker Diarization으로 변환한 뒤 사용자가 화자와 참석자를
@@ -84,7 +86,7 @@ Meeting Automation은 **사내 오프라인 회의를 스마트폰 웹에서 녹
 > **스마트폰을 회의 테이블 중앙에 놓고 → 회의를 녹음 → 자동으로 정리 →
 > 사람만 확인 → 저장·공유**
 
-## 2.1 목표
+## 목표
 
 1.  오프라인 회의 기록을 최소 조작으로 시작한다.
 2.  녹음 종료 후 STT, Speaker Diarization, 회의록 생성을 자동화한다.
@@ -98,7 +100,7 @@ Meeting Automation은 **사내 오프라인 회의를 스마트폰 웹에서 녹
 10. Document, Email, Notification 연동은 Provider 공통 계약을 통해 교체
     가능하게 한다.
 
-## 2.2 비목표
+## 비목표
 
 -   실시간 자막
 -   Google Meet/Teams/Zoom Bot
@@ -118,11 +120,11 @@ Meeting Automation은 **사내 오프라인 회의를 스마트폰 웹에서 녹
 ------------------------------------------------------------------------
 
 
-# 3. Technology Baseline
+# Technology Baseline
 
 이 절은 Codex가 프로젝트 생성·의존성 선택·빌드 도구를 임의 변경하지 않도록 하는 **개발 기술 기준선**이다.
 
-## 3.1 Monorepo
+## Monorepo
 
 V1은 하나의 Git Repository에서 Frontend, Backend, 문서를 함께 관리한다.
 
@@ -147,7 +149,7 @@ meeting-automation/
 
 Monorepo는 소스와 개발 기준을 한 Repository에서 관리하기 위한 방식이다. Frontend와 Backend의 빌드 및 배포 단위는 서로 독립적이다.
 
-## 3.2 Frontend Baseline
+## Frontend Baseline
 
 | 항목 | 기준 |
 |---|---|
@@ -163,7 +165,7 @@ Monorepo는 소스와 개발 기준을 한 Repository에서 관리하기 위한 
 
 **Node.js는 서비스 Backend가 아니다.** Node.js는 React/Vite의 개발·빌드 Toolchain으로만 사용한다. 업무 API, Secret, OpenAI, Document, Email, Slack 연동은 Spring Boot Backend가 담당한다.
 
-## 3.3 Backend Baseline
+## Backend Baseline
 
 | 항목 | 기준 |
 |---|---|
@@ -183,7 +185,7 @@ Monorepo는 소스와 개발 기준을 한 Repository에서 관리하기 위한 
 
 외부 HTTP Client는 Adapter별로 난립시키지 않는다. 프로젝트 초기 설정에서 `Spring RestClient` 또는 `Apache HttpClient5` 중 하나를 기본 방식으로 선택하고 이후 동일 기준을 유지한다.
 
-## 3.4 Runtime 역할
+## Runtime 역할
 
 ```mermaid
 flowchart LR
@@ -223,14 +225,14 @@ Spring Boot 4.1.x / Java 25
   └─ Slack
 ```
 
-## 3.5 버전 운영 규칙
+## 버전 운영 규칙
 
 - 위 Major 기준을 Codex가 임의로 변경하지 않는다.
 - 고정 minor가 있는 `4.1.x` 항목은 해당 minor 라인의 호환 가능한 최신 patch를 선택한다. Java 25로 Gradle을 실행할 때는 Gradle 9.1 이상을 사용한다.
 - Major 변경은 PRD 또는 ADR 승인 후 진행한다.
 - Frontend와 Backend는 Monorepo에 있지만 독립적으로 build/test/deploy 가능해야 한다.
 
-# 4. 확정 의사결정
+# 확정 의사결정
 
   -----------------------------------------------------------------------
   ID                                  결정
@@ -291,7 +293,7 @@ Spring Boot 4.1.x / Java 25
                                       수정은 원문 Document Provider에서
                                       한다.
 
-  `DEC-017`                           Secret은 Backend에서만 사용한다.
+  `DEC-017`                           저장된 Secret은 Backend에서만 사용한다.
 
   `DEC-018`                           오류는 PROCESSING, DOCUMENT, EMAIL,
                                       NOTIFICATION 네 종류로 운영
@@ -309,9 +311,30 @@ Spring Boot 4.1.x / Java 25
 
 ------------------------------------------------------------------------
 
-# 5. 사용자와 핵심 시나리오
 
-## 4.1 사용자
+## 🧭 전역 연결 설정 결정
+
+| ID | 결정 |
+|---|---|
+| DEC-021 | 제품 계정·로그인·사용자별 설정은 없다. 문서 연결 설정 하나를 서비스 전체가 공유한다. |
+| DEC-022 | 활성 설정이 없으면 최초 위저드로 유도하며, 연결 테스트와 명시적 완료 요청으로 기본 Page 구조를 생성·재사용한다. |
+| DEC-023 | 운영 중 같은 위저드로 Provider를 변경한다. 전체 자료 복사 또는 새 시작을 선택하며 검증 전 active는 변경하지 않는다. |
+| DEC-024 | 전역 설정·credential·이전 journal은 단일 Backend 영속 디렉터리에 암호화해 저장한다. 업무 문서는 Provider 정본이고 제품 계정 DB는 없다. |
+
+## 🧩 연결과 이전 요구사항
+
+| ID | 요구사항 |
+|---|---|
+| FR-031 | Notion/Confluence별 가이드·필수 입력·읽기 전용 테스트·초기 생성 위저드를 제공한다. |
+| FR-032 | Settings에서 서비스 전체 연결을 다시 설정하고 동시 Session/쓰기와 전환 충돌을 차단한다. |
+| FR-033 | 이전 선택 시 회의록·Transcript·참석자를 참조 무결성과 함께 복사하고 원본을 보존한다. |
+| FR-034 | 설정·이전 상태를 재시작 후 복원하고 실패 재개·취소·멱등 생성·검증 후 원자 전환을 지원한다. |
+
+화면 SCR-013은 공용 연결 위저드, SCR-014는 서비스 전환·자료 이전 진행이다. 신규 API-023~030과 기존 API의 연결 gate는 [API 명세](./api-spec.md)를 따른다. 이 변경의 상세 경계는 [전역 문서 연결 설계](./document-setup.md)가 기준이다.
+
+# 사용자와 핵심 시나리오
+
+## 사용자
 
 ### 회의 진행자
 
@@ -339,9 +362,9 @@ Spring Boot 4.1.x / Java 25
 
 ------------------------------------------------------------------------
 
-# 6. 서비스 프로세스
+# 서비스 프로세스
 
-## 5.1 사용자 흐름
+## 사용자 흐름
 
 ``` mermaid
 flowchart TD
@@ -367,7 +390,7 @@ flowchart TD
     ST --> PT[SCR-012 Participants]
 ```
 
-## 5.2 처리 시퀀스
+## 처리 시퀀스
 
 ``` mermaid
 sequenceDiagram
@@ -435,7 +458,7 @@ sequenceDiagram
     end
 ```
 
-## 5.3 세션 상태
+## 세션 상태
 
 ``` mermaid
 stateDiagram-v2
@@ -462,9 +485,9 @@ stateDiagram-v2
 
 ------------------------------------------------------------------------
 
-# 7. 시스템 아키텍처
+# 시스템 아키텍처
 
-## 6.1 System Context
+## System Context
 
 ``` mermaid
 flowchart LR
@@ -479,7 +502,7 @@ flowchart LR
     NP --> SL[Slack]
 ```
 
-## 6.2 Backend 책임
+## Backend 책임
 
 Backend는 범용 파일 저장 서버가 아니라 **Integration Gateway + Meeting
 Workflow Processor**다. Audio 처리 입력과 실패 복구를 위해 제한된 기간 동안만 비공개 객체 저장소를 사용한다.
@@ -506,7 +529,7 @@ flowchart TB
     APP --> NOTI
 ```
 
-## 6.3 권장 Repository 구조
+## 권장 Repository 구조
 
 ``` text
 meeting-automation/
@@ -542,14 +565,15 @@ Domain/Application 계층은 특정 Notion/Confluence/Slack/OpenAI SDK 타입을
 
 ------------------------------------------------------------------------
 
-# 8. 데이터 구조
+# 데이터 구조
 
-## 7.1 저장 위치
+## 저장 위치
 
   데이터                                   위치                          영속
   ---------------------------------------- ----------------------------- ------
-  회사명/Provider/Root ID                  Backend deployment config     Y
-  API Key/Token/Webhook/Email credential   Render Secret                 Y
+  회사명                                  Backend deployment config     Y
+  Document Provider/Root/연결 credential     암호화한 전역 영속 설정        Y
+  AI/Email/Slack/설정 암호화 키             Render Secret                 Y
   Template                                 Backend static resource       Y
   Participants                             Document Provider             Y
   Meeting Minutes                          Document Provider             Y
@@ -558,7 +582,7 @@ Domain/Application 계층은 특정 Notion/Confluence/Slack/OpenAI SDK 타입을
   Audio chunk/assembled audio              Browser temporary + private object storage   처리 중 유지, 성공 시 삭제, 실패 시 최대 24시간
   Meeting list cache                       memory                        N
 
-## 7.2 MeetingSession
+## MeetingSession
 
 ``` json
 {
@@ -610,9 +634,9 @@ Domain/Application 계층은 특정 Notion/Confluence/Slack/OpenAI SDK 타입을
 
 ------------------------------------------------------------------------
 
-# 9. Document 구조
+# Document 구조
 
-## 8.1 논리 구조
+## 논리 구조
 
 ``` mermaid
 flowchart TD
@@ -628,7 +652,7 @@ flowchart TD
 V1에서 이 외의 `Home`, `Service Info`, `History`, `Processing History`
 문서를 자동 생성하지 않는다.
 
-## 8.2 Meeting Document
+## Meeting Document
 
 ``` text
 2026-10-04 AX 주간회의
@@ -680,7 +704,7 @@ Machine-readable metadata는 Provider가 허용하는 최소 속성/metadata를
 }
 ```
 
-## 8.3 Participant
+## Participant
 
 V1 Participant는 다음만 가진다.
 
@@ -696,9 +720,9 @@ V1 Participant는 다음만 가진다.
 
 ------------------------------------------------------------------------
 
-# 10. Provider 공통 계약
+# Provider 공통 계약
 
-## 9.1 DocumentProvider
+## DocumentProvider
 
 ``` text
 validateConnection()
@@ -727,7 +751,7 @@ Provider-specific 기능을 Domain 요구사항으로 올리지 않는다.
 -   child page list/read/create/update
 -   basic content property/metadata
 
-## 9.2 EmailProvider
+## EmailProvider
 
 ``` text
 validateConnection()
@@ -736,7 +760,7 @@ sendMeetingEmail(command)
 
 Email은 참석자별 Delivery다.
 
-## 9.3 NotificationProvider
+## NotificationProvider
 
 ``` text
 validateConnection()
@@ -746,7 +770,7 @@ sendAdminIncident(command)
 
 Slack은 첫 구현 Adapter일 뿐 Domain 명칭이 아니다.
 
-## 9.4 TranscriptionProvider
+## TranscriptionProvider
 
 ``` text
 transcribeWithDiarization(audio)
@@ -778,9 +802,9 @@ transcribeWithDiarization(audio)
 
 ------------------------------------------------------------------------
 
-# 11. Template
+# Template
 
-## 10.1 default.md
+## default.md
 
 필수 섹션:
 
@@ -792,7 +816,7 @@ transcribeWithDiarization(audio)
 -   후속 확인사항
 -   Transcript
 
-## 10.2 project.md
+## project.md
 
 필수 섹션:
 
@@ -812,7 +836,7 @@ Backend가 Template에 렌더링한다.
 
 ------------------------------------------------------------------------
 
-# 12. 기능 요구사항
+# 기능 요구사항
 
   -----------------------------------------------------------------------
   ID                                  요구사항
@@ -886,10 +910,11 @@ Backend가 Template에 렌더링한다.
   `FR-024`                            Participants를
                                       조회/추가/수정한다.
 
-  `FR-025`                            Root에서 Meetings/Participants
-                                      구조를 탐색한다.
+  `FR-025`                            초기 완료 시 Root/Meetings/Participants를
+                                      생성·재사용하고 업무 요청에서는 탐색한다.
 
-  `FR-026`                            Provider 연결 상태를 확인한다.
+  `FR-026`                            Provider 연결 상태와 전역 설정을 확인하고
+                                      동일 위저드로 재설정한다.
 
   `FR-027`                            사용자가 retryable 처리 실패를 24시간 안에 명시 재시도하거나 Audio 다운로드 후 실패 마무리를 선택한다. 자동 재시도는 없다.
 
@@ -898,13 +923,13 @@ Backend가 Template에 렌더링한다.
   `FR-029`                            운영 오류를 Admin Slack으로
                                       전송한다.
 
-  `FR-030`                            Secret 원문은 Frontend/API 응답에
+  `FR-030`                            저장된 Secret은 Frontend/API 응답에
                                       노출하지 않는다.
   -----------------------------------------------------------------------
 
 ------------------------------------------------------------------------
 
-# 13. 비기능 요구사항
+# 비기능 요구사항
 
   -----------------------------------------------------------------------
   ID                                  요구사항
@@ -955,7 +980,7 @@ Backend가 Template에 렌더링한다.
 
 ------------------------------------------------------------------------
 
-# 14. Information Architecture
+# Information Architecture
 
 ``` text
 Meeting Automation
@@ -985,7 +1010,7 @@ Recording/Processing 중 Bottom Navigation은 숨긴다.
 
 ------------------------------------------------------------------------
 
-# 15. 화면 설계
+# 화면 설계
 
 ## SCR-001 Home
 
@@ -1299,7 +1324,7 @@ Slack · 연결됨            >
 18명                      >
 ```
 
-Secret 원문은 표시하지 않는다.
+설정은 서비스 공통이며 제품 계정·로그인·사용자별 환경 설정은 없다. 문서 저장 row에서 연결 또는 변경 위저드를 연다. 입력 중 password 필드 외 저장된 Secret 원문을 표시하지 않는다. 상세는 [문서 연결·이전 설계](./document-setup.md)를 따른다.
 
 ------------------------------------------------------------------------
 
@@ -1311,9 +1336,9 @@ Secret 원문은 표시하지 않는다.
 
 ------------------------------------------------------------------------
 
-# 16. 디자인 시스템
+# 디자인 시스템
 
-## 15.1 디자인 방향
+## 디자인 방향
 
 **키워드:** Calm / Minimal / Trustworthy / Mobile Recording / Clear
 Review
@@ -1327,7 +1352,7 @@ Review
 -   Review/Meeting Detail: 중간
 -   Settings: 낮음
 
-## 15.2 Layout
+## Layout
 
 -   Mobile-first single column
 -   Content max-width: 640px
@@ -1337,7 +1362,7 @@ Review
 -   component gap: 8/12/16px
 -   Bottom Primary Action은 safe-area를 고려한다.
 
-## 15.3 Typography
+## Typography
 
   Token       용도
   ----------- -----------------
@@ -1350,7 +1375,7 @@ Review
 
 폰트 종류는 1개 계열을 기본으로 하고 크기/weight로 계층을 만든다.
 
-## 15.4 Components
+## Components
 
 ### Primary Button
 
@@ -1389,7 +1414,7 @@ Review
 -   Timer를 가장 강하게 표시
 -   종료 버튼 외 불필요한 액션 제거
 
-## 15.5 상태 화면
+## 상태 화면
 
 모든 주요 조회 화면은 다음 상태를 정의한다.
 
@@ -1402,7 +1427,7 @@ Processing은: - Waiting - Running - Completed - Failed
 
 ------------------------------------------------------------------------
 
-# 17. 오류 모델
+# 오류 모델
 
 운영 오류는 정확히 네 종류다.
 
@@ -1439,9 +1464,9 @@ Audio, Transcript, Minutes 본문, Token, 전체 Email 주소는 Admin Slack에
 
 ------------------------------------------------------------------------
 
-# 18. Backend REST API
+# Backend REST API
 
-## 17.1 공통 규칙
+## 공통 규칙
 
 Base Path:
 
@@ -1512,7 +1537,7 @@ Response:
 }
 ```
 
-`DOCUMENT_PROVIDER`가 없거나 빈 값이면 Provider를 자동 선택하지 않고 `provider:null`, `configured:false`를 반환한다. 유효 Provider가 선택됐지만 credentials가 없거나 형식이 잘못된 경우에는 선택된 `provider`를 유지하고 `configured:false`로 반환한다. 설정값이 지원하지 않는 비어 있지 않은 enum이면 HTTP 500 `INTERNAL_ERROR`로 변환한다. Secret은 어떤 상태에서도 응답하지 않는다.
+활성 문서 Provider는 암호화한 전역 설정에서 읽는다. 미설정이면 provider:null, configured:false와 setup.required:true를 반환해 최초 위저드로 안내한다. 운영 중 네트워크 장애는 설정을 삭제하지 않는다. 저장소 오류는 STORAGE_UNAVAILABLE로 구분한다. 공개 setup/connectionVersion 계약은 API 명세를 따른다. 저장된 Secret은 어떤 상태에서도 응답하지 않는다.
 
 ------------------------------------------------------------------------
 
@@ -2105,7 +2130,7 @@ Slack Notification contributor는 `NOTIFICATION_PROVIDER=SLACK` 및 유효한 me
 
 ------------------------------------------------------------------------
 
-# 19. 외부 연동 계약
+# 외부 연동 계약
 
 ## EXT-001 AI/STT
 
@@ -2155,7 +2180,7 @@ error summary
 
 ------------------------------------------------------------------------
 
-# 20. Security / Secret
+# Security / Secret
 
 Backend 환경 설정 예:
 
@@ -2164,13 +2189,9 @@ APP_COMPANY_ID
 APP_COMPANY_NAME
 APP_TIMEZONE
 
-DOCUMENT_PROVIDER
-DOCUMENT_ROOT_ID
-
-NOTION_TOKEN
-CONFLUENCE_BASE_URL
-CONFLUENCE_ACCOUNT_EMAIL
-CONFLUENCE_AUTH_TOKEN
+DOCUMENT_SETTINGS_DIR
+DOCUMENT_SETTINGS_ENCRYPTION_KEY
+# 문서 Provider/계정 이메일/API token/부모 경로는 화면 위저드에서 등록
 
 OPENAI_API_KEY
 TRANSCRIPTION_MODEL
@@ -2202,7 +2223,7 @@ Authorization/Webhook/Email/Transcript/Audio는 일반 로그에서 마스킹 �
 
 ------------------------------------------------------------------------
 
-# 21. 실제 모바일·회의실 품질 검증
+# 실제 모바일·회의실 품질 검증
 
 실제 스마트폰과 회의실 환경의 녹음 품질 검증은 **V1 Release 전에는 수행해야 하지만 초기 개발의 선행조건은 아니다.**
 
@@ -2229,9 +2250,11 @@ Meeting UI
 → Publish / Delivery
 ```
 
+기능 개발 재개에 앞서 TASK-022의 최초 연결·서비스 변경·자료 이전을 먼저 완료한다. 기존 회의 생성 PR #95는 보존하고 TASK-022.06 이후 새 기준에 맞춰 재검증한다.
+
 실제 환경 테스트는 기능 완성 후 **Phase 8 Quality Validation & Tuning**에서 수행하고 결과에 따라 녹음 MIME, chunk 크기, 마이크 안내, STT 설정, diarization 설정 등을 조정한다.
 
-## 21.1 Phase 8 검증 대상
+## Phase 8 검증 대상
 
 ### Android
 - Chrome
@@ -2248,7 +2271,7 @@ Meeting UI
 - 3명
 - 5명
 
-## 21.2 검증 항목
+## 검증 항목
 
 - MediaRecorder MIME 호환성
 - 30~60분 녹음 지속성
@@ -2264,12 +2287,12 @@ Meeting UI
 - Speaker A/B/C mapping UX
 - 회의실 반향/배경소음 영향
 
-## 21.3 조정 원칙
+## 조정 원칙
 
 품질 문제가 발견되어도 DB, Native App, Object Storage 등 새로운 핵심 아키텍처를 즉시 추가하지 않는다. 현재 구조 안에서 먼저 조정하고, 구조 변경이 필요한 경우 ADR과 PRD 변경으로 결정한다.
 
 
-# 22. Traceability Matrix
+# Traceability Matrix
 
 | FR | Screen | API | Task |
 |---|---|---|---|
@@ -2287,26 +2310,29 @@ Meeting UI
 | FR-027 | SCR-005 | API-010,020~022 | TASK-017.02,017.03 |
 | FR-020~023 | SCR-001,009,010 | API-017,018 | TASK-014 |
 | FR-024 | SCR-012 | API-003~005 | TASK-003 |
-| FR-025~026 | SCR-011 | API-001,019 | TASK-002,015 |
+| FR-025~026 | SCR-011,013,014 | API-001,019,023~030 | TASK-002,015,022 |
+| FR-031~034 | SCR-011,013,014 | API-023~030 | TASK-022 |
 | FR-028 | SCR-005 | API-010,021,022 | TASK-017.02,017.03,017.04 |
 | FR-030 | 전체 | 전체 | TASK-017.01,017.04 |
 | FR-029 | 운영 | - | TASK-016 |
 
-# 23. Codex 개발 일정
+# Codex 개발 일정
 
-## 23.1 공통 작업 및 검증 규칙
+## 공통 작업 및 검증 규칙
 
 ### 상세 설계 추적 기준
 
 각 세부 TASK 표의 `설계 상태 / 문서` 열은 **설계 진행 상태**를 기록한다. 구현 진행 상태는 계속 GitHub Issue의 상태 라벨과 종료 상태가 기준이며, 두 상태를 혼합하지 않는다.
 
-**다음 설계 대상 커서: 없음 (PRD leaf TASK 설계 완료)** — 마지막 leaf인 TASK-021.04 네 문서와 Issue #80을 master commit `38a0c8f`에서 원격 확인했다. PRD Section 24의 20개 Release DoD별 Evidence 판정·추적 규칙을 설계했다. TASK-021.03 네 문서와 Issue #79는 master commit `c2927b1`, TASK-021.02 네 문서와 Issue #78은 master commit `9889d8c`에서 원격 확인했다. 현재 PRD 설계 backlog에 남은 leaf TASK가 없다.
+**다음 설계 대상 커서: `TASK-022.01` (v1.9.0 변경 패키지 원격 게시 확인 후 완료 처리)**
 
 ## 📊 개발 진행 현황
 
 구현 상태는 이 표와 GitHub Issue/PR, `docs/evidence/`의 head별 검증 기록으로 관리한다. 기존 세부 TASK 표의 `설계 상태 / 문서`와 설계 커서는 설계 상태만 나타내며 개발 상태를 대신하지 않는다.
 
-**다음 개발 대상 커서: `TASK-004.04`**
+**다음 개발 대상 커서: `TASK-022.01`**
+
+**실행 우선순위:** TASK-022.01 → TASK-022.02 → TASK-022.03 → TASK-022.04 → TASK-022.05 → TASK-022.06 → TASK-004.04 재검증 → 기존 커서 순서. 새 변경 작업이 모두 완료되기 전 일반 기능 개발과 PR #95 병합을 진행하지 않는다. GitHub Issue 번호나 생성일 정렬을 실행 순서로 해석하지 않는다.
 
 | TASK | 개발 상태 | 단계 | Issue / PR | 검증 증거 | 병합 commit | 완료 일시 (Asia/Seoul) |
 |---|---|---|---|---|---|---|
@@ -2326,7 +2352,13 @@ Meeting UI
 | `TASK-004.01` | DONE | DONE | [Issue #14](https://github.com/donghyunlee-dev/meeting-automation/issues/14) / [PR #92](https://github.com/donghyunlee-dev/meeting-automation/pull/92) | [검증 증거](../evidence/TASK-004.01/verification.md), tests/review/QA PASS at `5c122bb` | `79287928a18b06124f74116433d38fdc63b7e91c` | 2026-10-09 20:56 KST |
 | `TASK-004.02` | DONE | DONE | [Issue #15](https://github.com/donghyunlee-dev/meeting-automation/issues/15) / [PR #93](https://github.com/donghyunlee-dev/meeting-automation/pull/93) | [검증 증거](../evidence/TASK-004.02/verification.md), tests/review/QA PASS at `d43543c` | `c2b06eb82bfaa155f1025fd47d16097fe6d7143a` | 2026-10-09 22:03 KST |
 | `TASK-004.03` | DONE | DONE | [Issue #16](https://github.com/donghyunlee-dev/meeting-automation/issues/16) / [PR #94](https://github.com/donghyunlee-dev/meeting-automation/pull/94) | [검증 증거](../evidence/TASK-004.03/verification.md), tests/review/QA PASS at `b043f1a` | `cea7902fb10cb0ea44c3c845cd9636ad0ebb2f0c` | 2026-10-10 00:04 KST |
-| `TASK-004.04` | TODO | DESIGN | [Issue #17](https://github.com/donghyunlee-dev/meeting-automation/issues/17) / — | — | — | — |
+| `TASK-022.01` | TODO | DESIGN | [Issue #96](https://github.com/donghyunlee-dev/meeting-automation/issues/96) / — | — | — | — |
+| `TASK-022.02` | TODO | DESIGN | [Issue #97](https://github.com/donghyunlee-dev/meeting-automation/issues/97) / — | — | — | — |
+| `TASK-022.03` | TODO | DESIGN | [Issue #98](https://github.com/donghyunlee-dev/meeting-automation/issues/98) / — | — | — | — |
+| `TASK-022.04` | TODO | DESIGN | [Issue #99](https://github.com/donghyunlee-dev/meeting-automation/issues/99) / — | — | — | — |
+| `TASK-022.05` | TODO | DESIGN | [Issue #100](https://github.com/donghyunlee-dev/meeting-automation/issues/100) / — | — | — | — |
+| `TASK-022.06` | TODO | DESIGN | [Issue #101](https://github.com/donghyunlee-dev/meeting-automation/issues/101) / — | — | — | — |
+| `TASK-004.04` | BLOCKED | DESIGN_REBASE | [Issue #17](https://github.com/donghyunlee-dev/meeting-automation/issues/17) / [PR #95](https://github.com/donghyunlee-dev/meeting-automation/pull/95) | v1.9.0 연결 gate 적용 후 재검증 대기 | — | — |
 | `TASK-004.05` | TODO | DESIGN | [Issue #18](https://github.com/donghyunlee-dev/meeting-automation/issues/18) / — | — | — | — |
 | `TASK-005.01` | TODO | DESIGN | [Issue #19](https://github.com/donghyunlee-dev/meeting-automation/issues/19) / — | — | — | — |
 | `TASK-005.02` | TODO | DESIGN | [Issue #20](https://github.com/donghyunlee-dev/meeting-automation/issues/20) / — | — | — | — |
@@ -2413,7 +2445,7 @@ TODO → IN_PROGRESS → VERIFY → DONE
 CANCELLED
 ```
 
-기존 `TASK-001`~`TASK-021`은 기능·제품 범위를 묶는 상위 작업 묶음이다. 실제 구현과 GitHub Issue의 단위는 `TASK-001.01`처럼 점으로 구분한 세부 작업이다. 상위 작업의 상태는 하위 작업 상태에서 계산하며 상위 작업 자체를 별도 Issue로 만들지 않는다.
+기존 `TASK-001`~`TASK-022`은 기능·제품 범위를 묶는 상위 작업 묶음이다. 실제 구현과 GitHub Issue의 단위는 `TASK-001.01`처럼 점으로 구분한 세부 작업이다. 상위 작업의 상태는 하위 작업 상태에서 계산하며 상위 작업 자체를 별도 Issue로 만들지 않는다.
 
 상위 TASK 상태는 다음 순서로 계산한다: 모든 하위 작업이 `DONE`이면 `DONE`; 모든 하위 작업이 `TODO`이면 `TODO`; 미완료 하위 작업이 전부 `BLOCKED`이면 `BLOCKED`; 모든 하위 작업이 `VERIFY` 또는 `DONE`이고 하나 이상이 `VERIFY`이면 `VERIFY`; 그 외에는 `IN_PROGRESS`.
 
@@ -2465,6 +2497,21 @@ Backend API 작업은 정상 응답뿐 아니라 명세된 검증 오류, 없는
 | `TASK-001.04` 공통 오류 응답 및 Health 기반 / BE | TASK-001.03 | API 공통 규칙, ERR-001~ | 오류 응답 필드와 Health 응답이 계약 테스트로 검증되고, Secret이나 내부 예외가 노출되지 않는다. | 설계완료 · `docs/specs/phase-01-foundation/TASK-001.04/` |
 | `TASK-001.05` FE/BE 독립 빌드 및 환경 샘플 / FE, BE | TASK-001.02, TASK-001.03, TASK-001.04 | DEC-017, NFR-004,008,009 | FE/BE 빌드가 서로 독립 실행되고 환경 샘플에 실제 Secret이 없다. 두 빌드와 Secret 검사 통과 | 설계완료 · `docs/specs/phase-01-foundation/TASK-001.05/` |
 
+## 🥇 최우선 변경 — 전역 문서 연결과 자료 이전
+
+### ⚙️ 문서 연결 변경 작업 묶음
+
+기존 완료 작업은 재개방하지 않는다. 새 TASK-022가 연결 설정 원본과 초기화/전환 계약을 변경한다. 각 package는 `docs/specs/phase-02-document-setup/`에 둔다.
+
+| 세부 작업 / 영역 | 선행 | 관련 ID | 결과와 검증 | 설계 상태 / 문서 |
+|---|---|---|---|---|
+| `TASK-022.01` 전역 문서 연결 설정 저장과 연결 테스트 / BE | TASK-002.04 (#9), TASK-001.04 (#4) | DEC-021~024, FR-031~034, API-001, API-019, API-023~025 | 서비스 공통 연결 설정을 암호화한 영속 파일로 저장하고, 계정 없이 draft 생성·검증과 활성 연결 조회를 제공한다. 기존 환경변수 Resolver를 저장된 active snapshot 기반 Resolver로 변경한다. 각 수용 기준을 전용 테스트와 QA로 검증한다. | 설계중 · `docs/specs/phase-02-document-setup/TASK-022.01/` |
+| `TASK-022.02` Notion과 Confluence 기본 페이지 초기화 / BE | TASK-022.01 | DEC-021~024, FR-031~034, API-026, API-027 | 완료 버튼의 명시적 초기화 요청으로 부모 위치 아래 Meeting Automation/Meetings/Participants를 생성하거나 확인된 기존 루트를 재사용한다. 최초 연결에만 활성화하고 운영 중 draft 준비는 active를 바꾸지 않는다. 각 수용 기준을 전용 테스트와 QA로 검증한다. | 설계중 · `docs/specs/phase-02-document-setup/TASK-022.02/` |
+| `TASK-022.03` 최초 실행 연결 위저드와 공용 설정 화면 / FE | TASK-022.02 | DEC-021~024, FR-031~034, API-001, API-023~027 | 앱 첫 진입을 전역 설정 상태로 gate하고 Notion/Confluence 선택·가이드·입력·연결 테스트·완료 구조 확인·초기화 진행을 하나의 재사용 위저드로 제공한다. 제품 로그인/사용자 프로필은 추가하지 않는다. 각 수용 기준을 전용 테스트와 QA로 검증한다. | 설계중 · `docs/specs/phase-02-document-setup/TASK-022.03/` |
+| `TASK-022.04` 문서 서비스 간 표준 자료 export와 import / BE | TASK-022.02 | DEC-021~024, FR-031~034, EXT-003, API-017, API-018의 공유 Adapter 기반 | 양쪽 Adapter가 앱 관리 회의록·Transcript·실패 문서·참석자를 표준 모델로 읽고 반대 Provider에 복사하는 전송 Port를 구현한다. 이후 Publish/History가 같은 문서 codec을 재사용하도록 계약을 고정한다. 각 수용 기준을 전용 테스트와 QA로 검증한다. | 설계중 · `docs/specs/phase-02-document-setup/TASK-022.04/` |
+| `TASK-022.05` 자료 이전과 활성 문서 서비스 전환 / BE | TASK-022.04, TASK-022.01 | DEC-021~024, FR-031~034, API-028~030, API-027, API-006 gate | 전체 복사 또는 새 서비스 시작을 실행하고 검증 후 활성 연결을 원자적으로 전환한다. durable journal로 재시작·부분 실패를 복구하고 source 보존·전환 lock·cache 무효화를 보장한다. 각 수용 기준을 전용 테스트와 QA로 검증한다. | 설계중 · `docs/specs/phase-02-document-setup/TASK-022.05/` |
+| `TASK-022.06` 문서 서비스 변경과 자료 이전 화면 통합 검증 / FE, QA | TASK-022.03, TASK-022.05 | DEC-021~024, FR-031~034, API-023~030, SCR-011, SCR-013, SCR-014 | Settings에서 같은 위저드를 재사용해 새 연결 준비·전체 복사/새 시작 선택·진행·실패 재개·취소·완료를 제공한다. 최초 설정과 양방향 변경을 통합 검증한 뒤 기존 회의 생성 개발을 재개할 수 있게 한다. 각 수용 기준을 전용 테스트와 QA로 검증한다. | 설계중 · `docs/specs/phase-02-document-setup/TASK-022.06/` |
+
 ## Phase 2 — Document / Participants
 
 ### TASK-002 Document Provider Foundation — 작업 묶음
@@ -2494,7 +2541,7 @@ Backend API 작업은 정상 응답뿐 아니라 명세된 검증 오류, 없는
 | `TASK-004.01` Home 기본 화면과 새 미팅 이동 / FE | TASK-001.02 | FR-001, SCR-001 | 화면 제목과 새 미팅 버튼이 렌더링되고 버튼 클릭 시 New Meeting으로 이동한다. 컴포넌트/라우팅 테스트 통과 | 설계완료 · `docs/specs/phase-03-recording/TASK-004.01/` |
 | `TASK-004.02` App config 및 Template 조회 API / BE | TASK-001.04 | FR-002, API-001,002 | 설정과 `default`/`project` Template 목록이 계약대로 반환된다. 미설정·리소스 누락 테스트 통과 | 설계완료 · `docs/specs/phase-03-recording/TASK-004.02/` |
 | `TASK-004.03` New Meeting 입력 및 선택 UI / FE | TASK-004.01, TASK-004.02, TASK-003.01 | FR-002, SCR-002, API-001~003 | 제목 입력, Template 선택, 참석자 선택·유효성 검증이 동작한다. App Config timezone을 제출 데이터에 포함하며 API fixture 기반 컴포넌트 테스트 통과 | 설계완료 · `docs/specs/phase-03-recording/TASK-004.03/` |
-| `TASK-004.04` Meeting Session 생성 POST / BE | TASK-004.02, TASK-003.01 | FR-002, API-006 | 제목·Template·참석자를 검증하고 Session ID/상태를 반환한다. 유효 요청, 잘못된 참석자, 누락값 테스트 통과 | 설계완료 · `docs/specs/phase-03-recording/TASK-004.04/` |
+| `TASK-004.04` Meeting Session 생성 POST / BE | TASK-004.02, TASK-003.01, TASK-022.06 | FR-002, API-006 | 제목·Template·참석자를 검증하고 Session ID/상태를 반환한다. 유효 요청, 잘못된 참석자, 누락값 테스트 통과 | 설계완료 · `docs/specs/phase-03-recording/TASK-004.04/` |
 | `TASK-004.05` New Meeting 생성 API 연결 / FE, INTEGRATION | TASK-004.03, TASK-004.04 | SCR-002, API-006 | 제출 시 한 번 Session이 생성되고 성공 시 Recording으로 이동한다. 중복 클릭·검증 오류·서버 오류 테스트 통과 | 설계완료 · `docs/specs/phase-03-recording/TASK-004.05/` |
 
 ### TASK-005 Recording / Chunk Upload — 작업 묶음
@@ -2557,7 +2604,7 @@ Backend API 작업은 정상 응답뿐 아니라 명세된 검증 오류, 없는
 | 세부 작업 / 영역 | 선행 작업 | Related IDs | 완료 및 검증 조건 | 설계 상태 / 문서 |
 |---|---|---|------|---|
 | `TASK-010.01` Review 확정 검증 POST / BE | TASK-007.01, TASK-008.01, TASK-008.03 | FR-016, API-014 | 필수 Review 항목과 매핑 완료 여부를 검증하고 오류 항목을 반환한다. 유효/미완료 테스트 통과 | 설계완료 · `docs/specs/phase-06-publish/TASK-010.01/` |
-| `TASK-010.02` Document Publish POST 및 멱등성 / BE | TASK-010.01 | FR-016, API-015, EXT-003 | Meeting 문서를 생성하고 재요청 시 중복 문서를 만들지 않는다. Provider 성공·실패·중복 요청 테스트 통과 | 설계완료 · `docs/specs/phase-06-publish/TASK-010.02/` |
+| `TASK-010.02` Document Publish POST 및 멱등성 / BE | TASK-010.01, TASK-022.04, TASK-022.05 | FR-016, API-015, EXT-003 | Meeting 문서를 생성하고 재요청 시 중복 문서를 만들지 않는다. Provider 성공·실패·중복 요청 테스트 통과 | 설계완료 · `docs/specs/phase-06-publish/TASK-010.02/` |
 | `TASK-010.03` 저장 확인 및 문서 링크 표시 / FE, INTEGRATION | TASK-010.02 | SCR-007, API-014,015 | 저장 전 검증 결과를 표시하고 성공 후 유효한 document URL을 제공한다. 실패 시 재시도 가능한 상태를 보인다. | 설계완료 · `docs/specs/phase-06-publish/TASK-010.03/` |
 
 ### TASK-011 Email Delivery — 작업 묶음
@@ -2587,7 +2634,7 @@ Backend API 작업은 정상 응답뿐 아니라 명세된 검증 오류, 없는
 
 | 세부 작업 / 영역 | 선행 작업 | Related IDs | 완료 및 검증 조건 | 설계 상태 / 문서 |
 |---|---|---|------|---|
-| `TASK-014.01` Meetings List GET / BE | TASK-002.02 또는 TASK-002.03, TASK-010.02 | FR-020, API-017 | 최신 순, 최근 5건/전체 범위 기준의 요약을 반환한다. 빈 결과·100건 경계 테스트 통과 | 설계완료 · `docs/specs/phase-07-history/TASK-014.01/` |
+| `TASK-014.01` Meetings List GET / BE | TASK-002.02 또는 TASK-002.03, TASK-010.02, TASK-022.04 | FR-020, API-017 | 최신 순, 최근 5건/전체 범위 기준의 요약을 반환한다. 빈 결과·100건 경계 테스트 통과 | 설계완료 · `docs/specs/phase-07-history/TASK-014.01/` |
 | `TASK-014.02` Meeting Detail GET / BE | TASK-014.01 | FR-021~023, API-018 | 읽기 전용 상세와 Provider 원문 URL을 반환한다. 없는 회의·누락 문서 테스트 통과 | 설계완료 · `docs/specs/phase-07-history/TASK-014.02/` |
 | `TASK-014.03` Home 최근 목록·Meetings 화면 / FE | TASK-014.01 | SCR-001,009, FR-001,020 | 최근 5건과 전체 목록을 표시하고 Empty/Loading/Error를 검증한다. | 설계완료 · `docs/specs/phase-07-history/TASK-014.03/` |
 | `TASK-014.04` Client-side filter 및 Detail 연결 / FE, INTEGRATION | TASK-014.02, TASK-014.03 | SCR-009,010, FR-021~023 | 제목/참석자/날짜 필터와 읽기 전용 상세·원문 열기가 동작한다. 경계·결과 없음 테스트 통과 | 설계완료 · `docs/specs/phase-07-history/TASK-014.04/` |
@@ -2596,7 +2643,7 @@ Backend API 작업은 정상 응답뿐 아니라 명세된 검증 오류, 없는
 
 | 세부 작업 / 영역 | 선행 작업 | Related IDs | 완료 및 검증 조건 | 설계 상태 / 문서 |
 |---|---|---|------|---|
-| `TASK-015.01` Settings 조회 연결 / FE, BE | TASK-002.04, TASK-011.01, TASK-012.01 | FR-026, API-001,019, SCR-011 | Company/Document/Email/Notification 상태를 표시하고 Secret 원문이 응답·화면에 없다. | 설계완료 · `docs/specs/phase-07-settings/TASK-015.01/` |
+| `TASK-015.01` Settings 조회 연결 / FE, BE | TASK-022.06, TASK-002.04, TASK-011.01, TASK-012.01 | FR-026, API-001,019, SCR-011 | Company/Document/Email/Notification 상태를 표시하고 저장된 Secret 원문이 응답·화면에 없다. | 설계완료 · `docs/specs/phase-07-settings/TASK-015.01/` |
 
 ### TASK-016 Error / Admin Slack — 작업 묶음
 
@@ -2655,7 +2702,7 @@ Backend API 작업은 정상 응답뿐 아니라 명세된 검증 오류, 없는
 | `TASK-021.04` Release Acceptance 및 증거 검토 / QA | TASK-021.01~TASK-021.03, TASK-018.04, TASK-019.03, TASK-020.04 | 전체 | Release Definition of Done의 모든 항목에 Evidence가 연결되고 미충족 항목은 DONE 처리되지 않는다. | 설계완료 · `docs/specs/phase-10-e2e/TASK-021.04/` |
 
 
-# 24. Release Definition of Done
+# Release Definition of Done
 
 V1 Release는 다음을 모두 만족해야 한다. 실제 모바일/회의실 검증은 초기 개발 Gate가 아니지만 **Phase 8 이후 Release Gate**로 적용한다.
 
@@ -2674,7 +2721,9 @@ V1 Release는 다음을 모두 만족해야 한다. 실제 모바일/회의실 �
 -   [ ] Email 전달 검증
 -   [ ] Slack Notification 검증
 -   [ ] Admin Slack 4종 오류 검증
--   [ ] Secret frontend 노출 0건
+-   [ ] 최초 연결 위저드와 양방향 Provider 변경·전체 자료 복사 검증
+-   [ ] 설정·이전 journal 재시작 복원과 원본 보존 검증
+-   [ ] 저장된 Secret의 FE bundle·웹 저장소·조회 API·로그 노출 0건
 -   [ ] Audio 영구 보관 0건
 -   [ ] DB/JPA/Redis/Queue 의존 0건
 -   [ ] DONE TASK 재구현 없음
@@ -2682,7 +2731,7 @@ V1 Release는 다음을 모두 만족해야 한다. 실제 모바일/회의실 �
 
 ------------------------------------------------------------------------
 
-# 25. Codex 시작 지침
+# Codex 시작 지침
 
 Codex는 개발 세션을 시작할 때 다음 순서를 지킨다.
 
@@ -2690,7 +2739,7 @@ Codex는 개발 세션을 시작할 때 다음 순서를 지킨다.
 2. GitHub에서 열린 Issue와 라벨을 조회하고, 작업 묶음·선행 Issue·관련 댓글을 확인한다.
 3. `DEC-*` 및 승인된 PRD 요구사항을 변경하지 않는다.
 4. 완료된 세부 TASK Issue는 재구현하지 않는다.
-5. 모든 선행 작업이 완료된 가장 앞의 `TODO` 세부 TASK 하나를 선택한다.
+5. 명시된 실행 우선순위와 다음 개발 커서를 우선 적용하고, 모든 선행 작업이 완료된 가장 앞의 `TODO` 세부 TASK 하나를 선택한다. TASK-022가 기존 미완료 TASK보다 앞선다.
 6. 관련 `FR/SCR/API/EXT`와 Issue 댓글의 결정을 읽는다.
 7. 테스트를 먼저 작성하고 실패를 확인한 뒤 최소 구현을 진행한다.
 8. 대상 테스트와 회귀 테스트를 실행하고 `docs/evidence/`에 결과를 남긴다.
@@ -2714,7 +2763,7 @@ Codex는 개발 세션을 시작할 때 다음 순서를 지킨다.
 
 ------------------------------------------------------------------------
 
-# 26. 최종 제품 기준
+# 최종 제품 기준
 
 Meeting Automation V1의 제품 경험은 다음 한 문장으로 판단한다.
 

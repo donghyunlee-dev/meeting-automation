@@ -1,5 +1,7 @@
 # 검증 계획
 
+> 📌 v1.9.0 변경 계약: TASK-022.06과 TASK-004.04 변경 완료 후 API-001의 documentConnectionVersion을 불변 제출 snapshot에 포함한다. 미설정·전환 중에는 제출을 차단하고, DOCUMENT_CONNECTION_CHANGED는 참석자 목록과 설정을 다시 읽어 새 시도/key를 만들도록 안내한다. 동일 연결의 응답 유실 재시도만 기존 snapshot/key를 재사용한다. 계정이나 사용자별 설정은 추가하지 않는다. 상세는 [문서 연결·이전 설계](../../../product/document-setup.md)와 [API 명세](../../../product/api-spec.md#api-006-meeting-session-create)를 따른다.
+
 ## 자동화 테스트
 
 | ID | 준비/입력 | 기대 결과 | 증거 |
@@ -27,3 +29,9 @@ Frontend 기반 Issue #2의 `npm run test`, `npm run lint`, `npm run build`로 �
 ## 릴리스 확인
 
 Recording 화면이 구현되기 전 destination fixture로 route contract를 테스트한다. 실제 MediaRecorder와 upload는 후속 Recording/Chunk task에서 확인한다.
+
+## ⚙️ 연결 변경 회귀
+
+- 미설정 또는 전환 잠금 중 New Meeting 제출은 API-006 호출 없이 설정/진행 안내를 보인다.
+- API-001의 connectionVersion을 POST와 불변 snapshot에 포함한다. stale 409 뒤 설정·참석자 roster를 다시 읽고 새 key로 요청한다.
+- 동일 연결에서 응답 유실 재시도는 같은 version/payload/key를 유지한다.

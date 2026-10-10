@@ -1,5 +1,7 @@
 # Document Publish API 및 Session 멱등성
 
+> 📌 v1.9.0 변경 계약: TASK-022.04/.05의 공통 문서 codec과 활성 connection snapshot을 사용한다. 전환 lock 중 Publish를 차단하며 export/import와 같은 metadata/본문 round-trip 계약을 따른다. 이전으로 전달을 재발송하지 않는다. 상세 기준은 [문서 연결·이전 설계](../../../product/document-setup.md)다. 아래의 과거 기준과 충돌하면 이 변경 계약을 우선 적용한다.
+
 ## 목표
 
 API-015가 `CONFIRMED` Session의 Meeting 문서를 생성하거나 동일 Session의 기존 문서를 재사용하도록 한다. Publish 접수는 비동기 `202 PUBLISHING`이며, Document 저장 실패는 `DOCUMENT_FAILED`로 기록하고 Email/Notification을 시작하지 않는다. 실패 후 새 key/current version으로 문서 단계 재시도를 허용한다. PRD v1.7.0 (2026-10-05), `FR-016`, `API-015`, `EXT-003`을 구체화한다. Issue [#44](https://github.com/donghyunlee-dev/meeting-automation/issues/44).

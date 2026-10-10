@@ -1,5 +1,7 @@
 # 검증 계획
 
+> 📌 v1.9.0 변경 계약: 활성 전역 connection의 documentId를 사용하고 TASK-022.04의 표준 codec을 재사용한다. 전환 뒤 원본 링크는 외부에서 유효하지만 새 Provider ID로 목록/상세를 다시 조회한다. 상세 기준은 [문서 연결·이전 설계](../../../product/document-setup.md)다. 아래의 과거 기준과 충돌하면 이 변경 계약을 우선 적용한다.
+
 ## 자동화 테스트
 
 Backend 표준 JUnit/Gradle 테스트에서 fake DocumentProvider 및 Provider HTTP fixture를 사용한다. 실제 Provider 계정/회의 문서는 자동화 테스트에 사용하지 않는다.

@@ -1,5 +1,7 @@
 # Meeting 상세 조회 API 설계
 
+> 📌 v1.9.0 변경 계약: 활성 전역 connection의 documentId를 사용하고 TASK-022.04의 표준 codec을 재사용한다. 전환 뒤 원본 링크는 외부에서 유효하지만 새 Provider ID로 목록/상세를 다시 조회한다. 상세 기준은 [문서 연결·이전 설계](../../../product/document-setup.md)다. 아래의 과거 기준과 충돌하면 이 변경 계약을 우선 적용한다.
+
 ## 작업 식별 정보
 
 - 작업: `TASK-014.02`

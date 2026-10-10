@@ -1,5 +1,7 @@
 # 검증 계획
 
+> 📌 v1.9.0 변경 계약: TASK-022.04/.05의 공통 문서 codec과 활성 connection snapshot을 사용한다. 전환 lock 중 Publish를 차단하며 export/import와 같은 metadata/본문 round-trip 계약을 따른다. 이전으로 전달을 재발송하지 않는다. 상세 기준은 [문서 연결·이전 설계](../../../product/document-setup.md)다. 아래의 과거 기준과 충돌하면 이 변경 계약을 우선 적용한다.
+
 ## 자동화 검증
 
 Backend 구현 시 JUnit 5로 API/application/provider 경계를 검증한다. 실제 실행 명령은 repository의 Backend build 설정 및 TASK-001.05 결과에 따라 확정한다. 설계 단계에서는 테스트를 실행하지 않는다.

@@ -18,8 +18,9 @@
 
 | 데이터 | 정본/저장 위치 | 수명 |
 |---|---|---|
-| Company, Provider 설정 | Backend 환경 설정 | 배포 기간 |
-| Secret | Render Secret | 배포 기간, 비응답 |
+| Company, AI/Email/Slack 설정 | Backend 환경 설정 | 배포 기간 |
+| Document 연결 설정·credentials·journal | 암호화한 전역 영속 snapshot | 재시작·재배포 유지 |
+| AI/Email/Slack Secret·설정 암호화 키 | Render Secret | 배포 기간, 비응답 |
 | Templates | Backend static resources | 배포 버전 |
 | Participants | Document Provider `Participants` child page | Provider 정책에 따름. V1 API는 삭제를 제공하지 않음 |
 | 완료 Meeting, Minutes, Transcript | Document Provider `Meetings` child page | Provider 정책에 따름 |
@@ -171,11 +172,12 @@ API-010은 Publish가 시작된 뒤 이 generic Delivery projection을 제공한
 ## 문서 Provider 저장 구조
 
 ```text
-Meeting Automation (configured root)
-├─ Meetings
-│  └─ <meeting date> <title> (one provider page per meeting)
-└─ Participants
-   └─ <participant name> (one provider page per participant)
+지정 부모/space
+└─ Meeting Automation (위저드 생성 또는 명시 재사용 root)
+   ├─ Meetings
+   │  └─ <meeting date> <title> (one provider page per meeting)
+   └─ Participants
+      └─ <participant name> (one provider page per participant)
 ```
 
 다른 자동 생성 문서 계층은 만들지 않는다. Meeting page 본문은 회의 정보, 요약, 논의사항, 결정사항, Action Items, 후속 확인사항, Transcript 순서다.
@@ -213,7 +215,25 @@ Participant 표준 모델:
 
 | 분류 | 예 | 처리 |
 |---|---|---|
-| Secret | API key, token, webhook | 배포 secret store 전용, 응답/로그 금지 |
+| Secret | API key, token, webhook | AI/Email/Slack은 배포 secret store, Document는 암호화 전역 설정; 저장값 응답/로그 금지 |
 | 민감 콘텐츠 | Audio, Transcript, Minutes | 필요한 처리에만 사용, 일반 로그/Admin Slack 금지 |
 | 개인 정보 | 이름, 이메일 | 업무상 필요 최소 사용, Admin Slack에 전체 이메일 금지 |
 | 운영 상관관계 | sessionId, traceId, stage | 구조화 로그 허용 |
+
+## 전역 문서 연결 설정
+
+제품 계정·userId·사용자별 설정을 만들지 않는다. 문서 Provider 선택은 Backend env가 아니라 서비스 공통 GlobalDocumentSettings다.
+
+| 모델 | 필드와 규칙 |
+|---|---|
+| GlobalDocumentSettings | schemaVersion, version, active?, draft?, operation?, idempotencyRecords; 암호화 snapshot 한 개를 원자 교체 |
+| DocumentConnection | connectionId, connectionVersion, provider, normalized location, credential, rootId, meetingsPageId, participantsPageId, createdAt; API는 안전 요약만 |
+| DocumentDraft | draftId, revision, provider, location, credentials, reuseExistingRootId?, state, testResult?, expiresAt; 24시간 후 정리, 작업 참조 중 보존 |
+| DocumentOperation | operationId, type, status, sourceConnectionVersion?, draftId, stage, counts, manifest, participantIdMap, transferMarkers, errorCode?, retryable, cancelRequested; 본문 저장 없음 |
+| TransferManifestItem | sourceId, sourceRevision, sourceDigest, transferKey, targetId?, verifiedDigest?; 목록 전체와 참조를 검사 |
+
+활성 문서 설정은 AES-256-GCM으로 DOCUMENT_SETTINGS_DIR에 영속화한다. 암호화 키는 DOCUMENT_SETTINGS_ENCRYPTION_KEY 배포 secret에 둔다. 원문 credential·email은 GET/log에 포함하지 않는다. draft Secret은 Frontend password 입력 중 메모리에서 요청으로 전달하는 것만 허용한다.
+
+Participant의 public id는 계속 provider page ID다. 이전 시 새 ID map으로 모든 Meeting participantIds, Speaker mapping, ownerParticipantId를 재작성한다. Session speakerId와 externalSessionId는 보존한다. 이 map은 계정 연결이나 실명 자동 인식이 아니다. MeetingDoc은 정상 Minutes/Transcript와 실패 metadata를 표준 codec으로 구분해 export/import한다.
+
+완료·취소 뒤 불필요 source/draft credentials를 제거한다. operation summary/ID map은 30일 보관하고, 본문과 Audio·첨부파일은 journal에 넣지 않는다. 이전은 source 삭제·mail/notification 재전송 없이 수행한다. 자세한 실패/원자 전환 규칙은 [문서 연결 설계](./document-setup.md)를 따른다.
