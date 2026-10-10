@@ -2324,9 +2324,9 @@ Meeting UI
 
 각 세부 TASK 표의 `설계 상태 / 문서` 열은 **설계 진행 상태**를 기록한다. 구현 진행 상태는 계속 GitHub Issue의 상태 라벨과 종료 상태가 기준이며, 두 상태를 혼합하지 않는다.
 
-**다음 설계 대상 커서: `TASK-022.01` (v1.9.0 변경 패키지의 master 게시 확인 후 완료 처리)**
+**다음 설계 대상 커서: 없음 (TASK-022.01~06 포함 PRD leaf TASK 설계 게시 완료)**
 
-**설계 게시 상태:** [설계 PR #102](https://github.com/donghyunlee-dev/meeting-automation/pull/102)에 신규 TASK-022.01~06 네 문서와 관련 계약을 게시했다. master 직접 push는 프로젝트 게시 훅의 `Master push requires FINALIZE` 조건으로 차단됐다. PR 병합 후 여섯 패키지의 master 경로와 Issue를 원격 확인하고 `설계완료`로 바꾼 뒤 설계 커서를 `없음`으로 복원한다. 이 문서 요청은 제품 구현을 시작하거나 구현 TASK를 DONE으로 처리하지 않는다.
+**설계 게시 상태:** [설계 PR #102](https://github.com/donghyunlee-dev/meeting-automation/pull/102)를 문서 리뷰·구조 QA 후 master에 병합하고 신규 TASK-022.01~06 네 문서의 원격 경로와 Issue를 확인했다. 병합 commit은 `5dab4d086adc6b386051ddc983add9ac5c270474`이며 [설계 게시 검증](../evidence/TASK-022.01/verification.md)에 기록한다. 제품 구현은 시작하지 않았으며 여섯 개발 작업은 TODO다.
 
 ## 📊 개발 진행 현황
 
@@ -2356,12 +2356,12 @@ Meeting UI
 | `TASK-004.01` | DONE | DONE | [Issue #14](https://github.com/donghyunlee-dev/meeting-automation/issues/14) / [PR #92](https://github.com/donghyunlee-dev/meeting-automation/pull/92) | [검증 증거](../evidence/TASK-004.01/verification.md), tests/review/QA PASS at `5c122bb` | `79287928a18b06124f74116433d38fdc63b7e91c` | 2026-10-09 20:56 KST |
 | `TASK-004.02` | DONE | DONE | [Issue #15](https://github.com/donghyunlee-dev/meeting-automation/issues/15) / [PR #93](https://github.com/donghyunlee-dev/meeting-automation/pull/93) | [검증 증거](../evidence/TASK-004.02/verification.md), tests/review/QA PASS at `d43543c` | `c2b06eb82bfaa155f1025fd47d16097fe6d7143a` | 2026-10-09 22:03 KST |
 | `TASK-004.03` | DONE | DONE | [Issue #16](https://github.com/donghyunlee-dev/meeting-automation/issues/16) / [PR #94](https://github.com/donghyunlee-dev/meeting-automation/pull/94) | [검증 증거](../evidence/TASK-004.03/verification.md), tests/review/QA PASS at `b043f1a` | `cea7902fb10cb0ea44c3c845cd9636ad0ebb2f0c` | 2026-10-10 00:04 KST |
-| `TASK-022.01` | TODO | DESIGN | [Issue #96](https://github.com/donghyunlee-dev/meeting-automation/issues/96) / — | — | — | — |
-| `TASK-022.02` | TODO | DESIGN | [Issue #97](https://github.com/donghyunlee-dev/meeting-automation/issues/97) / — | — | — | — |
-| `TASK-022.03` | TODO | DESIGN | [Issue #98](https://github.com/donghyunlee-dev/meeting-automation/issues/98) / — | — | — | — |
-| `TASK-022.04` | TODO | DESIGN | [Issue #99](https://github.com/donghyunlee-dev/meeting-automation/issues/99) / — | — | — | — |
-| `TASK-022.05` | TODO | DESIGN | [Issue #100](https://github.com/donghyunlee-dev/meeting-automation/issues/100) / — | — | — | — |
-| `TASK-022.06` | TODO | DESIGN | [Issue #101](https://github.com/donghyunlee-dev/meeting-automation/issues/101) / — | — | — | — |
+| `TASK-022.01` | TODO | DESIGN_READY | [Issue #96](https://github.com/donghyunlee-dev/meeting-automation/issues/96) / — | — | — | — |
+| `TASK-022.02` | TODO | DESIGN_READY | [Issue #97](https://github.com/donghyunlee-dev/meeting-automation/issues/97) / — | — | — | — |
+| `TASK-022.03` | TODO | DESIGN_READY | [Issue #98](https://github.com/donghyunlee-dev/meeting-automation/issues/98) / — | — | — | — |
+| `TASK-022.04` | TODO | DESIGN_READY | [Issue #99](https://github.com/donghyunlee-dev/meeting-automation/issues/99) / — | — | — | — |
+| `TASK-022.05` | TODO | DESIGN_READY | [Issue #100](https://github.com/donghyunlee-dev/meeting-automation/issues/100) / — | — | — | — |
+| `TASK-022.06` | TODO | DESIGN_READY | [Issue #101](https://github.com/donghyunlee-dev/meeting-automation/issues/101) / — | — | — | — |
 | `TASK-004.04` | BLOCKED | DESIGN_REBASE | [Issue #17](https://github.com/donghyunlee-dev/meeting-automation/issues/17) / [PR #95](https://github.com/donghyunlee-dev/meeting-automation/pull/95) | v1.9.0 연결 gate 적용 후 재검증 대기 | — | — |
 | `TASK-004.05` | TODO | DESIGN | [Issue #18](https://github.com/donghyunlee-dev/meeting-automation/issues/18) / — | — | — | — |
 | `TASK-005.01` | TODO | DESIGN | [Issue #19](https://github.com/donghyunlee-dev/meeting-automation/issues/19) / — | — | — | — |
@@ -2509,12 +2509,12 @@ Backend API 작업은 정상 응답뿐 아니라 명세된 검증 오류, 없는
 
 | 세부 작업 / 영역 | 선행 | 관련 ID | 결과와 검증 | 설계 상태 / 문서 |
 |---|---|---|---|---|
-| `TASK-022.01` 전역 문서 연결 설정 저장과 연결 테스트 / BE | TASK-002.04 (#9), TASK-001.04 (#4) | DEC-021~024, FR-031~034, API-001, API-019, API-023~025 | 서비스 공통 연결 설정을 암호화한 영속 파일로 저장하고, 계정 없이 draft 생성·검증과 활성 연결 조회를 제공한다. 기존 환경변수 Resolver를 저장된 active snapshot 기반 Resolver로 변경한다. 각 수용 기준을 전용 테스트와 QA로 검증한다. | 설계중 · `docs/specs/phase-02-document-setup/TASK-022.01/` |
-| `TASK-022.02` Notion과 Confluence 기본 페이지 초기화 / BE | TASK-022.01 | DEC-021~024, FR-031~034, API-026, API-027 | 완료 버튼의 명시적 초기화 요청으로 부모 위치 아래 Meeting Automation/Meetings/Participants를 생성하거나 확인된 기존 루트를 재사용한다. 최초 연결에만 활성화하고 운영 중 draft 준비는 active를 바꾸지 않는다. 각 수용 기준을 전용 테스트와 QA로 검증한다. | 설계중 · `docs/specs/phase-02-document-setup/TASK-022.02/` |
-| `TASK-022.03` 최초 실행 연결 위저드와 공용 설정 화면 / FE | TASK-022.02 | DEC-021~024, FR-031~034, API-001, API-023~027 | 앱 첫 진입을 전역 설정 상태로 gate하고 Notion/Confluence 선택·가이드·입력·연결 테스트·완료 구조 확인·초기화 진행을 하나의 재사용 위저드로 제공한다. 제품 로그인/사용자 프로필은 추가하지 않는다. 각 수용 기준을 전용 테스트와 QA로 검증한다. | 설계중 · `docs/specs/phase-02-document-setup/TASK-022.03/` |
-| `TASK-022.04` 문서 서비스 간 표준 자료 export와 import / BE | TASK-022.02 | DEC-021~024, FR-031~034, EXT-003, API-017, API-018의 공유 Adapter 기반 | 양쪽 Adapter가 앱 관리 회의록·Transcript·실패 문서·참석자를 표준 모델로 읽고 반대 Provider에 복사하는 전송 Port를 구현한다. 이후 Publish/History가 같은 문서 codec을 재사용하도록 계약을 고정한다. 각 수용 기준을 전용 테스트와 QA로 검증한다. | 설계중 · `docs/specs/phase-02-document-setup/TASK-022.04/` |
-| `TASK-022.05` 자료 이전과 활성 문서 서비스 전환 / BE | TASK-022.04, TASK-022.01 | DEC-021~024, FR-031~034, API-028~030, API-027, API-006 gate | 전체 복사 또는 새 서비스 시작을 실행하고 검증 후 활성 연결을 원자적으로 전환한다. durable journal로 재시작·부분 실패를 복구하고 source 보존·전환 lock·cache 무효화를 보장한다. 각 수용 기준을 전용 테스트와 QA로 검증한다. | 설계중 · `docs/specs/phase-02-document-setup/TASK-022.05/` |
-| `TASK-022.06` 문서 서비스 변경과 자료 이전 화면 통합 검증 / FE, QA | TASK-022.03, TASK-022.05 | DEC-021~024, FR-031~034, API-023~030, SCR-011, SCR-013, SCR-014 | Settings에서 같은 위저드를 재사용해 새 연결 준비·전체 복사/새 시작 선택·진행·실패 재개·취소·완료를 제공한다. 최초 설정과 양방향 변경을 통합 검증한 뒤 기존 회의 생성 개발을 재개할 수 있게 한다. 각 수용 기준을 전용 테스트와 QA로 검증한다. | 설계중 · `docs/specs/phase-02-document-setup/TASK-022.06/` |
+| `TASK-022.01` 전역 문서 연결 설정 저장과 연결 테스트 / BE | TASK-002.04 (#9), TASK-001.04 (#4) | DEC-021~024, FR-031~034, API-001, API-019, API-023~025 | 서비스 공통 연결 설정을 암호화한 영속 파일로 저장하고, 계정 없이 draft 생성·검증과 활성 연결 조회를 제공한다. 기존 환경변수 Resolver를 저장된 active snapshot 기반 Resolver로 변경한다. 각 수용 기준을 전용 테스트와 QA로 검증한다. | 설계완료 · `docs/specs/phase-02-document-setup/TASK-022.01/` |
+| `TASK-022.02` Notion과 Confluence 기본 페이지 초기화 / BE | TASK-022.01 | DEC-021~024, FR-031~034, API-026, API-027 | 완료 버튼의 명시적 초기화 요청으로 부모 위치 아래 Meeting Automation/Meetings/Participants를 생성하거나 확인된 기존 루트를 재사용한다. 최초 연결에만 활성화하고 운영 중 draft 준비는 active를 바꾸지 않는다. 각 수용 기준을 전용 테스트와 QA로 검증한다. | 설계완료 · `docs/specs/phase-02-document-setup/TASK-022.02/` |
+| `TASK-022.03` 최초 실행 연결 위저드와 공용 설정 화면 / FE | TASK-022.02 | DEC-021~024, FR-031~034, API-001, API-023~027 | 앱 첫 진입을 전역 설정 상태로 gate하고 Notion/Confluence 선택·가이드·입력·연결 테스트·완료 구조 확인·초기화 진행을 하나의 재사용 위저드로 제공한다. 제품 로그인/사용자 프로필은 추가하지 않는다. 각 수용 기준을 전용 테스트와 QA로 검증한다. | 설계완료 · `docs/specs/phase-02-document-setup/TASK-022.03/` |
+| `TASK-022.04` 문서 서비스 간 표준 자료 export와 import / BE | TASK-022.02 | DEC-021~024, FR-031~034, EXT-003, API-017, API-018의 공유 Adapter 기반 | 양쪽 Adapter가 앱 관리 회의록·Transcript·실패 문서·참석자를 표준 모델로 읽고 반대 Provider에 복사하는 전송 Port를 구현한다. 이후 Publish/History가 같은 문서 codec을 재사용하도록 계약을 고정한다. 각 수용 기준을 전용 테스트와 QA로 검증한다. | 설계완료 · `docs/specs/phase-02-document-setup/TASK-022.04/` |
+| `TASK-022.05` 자료 이전과 활성 문서 서비스 전환 / BE | TASK-022.04, TASK-022.01 | DEC-021~024, FR-031~034, API-028~030, API-027, API-006 gate | 전체 복사 또는 새 서비스 시작을 실행하고 검증 후 활성 연결을 원자적으로 전환한다. durable journal로 재시작·부분 실패를 복구하고 source 보존·전환 lock·cache 무효화를 보장한다. 각 수용 기준을 전용 테스트와 QA로 검증한다. | 설계완료 · `docs/specs/phase-02-document-setup/TASK-022.05/` |
+| `TASK-022.06` 문서 서비스 변경과 자료 이전 화면 통합 검증 / FE, QA | TASK-022.03, TASK-022.05 | DEC-021~024, FR-031~034, API-023~030, SCR-011, SCR-013, SCR-014 | Settings에서 같은 위저드를 재사용해 새 연결 준비·전체 복사/새 시작 선택·진행·실패 재개·취소·완료를 제공한다. 최초 설정과 양방향 변경을 통합 검증한 뒤 기존 회의 생성 개발을 재개할 수 있게 한다. 각 수용 기준을 전용 테스트와 QA로 검증한다. | 설계완료 · `docs/specs/phase-02-document-setup/TASK-022.06/` |
 
 ## Phase 2 — Document / Participants
 
