@@ -5,7 +5,13 @@ import java.util.Map;
 
 /** Private storage model. Never serialize this model in an HTTP response or a log. */
 public record GlobalDocumentSettings(int schemaVersion, long version, Connection active, Draft draft,
-        Operation operation, Map<String, Replay> idempotencyRecords) {
+        Operation operation, Map<String, Replay> idempotencyRecords, Map<String, Operation> operationHistory) {
+    public GlobalDocumentSettings {
+        operationHistory=operationHistory==null ? Map.of() : Map.copyOf(operationHistory);
+    }
+    public GlobalDocumentSettings(int schemaVersion,long version,Connection active,Draft draft,Operation operation,Map<String,Replay> records) {
+        this(schemaVersion,version,active,draft,operation,records,Map.of());
+    }
     public static GlobalDocumentSettings empty() {
         return new GlobalDocumentSettings(1, 0, null, null, null, Map.of());
     }
@@ -21,11 +27,30 @@ public record GlobalDocumentSettings(int schemaVersion, long version, Connection
     }
     public record Draft(String draftId, long revision, String provider, Map<String, String> location,
             Map<String, String> credentials, String reuseExistingRootId, String state, TestResult testResult,
-            Instant expiresAt) {
+            Instant expiresAt, com.meetingautomation.document.DocumentStructure preparedStructure) {
+        public Draft(String draftId, long revision, String provider, Map<String, String> location,
+                Map<String, String> credentials, String reuseExistingRootId, String state, TestResult testResult, Instant expiresAt) {
+            this(draftId, revision, provider, location, credentials, reuseExistingRootId, state, testResult, expiresAt, null);
+        }
         @Override public String toString() { return "Draft[redacted]"; }
     }
     public record TestResult(Instant testedAt, Instant expiresAt, boolean authenticated,
             boolean parentAccessible, String writeCapability) { }
-    public record Operation(String operationId, String type, String status) { }
+    public record Operation(String operationId, String type, String status, String draftId, long draftRevision,
+            String stage, Map<String, Creation> journal, String errorCode, boolean retryable, Instant updatedAt) {
+        public Operation {
+            journal=journal==null ? Map.of() : Map.copyOf(journal);
+            stage=stage==null ? "PREFLIGHT" : stage;
+            updatedAt=updatedAt==null ? Instant.EPOCH : updatedAt;
+        }
+        public Operation(String operationId, String type, String status) {
+            this(operationId, type, status, null, 0, "PREFLIGHT", Map.of(), null, false, Instant.EPOCH);
+        }
+        public Operation transition(String status, String stage, Map<String, Creation> journal, String error, boolean retryable, Instant now) {
+            return new Operation(operationId, type, status, draftId, draftRevision, stage, Map.copyOf(journal), error, retryable, now);
+        }
+        @Override public String toString() { return "Operation[redacted]"; }
+    }
+    public record Creation(String parentId, String title, String marker, String pageId) { }
     public record Replay(String requestHmac, int status, String responseJson, long version) { }
 }

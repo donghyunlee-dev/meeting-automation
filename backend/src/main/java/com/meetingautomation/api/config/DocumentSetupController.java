@@ -11,9 +11,12 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/api/v1/document-setup")
 public final class DocumentSetupController {
     private final GlobalSettingsUseCase settings;
+    private final com.meetingautomation.document.bootstrap.DocumentBootstrapUseCase bootstrap;
     private final Set<String> origins;
-    public DocumentSetupController(GlobalSettingsUseCase settings, @Value("${ALLOWED_ORIGINS:}") String origins) {
+    public DocumentSetupController(GlobalSettingsUseCase settings, com.meetingautomation.document.bootstrap.DocumentBootstrapUseCase bootstrap,
+            @Value("${ALLOWED_ORIGINS:}") String origins) {
         this.settings = settings;
+        this.bootstrap = bootstrap;
         this.origins = new HashSet<>(Arrays.stream(origins.split(",")).map(String::trim).filter(s -> !s.isEmpty()).toList());
     }
     @GetMapping public ResponseEntity<Map<String, Object>> status() {
@@ -33,6 +36,18 @@ public final class DocumentSetupController {
         if (input.draftRevision() == null || input.draftRevision() < 1) throw SettingsException.invalid();
         return result(settings.testDraft(version, request.getHeader("Idempotency-Key"), draftId, input.draftRevision()));
     }
+    @PostMapping(value = "/drafts/{draftId}/initialize", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<String> initialize(HttpServletRequest request,@PathVariable String draftId,@RequestBody InitializeRequest input) {
+        long version=validate(request);
+        if (input.draftRevision()==null || !Boolean.TRUE.equals(input.confirmStructure())) throw SettingsException.invalid();
+        return result(bootstrap.initialize(version,request.getHeader("Idempotency-Key"),draftId,input.draftRevision(),true));
+    }
+    @GetMapping("/operations/{operationId}")
+    public ResponseEntity<Map<String,Object>> operation(@PathVariable String operationId) {
+        var summary=bootstrap.operation(operationId);
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).eTag('"'+Long.toString(summary.version())+'"')
+            .body(Map.of("data",summary));
+    }
     private long validate(HttpServletRequest request) {
         if (!origins.contains(request.getHeader("Origin"))) throw new SettingsException("DOCUMENT_SETUP_ORIGIN_REJECTED", 403);
         String version = request.getHeader("If-Match");
@@ -48,4 +63,5 @@ public final class DocumentSetupController {
             .cacheControl(CacheControl.noStore()).eTag('"' + Long.toString(result.version()) + '"').body(result.responseJson());
     }
     public record TestRequest(Long draftRevision) { }
+    public record InitializeRequest(Long draftRevision,Boolean confirmStructure) { }
 }
