@@ -22,9 +22,15 @@ public final class GlobalSettingsUseCase {
         try {
             GlobalDocumentSettings state = store.transaction(current -> {
                 var draft = current.draft();
-                if (draft != null && !locked(current) && !draft.expiresAt().isAfter(clock.instant())) {
-                    var cleaned = new GlobalDocumentSettings(1, current.version() + 1, current.active(), null,
-                            current.operation(), current.idempotencyRecords());
+                var operation=current.operation();
+                var history=new HashMap<>(current.operationHistory());
+                history.values().removeIf(old -> !old.updatedAt().plus(Duration.ofDays(30)).isAfter(clock.instant()));
+                if (operation!=null && Set.of("SUCCEEDED","CANCELLED").contains(operation.status())
+                        && !operation.updatedAt().plus(Duration.ofDays(30)).isAfter(clock.instant())) operation=null;
+                if (draft != null && !locked(current) && !draft.expiresAt().isAfter(clock.instant())) draft=null;
+                if (draft!=current.draft() || operation!=current.operation() || history.size()!=current.operationHistory().size()) {
+                    var cleaned = new GlobalDocumentSettings(1, current.version() + 1, current.active(), draft,
+                            operation, current.idempotencyRecords(),Map.copyOf(history));
                     return new GlobalSettingsStore.Change<>(cleaned, cleaned);
                 }
                 return new GlobalSettingsStore.Change<>(current, current);
@@ -32,11 +38,12 @@ public final class GlobalSettingsUseCase {
             var active = state.active();
             var draft = liveDraft(state);
             boolean locked = locked(state);
-            return new Status(state.version(), locked ? active == null ? "CONFIGURING" : "SWITCHING"
+            boolean attention=state.operation()!=null && Set.of("FAILED","INTERRUPTED","RECONCILIATION_REQUIRED").contains(state.operation().status());
+            return new Status(state.version(), attention ? "ATTENTION_REQUIRED" : locked ? active == null ? "CONFIGURING" : "SWITCHING"
                 : active != null ? "READY" : draft != null ? "CONFIGURING" : "UNCONFIGURED",
                 active == null ? null : new ActiveSummary(active.provider(), active.connectionVersion(), active.rootUrl()),
                 draft == null ? null : new DraftSummary(draft.draftId(), draft.revision(), draft.provider(), draft.state()),
-                state.operation(), active != null && !locked);
+                state.operation()==null ? null : new OperationSummary(state.operation().operationId(),state.operation().type(),state.operation().status()), active != null && !locked);
         } catch (SettingsException failure) {
             if (failure.status() != 503) throw failure;
             return new Status(null, "STORAGE_UNAVAILABLE", null, null, null, false);
@@ -118,12 +125,13 @@ public final class GlobalSettingsUseCase {
         String json = JSON.writeValueAsString(Map.of("data", response));
         var records = new HashMap<>(current.idempotencyRecords());
         records.put(key, new GlobalDocumentSettings.Replay(hmac, status, json, current.version() + 1));
-        var next = new GlobalDocumentSettings(1, current.version() + 1, current.active(), draft, current.operation(), Map.copyOf(records));
+        var next = new GlobalDocumentSettings(1, current.version() + 1, current.active(), draft, current.operation(), Map.copyOf(records),current.operationHistory());
         return new GlobalSettingsStore.Change<>(next, new MutationResult(status, json, next.version()));
     }
     public record MutationResult(int status, String responseJson, long version) { }
     public record Status(Long version, String status, ActiveSummary active, DraftSummary draft,
-            GlobalDocumentSettings.Operation operation, boolean canCreateMeeting) { }
+            OperationSummary operation, boolean canCreateMeeting) { }
+    public record OperationSummary(String operationId,String type,String status) { }
     public record ActiveSummary(String provider, long connectionVersion, String rootUrl) { }
     public record DraftSummary(String draftId, long revision, String provider, String state) { }
 }
