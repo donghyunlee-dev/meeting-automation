@@ -27,6 +27,16 @@ describe('document setup wizard', () => {
     expect(fetchMock.mock.calls.map(([url]) => new URL(String(url)).pathname)).toEqual(['/api/v1/document-setup', '/api/v1/document-setup']);
   });
 
+  it('gates the home route during first run and removes the loop-back action', async () => {
+    const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(response({ version: 0, status: 'UNCONFIGURED', active: null, draft: null, operation: null, canCreateMeeting: false })));
+    vi.stubGlobal('fetch', fetchMock);
+    render(<MemoryRouter initialEntries={['/']}><App /></MemoryRouter>);
+
+    expect(await screen.findByRole('heading', { name: '문서 서비스 연결' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '나중에 하기' })).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Meeting Automation' })).toBeNull();
+  });
+
   it('gates unconfigured participant settings and redirects to the first-run wizard', async () => {
     const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(response({ version: 0, status: 'UNCONFIGURED', active: null, draft: null, operation: null, canCreateMeeting: false })));
     vi.stubGlobal('fetch', fetchMock);
@@ -58,6 +68,18 @@ describe('document setup wizard', () => {
     render(<MemoryRouter initialEntries={['/settings/document']}><App /></MemoryRouter>);
     expect(await screen.findByRole('alert')).toBeTruthy();
     expect(screen.getByRole('heading', { name: '저장소 설정을 확인할 수 없습니다' })).toBeTruthy();
+  });
+
+  it('keeps READY document settings read-only until the switch API is available', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(response({ version: 5, status: 'READY', active: { provider: 'NOTION', connectionVersion: 2, rootUrl: 'https://notion.example' }, draft: { draftId: 'pending-draft', revision: 1, provider: 'CONFLUENCE', state: 'DRAFT' }, operation: null, canCreateMeeting: true }));
+    vi.stubGlobal('fetch', fetchMock);
+    render(<MemoryRouter initialEntries={['/settings/document']}><App /></MemoryRouter>);
+
+    expect(await screen.findByRole('heading', { name: '설정' })).toBeTruthy();
+    expect(screen.getByText('현재 연결: Notion')).toBeTruthy();
+    expect(screen.getByText(/후속 작업에서 지원/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '문서 서비스 변경' })).toBeNull();
+    expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(false);
   });
 
   it('connects required input errors, clears the password after testing, and invalidates TESTED when fields change', async () => {
@@ -154,6 +176,42 @@ describe('document setup wizard', () => {
     expect(initializeCalls).toHaveLength(1);
     expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith('/app-config'))).toBe(true);
     expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith('/participants'))).toBe(true);
+  });
+
+  it('rereads API-023 and resumes the accepted public operation after the initialize response is lost', async () => {
+    let statusReads = 0;
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = new URL(String(input)).pathname;
+      if (path.endsWith('/document-setup')) {
+        statusReads += 1;
+        if (statusReads === 1) return Promise.resolve(response({ version: 0, status: 'UNCONFIGURED', active: null, draft: null, operation: null, canCreateMeeting: false }));
+        const operationSummary = statusReads >= 4 ? { operationId: 'lost-op-9', type: 'INITIALIZE', status: 'RUNNING' } : null;
+        return Promise.resolve(response({ version: statusReads >= 4 ? 3 : 2, status: 'CONFIGURING', active: null, draft: { draftId: 'd1', revision: 1, provider: 'NOTION', state: statusReads >= 4 ? 'INITIALIZING' : 'TESTED' }, operation: operationSummary, canCreateMeeting: false }));
+      }
+      if (path.endsWith('/drafts') && init?.method === 'POST') return Promise.resolve(response({ draftId: 'd1', revision: 1, state: 'DRAFT', version: 1 }, 201));
+      if (path.endsWith('/test')) return Promise.resolve(response({ draftId: 'd1', revision: 1, testedAt: '2026-10-11T10:00:00Z', expiresAt: '2099-10-11T10:10:00Z', authenticated: true, parentAccessible: true, writeCapability: 'UNVERIFIED', version: 2 }));
+      if (path.endsWith('/initialize') && init?.method === 'POST') return Promise.reject(new Error('connection closed after dispatch'));
+      if (path.endsWith('/operations/lost-op-9')) return Promise.resolve(response(operation('lost-op-9', 'RUNNING')));
+      throw new Error(`Unexpected request: ${path}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<MemoryRouter initialEntries={['/setup/document']}><App /></MemoryRouter>);
+    await screen.findByRole('heading', { name: '문서 서비스 연결' });
+    fireEvent.click(screen.getByRole('button', { name: 'Notion 선택' }));
+    fireEvent.change(screen.getByLabelText('Notion 내부 연결 토큰'), { target: { value: 'synthetic-secret' } });
+    fireEvent.change(screen.getByLabelText('부모 페이지 URL 또는 ID'), { target: { value: 'parent-1' } });
+    fireEvent.click(screen.getByRole('button', { name: '읽기 전용 연결 테스트' }));
+    await screen.findByRole('heading', { name: '생성될 구조' });
+    fireEvent.click(screen.getByRole('button', { name: '구조 생성 및 연결 완료' }));
+
+    expect(await screen.findByRole('heading', { name: '문서 구조 준비 상태' })).toBeTruthy();
+    expect(await screen.findByText(/다시 확인했습니다/)).toBeTruthy();
+    expect(fetchMock.mock.calls.some(([url]) => new URL(String(url)).pathname === '/api/v1/document-setup')).toBe(true);
+    expect(fetchMock.mock.calls.some(([url]) => new URL(String(url)).pathname.endsWith('/operations/lost-op-9'))).toBe(true);
+    expect(screen.queryByRole('button', { name: '구조 생성 및 연결 완료' })).toBeNull();
+    expect(screen.queryByLabelText('Notion 내부 연결 토큰')).toBeNull();
+    const operationRead = fetchMock.mock.calls.find(([url]) => new URL(String(url)).pathname.endsWith('/operations/lost-op-9'));
+    expect(String(operationRead?.[0]).includes('synthetic-secret')).toBe(false);
   });
 
   it('resumes the public operation after reload without restoring or exposing credentials', async () => {

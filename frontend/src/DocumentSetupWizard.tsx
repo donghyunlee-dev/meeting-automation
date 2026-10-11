@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { Link, useNavigate } from 'react-router';
+import { Link } from 'react-router';
 import { getSetupOperation, getSetupSnapshot, initializeSetup, saveSetupDraft, testSetupDraft, DocumentSetupError, type DocumentProvider, type DraftInput, type SetupOperation, type SetupSnapshot, type TestedDraft } from './documentSetupApi';
 import { getCompanyConfig, listMeetingParticipants } from './newMeetingApi';
 
@@ -9,7 +9,6 @@ const EMPTY_CREDENTIALS: Credentials = { token: '', accountEmail: '', apiToken: 
 const EMPTY_LOCATION: Location = { parentPageId: '', baseUrl: '', spaceId: '', parentPageIdConfluence: '' };
 
 export function DocumentSetupWizard({ settings = false }: { settings?: boolean }) {
-  const navigate = useNavigate();
   const [snapshot, setSnapshot] = useState<SetupSnapshot | null>(null);
   const [provider, setProvider] = useState<DocumentProvider | null>(null);
   const [credentials, setCredentials] = useState(EMPTY_CREDENTIALS);
@@ -20,6 +19,7 @@ export function DocumentSetupWizard({ settings = false }: { settings?: boolean }
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [initializationUncertain, setInitializationUncertain] = useState(false);
   const formRef = useRef<HTMLFormElement | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const initializing = useRef(false);
@@ -129,29 +129,72 @@ export function DocumentSetupWizard({ settings = false }: { settings?: boolean }
     if (busy || initializing.current) return;
     if (!draft || !tested || tested.revision !== draft.revision || Date.parse(tested.expiresAt) <= Date.now()) { setError('완료 전에 같은 설정 버전의 연결 테스트를 다시 진행해 주세요.'); setTested(null); return; }
     initializing.current = true; setBusy(true); setError('');
+    let initializationSent = false;
+    let acceptedOperationId: string | null = null;
     try {
       const current = await refresh();
       if (current.version == null) throw new DocumentSetupError('STORAGE_UNAVAILABLE', 503);
+      initializationSent = true;
       const result = await initializeSetup(draft.id, draft.revision, current.version);
+      acceptedOperationId = result.data.operationId;
       setSnapshot(await refresh());
       const state = await getSetupOperation(result.data.operationId); setOperation(state);
       setNotice('문서 구조를 준비하고 있습니다. 이 화면을 다시 열어도 진행 상태를 확인할 수 있습니다.');
     } catch (reason) {
-      if (reason instanceof DocumentSetupError && reason.status === 412) { await refresh(); setTested(null); setError('설정 버전이 변경되었습니다. 최신 설정을 다시 읽었습니다. 연결 테스트를 다시 진행해 주세요.'); }
-      else setError('문서 구조 초기화를 시작하지 못했습니다. 연결 상태를 확인하고 다시 시도해 주세요.');
+      if (reason instanceof DocumentSetupError && reason.status === 412) {
+        await refresh(); setTested(null); setError('설정 버전이 변경되었습니다. 최신 설정을 다시 읽었습니다. 연결 테스트를 다시 진행해 주세요.');
+      } else if (initializationSent) {
+        setTested(null); setCredentials(EMPTY_CREDENTIALS);
+        try {
+          const latest = await refresh();
+          if (latest.operation) {
+            setInitializationUncertain(false);
+            setNotice('이미 진행 중인 문서 구조 준비 작업을 다시 확인했습니다.');
+            setError('');
+          } else if (acceptedOperationId) {
+            const accepted = await getSetupOperation(acceptedOperationId);
+            setOperation(accepted);
+            setSnapshot({ ...latest, operation: { operationId: accepted.operationId, type: accepted.type, status: accepted.status } });
+            setInitializationUncertain(false);
+            setNotice('응답에서 확인한 작업 ID로 진행 상태를 다시 불러왔습니다.');
+          } else {
+            setInitializationUncertain(true);
+            setError('완료 요청 결과가 불명확합니다. 다시 확인을 눌러 서버의 공개 작업 상태를 확인해 주세요.');
+          }
+        } catch {
+          setInitializationUncertain(true);
+          setError('완료 요청 결과를 확인할 수 없습니다. 다시 확인을 눌러 서버의 공개 작업 상태를 확인해 주세요.');
+        }
+      } else setError('문서 구조 초기화를 시작하지 못했습니다. 연결 상태를 확인하고 다시 시도해 주세요.');
     } finally { setBusy(false); initializing.current = false; }
+  }
+
+  async function recheckUncertainInitialization() {
+    setBusy(true); setError('');
+    try {
+      const latest = await refresh();
+      if (latest.operation) {
+        setInitializationUncertain(false);
+        setNotice('공개 작업 상태를 다시 확인했습니다.');
+      } else {
+        setInitializationUncertain(false);
+        setNotice('진행 중인 초기화 작업이 없습니다. 연결 테스트를 다시 진행해 주세요.');
+      }
+    } catch {
+      setError('공개 작업 상태를 불러오지 못했습니다. 잠시 후 다시 확인해 주세요.');
+    } finally { setBusy(false); }
   }
 
   if (!snapshot) return <main className="setup-page"><p role="status">문서 설정을 불러오는 중…</p></main>;
   if (snapshot.status === 'STORAGE_UNAVAILABLE') return <main className="setup-page"><h1>문서 서비스 연결</h1><section className="setup-card" role="alert"><h2>저장소 설정을 확인할 수 없습니다</h2><p>문서 설정 저장소가 준비되지 않아 문서 기능을 사용할 수 없습니다. 관리자에게 저장소 설정을 확인해 달라고 요청해 주세요.</p><button className="button button-secondary" type="button" onClick={() => void refresh()}>다시 확인</button></section></main>;
-  if (snapshot.status === 'READY' && settings && !provider) return <main className="setup-page"><h1>설정</h1><section className="setup-card"><h2>문서 서비스</h2><p>현재 연결: {snapshot.active?.provider === 'NOTION' ? 'Notion' : 'Confluence Cloud'}</p><button className="button button-primary" type="button" onClick={() => chooseProvider(snapshot.active?.provider ?? 'NOTION')}>문서 서비스 변경</button></section><section className="setup-card"><h2>참석자</h2><p>회의에서 사용할 참석자 정보를 관리합니다.</p><Link className="button button-secondary" to="/settings/participants">참석자 관리</Link></section></main>;
+  if (snapshot.status === 'READY' && settings) return <main className="setup-page"><h1>설정</h1><section className="setup-card"><h2>문서 서비스</h2><p>현재 연결: {snapshot.active?.provider === 'NOTION' ? 'Notion' : 'Confluence Cloud'}</p><p>문서 서비스 변경은 이전과 전환 계약을 제공하는 후속 작업에서 지원됩니다.</p></section><section className="setup-card"><h2>참석자</h2><p>회의에서 사용할 참석자 정보를 관리합니다.</p><Link className="button button-secondary" to="/settings/participants">참석자 관리</Link></section></main>;
 
   return <main className="setup-page">
     <header className="setup-heading"><p className="eyebrow">DOCUMENT CONNECTION</p><h1>문서 서비스 연결</h1><p>회의록과 참석자를 저장할 문서 서비스를 연결합니다.</p></header>
     {error && <p className="setup-error" role="alert">{error}</p>}{notice && <p className="setup-notice" role="status">{notice}</p>}
     {snapshot.operation && <section className="setup-card" aria-labelledby="operation-heading"><h2 id="operation-heading">문서 구조 준비 상태</h2><p role="status">{operation?.stage ?? snapshot.operation.status} · {operation?.status ?? '상태 확인 중'}</p>{operation && <p>참석자 {operation.counts.participantsCopied}/{operation.counts.participantsTotal}명 · 회의 {operation.counts.meetingsCopied}/{operation.counts.meetingsTotal}건</p>}<button type="button" className="button button-secondary" onClick={() => void refresh()}>진행 상태 새로고침</button></section>}
     {snapshot.status === 'ATTENTION_REQUIRED' && <section className="setup-card" role="status"><h2>이전 작업을 확인해 주세요</h2><p>이전에 시작한 설정 작업이 완료되지 않았습니다. 공개 진행 상태를 새로고침해 확인할 수 있습니다.</p></section>}
-    {!snapshot.operation && <>
+    {!snapshot.operation && !initializationUncertain && <>
       {!provider ? <section className="setup-card"><h2>문서 서비스 선택</h2><div className="setup-choice"><button className="button button-secondary" type="button" onClick={() => chooseProvider('NOTION')}>Notion 선택</button><button className="button button-secondary" type="button" onClick={() => chooseProvider('CONFLUENCE')}>Confluence Cloud 선택</button></div></section> : <>
         <section className="setup-card" aria-labelledby="guide-title"><div className="setup-card-heading"><div><h2 id="guide-title">{provider === 'NOTION' ? 'Notion 연결 가이드' : 'Confluence Cloud 연결 가이드'}</h2><p>{provider === 'NOTION' ? '내부 연결을 만들고 대상 부모 페이지에 연결 접근 권한을 부여해 주세요. 읽기·페이지 생성·갱신 권한이 필요합니다.' : '내부 운영용 Atlassian 계정과 API token을 준비하고, 공간 읽기·페이지 생성·갱신 권한을 확인해 주세요.'}</p></div><button className="button button-secondary" type="button" onClick={() => chooseProvider(provider === 'NOTION' ? 'CONFLUENCE' : 'NOTION')}>{provider === 'NOTION' ? 'Confluence Cloud 선택' : 'Notion 선택'}</button></div></section>
         <form ref={formRef} className="setup-card setup-form" onSubmit={(event) => void handleTest(event)} noValidate>
@@ -171,6 +214,6 @@ export function DocumentSetupWizard({ settings = false }: { settings?: boolean }
       </>}
     </>}
     {snapshot.status === 'READY' && <p><Link to="/settings/document">문서 서비스 설정으로 돌아가기</Link></p>}
-    <button className="setup-back" type="button" onClick={() => { setCredentials(EMPTY_CREDENTIALS); navigate(settings ? '/settings/participants' : '/'); }}>나중에 하기</button>
+    {initializationUncertain && <section className="setup-card" aria-labelledby="uncertain-operation-title"><h2 id="uncertain-operation-title">초기화 상태 확인</h2><p>요청 결과가 불명확하므로 새 초기화를 보내지 않습니다. 서버의 공개 작업 상태를 먼저 확인해 주세요.</p><button className="button button-secondary" type="button" onClick={() => void recheckUncertainInitialization()} disabled={busy}>{busy ? '확인 중…' : '다시 확인'}</button></section>}
   </main>;
 }

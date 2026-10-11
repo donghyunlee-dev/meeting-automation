@@ -336,7 +336,7 @@ export function App({ onNewMeetingSubmit = () => undefined }: { onNewMeetingSubm
   return (
     <div className="app-shell">
       <Routes>
-        <Route path="/" element={<HomePage />} />
+        <Route path="/" element={<SetupGate><HomePage /></SetupGate>} />
         <Route path="/setup/document" element={<DocumentSetupWizard />} />
         <Route path="/settings" element={<DocumentSetupWizard settings />} />
         <Route path="/settings/document" element={<DocumentSetupWizard settings />} />

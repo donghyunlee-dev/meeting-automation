@@ -54,12 +54,12 @@ function renderParticipantsApp() {
 }
 
 describe('Participants settings', () => {
-  it('renders the SCR-001 Home content and navigation without fetching recent meetings', () => {
+  it('renders the SCR-001 Home content and navigation without fetching recent meetings', async () => {
     const fetchMock = vi.fn();
     installFetchMock(fetchMock);
     renderHomeWithDestinationFixture();
 
-    expect(screen.getByRole('heading', { level: 1, name: 'Meeting Automation' })).toBeTruthy();
+    expect(await screen.findByRole('heading', { level: 1, name: 'Meeting Automation' })).toBeTruthy();
     expect(screen.getByText('회의를 시작할까요?')).toBeTruthy();
     expect(screen.getByText('회의 내용을 녹음하고 자동으로 정리합니다.')).toBeTruthy();
     expect(screen.getByRole('link', { name: '새 회의 시작' })).toBeTruthy();
@@ -69,8 +69,9 @@ describe('Participants settings', () => {
   });
 
   it('navigates the Home CTA to the New Meeting route fixture', async () => {
+    installFetchMock(vi.fn().mockResolvedValue(response({ data: {} })));
     renderHomeWithDestinationFixture();
-    fireEvent.click(screen.getByRole('link', { name: '새 회의 시작' }));
+    fireEvent.click(await screen.findByRole('link', { name: '새 회의 시작' }));
     expect(await screen.findByText('New Meeting fixture: /meetings/new')).toBeTruthy();
   });
 
