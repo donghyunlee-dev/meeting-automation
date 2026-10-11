@@ -38,7 +38,7 @@ public final class ConfluenceBootstrapPages implements BootstrapPages {
         if (!spaceId.equals(BootstrapHttp.required(space,"id"))) throw BootstrapHttp.failure();
         String key=BootstrapHttp.required(space,"key");
         if (!key.matches("[A-Za-z0-9_~-]+")) throw BootstrapHttp.failure();
-        String cql="space = \""+key+"\" AND title = \"\\\"Meeting Automation\\\"\" AND type IN (page, folder, database)";
+        String cql="space = \""+key+"\" AND title ~ \"\\\"Meeting Automation\\\"\" AND type IN (page, folder, database)";
         String path="/wiki/rest/api/search?cql="+java.net.URLEncoder.encode(cql,java.nio.charset.StandardCharsets.UTF_8)
             +"&expand=content.ancestors,content.space&limit=100";
         List<Page> roots=new ArrayList<>(); Set<String> seen=new HashSet<>();
