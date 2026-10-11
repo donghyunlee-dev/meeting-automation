@@ -8,8 +8,10 @@ import {
   updateParticipant,
 } from './participantsApi';
 import './app.css';
-import { Link, NavLink, Route, Routes } from 'react-router';
+import { Link, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router';
 import { NewMeetingPage, type NewMeetingPayload } from './NewMeetingPage';
+import { DocumentSetupWizard } from './DocumentSetupWizard';
+import { getSetupSnapshot } from './documentSetupApi';
 
 type ViewState = 'loading' | 'ready' | 'error';
 type FormState = { mode: 'create' } | { mode: 'edit'; participant: Participant };
@@ -302,12 +304,30 @@ function FutureRouteNotice() {
   return <main className="future-page"><h1>화면 준비 중</h1><p>이 화면은 다음 작업에서 제공됩니다.</p></main>;
 }
 
+function SetupGate({ children }: { children: React.ReactNode }) {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [allowed, setAllowed] = useState(false);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    let live = true;
+    void getSetupSnapshot().then(({ snapshot }) => {
+      if (!live) return;
+      if (snapshot.status === 'READY' && snapshot.canCreateMeeting) setAllowed(true);
+      else navigate(snapshot.status === 'STORAGE_UNAVAILABLE' ? '/settings/document' : '/setup/document', { replace: true, state: { from: location.pathname } });
+    }).catch(() => { if (live) setFailed(true); });
+    return () => { live = false; };
+  }, [location.pathname, navigate]);
+  if (failed) return <main className="setup-page"><section className="setup-card" role="alert"><h1>문서 설정 상태를 확인할 수 없습니다</h1><p>연결을 확인한 뒤 다시 시도해 주세요.</p></section></main>;
+  return allowed ? <>{children}</> : <main className="setup-page"><p role="status">문서 연결 상태를 확인하는 중…</p></main>;
+}
+
 function BottomNavigation() {
   return (
     <nav className="bottom-navigation" aria-label="주요 메뉴">
       <NavLink to="/" end aria-label="홈"><span aria-hidden="true">⌂</span>홈</NavLink>
       <NavLink to="/meetings" aria-label="회의록"><span aria-hidden="true">▤</span>회의록</NavLink>
-      <NavLink to="/settings/participants" aria-label="설정"><span aria-hidden="true">⚙</span>설정</NavLink>
+      <NavLink to="/settings" aria-label="설정"><span aria-hidden="true">⚙</span>설정</NavLink>
     </nav>
   );
 }
@@ -317,8 +337,11 @@ export function App({ onNewMeetingSubmit = () => undefined }: { onNewMeetingSubm
     <div className="app-shell">
       <Routes>
         <Route path="/" element={<HomePage />} />
-        <Route path="/meetings/new" element={<NewMeetingPage onSubmit={onNewMeetingSubmit} />} />
-        <Route path="/settings/participants" element={<ParticipantsPage />} />
+        <Route path="/setup/document" element={<DocumentSetupWizard />} />
+        <Route path="/settings" element={<DocumentSetupWizard settings />} />
+        <Route path="/settings/document" element={<DocumentSetupWizard settings />} />
+        <Route path="/meetings/new" element={<SetupGate><NewMeetingPage onSubmit={onNewMeetingSubmit} /></SetupGate>} />
+        <Route path="/settings/participants" element={<SetupGate><ParticipantsPage /></SetupGate>} />
         <Route path="*" element={<FutureRouteNotice />} />
       </Routes>
       <BottomNavigation />

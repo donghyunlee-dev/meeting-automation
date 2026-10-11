@@ -12,9 +12,19 @@ function response(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 }
 
+function readySetupResponse() {
+  return response({ data: { version: 1, status: 'READY', active: { provider: 'NOTION', connectionVersion: 1, rootUrl: 'https://notion.example' }, draft: null, operation: null, canCreateMeeting: true } });
+}
+
+function installFetchMock(fetchMock: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>) {
+  vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL, init?: RequestInit) => String(input).endsWith('/document-setup')
+    ? Promise.resolve(readySetupResponse())
+    : fetchMock(input, init)));
+}
+
 function mockList(result: Response | Promise<Response>) {
   const fetchMock = vi.fn().mockResolvedValue(result);
-  vi.stubGlobal('fetch', fetchMock);
+  installFetchMock(fetchMock);
   return fetchMock;
 }
 
@@ -46,7 +56,7 @@ function renderParticipantsApp() {
 describe('Participants settings', () => {
   it('renders the SCR-001 Home content and navigation without fetching recent meetings', () => {
     const fetchMock = vi.fn();
-    vi.stubGlobal('fetch', fetchMock);
+    installFetchMock(fetchMock);
     renderHomeWithDestinationFixture();
 
     expect(screen.getByRole('heading', { level: 1, name: 'Meeting Automation' })).toBeTruthy();
@@ -71,7 +81,7 @@ describe('Participants settings', () => {
       if (path.endsWith('/templates')) return Promise.resolve(response({ data: { items: [{ id: 'default.md', name: '기본 회의록', version: '1.0.0' }] } }));
       return Promise.resolve(response({ data: { items: participants } }));
     });
-    vi.stubGlobal('fetch', fetchMock);
+    installFetchMock(fetchMock);
     render(<MemoryRouter initialEntries={['/meetings/new']}><App onNewMeetingSubmit={vi.fn()} /></MemoryRouter>);
 
     expect(await screen.findByRole('heading', { level: 1, name: '새 회의' })).toBeTruthy();
@@ -88,7 +98,7 @@ describe('Participants settings', () => {
     renderParticipantsApp();
 
     expect(screen.getAllByRole('main')).toHaveLength(1);
-    expect(screen.getByRole('status').textContent).toMatch(/불러오는 중/);
+    expect(screen.getByRole('status').textContent).toMatch(/확인하는 중|불러오는 중/);
     resolve(response({ data: { items: participants } }));
     expect(await screen.findByText('Ada Lovelace')).toBeTruthy();
     expect(screen.getByText('ada@example.com')).toBeTruthy();
@@ -122,7 +132,7 @@ describe('Participants settings', () => {
     const fetchMock = vi.fn()
       .mockRejectedValueOnce(new Error('private provider details'))
       .mockResolvedValueOnce(response({ data: { items: participants } }));
-    vi.stubGlobal('fetch', fetchMock);
+    installFetchMock(fetchMock);
     renderParticipantsApp();
     expect((await screen.findByRole('alert')).textContent).toMatch(/불러오지 못했습니다/);
     expect(screen.queryByText(/private provider details/)).toBeNull();
@@ -135,7 +145,7 @@ describe('Participants settings', () => {
       .mockResolvedValueOnce(response({ data: { items: [] } }))
       .mockRejectedValueOnce(new Error('offline'))
       .mockResolvedValueOnce(response({ data: { id: 'p3', name: 'Lin Chen', email: 'lin@example.com' } }, 201));
-    vi.stubGlobal('fetch', fetchMock);
+    installFetchMock(fetchMock);
     renderParticipantsApp();
     await screen.findByText(/등록된 참석자가 없습니다/);
     fireEvent.click(screen.getByRole('button', { name: '참석자 추가' }));
@@ -155,7 +165,7 @@ describe('Participants settings', () => {
 
   it('connects validation errors to fields and does not send invalid input', async () => {
     const fetchMock = vi.fn().mockResolvedValue(response({ data: { items: [] } }));
-    vi.stubGlobal('fetch', fetchMock);
+    installFetchMock(fetchMock);
     renderParticipantsApp();
     await screen.findByText(/등록된 참석자가 없습니다/);
     fireEvent.click(screen.getByRole('button', { name: '새 참석자 추가' }));
@@ -174,7 +184,7 @@ describe('Participants settings', () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(response({ data: { items: participants } }))
       .mockResolvedValueOnce(response({ data: { id: 'p1', name: 'Ada Byron', email: 'ada@example.com' } }));
-    vi.stubGlobal('fetch', fetchMock);
+    installFetchMock(fetchMock);
     renderParticipantsApp();
     await screen.findByText('Ada Lovelace');
     fireEvent.click(within(screen.getByRole('article', { name: /Ada Lovelace/ })).getByRole('button', { name: '수정' }));
@@ -220,7 +230,7 @@ describe('Participants settings', () => {
       .mockResolvedValueOnce(response({ data: { items: [] } }))
       .mockReturnValueOnce(pendingCreate)
       .mockResolvedValueOnce(response({ data: { id: 'p3', name: 'Lin Chen', email: 'lin@example.com' } }, 201));
-    vi.stubGlobal('fetch', fetchMock);
+    installFetchMock(fetchMock);
     renderParticipantsApp();
     await screen.findByText(/등록된 참석자가 없습니다/);
     fireEvent.click(screen.getByRole('button', { name: '새 참석자 추가' }));
@@ -269,7 +279,7 @@ describe('Participants settings', () => {
       .mockResolvedValueOnce(response({ data: { items: participants } }))
       .mockResolvedValueOnce(response({ error: { code: 'PARTICIPANT_NOT_FOUND' } }, 404))
       .mockResolvedValueOnce(response({ data: { items: participants } }));
-    vi.stubGlobal('fetch', fetchMock);
+    installFetchMock(fetchMock);
     renderParticipantsApp();
     await screen.findByText('Ada Lovelace');
     fireEvent.click(within(screen.getByRole('article', { name: /Ada Lovelace/ })).getByRole('button', { name: '수정' }));

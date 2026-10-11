@@ -6,5 +6,8 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     include: ['src/**/*.test.{ts,tsx}'],
+    pool: 'threads',
+    isolate: false,
+    maxWorkers: 1,
   },
 });
