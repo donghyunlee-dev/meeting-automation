@@ -45,7 +45,7 @@ class DocumentBootstrapProviderTests {
         server.expect(requestTo("https://site.atlassian.net/wiki/api/v2/spaces/1")).andRespond(withSuccess("{\"id\":\"1\",\"key\":\"TEST\"}",MediaType.APPLICATION_JSON));
         server.expect(request -> {
             String query=java.net.URLDecoder.decode(request.getURI().getRawQuery(),StandardCharsets.UTF_8);
-            assertThat(query).contains("space = \"TEST\"","title = \"\\\"Meeting Automation\\\"\"","type IN (page, folder, database)");
+            assertThat(query).contains("space = \"TEST\"","title ~ \"\\\"Meeting Automation\\\"\"","type IN (page, folder, database)");
             assertThat(request.getMethod()).isEqualTo(HttpMethod.GET);
         }).andRespond(withSuccess("{\"results\":[],\"_links\":{\"next\":\"/wiki/rest/api/search?cursor=second\"}}",MediaType.APPLICATION_JSON));
         server.expect(requestTo("https://site.atlassian.net/wiki/rest/api/search?cursor=second"))
@@ -55,7 +55,7 @@ class DocumentBootstrapProviderTests {
             .isInstanceOf(SettingsException.class).extracting("code").isEqualTo("DOCUMENT_STRUCTURE_CONFLICT");
         server.verify();
     }
-    @Test void bootConfluenceDecodedCqlMatchesDocumentedExactTitleAndReturnsExistingRoot() {
+    @Test void bootConfluenceRootSearchUsesCompatibleExactPhraseAndReturnsExistingRoot() {
         var builder=RestClient.builder(); var server=MockRestServiceServer.bindTo(builder).build();
         var captured=new java.util.concurrent.atomic.AtomicReference<java.net.URI>();
         server.expect(requestTo("https://site.atlassian.net/wiki/api/v2/spaces/1"))
@@ -67,9 +67,8 @@ class DocumentBootstrapProviderTests {
         String rawCql=Arrays.stream(captured.get().getRawQuery().split("&")).filter(parameter -> parameter.startsWith("cql="))
             .findFirst().orElseThrow().substring(4);
         String decodedCql=java.net.URLDecoder.decode(rawCql,StandardCharsets.UTF_8);
-        // Atlassian's documented EQUALS example: title = "\\\"Advanced Searching\\\"".
-        assertThat(decodedCql).isEqualTo("space = \"TEST\" AND title = \"\\\"Meeting Automation\\\"\" AND type IN (page, folder, database)");
-        assertThat(rawCql).contains("%5C%22Meeting+Automation%5C%22").doesNotContain("%255C","%2522");
+        assertThat(decodedCql).isEqualTo("space = \"TEST\" AND title ~ \"\\\"Meeting Automation\\\"\" AND type IN (page, folder, database)");
+        assertThat(rawCql).contains("title+%7E+").contains("%5C%22Meeting+Automation%5C%22").doesNotContain("%255C","%2522");
         server.verify();
     }
     @Test void bootConfluenceCompleteExplicitRootReuseMakesNoCreateRequests() {
