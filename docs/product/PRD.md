@@ -2332,7 +2332,7 @@ Meeting UI
 
 구현 상태는 이 표와 GitHub Issue/PR, `docs/evidence/`의 head별 검증 기록으로 관리한다. 기존 세부 TASK 표의 `설계 상태 / 문서`와 설계 커서는 설계 상태만 나타내며 개발 상태를 대신하지 않는다.
 
-**다음 개발 대상 커서: `TASK-022.01`**
+**다음 개발 대상 커서: `TASK-022.02`**
 
 **실행 우선순위:** TASK-022.01 → TASK-022.02 → TASK-022.03 → TASK-022.04 → TASK-022.05 → TASK-022.06 → TASK-004.04 재검증 → 기존 커서 순서. 새 변경 작업이 모두 완료되기 전 일반 기능 개발과 PR #95 병합을 진행하지 않는다. GitHub Issue 번호나 생성일 정렬을 실행 순서로 해석하지 않는다.
 
@@ -2356,8 +2356,8 @@ Meeting UI
 | `TASK-004.01` | DONE | DONE | [Issue #14](https://github.com/donghyunlee-dev/meeting-automation/issues/14) / [PR #92](https://github.com/donghyunlee-dev/meeting-automation/pull/92) | [검증 증거](../evidence/TASK-004.01/verification.md), tests/review/QA PASS at `5c122bb` | `79287928a18b06124f74116433d38fdc63b7e91c` | 2026-10-09 20:56 KST |
 | `TASK-004.02` | DONE | DONE | [Issue #15](https://github.com/donghyunlee-dev/meeting-automation/issues/15) / [PR #93](https://github.com/donghyunlee-dev/meeting-automation/pull/93) | [검증 증거](../evidence/TASK-004.02/verification.md), tests/review/QA PASS at `d43543c` | `c2b06eb82bfaa155f1025fd47d16097fe6d7143a` | 2026-10-09 22:03 KST |
 | `TASK-004.03` | DONE | DONE | [Issue #16](https://github.com/donghyunlee-dev/meeting-automation/issues/16) / [PR #94](https://github.com/donghyunlee-dev/meeting-automation/pull/94) | [검증 증거](../evidence/TASK-004.03/verification.md), tests/review/QA PASS at `b043f1a` | `cea7902fb10cb0ea44c3c845cd9636ad0ebb2f0c` | 2026-10-10 00:04 KST |
-| `TASK-022.01` | IN_PROGRESS | IMPLEMENT | [Issue #96](https://github.com/donghyunlee-dev/meeting-automation/issues/96) / — | — | — | — |
-| `TASK-022.02` | TODO | DESIGN_READY | [Issue #97](https://github.com/donghyunlee-dev/meeting-automation/issues/97) / — | — | — | — |
+| `TASK-022.01` | DONE | DONE | [Issue #96](https://github.com/donghyunlee-dev/meeting-automation/issues/96) / [PR #103](https://github.com/donghyunlee-dev/meeting-automation/pull/103) | [검증 증거](../evidence/TASK-022.01/verification.md), tests/review/QA PASS at `129431905` | `bb1c9b6bd81509197e1b1bc3dd3ef0568222eaa5` | 2026-10-11 11:19 KST |
+| `TASK-022.02` | IN_PROGRESS | IMPLEMENT | [Issue #97](https://github.com/donghyunlee-dev/meeting-automation/issues/97) / — | 설계 게시 완료; #96 선행 작업 병합 | — | — |
 | `TASK-022.03` | TODO | DESIGN_READY | [Issue #98](https://github.com/donghyunlee-dev/meeting-automation/issues/98) / — | — | — | — |
 | `TASK-022.04` | TODO | DESIGN_READY | [Issue #99](https://github.com/donghyunlee-dev/meeting-automation/issues/99) / — | — | — | — |
 | `TASK-022.05` | TODO | DESIGN_READY | [Issue #100](https://github.com/donghyunlee-dev/meeting-automation/issues/100) / — | — | — | — |
