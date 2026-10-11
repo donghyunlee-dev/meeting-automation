@@ -89,7 +89,7 @@ Wrapper가 지원하는 작업:
 
 ## 환경변수
 
-Backend는 AI/Email/Slack과 저장 기반 설정을 환경변수로 읽는다. Document Provider·Root·인증 정보는 최초 연결 위저드에서 등록한다. TASK-022 구현 전 legacy 코드의 실행 방법과 새 설계의 차이를 구분하며 새 기능이 구현됐다고 가정하지 않는다. 로컬 개발에서는 `backend/.env.local` 파일을 사용할 수 있도록 애플리케이션 실행 설정을 구성하거나 IntelliJ Run Configuration에 값을 입력한다. Spring Boot가 `.env` 파일을 자동 로딩한다고 가정하지 않는다. 프로젝트가 로컬 dotenv loader를 포함하지 않으면 Run Configuration의 Environment variables에 직접 설정한다.
+Backend는 AI/Email/Slack과 저장 기반 설정을 환경변수로 읽는다. Document Provider·Root·인증 정보는 전역 draft API에 입력한다. TASK-022.01은 draft 저장과 읽기 테스트까지 제공하며 초기 구조 생성·활성화와 화면 위저드는 후속 작업에서 연결한다. 로컬 개발에서는 `backend/.env.local` 파일을 사용할 수 있도록 애플리케이션 실행 설정을 구성하거나 IntelliJ Run Configuration에 값을 입력한다. Spring Boot가 `.env` 파일을 자동 로딩한다고 가정하지 않는다. 프로젝트가 로컬 dotenv loader를 포함하지 않으면 Run Configuration의 Environment variables에 직접 설정한다.
 
 비밀이 아닌 설정의 예:
 
@@ -208,5 +208,15 @@ Health endpoint 노출 설정이 scaffold에 없다면 PRD의 Actuator 기준을
 ## ⚙️ 문서 연결 위저드 운영 준비
 
 TASK-022 이후 문서 연결은 화면에서 설정한다. Render는 Persistent Disk mount 아래 DOCUMENT_SETTINGS_DIR를 사용하고 로컬은 저장소/Git 밖의 디렉터리를 사용한다. 설정 키는 Backend secret으로 유지한다. Disk는 유료·단일 인스턴스·재배포 중단 제약이 있으며 임시 파일로 대체하지 않는다. 이 문서 변경으로 실제 배포/요금 지출을 실행하지 않는다.
+
+`DOCUMENT_SETTINGS_DIR`는 미리 생성한 절대 경로여야 한다. Git 저장소 아래, 심볼릭 링크 디렉터리, 쓰기 불가능한 디렉터리는 거절한다. `RENDER=true`에서는 root 파일시스템과 다른 실제 mount가 필요하다. Render 임시 파일시스템은 저장 성공으로 처리하지 않는다. 로컬 운영자는 임시 디렉터리가 아닌 지속 보존되는 경로를 지정한다.
+
+`DOCUMENT_SETTINGS_ENCRYPTION_KEY`는 안전하게 생성한 32 bytes를 Base64로 인코딩한 값이다. 키는 상태 디렉터리와 분리한 deployment secret에 저장하고 백업한다. 기존 암호화 파일을 읽으려면 같은 키가 필요하다. 키 누락·손상 snapshot·복호화 실패는 `STORAGE_UNAVAILABLE`이며 기존 파일을 지우거나 빈 설정으로 초기화하지 않는다. 암호화 snapshot `settings.enc`와 키를 별도로 백업한다.
+
+설정 조회는 `GET /api/v1/document-setup`, draft 저장은 `POST /api/v1/document-setup/drafts`, 읽기 테스트는 `POST /api/v1/document-setup/drafts/{draftId}/test`다. mutation은 `Content-Type: application/json`, 허용 `Origin`, `X-Document-Setup-Request: true`, `If-Match: "<version>"`, `Idempotency-Key`를 요구한다. Origin은 `ALLOWED_ORIGINS`의 정확한 값과 일치해야 한다. 성공 응답의 version/ETag를 다음 변경에 사용하며 동일 키·동일 입력 재전송은 재시작 후에도 최초 결과를 재사용한다.
+
+Notion 입력은 `{provider:"NOTION",location:{parentPageId:"<page ID 또는 https://www.notion.so/... URL>"},credentials:{token:"<secret>"}}`다. Confluence 입력은 `{provider:"CONFLUENCE",location:{baseUrl:"https://<site>.atlassian.net",spaceId:"<numeric ID>",parentPageId:"<optional numeric ID>"},credentials:{accountEmail:"<external account email>",apiToken:"<secret>"}}`다. `reuseExistingRootId`는 선택 필드이며 후속 초기화에서 명시적 재사용에 사용한다. draft 변경은 테스트를 무효화하고 마지막 변경 후 24시간이 지나면 다음 설정 조회에서 자격 증명을 제거한다. 읽기 테스트 결과는 10분 유효하며 검사용 페이지를 만들지 않고 `writeCapability=UNVERIFIED`를 반환한다.
+
+legacy `DOCUMENT_PROVIDER`, `DOCUMENT_ROOT_ID`, `NOTION_TOKEN`, `CONFLUENCE_*`는 활성 연결 선택에 사용하지 않는다. draft가 있어도 active가 없으면 업무 API를 차단한다. Provider 네트워크 장애는 저장된 active를 삭제하지 않는다. 인증 HTTP client는 HTTPS public Provider host만 허용하고 redirect를 따르지 않으며 연결 10초·응답 20초 제한을 적용한다.
 
 앱 계정은 없으며 신뢰된 사내 배포 접근 경계를 유지한다. Notion 부모 페이지 접근 부여, Confluence space와 페이지 생성 권한은 [문서 연결 설계](../product/document-setup.md)의 가이드를 따른다. 기존 env 기반 연결은 화면에 다시 입력하고 기존 루트 재사용을 선택한다. 초기 완료·양방향 변경·재배포 복원은 synthetic 테스트 문서로 확인한다.

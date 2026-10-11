@@ -9,6 +9,6 @@ import org.springframework.web.client.RestClient;
 public class DocumentClientConfiguration {
     @Bean
     RestClient.Builder documentRestClientBuilder() {
-        return RestClient.builder();
+        return RestClient.builder().requestFactory(new SafeDocumentClientHttpRequestFactory());
     }
 }

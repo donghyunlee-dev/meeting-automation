@@ -8,10 +8,8 @@ const BACKEND_REQUIRED = [
   'APP_COMPANY_ID',
   'APP_COMPANY_NAME',
   'APP_TIMEZONE',
-  'DOCUMENT_PROVIDER',
-  'DOCUMENT_ROOT_ID',
-  'CONFLUENCE_BASE_URL',
-  'CONFLUENCE_ACCOUNT_EMAIL',
+  'DOCUMENT_SETTINGS_DIR',
+  'DOCUMENT_SETTINGS_ENCRYPTION_KEY',
   'TRANSCRIPTION_MODEL',
   'MINUTES_MODEL',
   'EMAIL_PROVIDER',
@@ -22,8 +20,6 @@ const BACKEND_REQUIRED = [
   'NOTIFICATION_PROVIDER',
   'ALLOWED_ORIGINS',
   'TEMP_AUDIO_DIR',
-  'NOTION_TOKEN',
-  'CONFLUENCE_AUTH_TOKEN',
   'OPENAI_API_KEY',
   'SLACK_MEETING_WEBHOOK_URL',
   'SLACK_ADMIN_WEBHOOK_URL'
@@ -83,7 +79,8 @@ export function inspectEnvSamples(frontendContent, backendContent) {
   }
 
   for (const entry of backendEntries) {
-    const isCredential = entry.key === 'NOTION_TOKEN'
+    const isCredential = entry.key === 'DOCUMENT_SETTINGS_ENCRYPTION_KEY'
+      || entry.key === 'NOTION_TOKEN'
       || entry.key === 'CONFLUENCE_AUTH_TOKEN'
       || entry.key === 'CONFLUENCE_ACCOUNT_EMAIL'
       || entry.key === 'OPENAI_API_KEY'

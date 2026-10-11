@@ -18,15 +18,12 @@ import java.util.Map;
 import java.util.Set;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatusCode;
-import org.springframework.stereotype.Component;
 import org.springframework.util.StreamUtils;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
 /** Notion implementation for the root hierarchy and connection health slice. */
-@Component
 public final class NotionPageHierarchyAdapter implements ParticipantCreationProvider, ParticipantUpdatingProvider {
     public static final String API_VERSION = "2026-03-11";
     private static final String API_BASE_URL = "https://api.notion.com";
@@ -39,8 +36,7 @@ public final class NotionPageHierarchyAdapter implements ParticipantCreationProv
 
     public NotionPageHierarchyAdapter(
             RestClient.Builder restClientBuilder,
-            @Value("${NOTION_TOKEN:}") String token,
-            @Value("${DOCUMENT_ROOT_ID:}") String configuredRootId) {
+            String token, String configuredRootId) {
         this.token = token;
         this.configuredRootId = configuredRootId;
         this.restClient = restClientBuilder.baseUrl(API_BASE_URL).build();

@@ -30,6 +30,13 @@ import org.springframework.validation.method.ParameterValidationResult;
 @RestControllerAdvice
 public class ApiExceptionHandler {
 
+    @ExceptionHandler(com.meetingautomation.document.settings.SettingsException.class)
+    public ResponseEntity<ApiErrorResponse> handleSettingsFailure(
+            com.meetingautomation.document.settings.SettingsException failure, HttpServletRequest request) {
+        return errorResponse(HttpStatusCode.valueOf(failure.status()), failure.code(), failure.getMessage(),
+                failure.category(), false, request, Map.of());
+    }
+
     private static final String REQUEST_ID_HEADER = "X-Request-Id";
 
     @ExceptionHandler(BindException.class)

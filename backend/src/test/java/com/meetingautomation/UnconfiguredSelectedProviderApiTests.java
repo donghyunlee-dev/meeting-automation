@@ -19,22 +19,26 @@ import org.springframework.test.web.servlet.MockMvc;
         "NOTIFICATION_PROVIDER=SLACK"
 })
 @AutoConfigureMockMvc
-@Import({SelectedDocumentProviderApiTests.MockProviderHttpConfiguration.class,
-        ErrorContractProbeController.class, ConstraintViolationProbeService.class})
+@Import({ErrorContractProbeController.class, ConstraintViolationProbeService.class, UnconfiguredSelectedProviderApiTests.EmptySettings.class})
 class UnconfiguredSelectedProviderApiTests {
     @Autowired
     private MockMvc mockMvc;
 
     @Test
-    void selectedProviderWithMissingCredentialRemainsSelectedAndUnconfigured() throws Exception {
+    void legacyProviderAndCredentialsDoNotSelectAnActiveConnection() throws Exception {
         mockMvc.perform(get("/api/v1/app-config"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.document.provider").value("NOTION"))
+                .andExpect(jsonPath("$.data.document.provider").value(org.hamcrest.Matchers.nullValue()))
                 .andExpect(jsonPath("$.data.document.configured").value(false))
                 .andExpect(result -> {
                     String response = result.getResponse().getContentAsString();
                     assertFalse(response.contains("root-public-marker"));
                     assertFalse(response.contains("NOTION_TOKEN"));
                 });
+    }
+    @org.springframework.boot.test.context.TestConfiguration(proxyBeanMethods = false)
+    static class EmptySettings {
+        @org.springframework.context.annotation.Bean @org.springframework.context.annotation.Primary
+        com.meetingautomation.document.settings.GlobalSettingsStore emptyFixture() { return DocumentSettingsFixtures.empty(); }
     }
 }

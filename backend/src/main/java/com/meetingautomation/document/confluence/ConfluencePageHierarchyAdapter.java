@@ -22,16 +22,13 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatusCode;
-import org.springframework.stereotype.Component;
 import org.springframework.util.StreamUtils;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
 /** Confluence Cloud implementation of the document hierarchy and health slice. */
-@Component
 public final class ConfluencePageHierarchyAdapter implements ParticipantCreationProvider, ParticipantUpdatingProvider {
     private static final int PAGE_LIMIT = 100;
     private static final String DIRECT_CHILDREN_PATH = "/wiki/api/v2/pages/{id}/direct-children";
@@ -48,10 +45,7 @@ public final class ConfluencePageHierarchyAdapter implements ParticipantCreation
 
     public ConfluencePageHierarchyAdapter(
             RestClient.Builder restClientBuilder,
-            @Value("${CONFLUENCE_BASE_URL:}") String baseUrl,
-            @Value("${CONFLUENCE_ACCOUNT_EMAIL:}") String accountEmail,
-            @Value("${CONFLUENCE_AUTH_TOKEN:}") String authToken,
-            @Value("${DOCUMENT_ROOT_ID:}") String rootId) {
+            String baseUrl, String accountEmail, String authToken, String rootId) {
         this.baseUri = validBaseUri(baseUrl);
         this.accountEmail = accountEmail;
         this.authToken = authToken;

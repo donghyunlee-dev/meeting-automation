@@ -59,7 +59,7 @@ class SelectedDocumentProviderApiTests {
     }
 
     @Test
-    void appConfigReturnsSelectedProviderWithoutCredentialOrRootValues() throws Exception {
+    void appConfigReturnsActiveProviderAndSafeLocationWithoutCredentialValues() throws Exception {
         mockMvc.perform(get("/api/v1/app-config"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.document.provider").value("NOTION"))
@@ -68,7 +68,6 @@ class SelectedDocumentProviderApiTests {
                 .andExpect(result -> {
                     String body = result.getResponse().getContentAsString();
                     assertFalse(body.contains(TOKEN));
-                    assertFalse(body.contains(ROOT_ID));
                 });
     }
 
@@ -684,7 +683,6 @@ class SelectedDocumentProviderApiTests {
                 .andExpect(result -> {
                     String body = result.getResponse().getContentAsString();
                     assertFalse(body.contains(TOKEN));
-                    assertFalse(body.contains(ROOT_ID));
                     assertFalse(body.contains("provider-error-marker"));
                 });
         mockServer.verify();
@@ -703,7 +701,7 @@ class SelectedDocumentProviderApiTests {
                 .andExpect(result -> {
                     String body = result.getResponse().getContentAsString();
                     assertFalse(body.contains("private-root-marker"));
-                    assertFalse(body.contains(ROOT_ID));
+                    assertFalse(body.contains(TOKEN));
                 });
         mockServer.verify();
     }
@@ -761,6 +759,10 @@ class SelectedDocumentProviderApiTests {
 
     @TestConfiguration(proxyBeanMethods = false)
     static class MockProviderHttpConfiguration {
+        @Bean @Primary
+        com.meetingautomation.document.settings.GlobalSettingsStore activeFixture() {
+            return DocumentSettingsFixtures.activeNotion(TOKEN, ROOT_ID);
+        }
         @Bean
         MockProviderHttp mockProviderHttp() {
             RestClient.Builder builder = RestClient.builder();
