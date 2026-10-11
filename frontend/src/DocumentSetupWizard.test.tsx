@@ -170,7 +170,7 @@ describe('document setup wizard', () => {
     const finishButton = screen.getByRole('button', { name: '구조 생성 및 연결 완료' });
     fireEvent.click(finishButton);
     fireEvent.click(finishButton);
-    expect(await screen.findByText('문서 서비스 연결이 준비되었습니다.')).toBeTruthy();
+    expect(await screen.findByText('문서 서비스 연결이 준비되었습니다.', {}, { timeout: 5000 })).toBeTruthy();
     await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith('/participants'))).toBe(true));
     const initializeCalls = fetchMock.mock.calls.filter(([url, init]) => new URL(String(url)).pathname.endsWith('/initialize') && init?.method === 'POST');
     expect(initializeCalls).toHaveLength(1);
@@ -229,6 +229,49 @@ describe('document setup wizard', () => {
     expect(screen.queryByLabelText('Notion 내부 연결 토큰')).toBeNull();
     expect(JSON.stringify(fetchMock.mock.calls).includes('synthetic-secret')).toBe(false);
     expect(window.localStorage.length).toBe(0);
+  });
+
+  it('shows terminal failure details and recovery guidance without calling unsupported retry APIs', async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const path = new URL(String(input)).pathname;
+      if (path.endsWith('/document-setup')) return Promise.resolve(response({ version: 3, status: 'ATTENTION_REQUIRED', active: null, draft: { draftId: 'd1', revision: 1, provider: 'NOTION', state: 'INITIALIZING' }, operation: { operationId: 'failed-op-3', type: 'INITIALIZE', status: 'FAILED' }, canCreateMeeting: false }));
+      if (path.endsWith('/operations/failed-op-3')) {
+        return Promise.resolve(response({ ...operation('failed-op-3', 'FAILED'), errorCode: 'DOCUMENT_FAILED', retryable: true, allowedActions: ['RETRY', 'CANCEL'], version: 3 }));
+      }
+      throw new Error(`Unexpected request: ${path}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<MemoryRouter initialEntries={['/setup/document']}><App /></MemoryRouter>);
+
+    expect(await screen.findByText('DOCUMENT_FAILED')).toBeTruthy();
+    expect(screen.getByText(/실패/)).toBeTruthy();
+    expect(screen.getByText('재시도 허용')).toBeTruthy();
+    expect(screen.getByText('작업 취소')).toBeTruthy();
+    expect(screen.getByText(/작업 ID와 오류 코드를 관리자에게 전달/)).toBeTruthy();
+    expect(screen.getByRole('heading', { name: /서버가 허용한 작업.*이 화면에서 실행되지 않음/ })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '구조 생성 및 연결 완료' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '다시 시도' })).toBeNull();
+    expect(fetchMock.mock.calls.some(([url]) => new URL(String(url)).pathname.endsWith('/initialize'))).toBe(false);
+    expect(fetchMock.mock.calls.some(([url]) => new URL(String(url)).pathname.includes('/retry'))).toBe(false);
+  });
+
+  it('shows only API-027 allowed actions for a terminal reconciliation operation', async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const path = new URL(String(input)).pathname;
+      if (path.endsWith('/document-setup')) return Promise.resolve(response({ version: 5, status: 'ATTENTION_REQUIRED', active: null, draft: { draftId: 'd1', revision: 1, provider: 'NOTION', state: 'INITIALIZING' }, operation: { operationId: 'review-op-4', type: 'INITIALIZE', status: 'RECONCILIATION_REQUIRED' }, canCreateMeeting: false }));
+      if (path.endsWith('/operations/review-op-4')) return Promise.resolve(response({ ...operation('review-op-4', 'RECONCILIATION_REQUIRED'), errorCode: 'PROVIDER_STATE_UNCERTAIN', retryable: false, allowedActions: ['REVIEW_PROVIDER', 'CANCEL'], version: 5 }));
+      throw new Error(`Unexpected request: ${path}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<MemoryRouter initialEntries={['/setup/document']}><App /></MemoryRouter>);
+
+    expect(await screen.findByText('PROVIDER_STATE_UNCERTAIN')).toBeTruthy();
+    expect(screen.getByText('Provider 확인')).toBeTruthy();
+    expect(screen.getByText('작업 취소')).toBeTruthy();
+    expect(screen.getByRole('heading', { name: /서버가 허용한 작업.*이 화면에서 실행되지 않음/ })).toBeTruthy();
+    expect(screen.getByText(/Provider에서 생성된/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '다시 시도' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '구조 생성 및 연결 완료' })).toBeNull();
   });
 
   it('rereads the latest setup revision after a 412 conflict before retrying', async () => {

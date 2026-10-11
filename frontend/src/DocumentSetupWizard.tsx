@@ -7,6 +7,42 @@ type Credentials = { token: string; accountEmail: string; apiToken: string };
 type Location = { parentPageId: string; baseUrl: string; spaceId: string; parentPageIdConfluence: string };
 const EMPTY_CREDENTIALS: Credentials = { token: '', accountEmail: '', apiToken: '' };
 const EMPTY_LOCATION: Location = { parentPageId: '', baseUrl: '', spaceId: '', parentPageIdConfluence: '' };
+const TERMINAL_OPERATION_STATUSES = ['SUCCEEDED', 'FAILED', 'INTERRUPTED', 'CANCELLED', 'RECONCILIATION_REQUIRED'];
+
+function operationTitle(status: string) {
+  switch (status) {
+    case 'SUCCEEDED': return '문서 구조 준비 완료';
+    case 'FAILED': return '문서 구조 준비 실패';
+    case 'INTERRUPTED': return '문서 구조 준비 중단';
+    case 'CANCELLED': return '문서 구조 준비 취소';
+    case 'RECONCILIATION_REQUIRED': return 'Provider 상태 확인 필요';
+    default: return '문서 구조 준비 상태';
+  }
+}
+
+function allowedActionLabel(action: string) {
+  switch (action) {
+    case 'RETRY': return '재시도 허용';
+    case 'CANCEL': return '작업 취소';
+    case 'REVIEW_PROVIDER': return 'Provider 확인';
+    default: return action;
+  }
+}
+
+function operationGuidance(operation: SetupOperation) {
+  switch (operation.status) {
+    case 'SUCCEEDED': return '문서 구조 준비가 완료되었습니다. 문서 서비스 상태를 새로고침해 확인할 수 있습니다.';
+    case 'FAILED': return operation.allowedActions.includes('RETRY')
+      ? 'API-027에서 재시도 가능 상태를 확인했습니다. 작업 ID와 오류 코드를 관리자에게 전달해 안전한 재시도를 요청해 주세요. 이 화면은 초기화 요청을 다시 보내지 않습니다.'
+      : 'Provider 연결 권한과 대상 페이지 상태를 확인한 뒤 작업 ID와 오류 코드를 관리자에게 전달해 주세요.';
+    case 'INTERRUPTED': return operation.allowedActions.includes('RETRY')
+      ? '작업이 중단되었습니다. 작업 ID를 관리자에게 전달해 안전한 재개를 요청해 주세요. 이 화면은 새 초기화 요청을 보내지 않습니다.'
+      : '작업 ID를 관리자에게 전달해 현재 Provider 구조와 작업 상태를 확인해 주세요.';
+    case 'RECONCILIATION_REQUIRED': return 'Provider에서 생성된 Meetings와 Participants 구조를 확인해 주세요. 상태를 확인하기 전에는 자동 재시도하지 말고 작업 ID를 관리자에게 전달해 주세요.';
+    case 'CANCELLED': return '초기화 작업이 취소되었습니다. 공개 작업 상태를 새로고침해 확인해 주세요.';
+    default: return '공개 작업 상태를 새로고침해 진행 상황을 확인해 주세요.';
+  }
+}
 
 export function DocumentSetupWizard({ settings = false }: { settings?: boolean }) {
   const [snapshot, setSnapshot] = useState<SetupSnapshot | null>(null);
@@ -44,13 +80,13 @@ export function DocumentSetupWizard({ settings = false }: { settings?: boolean }
 
   useEffect(() => {
     const operationId = snapshot?.operation?.operationId;
-    if (!operationId || ['SUCCEEDED', 'FAILED', 'INTERRUPTED', 'CANCELLED', 'RECONCILIATION_REQUIRED'].includes(operation?.status ?? '')) return;
+    if (!operationId || TERMINAL_OPERATION_STATUSES.includes(operation?.status ?? '')) return;
     let live = true; let timer: ReturnType<typeof setTimeout>;
     const poll = async () => {
       try {
         const current = await getSetupOperation(operationId);
         if (!live) return; setOperation(current);
-        if (['SUCCEEDED', 'FAILED', 'INTERRUPTED', 'CANCELLED', 'RECONCILIATION_REQUIRED'].includes(current.status)) {
+        if (TERMINAL_OPERATION_STATUSES.includes(current.status)) {
           const updated = await refresh();
           if (current.status === 'SUCCEEDED' && updated.status === 'READY') {
             await Promise.allSettled([getCompanyConfig(), listMeetingParticipants()]);
@@ -189,10 +225,12 @@ export function DocumentSetupWizard({ settings = false }: { settings?: boolean }
   if (snapshot.status === 'STORAGE_UNAVAILABLE') return <main className="setup-page"><h1>문서 서비스 연결</h1><section className="setup-card" role="alert"><h2>저장소 설정을 확인할 수 없습니다</h2><p>문서 설정 저장소가 준비되지 않아 문서 기능을 사용할 수 없습니다. 관리자에게 저장소 설정을 확인해 달라고 요청해 주세요.</p><button className="button button-secondary" type="button" onClick={() => void refresh()}>다시 확인</button></section></main>;
   if (snapshot.status === 'READY' && settings) return <main className="setup-page"><h1>설정</h1><section className="setup-card"><h2>문서 서비스</h2><p>현재 연결: {snapshot.active?.provider === 'NOTION' ? 'Notion' : 'Confluence Cloud'}</p><p>문서 서비스 변경은 이전과 전환 계약을 제공하는 후속 작업에서 지원됩니다.</p></section><section className="setup-card"><h2>참석자</h2><p>회의에서 사용할 참석자 정보를 관리합니다.</p><Link className="button button-secondary" to="/settings/participants">참석자 관리</Link></section></main>;
 
+  const operationStatus = operation?.status ?? snapshot.operation?.status ?? '';
+
   return <main className="setup-page">
     <header className="setup-heading"><p className="eyebrow">DOCUMENT CONNECTION</p><h1>문서 서비스 연결</h1><p>회의록과 참석자를 저장할 문서 서비스를 연결합니다.</p></header>
     {error && <p className="setup-error" role="alert">{error}</p>}{notice && <p className="setup-notice" role="status">{notice}</p>}
-    {snapshot.operation && <section className="setup-card" aria-labelledby="operation-heading"><h2 id="operation-heading">문서 구조 준비 상태</h2><p role="status">{operation?.stage ?? snapshot.operation.status} · {operation?.status ?? '상태 확인 중'}</p>{operation && <p>참석자 {operation.counts.participantsCopied}/{operation.counts.participantsTotal}명 · 회의 {operation.counts.meetingsCopied}/{operation.counts.meetingsTotal}건</p>}<button type="button" className="button button-secondary" onClick={() => void refresh()}>진행 상태 새로고침</button></section>}
+    {snapshot.operation && <section className="setup-card" aria-labelledby="operation-heading"><h2 id="operation-heading">{operationTitle(operationStatus)}</h2><p role="status">{operation?.stage ?? snapshot.operation.status} · {operation?.status ?? '상태 확인 중'}</p>{operation && <><p>참석자 {operation.counts.participantsCopied}/{operation.counts.participantsTotal}명 · 회의 {operation.counts.meetingsCopied}/{operation.counts.meetingsTotal}건</p>{operation.errorCode && <p>오류 코드: <code>{operation.errorCode}</code></p>}<p>{operationGuidance(operation)}</p><h3>서버가 허용한 작업 (이 화면에서 실행되지 않음)</h3>{operation.allowedActions.length > 0 ? <ul>{operation.allowedActions.map((action) => <li key={action}>{allowedActionLabel(action)}</li>)}</ul> : <p>가능한 추가 작업이 없습니다.</p>}</>}<button type="button" className="button button-secondary" onClick={() => void refresh()}>진행 상태 새로고침</button></section>}
     {snapshot.status === 'ATTENTION_REQUIRED' && <section className="setup-card" role="status"><h2>이전 작업을 확인해 주세요</h2><p>이전에 시작한 설정 작업이 완료되지 않았습니다. 공개 진행 상태를 새로고침해 확인할 수 있습니다.</p></section>}
     {!snapshot.operation && !initializationUncertain && <>
       {!provider ? <section className="setup-card"><h2>문서 서비스 선택</h2><div className="setup-choice"><button className="button button-secondary" type="button" onClick={() => chooseProvider('NOTION')}>Notion 선택</button><button className="button button-secondary" type="button" onClick={() => chooseProvider('CONFLUENCE')}>Confluence Cloud 선택</button></div></section> : <>
