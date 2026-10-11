@@ -1,12 +1,15 @@
 package com.meetingautomation;
 
 import com.meetingautomation.document.bootstrap.*;
+import com.meetingautomation.document.DocumentProviderException;
 import com.meetingautomation.document.settings.SettingsException;
 import java.util.*;
 import java.nio.charset.StandardCharsets;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.Arguments;
 import org.springframework.http.*;
 import org.springframework.mock.http.client.*;
 import org.springframework.test.web.client.*;
@@ -52,12 +55,41 @@ class DocumentBootstrapProviderTests {
             .isInstanceOf(SettingsException.class).extracting("code").isEqualTo("DOCUMENT_STRUCTURE_CONFLICT");
         server.verify();
     }
+    @Test void bootConfluenceDecodedCqlMatchesDocumentedExactTitleAndReturnsExistingRoot() {
+        var builder=RestClient.builder(); var server=MockRestServiceServer.bindTo(builder).build();
+        var captured=new java.util.concurrent.atomic.AtomicReference<java.net.URI>();
+        server.expect(requestTo("https://site.atlassian.net/wiki/api/v2/spaces/1"))
+            .andRespond(withSuccess("{\"id\":\"1\",\"key\":\"TEST\"}",MediaType.APPLICATION_JSON));
+        server.expect(request -> { captured.set(request.getURI()); assertThat(request.getMethod()).isEqualTo(HttpMethod.GET); })
+            .andRespond(withSuccess("{\"results\":[{\"content\":{\"id\":\"9\",\"title\":\"Meeting Automation\",\"type\":\"page\",\"space\":{\"id\":\"1\"},\"ancestors\":[]}}]}",MediaType.APPLICATION_JSON));
+        var pages=new ConfluenceBootstrapPages(builder,"https://site.atlassian.net","1","synthetic@example.test","synthetic-secret");
+        assertThat(pages.children(null)).containsExactly(new BootstrapPages.Page("9",null,"Meeting Automation","page",null));
+        String rawCql=Arrays.stream(captured.get().getRawQuery().split("&")).filter(parameter -> parameter.startsWith("cql="))
+            .findFirst().orElseThrow().substring(4);
+        String decodedCql=java.net.URLDecoder.decode(rawCql,StandardCharsets.UTF_8);
+        // Atlassian's documented EQUALS example: title = "\\\"Advanced Searching\\\"".
+        assertThat(decodedCql).isEqualTo("space = \"TEST\" AND title = \"\\\"Meeting Automation\\\"\" AND type IN (page, folder, database)");
+        assertThat(rawCql).contains("%5C%22Meeting+Automation%5C%22").doesNotContain("%255C","%2522");
+        server.verify();
+    }
+    @Test void bootConfluenceCompleteExplicitRootReuseMakesNoCreateRequests() {
+        var fixture=new HttpPages(false,null);
+        fixture.nodes.put("9",new BootstrapPages.Page("9",null,"Meeting Automation","page",null));
+        fixture.nodes.put("10",new BootstrapPages.Page("10","9","Meetings","page",null));
+        fixture.nodes.put("11",new BootstrapPages.Page("11","9","Participants","page",null));
+        var structure=new DocumentStructureInitializer(fixture.pages).initializeStructure(null,"9","operation",new DocumentStructureInitializerTests.Journal());
+        assertThat(structure.rootId()).isEqualTo("9");
+        assertThat(structure.meetingsPageId()).isEqualTo("10");
+        assertThat(structure.participantsPageId()).isEqualTo("11");
+        assertThat(fixture.posts).isEmpty(); fixture.server.verify();
+    }
     @Test void bootConfluenceNeverForwardsCredentialsToPaginationOrigin() {
         var builder=RestClient.builder(); var server=MockRestServiceServer.bindTo(builder).build();
         server.expect(requestTo("https://site.atlassian.net/wiki/api/v2/pages/2/direct-children?limit=100"))
             .andRespond(withSuccess("{\"results\":[],\"_links\":{\"next\":\"https://evil.example/wiki/api/v2/pages/2/direct-children\"}}",MediaType.APPLICATION_JSON));
         var pages=new ConfluenceBootstrapPages(builder,"https://site.atlassian.net","1","synthetic@example.test","synthetic-secret");
-        assertThatThrownBy(() -> pages.children("2")).isInstanceOf(SettingsException.class);
+        assertThatThrownBy(() -> pages.children("2")).isInstanceOf(DocumentProviderException.class)
+            .extracting("retryable").isEqualTo(false);
         server.verify();
     }
     @Test void bootConfluenceExplicitFolderReuseIsStructureConflictWithoutPageReadOrWrite() {
@@ -76,7 +108,57 @@ class DocumentBootstrapProviderTests {
         server.expect(requestTo("https://api.notion.com/v1/pages")).andExpect(method(HttpMethod.POST))
             .andRespond(withStatus(HttpStatus.FOUND).header("Location","https://evil.example").body("synthetic-secret provider-original"));
         assertThatThrownBy(() -> new NotionBootstrapPages(builder,"synthetic-secret").create("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee","Meeting Automation","meeting-automation/bootstrap/operation/ROOT"))
-            .isInstanceOf(SettingsException.class).hasMessageNotContaining("synthetic").hasNoCause();
+            .isInstanceOf(DocumentProviderException.class).hasMessageNotContaining("synthetic").hasNoCause()
+            .extracting("retryable").isEqualTo(false);
+        server.verify();
+    }
+    @ParameterizedTest @ValueSource(booleans={true,false})
+    void bootProviderUnknownOutcomeSeparatesWriteReconciliationFromReadFailure(boolean write) {
+        var builder=RestClient.builder(); var server=MockRestServiceServer.bindTo(builder).build();
+        server.expect(request -> assertThat(request.getMethod()).isEqualTo(write?HttpMethod.POST:HttpMethod.GET))
+            .andRespond(request -> { throw new java.net.SocketTimeoutException("synthetic-secret provider-original"); });
+        var pages=new NotionBootstrapPages(builder,"synthetic-secret");
+        var failure=catchThrowable(() -> {
+            if(write) pages.create("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee","Meeting Automation","meeting-automation/bootstrap/operation/ROOT");
+            else pages.children("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
+        });
+        assertThat(failure).hasMessageNotContaining("synthetic").hasNoCause();
+        if(write) assertThat(failure).isInstanceOf(SettingsException.class).extracting("code").isEqualTo("DOCUMENT_RECONCILIATION_REQUIRED");
+        else assertThat(failure).isInstanceOf(DocumentProviderException.class).extracting("retryable").isEqualTo(false);
+        server.verify();
+    }
+    @ParameterizedTest @ValueSource(ints={400,401,403,429,503})
+    void bootProviderHttpStatusRetainsOnlySafeRetryability(int status) {
+        var builder=RestClient.builder(); var server=MockRestServiceServer.bindTo(builder).build();
+        server.expect(requestTo("https://api.notion.com/v1/pages")).andExpect(method(HttpMethod.POST))
+            .andRespond(withStatus(HttpStatus.valueOf(status)).body("synthetic-secret provider-original"));
+        assertThatThrownBy(() -> new NotionBootstrapPages(builder,"synthetic-secret")
+            .create("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee","Meeting Automation","meeting-automation/bootstrap/operation/ROOT"))
+            .isInstanceOf(DocumentProviderException.class).hasMessageNotContaining("synthetic").hasNoCause()
+            .extracting("retryable").isEqualTo(status==429 || status>=500);
+        server.verify();
+    }
+    static java.util.stream.Stream<Arguments> ambiguousCreateResponses() {
+        return java.util.stream.Stream.of("EMPTY","null","[]","{}","{\"id\":\"invalid\"}")
+            .flatMap(response -> java.util.stream.Stream.of(true,false).map(notion -> Arguments.of(notion,response)));
+    }
+    @ParameterizedTest @MethodSource("ambiguousCreateResponses")
+    void bootRecoveryUnusableSuccessResponseRequiresReconciliation(boolean notion,String response) {
+        var builder=RestClient.builder(); var server=MockRestServiceServer.bindTo(builder).build();
+        server.expect(method(HttpMethod.POST)).andRespond("EMPTY".equals(response)
+            ? withStatus(HttpStatus.NO_CONTENT) : withSuccess(response,MediaType.APPLICATION_JSON));
+        BootstrapPages pages=notion?new NotionBootstrapPages(builder,"synthetic-secret")
+            :new ConfluenceBootstrapPages(builder,"https://site.atlassian.net","1","synthetic@example.test","synthetic-secret");
+        assertThatThrownBy(() -> pages.create(notion?"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee":"22","Meeting Automation","meeting-automation/bootstrap/operation/ROOT"))
+            .isInstanceOf(SettingsException.class).extracting("code").isEqualTo("DOCUMENT_RECONCILIATION_REQUIRED");
+        server.verify();
+    }
+    @ParameterizedTest @ValueSource(strings={"null","[]","{}"})
+    void bootProviderUnusableReadResponseDoesNotExposeRetry(String response) {
+        var builder=RestClient.builder(); var server=MockRestServiceServer.bindTo(builder).build();
+        server.expect(method(HttpMethod.GET)).andRespond(withSuccess(response,MediaType.APPLICATION_JSON));
+        assertThatThrownBy(() -> new NotionBootstrapPages(builder,"synthetic-secret").children("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"))
+            .isInstanceOf(DocumentProviderException.class).extracting("retryable").isEqualTo(false);
         server.verify();
     }
     private static final class HttpPages {

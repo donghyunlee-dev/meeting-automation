@@ -1,11 +1,14 @@
 package com.meetingautomation;
 
 import com.meetingautomation.document.bootstrap.*;
+import com.meetingautomation.document.DocumentProviderException;
 import com.meetingautomation.document.settings.*;
 import java.time.*;
 import java.util.*;
 import java.util.concurrent.*;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import static org.assertj.core.api.Assertions.*;
 
 class DocumentBootstrapUseCaseTests {
@@ -60,6 +63,53 @@ class DocumentBootstrapUseCaseTests {
             .containsExactly("REVIEW_PROVIDER","CANCEL");
         assertThat(DocumentBootstrapUseCase.summary(operation.transition("INTERRUPTED","STRUCTURE",Map.of(),null,false,fixture.clock.instant()),1).allowedActions())
             .containsExactly("RETRY","CANCEL");
+    }
+    @Test void bootProviderPermissionFailureRemainsNonRetryableInDurableOperation() {
+        var fixture=new Fixture(); fixture.test();
+        fixture.verificationFailure=DocumentProviderException.documentFailed(false);
+        fixture.initialize(); fixture.queue.run();
+        var operation=fixture.store.read().operation();
+        assertThat(operation.errorCode()).isEqualTo("DOCUMENT_FAILED");
+        assertThat(operation.retryable()).isFalse();
+        assertThat(fixture.bootstrap.operation(operation.operationId()).allowedActions()).containsExactly("CANCEL");
+        assertThatThrownBy(() -> fixture.bootstrap.resumeInterrupted(operation.operationId()))
+            .isInstanceOf(SettingsException.class).extracting("code").isEqualTo("DOCUMENT_CHANGE_BUSY");
+        assertThat(fixture.pages.created).isEmpty(); assertThat(fixture.store.read().active()).isNull();
+    }
+    @ParameterizedTest @ValueSource(strings={"TIMEOUT","EMPTY","{}","{\"id\":\"invalid\"}"})
+    void bootRecoveryUnknownCreateOutcomePreservesMarkerAndRequiresProviderReview(String outcome) {
+        var fixture=new Fixture(); fixture.test();
+        var builder=org.springframework.web.client.RestClient.builder();
+        var server=org.springframework.test.web.client.MockRestServiceServer.bindTo(builder).build();
+        var marker=new java.util.concurrent.atomic.AtomicReference<String>(); var writes=new java.util.concurrent.atomic.AtomicInteger();
+        server.expect(org.springframework.test.web.client.ExpectedCount.manyTimes(),request ->
+            assertThat(request.getMethod()).isIn(org.springframework.http.HttpMethod.GET,org.springframework.http.HttpMethod.POST))
+            .andRespond(request -> {
+                if(request.getMethod()==org.springframework.http.HttpMethod.GET) {
+                    var response=new org.springframework.mock.http.client.MockClientHttpResponse(
+                        "{\"results\":[],\"has_more\":false}".getBytes(java.nio.charset.StandardCharsets.UTF_8),org.springframework.http.HttpStatus.OK);
+                    response.getHeaders().setContentType(org.springframework.http.MediaType.APPLICATION_JSON); return response;
+                }
+                writes.incrementAndGet();
+                var body=tools.jackson.databind.json.JsonMapper.builder().build().readTree(
+                    ((org.springframework.mock.http.client.MockClientHttpRequest)request).getBodyAsString());
+                marker.set(body.path("children").get(0).path("paragraph").path("rich_text").get(0).path("text").path("content").asText());
+                if("TIMEOUT".equals(outcome)) throw new java.net.SocketTimeoutException("synthetic-secret provider-original");
+                var response=new org.springframework.mock.http.client.MockClientHttpResponse(
+                    ("EMPTY".equals(outcome)?"":outcome).getBytes(java.nio.charset.StandardCharsets.UTF_8),org.springframework.http.HttpStatus.OK);
+                response.getHeaders().setContentType(org.springframework.http.MediaType.APPLICATION_JSON); return response;
+            });
+        fixture.providerPages=new NotionBootstrapPages(builder,"synthetic-secret");
+        fixture.initialize(); fixture.queue.run();
+        var operation=fixture.store.read().operation();
+        assertThat(operation.status()).isEqualTo("RECONCILIATION_REQUIRED");
+        assertThat(operation.errorCode()).isEqualTo("DOCUMENT_RECONCILIATION_REQUIRED");
+        assertThat(operation.retryable()).isFalse();
+        assertThat(fixture.bootstrap.operation(operation.operationId()).allowedActions()).containsExactly("REVIEW_PROVIDER","CANCEL");
+        assertThat(operation.journal().get("ROOT").marker()).isEqualTo(marker.get()).isNotBlank();
+        assertThat(operation.journal().get("ROOT").pageId()).isNull();
+        assertThat(fixture.store.read().active()).isNull(); assertThat(writes.get()).isEqualTo(1);
+        assertThat(fixture.queue.tasks).isEmpty(); server.verify();
     }
     @Test void bootRecoveryRestartInterruptsWithoutAutomaticRetryThenExplicitContinuationReusesMarker() {
         var fixture=new Fixture(); fixture.test(); fixture.pages.loseNextResponse=true;
@@ -141,14 +191,18 @@ class DocumentBootstrapUseCaseTests {
         final GlobalSettingsStore store; final MutableClock clock=new MutableClock(); final Queue queue=new Queue();
         final DocumentStructureInitializerTests.Pages pages=new DocumentStructureInitializerTests.Pages();
         BootstrapPages providerPages=pages;
-        final List<String> readOnlyChecks=new ArrayList<>(); boolean deny; String draftId;
+        final List<String> readOnlyChecks=new ArrayList<>(); boolean deny; String draftId; DocumentProviderException verificationFailure;
         final GlobalSettingsUseCase settings; final DocumentBootstrapUseCase bootstrap;
         Fixture() { this(DocumentSettingsFixtures.empty()); }
         Fixture(GlobalSettingsStore store) {
             this.store=store; settings=new GlobalSettingsUseCase(store,this::verify,clock); bootstrap=newUseCase();
             settings.saveDraft(store.read().version(),"draft",INPUT); draftId=store.read().draft().draftId();
         }
-        void verify(GlobalDocumentSettings.Draft draft) { readOnlyChecks.add(draft.draftId()); if(deny) throw new SettingsException("DOCUMENT_INITIALIZATION_FAILED",403); }
+        void verify(GlobalDocumentSettings.Draft draft) {
+            readOnlyChecks.add(draft.draftId());
+            if(verificationFailure!=null) throw verificationFailure;
+            if(deny) throw new SettingsException("DOCUMENT_INITIALIZATION_FAILED",403);
+        }
         DocumentBootstrapUseCase newUseCase() { return new DocumentBootstrapUseCase(store,this::verify,draft -> providerPages,queue,clock); }
         void test() { settings.testDraft(store.read().version(),"test"+store.read().version(),draftId,1); }
         GlobalSettingsUseCase.MutationResult initialize() { return bootstrap.initialize(store.read().version(),"initialize",draftId,1,true); }

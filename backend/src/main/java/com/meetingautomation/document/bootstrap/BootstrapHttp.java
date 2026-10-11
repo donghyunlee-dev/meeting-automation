@@ -1,6 +1,7 @@
 package com.meetingautomation.document.bootstrap;
 
 import com.meetingautomation.document.settings.SettingsException;
+import com.meetingautomation.document.DocumentProviderException;
 import java.net.URI;
 import org.springframework.http.MediaType;
 import org.springframework.web.client.RestClient;
@@ -22,13 +23,20 @@ final class BootstrapHttp {
                         : target.getPath().startsWith("/wiki/api/v2/") || (body==null && target.getPath().equals("/wiki/rest/api/search"))))
                 throw failure();
             var request = body == null ? client.get().uri(target) : client.post().uri(target).contentType(MediaType.APPLICATION_JSON).body(body);
-            JsonNode result = request.retrieve().onStatus(status -> !status.is2xxSuccessful(), (req,res) -> { throw failure(); }).body(JsonNode.class);
-            if (result == null || !result.isObject()) throw failure();
+            JsonNode result = request.retrieve().onStatus(status -> !status.is2xxSuccessful(), (req,res) -> {
+                var status=res.getStatusCode();
+                throw DocumentProviderException.documentFailed(status.value()==429 || status.is5xxServerError());
+            }).body(JsonNode.class);
+            if (result == null || !result.isObject()) throw body!=null?reconciliation():failure();
             return result;
-        } catch (SettingsException safe) { throw safe; }
-        catch (RuntimeException ignored) { throw failure(); }
+        } catch (SettingsException | DocumentProviderException safe) { throw safe; }
+        catch (RuntimeException ignored) {
+            if (body!=null) throw reconciliation();
+            throw DocumentProviderException.documentFailed(false);
+        }
     }
-    static SettingsException failure() { return new SettingsException("DOCUMENT_FAILED",502); }
+    static DocumentProviderException failure() { return DocumentProviderException.documentFailed(false); }
+    static SettingsException reconciliation() { return new SettingsException("DOCUMENT_RECONCILIATION_REQUIRED",409); }
     static String required(JsonNode node, String field) {
         JsonNode value = node.get(field);
         if (value == null || (!value.isTextual() && !value.isNumber()) || value.asText().isBlank()) throw failure();

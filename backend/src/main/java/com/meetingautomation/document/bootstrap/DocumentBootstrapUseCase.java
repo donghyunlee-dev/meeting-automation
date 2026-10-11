@@ -1,6 +1,7 @@
 package com.meetingautomation.document.bootstrap;
 
 import com.meetingautomation.document.DocumentStructure;
+import com.meetingautomation.document.DocumentProviderException;
 import com.meetingautomation.document.settings.*;
 import java.time.*;
 import java.util.*;
@@ -106,7 +107,9 @@ public final class DocumentBootstrapUseCase {
             complete(id,structure);
         } catch (SettingsException safe) {
             fail(id,safe.code(),"DOCUMENT_RECONCILIATION_REQUIRED".equals(safe.code())?"RECONCILIATION_REQUIRED":"FAILED",safe.status()>=500);
-        } catch (RuntimeException ignored) { fail(id,"DOCUMENT_FAILED","FAILED",true); }
+        } catch (DocumentProviderException safe) {
+            fail(id,safe.code(),"FAILED",safe.retryable());
+        } catch (RuntimeException ignored) { fail(id,"DOCUMENT_FAILED","FAILED",false); }
     }
     private void complete(String id,DocumentStructure structure) {
         store.transaction(current -> {

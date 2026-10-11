@@ -1,5 +1,7 @@
 package com.meetingautomation.document.bootstrap;
 
+import com.meetingautomation.document.DocumentProviderException;
+
 import java.util.*;
 import org.springframework.web.client.RestClient;
 import tools.jackson.databind.JsonNode;
@@ -74,7 +76,9 @@ public final class ConfluenceBootstrapPages implements BootstrapPages {
         body.put("spaceId",spaceId); body.put("status","current"); body.put("title",title);
         if (parent != null) body.put("parentId",numeric(parent));
         body.put("body",Map.of("representation","storage","value","<p>"+marker+"</p>"));
-        return numeric(BootstrapHttp.required(http.post("/wiki/api/v2/pages"+(parent==null?"?root-level=true":""),body),"id"));
+        JsonNode created=http.post("/wiki/api/v2/pages"+(parent==null?"?root-level=true":""),body);
+        try { return numeric(BootstrapHttp.required(created,"id")); }
+        catch (DocumentProviderException unusableResponse) { throw BootstrapHttp.reconciliation(); }
     }
     private static String numeric(String value) {
         if (value == null || !value.matches("[1-9][0-9]{0,19}")) throw BootstrapHttp.failure();

@@ -1,5 +1,7 @@
 package com.meetingautomation.document.bootstrap;
 
+import com.meetingautomation.document.DocumentProviderException;
+
 import com.meetingautomation.document.notion.NotionPageHierarchyAdapter;
 import java.util.*;
 import org.springframework.web.client.RestClient;
@@ -49,7 +51,9 @@ public final class NotionBootstrapPages implements BootstrapPages {
             "properties", Map.of("title",Map.of("title",List.of(Map.of("type","text","text",Map.of("content",title))))),
             "children",List.of(Map.of("object","block","type","paragraph","paragraph",Map.of("rich_text",
                 List.of(Map.of("type","text","text",Map.of("content",marker)))))));
-        return id(BootstrapHttp.required(http.post("/v1/pages",body),"id"));
+        JsonNode created=http.post("/v1/pages",body);
+        try { return id(BootstrapHttp.required(created,"id")); }
+        catch (DocumentProviderException unusableResponse) { throw BootstrapHttp.reconciliation(); }
     }
     private List<JsonNode> blocks(String parent) {
         List<JsonNode> result = new ArrayList<>(); Set<String> seen = new HashSet<>(); String cursor = null;
