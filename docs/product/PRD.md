@@ -2332,11 +2332,11 @@ Meeting UI
 
 구현 상태는 이 표와 GitHub Issue/PR, `docs/evidence/`의 head별 검증 기록으로 관리한다. 기존 세부 TASK 표의 `설계 상태 / 문서`와 설계 커서는 설계 상태만 나타내며 개발 상태를 대신하지 않는다.
 
-**다음 개발 대상 커서: `TASK-004.04` (TASK-022.06 완료; 기존 PR #95는 새 기준으로 재검증)**
+**다음 개발 대상 커서: `TASK-004.05` (TASK-004.04 완료; PR #95 병합 및 검증 기록 완료)**
 
-**실행 우선순위:** TASK-022.01 → TASK-022.02 → TASK-022.03 → TASK-022.04 → TASK-022.05 → TASK-022.06 → TASK-004.04 재검증 → 기존 커서 순서. 새 변경 작업이 모두 완료되기 전 일반 기능 개발과 PR #95 병합을 진행하지 않는다. GitHub Issue 번호나 생성일 정렬을 실행 순서로 해석하지 않는다.
+**실행 우선순위:** TASK-022.01 → TASK-022.02 → TASK-022.03 → TASK-022.04 → TASK-022.05 → TASK-022.06 → TASK-004.04 재검증 완료 → 기존 커서 순서(TASK-004.05부터). GitHub Issue 번호나 생성일 정렬을 실행 순서로 해석하지 않는다.
 
-**재개 선택 규칙:** 새 세션과 기존 세션 모두 최신 master의 개발 커서·실행 우선순위와 GitHub 선행 관계를 로컬 checkpoint보다 먼저 적용한다. `Resume existing work`는 기존 작업이 여전히 실행 가능한 경우에만 적용한다. TASK-004.04가 checkpoint나 열린 PR에 남아 있어도 TASK-022.06 완료 전에는 보존 상태로 두고 TASK-022 중 가장 앞의 실행 가능한 작업을 선택한다. 과거의 `Provider 수동 설정 대기`는 재개 조건으로 사용하지 않는다. TASK-022.01의 첫 개발·mock 검증을 시작하기 위해 사용자가 먼저 문서 서비스나 키를 준비할 필요는 없으며, 실제 연동 QA에서 필요한 환경만 별도로 확인한다.
+**재개 선택 규칙:** 새 세션과 기존 세션 모두 최신 master의 개발 커서·실행 우선순위와 GitHub 선행 관계를 로컬 checkpoint보다 먼저 적용한다. `Resume existing work`는 기존 작업이 여전히 실행 가능한 경우에만 적용한다. TASK-004.04는 PR #95 병합 및 검증 기록까지 완료했으며, 다음 실행 가능한 TASK-004.05부터 이어간다. 과거의 `Provider 수동 설정 대기`는 재개 조건으로 사용하지 않는다. TASK-022.01의 첫 개발·mock 검증을 시작하기 위해 사용자가 먼저 문서 서비스나 키를 준비할 필요는 없으며, 실제 연동 QA에서 필요한 환경만 별도로 확인한다.
 
 | TASK | 개발 상태 | 단계 | Issue / PR | 검증 증거 | 병합 commit | 완료 일시 (Asia/Seoul) |
 |---|---|---|---|---|---|---|
@@ -2362,7 +2362,7 @@ Meeting UI
 | `TASK-022.04` | DONE | DONE | [Issue #99](https://github.com/donghyunlee-dev/meeting-automation/issues/99) / [PR #108](https://github.com/donghyunlee-dev/meeting-automation/pull/108) | [검증 증거](../evidence/TASK-022.04/verification.md), Windows Java 25 clean test/build PASS; 양방향 Notion·Confluence QA와 replay/read-back PASS; exact-head review 및 CI PASS | `375897a486592adc5ea8f87c1d5e9f2a93e085b9` | 2026-10-12 14:20 KST |
 | `TASK-022.05` | DONE | DONE | [Issue #100](https://github.com/donghyunlee-dev/meeting-automation/issues/100) / [PR #109](https://github.com/donghyunlee-dev/meeting-automation/pull/109) | [검증 증거](../evidence/TASK-022.05/verification.md), Windows Java 25 clean test/build PASS; local Backend API QA, exact-head review 및 CI PASS | `aff5f19bb7205229d75d1df26543869536181b0a` | 2026-10-12 15:14 KST |
 | `TASK-022.06` | DONE | DONE | [Issue #101](https://github.com/donghyunlee-dev/meeting-automation/issues/101) / [PR #110](https://github.com/donghyunlee-dev/meeting-automation/pull/110) | [검증 증거](../evidence/TASK-022.06/verification.md), frontend 52 tests/lint/build PASS; backend 306 PASS + Notion live transfer; exact-head CI/review/QA PASS at `0ab4e22`; Confluence live QA user-waived | `4f36ebaf3260e94d40b2d4fc904727da38a28c5b` | 2026-10-13 00:21 KST |
-| `TASK-004.04` | BLOCKED | DESIGN_REBASE | [Issue #17](https://github.com/donghyunlee-dev/meeting-automation/issues/17) / [PR #95](https://github.com/donghyunlee-dev/meeting-automation/pull/95) | v1.9.0 연결 gate 적용 후 재검증 대기 | — | — |
+| `TASK-004.04` | DONE | DONE | [Issue #17](https://github.com/donghyunlee-dev/meeting-automation/issues/17) / [PR #95](https://github.com/donghyunlee-dev/meeting-automation/pull/95) | [검증 증거](../evidence/TASK-004.04/verification.md), Java 25 full test 319 PASS + clean build; Notion live API QA PASS; exact-head review/CI PASS; Confluence live QA user-waived | `663e9f877f3c12cce5b18bcf0606c80b8c516ad6` | 2026-10-13 01:01 KST |
 | `TASK-004.05` | TODO | DESIGN | [Issue #18](https://github.com/donghyunlee-dev/meeting-automation/issues/18) / — | — | — | — |
 | `TASK-005.01` | TODO | DESIGN | [Issue #19](https://github.com/donghyunlee-dev/meeting-automation/issues/19) / — | — | — | — |
 | `TASK-005.02` | TODO | DESIGN | [Issue #20](https://github.com/donghyunlee-dev/meeting-automation/issues/20) / — | — | — | — |
