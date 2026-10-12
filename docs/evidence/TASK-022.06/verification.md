@@ -7,8 +7,8 @@
 - Base: `eba6acc0a5d7323b52aadf30fe66172c9eeb254c`
 - Implementation and live-test head: `518645240f9f88e0e6d7cd07b0385be573f87436`
 - Implementation commit: `6ce5fe04a596776fbdebd55d18b4257d11638fa1`
-- Current-head code review and final QA review: pending after this evidence update.
-- PR #110 remains a draft until final-head checks are recorded.
+- Final exact-head code review and QA results are recorded in the PR #110 conversation after this evidence commit.
+- Confluence live QA is excluded by user instruction; this scope waiver is not counted as a passed provider check.
 
 ## Automated checks
 
