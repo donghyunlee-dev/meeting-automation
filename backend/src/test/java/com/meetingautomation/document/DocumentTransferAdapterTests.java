@@ -128,6 +128,18 @@ class DocumentTransferAdapterTests {
     }
 
     @Test
+    void confluenceManifestPreservesLegacyParticipantNameStartingWithTitlePrefix() {
+        Fixture f = new Fixture(false, 1, "legacy-prefixed-participant-title");
+
+        TransferManifest manifest = f.port.readManifest();
+
+        assertEquals("Participant: Ada", manifest.participants().getFirst().participant().name());
+        assertEquals(CODEC.canonicalDigest(manifest.participants().getFirst()),
+                manifest.participants().getFirst().marker().canonicalDigest());
+        f.server.verify();
+    }
+
+    @Test
     void transferComposesEarlierParticipantIdsIntoNewProviderMarker() {
         Fixture f = new Fixture(false, 0, null);
         String originalFingerprint = CODEC.connectionFingerprint("notion", "original-root");
@@ -287,9 +299,12 @@ class DocumentTransferAdapterTests {
                 ids.stream().map(p -> new ParticipantSummary(p, "Ada")).toList(), null);
     }
     private static TransferRecord participant(String id) {
+        return participant(id, "Ada");
+    }
+    private static TransferRecord participant(String id, String name) {
         TransferMarker marker = new TransferMarker("meeting-automation", "participant", "1.0", null, null, null, List.of(), List.of(), null,
                 "sha256:" + "0".repeat(64), null);
-        TransferRecord record = new TransferRecord(id, "r1", null, marker, "Ada", null, null, List.of(), new Participant(id, "Ada", "ada@example.test"));
+        TransferRecord record = new TransferRecord(id, "r1", null, marker, name, null, null, List.of(), new Participant(id, name, "ada@example.test"));
         marker = new TransferMarker(marker.format(), marker.recordType(), marker.schemaVersion(), null, null, null, List.of(), List.of(), null, CODEC.canonicalDigest(record), null);
         return new TransferRecord(id, "r1", null, marker, null, null, null, List.of(), record.participant());
     }
@@ -381,7 +396,8 @@ class DocumentTransferAdapterTests {
             return JSON.writeValueAsString(data);
         }
         String marker(String id) {
-            String m = CODEC.encodeMarker(id.startsWith("1") ? participant(id).marker() : meeting(id, "reference".equals(defect) ? List.of("missing-person") : List.of(), null).marker());
+            String participantName = "legacy-prefixed-participant-title".equals(defect) && id.equals("1000") ? "Participant: Ada" : "Ada";
+            String m = CODEC.encodeMarker(id.startsWith("1") ? participant(id, participantName).marker() : meeting(id, "reference".equals(defect) ? List.of("missing-person") : List.of(), null).marker());
             if (id.equals("1000")) {
                 if ("missing".equals(defect)) return "{}";
                 if ("duplicate".equals(defect)) return m + m;
@@ -418,6 +434,7 @@ class DocumentTransferAdapterTests {
         String page(String id) {
             if ("page".equals(defect) && id.equals("1000")) return "{}";
             String title = id.startsWith("1") ? "Ada" : "Synthetic meeting";
+            if ("legacy-prefixed-participant-title".equals(defect) && id.equals("1000")) title = "Participant: Ada";
             String storage = id.startsWith("1") ? "<p>Email: ada@example.test</p>" : "<h2>Meeting information</h2><p>Date: 2026-10-10T10:00:00+09:00</p><p>Template: default.md</p>";
             if (saved.containsKey(id)) {
                 var data = JSON.readTree(saved.get(id));

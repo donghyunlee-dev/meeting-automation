@@ -86,7 +86,13 @@ public final class ConfluencePageHierarchyAdapter implements ParticipantCreation
         List<String> markers = blocks.stream().filter(block -> block.type().equals("code")).map(TransferPageCodec.Block::text).toList();
         TransferMarker marker = TRANSFER_CODEC.parseMarker(markers);
         if (marker.recordType().equals("participant") && title.startsWith(TRANSFER_PARTICIPANT_TITLE_PREFIX)) {
-            title = title.substring(TRANSFER_PARTICIPANT_TITLE_PREFIX.length());
+            String unprefixedTitle = title.substring(TRANSFER_PARTICIPANT_TITLE_PREFIX.length());
+            try {
+                return mapper.decode(id, version.asString(), baseUri.resolve("/wiki/pages/" + id).toASCIIString(), unprefixedTitle, blocks);
+            } catch (TransferCodec.ValidationException prefixedLegacyName) {
+                // Older transfers used the participant's name directly as the page title.
+                // The canonical digest distinguishes that legacy name from our disambiguation prefix.
+            }
         }
         return mapper.decode(id, version.asString(), baseUri.resolve("/wiki/pages/" + id).toASCIIString(), title, blocks);
     }
