@@ -70,15 +70,17 @@ describe('document setup wizard', () => {
     expect(screen.getByRole('heading', { name: '저장소 설정을 확인할 수 없습니다' })).toBeTruthy();
   });
 
-  it('keeps READY document settings read-only until the switch API is available', async () => {
+  it('CHANGE-ENTRY reopens provider selection from READY while preserving the active source', async () => {
     const fetchMock = vi.fn().mockResolvedValue(response({ version: 5, status: 'READY', active: { provider: 'NOTION', connectionVersion: 2, rootUrl: 'https://notion.example' }, draft: { draftId: 'pending-draft', revision: 1, provider: 'CONFLUENCE', state: 'DRAFT' }, operation: null, canCreateMeeting: true }));
     vi.stubGlobal('fetch', fetchMock);
     render(<MemoryRouter initialEntries={['/settings/document']}><App /></MemoryRouter>);
 
     expect(await screen.findByRole('heading', { name: '설정' })).toBeTruthy();
     expect(screen.getByText('현재 연결: Notion')).toBeTruthy();
-    expect(screen.getByText(/후속 작업에서 지원/)).toBeTruthy();
-    expect(screen.queryByRole('button', { name: '문서 서비스 변경' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: '문서 서비스 변경' }));
+    expect(screen.getByRole('heading', { name: '문서 서비스 선택' })).toBeTruthy();
+    expect(screen.getByText('현재 연결: Notion')).toBeTruthy();
+    expect(screen.getByText(/연결 버전: 2/)).toBeTruthy();
     expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(false);
   });
 
@@ -298,6 +300,7 @@ describe('document setup wizard', () => {
     fireEvent.change(screen.getByLabelText('부모 페이지 URL 또는 ID'), { target: { value: 'parent-1' } });
     fireEvent.click(screen.getByRole('button', { name: '읽기 전용 연결 테스트' }));
     expect((await screen.findByRole('alert')).textContent).toMatch(/최신 상태를 읽었습니다/);
+    expect(screen.getByRole('alert').textContent).toMatch(/설정 버전: 5/);
     fireEvent.change(screen.getByLabelText('Notion 내부 연결 토큰'), { target: { value: 'synthetic-secret-2' } });
     fireEvent.change(screen.getByLabelText('부모 페이지 URL 또는 ID'), { target: { value: 'parent-2' } });
     fireEvent.click(screen.getByRole('button', { name: '읽기 전용 연결 테스트' }));

@@ -1,4 +1,5 @@
 export type DocumentProvider = 'NOTION' | 'CONFLUENCE';
+export type SwitchMode = 'COPY_ALL' | 'START_EMPTY';
 export type SetupStatus = 'UNCONFIGURED' | 'CONFIGURING' | 'READY' | 'SWITCHING' | 'ATTENTION_REQUIRED' | 'STORAGE_UNAVAILABLE';
 export type SetupSnapshot = {
   version: number | null;
@@ -53,6 +54,12 @@ export async function testSetupDraft(draftId: string, revision: number, version:
 }
 export async function initializeSetup(draftId: string, revision: number, version: number, key = newKey()) {
   return request<{ operationId: string; status: 'PENDING'; version: number }>(`/drafts/${encodeURIComponent(draftId)}/initialize`, { method: 'POST', headers: mutationHeaders(version, key), body: JSON.stringify({ draftRevision: revision, confirmStructure: true }) });
+}
+export async function switchSetup(draftId: string, draftRevision: number, mode: SwitchMode, version: number, key = newKey()) {
+  return request<{ operationId: string; status: string; version: number }>('/switch', { method: 'POST', headers: mutationHeaders(version, key), body: JSON.stringify({ draftId, draftRevision, mode, confirmSourcePreserved: true }) });
+}
+export async function actOnSetupOperation(operationId: string, action: 'RETRY' | 'CANCEL', version: number, key = newKey()) {
+  return request<{ operationId: string; status: string; version: number }>(`/operations/${encodeURIComponent(operationId)}/${action.toLowerCase()}`, { method: 'POST', headers: mutationHeaders(version, key), body: '{}' });
 }
 function mutationHeaders(version: number, key: string) {
   return { 'If-Match': `"${version}"`, 'Idempotency-Key': key, 'X-Document-Setup-Request': 'true' };

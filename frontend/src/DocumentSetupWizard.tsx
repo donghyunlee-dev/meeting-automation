@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link } from 'react-router';
-import { getSetupOperation, getSetupSnapshot, initializeSetup, saveSetupDraft, testSetupDraft, DocumentSetupError, type DocumentProvider, type DraftInput, type SetupOperation, type SetupSnapshot, type TestedDraft } from './documentSetupApi';
-import { getCompanyConfig, listMeetingParticipants } from './newMeetingApi';
+import { actOnSetupOperation, getSetupOperation, getSetupSnapshot, initializeSetup, saveSetupDraft, switchSetup, testSetupDraft, DocumentSetupError, type DocumentProvider, type DraftInput, type SetupOperation, type SetupSnapshot, type SwitchMode, type TestedDraft } from './documentSetupApi';
+import { getDocumentAppConfig, listMeetingParticipants } from './newMeetingApi';
 
 type Credentials = { token: string; accountEmail: string; apiToken: string };
 type Location = { parentPageId: string; baseUrl: string; spaceId: string; parentPageIdConfluence: string };
@@ -30,6 +30,13 @@ function allowedActionLabel(action: string) {
 }
 
 function operationGuidance(operation: SetupOperation) {
+  if (operation.type === 'SWITCH') {
+    if (operation.status === 'SUCCEEDED') return '새 문서 서비스로 전환했습니다. 원본 자료는 원본 서비스에 보존됩니다.';
+    if (operation.status === 'CANCELLED') return '변경을 취소했습니다. 원본 연결이 활성 상태이며 부분 복사본은 대상에 보존됩니다.';
+    if (operation.status === 'RECONCILIATION_REQUIRED') return 'Provider 생성 결과가 불명확합니다. 대상 구조를 확인해 주세요. 자동 재시도하지 않습니다.';
+    if (operation.cancelRequested) return '취소를 요청했습니다. 안전한 중단 지점에서 멈출 때까지 진행 상태를 확인해 주세요.';
+    return '전환 완료 전까지 원본 연결이 유지됩니다. 작업 재개와 취소는 서버가 허용한 경우에만 가능합니다.';
+  }
   switch (operation.status) {
     case 'SUCCEEDED': return '문서 구조 준비가 완료되었습니다. 문서 서비스 상태를 새로고침해 확인할 수 있습니다.';
     case 'FAILED': return operation.allowedActions.includes('RETRY')
@@ -59,6 +66,14 @@ export function DocumentSetupWizard({ settings = false }: { settings?: boolean }
   const formRef = useRef<HTMLFormElement | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const initializing = useRef(false);
+  const [changing, setChanging] = useState(false);
+  const [mode, setMode] = useState<SwitchMode>('COPY_ALL');
+  const [confirmEmpty, setConfirmEmpty] = useState(false);
+  const [preparedInvalid, setPreparedInvalid] = useState(false);
+  const refreshedConnection = useRef<number | null>(null);
+  const progressRefreshRef = useRef<HTMLButtonElement | null>(null);
+  const [consumerRefreshAttempt, setConsumerRefreshAttempt] = useState(0);
+  const [consumerRefreshFailed, setConsumerRefreshFailed] = useState(false);
 
   async function refresh() {
     const result = await getSetupSnapshot();
@@ -66,7 +81,7 @@ export function DocumentSetupWizard({ settings = false }: { settings?: boolean }
     if (result.snapshot.operation) {
       try { setOperation(await getSetupOperation(result.snapshot.operation.operationId)); }
       catch { setError('진행 상태를 불러오지 못했습니다. 다시 확인해 주세요.'); }
-    }
+    } else setOperation(null);
     return result.snapshot;
   }
 
@@ -79,30 +94,43 @@ export function DocumentSetupWizard({ settings = false }: { settings?: boolean }
   }, []);
 
   useEffect(() => {
+    const version = snapshot?.active?.connectionVersion;
+    if (operation?.status !== 'SUCCEEDED' || snapshot?.status !== 'READY' || snapshot.draft?.state === 'PREPARED' || version == null || refreshedConnection.current === version) return;
+    refreshedConnection.current = version;
+    let live = true;
+    void Promise.all([getDocumentAppConfig(), listMeetingParticipants()]).then(([config]) => {
+      if (!live) return;
+      if (config.document && config.document.connectionVersion !== version) throw new Error('STALE_DOCUMENT_CONFIG');
+      window.dispatchEvent(new CustomEvent('document-connection-changed', { detail: { connectionVersion: version } }));
+      setNotice('문서 서비스 연결이 준비되었습니다.'); setCredentials(EMPTY_CREDENTIALS);
+    }).catch(() => { if (live) { refreshedConnection.current = null; setConsumerRefreshFailed(true); setError('새 연결의 설정 또는 참석자 목록을 불러오지 못했습니다. 연결 데이터를 다시 확인해 주세요.'); } });
+    return () => { live = false; };
+  }, [operation?.status, snapshot?.status, snapshot?.active?.connectionVersion, snapshot?.draft?.state, consumerRefreshAttempt]);
+
+  useEffect(() => {
     const operationId = snapshot?.operation?.operationId;
-    if (!operationId || TERMINAL_OPERATION_STATUSES.includes(operation?.status ?? '')) return;
+    if (!operationId) return;
+    const status = operation?.operationId === operationId ? operation.status : snapshot?.operation?.status ?? '';
+    if (TERMINAL_OPERATION_STATUSES.includes(status) && snapshot?.operation?.status === status) return;
     let live = true; let timer: ReturnType<typeof setTimeout>;
     const poll = async () => {
       try {
         const current = await getSetupOperation(operationId);
         if (!live) return; setOperation(current);
         if (TERMINAL_OPERATION_STATUSES.includes(current.status)) {
-          const updated = await refresh();
-          if (current.status === 'SUCCEEDED' && updated.status === 'READY') {
-            await Promise.allSettled([getCompanyConfig(), listMeetingParticipants()]);
-            setNotice('문서 서비스 연결이 준비되었습니다.'); setCredentials(EMPTY_CREDENTIALS);
-          }
+          await refresh();
           return;
         }
-      } catch { /* transient polling failures are recovered by the next public status read */ }
+      } catch { if (live) setError('진행 상태를 불러오지 못했습니다. 진행 상태 새로고침으로 다시 확인해 주세요.'); }
       if (live) timer = setTimeout(poll, 1800);
     };
-    timer = setTimeout(poll, 900);
+    timer = setTimeout(poll, TERMINAL_OPERATION_STATUSES.includes(status) ? 0 : 900);
     return () => { live = false; clearTimeout(timer); };
-  }, [snapshot?.operation?.operationId, operation?.status]);
+  }, [snapshot?.operation?.operationId, snapshot?.operation?.status, operation?.operationId, operation?.status]);
 
   function chooseProvider(next: DocumentProvider) {
-    setProvider(next); setCredentials(EMPTY_CREDENTIALS); setLocation(EMPTY_LOCATION); setDraft(null); setTested(null); setOperation(null); setError(''); setNotice('');
+    setProvider(next); setCredentials(EMPTY_CREDENTIALS); setLocation(EMPTY_LOCATION); setDraft(null); setTested(null); setOperation(null); setError(''); setNotice(''); setFieldErrors({});
+    requestAnimationFrame(() => formRef.current?.querySelector<HTMLInputElement>('input')?.focus());
   }
   function updateCredential(field: keyof Credentials, value: string) {
     setCredentials((current) => ({ ...current, [field]: value })); setTested(null); setError('');
@@ -151,10 +179,10 @@ export function DocumentSetupWizard({ settings = false }: { settings?: boolean }
       setDraft({ id: saved.data.draftId, revision: saved.data.revision, version: saved.data.version });
       setCredentials(EMPTY_CREDENTIALS);
       const test = await testSetupDraft(saved.data.draftId, saved.data.revision, saved.data.version);
-      setTested(test.data); setSnapshot(await refresh()); setNotice('연결을 확인했습니다. 자격 증명은 화면에서 지웠습니다.');
+      setTested(test.data); setPreparedInvalid(false); setSnapshot(await refresh()); setNotice('연결을 확인했습니다. 자격 증명은 화면에서 지웠습니다.');
     } catch (reason) {
       if (reason instanceof DocumentSetupError && reason.status === 412) {
-        await refresh(); setTested(null); setError('설정이 다른 브라우저에서 변경되었습니다. 최신 상태를 읽었습니다. 자격 증명을 다시 입력해 연결을 테스트해 주세요.'); setCredentials(EMPTY_CREDENTIALS);
+        const latest = await refresh(); setTested(null); setPreparedInvalid(true); setError(`설정이 다른 브라우저에서 변경되었습니다. 최신 상태를 읽었습니다. 설정 버전: ${latest.version}, draft revision: ${latest.draft?.revision ?? '없음'}. 자격 증명을 다시 입력해 연결을 테스트해 주세요.`); setCredentials(EMPTY_CREDENTIALS);
       } else if (reason instanceof DocumentSetupError && reason.code === 'DOCUMENT_FAILED') setError('연결을 확인하지 못했습니다. 입력과 Provider 권한을 확인한 뒤 다시 시도해 주세요.');
       else if (reason instanceof DocumentSetupError && reason.code === 'STORAGE_UNAVAILABLE') setError('저장소 설정을 확인할 수 없습니다. 관리자에게 저장소 설정을 확인해 달라고 요청해 주세요.');
       else setError('연결 테스트에 실패했습니다. 입력값과 네트워크를 확인하고 다시 시도해 주세요.');
@@ -209,30 +237,98 @@ export function DocumentSetupWizard({ settings = false }: { settings?: boolean }
     setBusy(true); setError('');
     try {
       const latest = await refresh();
-      if (latest.operation) {
+      if (latest.operation && (!changing || latest.operation.type === 'SWITCH')) {
         setInitializationUncertain(false);
         setNotice('공개 작업 상태를 다시 확인했습니다.');
       } else {
         setInitializationUncertain(false);
-        setNotice('진행 중인 초기화 작업이 없습니다. 연결 테스트를 다시 진행해 주세요.');
+        setPreparedInvalid(true); setTested(null); setProvider(null);
+        setNotice(changing ? '진행 중인 변경 작업이 없습니다. 연결 테스트를 다시 진행해 주세요.' : '진행 중인 초기화 작업이 없습니다. 연결 테스트를 다시 진행해 주세요.');
       }
     } catch {
       setError('공개 작업 상태를 불러오지 못했습니다. 잠시 후 다시 확인해 주세요.');
     } finally { setBusy(false); }
   }
 
-  if (!snapshot) return <main className="setup-page"><p role="status">문서 설정을 불러오는 중…</p></main>;
+  function beginChange() {
+    setChanging(true); setProvider(null); setDraft(null); setTested(null); setCredentials(EMPTY_CREDENTIALS); setLocation(EMPTY_LOCATION); setError(''); setNotice(''); setMode('COPY_ALL'); setConfirmEmpty(false);
+  }
+
+  async function reloadConflict() {
+    const latest = await refresh(); setTested(null); setPreparedInvalid(true); setCredentials(EMPTY_CREDENTIALS); setProvider(null);
+    setError(`설정 버전이 변경되었습니다. 최신 설정 버전: ${latest.version}, draft revision: ${latest.draft?.revision ?? '없음'}. 연결 테스트를 다시 진행해 주세요.`);
+  }
+
+  async function startSwitch() {
+    if (busy || initializing.current || initializationUncertain || preparedInvalid || snapshot?.draft?.state !== 'PREPARED' || snapshot.version == null || mode === 'START_EMPTY' && !confirmEmpty) return;
+    initializing.current = true; setBusy(true); setError('');
+    let acceptedId: string | null = null;
+    try {
+      const accepted = await switchSetup(snapshot.draft.draftId, snapshot.draft.revision, mode, snapshot.version);
+      acceptedId = accepted.data.operationId;
+      const latest = await refresh();
+      if (!latest.operation || latest.operation.operationId !== acceptedId) {
+        const state = await getSetupOperation(acceptedId); setOperation(state); setSnapshot({ ...latest, operation: { operationId: state.operationId, type: state.type, status: state.status } });
+      }
+      setNotice('문서 서비스 변경을 시작했습니다. 전환 완료 전까지 원본 연결을 유지합니다.');
+    } catch (reason) {
+      if (reason instanceof DocumentSetupError && reason.status === 412) {
+        try { await reloadConflict(); } catch { setError('최신 설정 상태를 불러오지 못했습니다. 진행 상태를 다시 확인해 주세요.'); }
+      } else {
+        setInitializationUncertain(true);
+        try {
+          const latest = await refresh();
+          if (latest.operation?.type === 'SWITCH' && !['SUCCEEDED', 'CANCELLED'].includes(latest.operation.status)) setInitializationUncertain(false);
+          else if (acceptedId) {
+            const state = await getSetupOperation(acceptedId); setOperation(state); setSnapshot({ ...latest, operation: { operationId: state.operationId, type: state.type, status: state.status } }); setInitializationUncertain(false);
+          }
+        } catch { /* Require an explicit status read when dispatch outcome is unknown. */ }
+        setError('변경 요청 결과를 확인해 주세요. 새 전환을 보내기 전에 공개 작업 상태를 다시 확인해야 합니다.');
+      }
+    } finally { initializing.current = false; setBusy(false); }
+  }
+
+  async function runOperationAction(action: 'RETRY' | 'CANCEL') {
+    if (busy || initializing.current || operation?.type !== 'SWITCH' || !operation.allowedActions.includes(action) || action === 'RETRY' && operation.status === 'RECONCILIATION_REQUIRED') return;
+    initializing.current = true; setBusy(true); setError(''); setChanging(true);
+    try {
+      await actOnSetupOperation(operation.operationId, action, operation.version);
+      await refresh(); setNotice(action === 'RETRY' ? '같은 작업을 재개했습니다.' : '작업 취소를 요청했습니다.');
+    } catch (reason) {
+      if (reason instanceof DocumentSetupError && reason.status === 412) {
+        try { await reloadConflict(); } catch { setError('최신 작업 상태를 불러오지 못했습니다. 다시 확인해 주세요.'); }
+      } else {
+        try { await refresh(); } catch { /* Preserve the visible operation and recovery action. */ }
+        setError('작업 요청 결과를 확인하지 못했습니다. 진행 상태를 새로고침해 확인해 주세요.');
+      }
+    } finally { setBusy(false); initializing.current = false; requestAnimationFrame(() => progressRefreshRef.current?.focus()); }
+  }
+
+  async function safeRefresh() {
+    setError('');
+    try { await refresh(); } catch { setError('진행 상태를 불러오지 못했습니다. 다시 확인해 주세요.'); }
+  }
+
+  const retryConsumerRefresh = <button className="button button-secondary" type="button" onClick={() => { setError(''); setConsumerRefreshFailed(false); setConsumerRefreshAttempt((attempt) => attempt + 1); }}>연결 데이터 다시 확인</button>;
+
+  if (!snapshot) return <main className="setup-page">{error ? <section role="alert"><p>{error}</p><button className="button button-secondary" type="button" onClick={() => void safeRefresh()}>다시 확인</button></section> : <p role="status">문서 설정을 불러오는 중…</p>}</main>;
   if (snapshot.status === 'STORAGE_UNAVAILABLE') return <main className="setup-page"><h1>문서 서비스 연결</h1><section className="setup-card" role="alert"><h2>저장소 설정을 확인할 수 없습니다</h2><p>문서 설정 저장소가 준비되지 않아 문서 기능을 사용할 수 없습니다. 관리자에게 저장소 설정을 확인해 달라고 요청해 주세요.</p><button className="button button-secondary" type="button" onClick={() => void refresh()}>다시 확인</button></section></main>;
-  if (snapshot.status === 'READY' && settings) return <main className="setup-page"><h1>설정</h1><section className="setup-card"><h2>문서 서비스</h2><p>현재 연결: {snapshot.active?.provider === 'NOTION' ? 'Notion' : 'Confluence Cloud'}</p><p>문서 서비스 변경은 이전과 전환 계약을 제공하는 후속 작업에서 지원됩니다.</p></section><section className="setup-card"><h2>참석자</h2><p>회의에서 사용할 참석자 정보를 관리합니다.</p><Link className="button button-secondary" to="/settings/participants">참석자 관리</Link></section></main>;
+  const activeSummary = snapshot.active && <section className="setup-card" aria-label="현재 활성 문서 연결"><h2>문서 서비스</h2><p>현재 연결: {snapshot.active.provider === 'NOTION' ? 'Notion' : 'Confluence Cloud'}</p><p>연결 버전: {snapshot.active.connectionVersion}</p><a href={snapshot.active.rootUrl} target="_blank" rel="noreferrer">활성 문서 루트 열기</a></section>;
+  if (snapshot.status === 'READY' && settings && !changing) return <main className="setup-page"><h1>설정</h1>{activeSummary}{error && <p role="alert" className="setup-error">{error}</p>}{consumerRefreshFailed && retryConsumerRefresh}{notice && <p role="status">{notice}</p>}<button className="button button-primary" type="button" onClick={beginChange}>문서 서비스 변경</button><section className="setup-card"><h2>참석자</h2><p>회의에서 사용할 참석자 정보를 관리합니다.</p><Link className="button button-secondary" to="/settings/participants">참석자 관리</Link></section></main>;
 
   const operationStatus = operation?.status ?? snapshot.operation?.status ?? '';
+  const preparedTarget = snapshot.active && snapshot.draft?.state === 'PREPARED' && snapshot.status === 'READY' && !preparedInvalid;
+  const hasBlockingOperation = snapshot.operation && !['SUCCEEDED', 'CANCELLED'].includes(operationStatus);
 
   return <main className="setup-page">
     <header className="setup-heading"><p className="eyebrow">DOCUMENT CONNECTION</p><h1>문서 서비스 연결</h1><p>회의록과 참석자를 저장할 문서 서비스를 연결합니다.</p></header>
+    {activeSummary}
     {error && <p className="setup-error" role="alert">{error}</p>}{notice && <p className="setup-notice" role="status">{notice}</p>}
-    {snapshot.operation && <section className="setup-card" aria-labelledby="operation-heading"><h2 id="operation-heading">{operationTitle(operationStatus)}</h2><p role="status">{operation?.stage ?? snapshot.operation.status} · {operation?.status ?? '상태 확인 중'}</p>{operation && <><p>참석자 {operation.counts.participantsCopied}/{operation.counts.participantsTotal}명 · 회의 {operation.counts.meetingsCopied}/{operation.counts.meetingsTotal}건</p>{operation.errorCode && <p>오류 코드: <code>{operation.errorCode}</code></p>}<p>{operationGuidance(operation)}</p><h3>서버가 허용한 작업 (이 화면에서 실행되지 않음)</h3>{operation.allowedActions.length > 0 ? <ul>{operation.allowedActions.map((action) => <li key={action}>{allowedActionLabel(action)}</li>)}</ul> : <p>가능한 추가 작업이 없습니다.</p>}</>}<button type="button" className="button button-secondary" onClick={() => void refresh()}>진행 상태 새로고침</button></section>}
+    {consumerRefreshFailed && retryConsumerRefresh}
+    {snapshot.operation && <section className="setup-card" aria-labelledby="operation-heading"><h2 id="operation-heading">{operation?.type === 'SWITCH' ? `문서 서비스 변경 · ${operationStatus}` : operationTitle(operationStatus)}</h2><p role="status">{operation?.stage ?? snapshot.operation.status} · {operation?.status ?? '상태 확인 중'}</p><p>작업 ID: <code>{snapshot.operation.operationId}</code></p>{operation && <><p role="status">참석자 {operation.counts.participantsCopied}/{operation.counts.participantsTotal}명 · 회의 {operation.counts.meetingsCopied}/{operation.counts.meetingsTotal}건</p>{operation.errorCode && <p>오류 코드: <code>{operation.errorCode}</code></p>}<p>{operationGuidance(operation)}</p>{operation.type === 'SWITCH' ? <div className="setup-choice">{operation.allowedActions.includes('RETRY') && operation.status !== 'RECONCILIATION_REQUIRED' && <button className="button button-secondary" type="button" disabled={busy} onClick={() => void runOperationAction('RETRY')}>작업 재개</button>}{operation.allowedActions.includes('CANCEL') && <button className="button button-secondary" type="button" disabled={busy} onClick={() => void runOperationAction('CANCEL')}>작업 취소</button>}{operation.allowedActions.includes('REVIEW_PROVIDER') && <p>Provider 확인: 대상 구조를 확인한 뒤 공개 상태를 다시 읽어 주세요.</p>}</div> : <><h3>서버가 허용한 작업 (이 화면에서 실행되지 않음)</h3>{operation.allowedActions.length > 0 ? <ul>{operation.allowedActions.map((action) => <li key={action}>{allowedActionLabel(action)}</li>)}</ul> : <p>가능한 추가 작업이 없습니다.</p>}</>}</>}<button ref={progressRefreshRef} type="button" className="button button-secondary" disabled={busy} onClick={() => void safeRefresh()}>진행 상태 새로고침</button></section>}
     {snapshot.status === 'ATTENTION_REQUIRED' && <section className="setup-card" role="status"><h2>이전 작업을 확인해 주세요</h2><p>이전에 시작한 설정 작업이 완료되지 않았습니다. 공개 진행 상태를 새로고침해 확인할 수 있습니다.</p></section>}
-    {!snapshot.operation && !initializationUncertain && <>
+    {preparedTarget && !initializationUncertain && <section className="setup-card" aria-labelledby="migration-heading"><h2 id="migration-heading">자료 이전 방식</h2><p>대상 연결: {snapshot.draft?.provider === 'NOTION' ? 'Notion' : 'Confluence Cloud'}</p><p>참석자와 회의록의 Transcript, Minutes, 참석자 참조를 전체 복사합니다. 첨부·댓글·버전 이력은 포함되지 않으며 이메일과 Slack 알림을 다시 보내지 않습니다.</p><p>원본 자료는 원본 서비스에 보존됩니다. 전환이 완료된 뒤 새 서비스의 목록을 사용합니다.</p><fieldset className="setup-mode"><legend>이전 방식 선택</legend><label><input type="radio" name="switch-mode" checked={mode === 'COPY_ALL'} onChange={() => { setMode('COPY_ALL'); setConfirmEmpty(false); }} />전체 복사</label><label><input type="radio" name="switch-mode" checked={mode === 'START_EMPTY'} onChange={() => { setMode('START_EMPTY'); setConfirmEmpty(false); }} />빈 구조로 새 시작</label></fieldset>{mode === 'START_EMPTY' && <label className="setup-confirm"><input type="checkbox" checked={confirmEmpty} onChange={(event) => setConfirmEmpty(event.target.checked)} />기존 자료가 새 서비스 목록에 나타나지 않음을 확인했습니다. 자료는 원본에 보존됩니다.</label>}<button className="button button-primary" type="button" disabled={busy || mode === 'START_EMPTY' && !confirmEmpty} onClick={() => void startSwitch()}>{busy ? '전환 시작 중…' : '문서 서비스 전환'}</button></section>}
+    {!hasBlockingOperation && !preparedTarget && !initializationUncertain && <>
       {!provider ? <section className="setup-card"><h2>문서 서비스 선택</h2><div className="setup-choice"><button className="button button-secondary" type="button" onClick={() => chooseProvider('NOTION')}>Notion 선택</button><button className="button button-secondary" type="button" onClick={() => chooseProvider('CONFLUENCE')}>Confluence Cloud 선택</button></div></section> : <>
         <section className="setup-card" aria-labelledby="guide-title"><div className="setup-card-heading"><div><h2 id="guide-title">{provider === 'NOTION' ? 'Notion 연결 가이드' : 'Confluence Cloud 연결 가이드'}</h2><p>{provider === 'NOTION' ? '내부 연결을 만들고 대상 부모 페이지에 연결 접근 권한을 부여해 주세요. 읽기·페이지 생성·갱신 권한이 필요합니다.' : '내부 운영용 Atlassian 계정과 API token을 준비하고, 공간 읽기·페이지 생성·갱신 권한을 확인해 주세요.'}</p></div><button className="button button-secondary" type="button" onClick={() => chooseProvider(provider === 'NOTION' ? 'CONFLUENCE' : 'NOTION')}>{provider === 'NOTION' ? 'Confluence Cloud 선택' : 'Notion 선택'}</button></div></section>
         <form ref={formRef} className="setup-card setup-form" onSubmit={(event) => void handleTest(event)} noValidate>
@@ -251,7 +347,7 @@ export function DocumentSetupWizard({ settings = false }: { settings?: boolean }
         {tested && <section className="setup-card"><h2>생성될 구조</h2><p>Meeting Automation 아래 Meetings와 Participants 페이지를 준비합니다. 초기화 완료 전까지 기존 활성 연결은 유지됩니다.</p><p>인증 및 부모 위치 접근을 확인했습니다. 쓰기 권한은 최종 페이지 생성 중 확인됩니다.</p><button className="button button-primary" type="button" disabled={busy} onClick={() => void finish()}>{busy ? '준비 시작 중…' : '구조 생성 및 연결 완료'}</button></section>}
       </>}
     </>}
-    {snapshot.status === 'READY' && <p><Link to="/settings/document">문서 서비스 설정으로 돌아가기</Link></p>}
-    {initializationUncertain && <section className="setup-card" aria-labelledby="uncertain-operation-title"><h2 id="uncertain-operation-title">초기화 상태 확인</h2><p>요청 결과가 불명확하므로 새 초기화를 보내지 않습니다. 서버의 공개 작업 상태를 먼저 확인해 주세요.</p><button className="button button-secondary" type="button" onClick={() => void recheckUncertainInitialization()} disabled={busy}>{busy ? '확인 중…' : '다시 확인'}</button></section>}
+    {snapshot.status === 'READY' && <p><Link to="/settings/document" onClick={() => { setChanging(false); setCredentials(EMPTY_CREDENTIALS); }}>문서 서비스 설정으로 돌아가기</Link></p>}
+    {initializationUncertain && <section className="setup-card" aria-labelledby="uncertain-operation-title"><h2 id="uncertain-operation-title">요청 상태 확인</h2><p>요청 결과가 불명확하므로 새 요청을 보내지 않습니다. 서버의 공개 작업 상태를 먼저 확인해 주세요.</p><button className="button button-secondary" type="button" onClick={() => void recheckUncertainInitialization()} disabled={busy}>{busy ? '확인 중…' : '다시 확인'}</button></section>}
   </main>;
 }
