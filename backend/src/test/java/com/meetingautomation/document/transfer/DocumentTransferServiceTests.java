@@ -121,6 +121,21 @@ class DocumentTransferServiceTests {
         assertEquals(Map.of("source-person", "target-person"), result.participantIdMap());
     }
 
+    @Test void transferRejectsReusableMeetingWithStaleParticipantMapBeforeWritingParticipants() {
+        var source = sourceWithOneParticipantAndMeeting();
+        var target = new StatefulPort(TARGET_FP, "target");
+        target.addParticipant(participant("wrong-target-person", "Ada", "ada@example.test"));
+        target.addMeeting(target.remap(source.meetings.get("source-meeting"), Map.of("source-person", "wrong-target-person"),
+                SOURCE_FP, "reused-meeting"));
+
+        var failure = assertThrows(TransferConflictException.class, () -> new DocumentTransferService().transfer(source, target));
+
+        assertTrue(target.writes.isEmpty());
+        assertEquals(TransferConflictException.Code.PARTICIPANT_MAPPING_MISMATCH, failure.code());
+        assertEquals(0, target.createParticipantCalls);
+        assertEquals(0, target.createMeetingCalls);
+    }
+
     @Test void transferRejectsDuplicateTargetTransferMarkerBeforeAnyWrite() {
         var source = sourceWithOneParticipantAndMeeting();
         var target = new StatefulPort(TARGET_FP, "target");

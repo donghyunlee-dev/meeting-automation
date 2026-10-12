@@ -208,8 +208,26 @@ public final class DocumentTransferService {
             if (match == null && manifest.meetings().stream().anyMatch(t -> t.externalSessionId().equals(entry.externalSessionId()))) {
                 throw conflict(TransferConflictException.Code.UNMARKED_COLLISION);
             }
+            if (match != null) validateReusedMeetingParticipantMap(match, source, participantByKey, sourceFingerprint);
         }
         return new TargetSnapshot(participantByKey, meetingByKey);
+    }
+
+    private void validateReusedMeetingParticipantMap(TransferRecord meeting, SourceSnapshot source,
+            Map<String, TransferRecord> targetParticipantsByKey, String sourceFingerprint) {
+        var transfer = meeting.marker().transfer();
+        if (transfer == null) throw conflict(TransferConflictException.Code.UNMARKED_COLLISION);
+        Map<String, String> resolvedMap = new LinkedHashMap<>();
+        for (TransferRecord participant : source.participants()) {
+            TransferRecord targetParticipant = targetParticipantsByKey.get(sourceKey(sourceFingerprint, participant.sourceDocumentId()));
+            if (targetParticipant == null) throw conflict(TransferConflictException.Code.PARTICIPANT_MAPPING_MISMATCH);
+            resolvedMap.put(participant.participant().id(), targetParticipant.participant().id());
+        }
+        if (resolvedMap.values().stream().anyMatch(DocumentTransferService::blank)
+                || new HashSet<>(resolvedMap.values()).size() != resolvedMap.size()
+                || !resolvedMap.equals(transfer.participantIdMap())) {
+            throw conflict(TransferConflictException.Code.PARTICIPANT_MAPPING_MISMATCH);
+        }
     }
 
     private Map<String, TransferRecord> validateTargetParticipants(TransferManifest manifest) {
