@@ -30,6 +30,8 @@ public final class NotionPageHierarchyAdapter implements ParticipantCreationProv
     public static final String API_VERSION = "2026-03-11";
     private static final String API_BASE_URL = "https://api.notion.com";
     private static final String CHILDREN_PATH = "/v1/blocks/{block_id}/children";
+    private static final java.util.regex.Pattern BOOTSTRAP_SENTINEL = java.util.regex.Pattern.compile(
+            "meeting-automation/bootstrap/[A-Za-z0-9_.-]+/(MEETINGS|PARTICIPANTS)");
     private static final JsonMapper JSON_MAPPER = JsonMapper.builder().build();
 
     private final RestClient restClient;
@@ -81,12 +83,23 @@ public final class NotionPageHierarchyAdapter implements ParticipantCreationProv
         return blocks;
     }
     private List<String> transferChildren(String root) {
-        List<String> children = new ArrayList<>();
+        List<String> children = new ArrayList<>(); boolean bootstrapSentinelSeen = false;
         for (JsonNode b : transferBlocks(root)) {
-            if (!"child_page".equals(transferText(b.get("type"))) || !b.path("child_page").isObject()) throw transferInvalid();
-            transferText(b.path("child_page").get("title")); children.add(transferText(b.get("id")));
+            String type = transferText(b.get("type"));
+            if ("child_page".equals(type) && b.path("child_page").isObject()) {
+                transferText(b.path("child_page").get("title")); children.add(transferText(b.get("id")));
+            } else if ("paragraph".equals(type) && isBootstrapSentinel(b)) {
+                if (bootstrapSentinelSeen) throw transferInvalid();
+                bootstrapSentinelSeen = true;
+            } else throw transferInvalid();
         }
         return children;
+    }
+    private static boolean isBootstrapSentinel(JsonNode block) {
+        JsonNode richText = block.path("paragraph").get("rich_text");
+        if (richText == null || !richText.isArray()) throw transferInvalid();
+        String content = transferRichText(richText);
+        return BOOTSTRAP_SENTINEL.matcher(content).matches();
     }
     private TransferRecord readTransferPage(String id, TransferPageCodec mapper) {
         JsonNode page = transferRequest("/v1/pages/" + encodeId(id), null);

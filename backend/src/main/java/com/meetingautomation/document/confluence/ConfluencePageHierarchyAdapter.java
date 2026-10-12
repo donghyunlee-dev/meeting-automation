@@ -34,6 +34,8 @@ import org.springframework.web.client.RestClientException;
 /** Confluence Cloud implementation of the document hierarchy and health slice. */
 public final class ConfluencePageHierarchyAdapter implements ParticipantCreationProvider, ParticipantUpdatingProvider, DocumentTransferPort {
     private static final int PAGE_LIMIT = 100;
+    private static final String TRANSFER_PARTICIPANT_TITLE_PREFIX = "Participant: ";
+    private static final TransferCodec TRANSFER_CODEC = new TransferCodec();
     private static final String DIRECT_CHILDREN_PATH = "/wiki/api/v2/pages/{id}/direct-children";
     private static final Pattern NEXT_LINK = Pattern.compile("<([^>]+)>\\s*;\\s*rel\\s*=\\s*\"?next\"?",
             Pattern.CASE_INSENSITIVE);
@@ -79,7 +81,14 @@ public final class ConfluencePageHierarchyAdapter implements ParticipantCreation
         JsonNode page = parseBody(get(baseUri.resolve("/wiki/api/v2/pages/" + encodePathSegment(id) + "?body-format=storage")));
         if (!id.equals(transferText(page.get("id")))) throw transferInvalid();
         JsonNode version = page.path("version").path("number"); if (!version.isIntegralNumber() || version.longValue() <= 0) throw transferInvalid();
-        return mapper.decode(id, version.asString(), baseUri.resolve("/wiki/pages/" + id).toASCIIString(), transferText(page.get("title")), storageBlocks(transferText(page.path("body").path("storage").get("value"))));
+        List<TransferPageCodec.Block> blocks = storageBlocks(transferText(page.path("body").path("storage").get("value")));
+        String title = transferText(page.get("title"));
+        List<String> markers = blocks.stream().filter(block -> block.type().equals("code")).map(TransferPageCodec.Block::text).toList();
+        TransferMarker marker = TRANSFER_CODEC.parseMarker(markers);
+        if (marker.recordType().equals("participant") && title.startsWith(TRANSFER_PARTICIPANT_TITLE_PREFIX)) {
+            title = title.substring(TRANSFER_PARTICIPANT_TITLE_PREFIX.length());
+        }
+        return mapper.decode(id, version.asString(), baseUri.resolve("/wiki/pages/" + id).toASCIIString(), title, blocks);
     }
     private String createTransferPage(String parent, TransferRecord record, TransferPageCodec mapper) {
         JsonNode root = parseBody(get(baseUri.resolve("/wiki/api/v2/pages/" + encodePathSegment(parent) + "?body-format=storage")));
@@ -91,7 +100,8 @@ public final class ConfluencePageHierarchyAdapter implements ParticipantCreation
             if (tag.equals("li")) storage.append("</ul>");
         }
         try {
-            String payload = JSON_MAPPER.writeValueAsString(Map.of("spaceId", space, "status", "current", "title", record.title(), "parentId", parent,
+            String title = record.participant() == null ? record.title() : TRANSFER_PARTICIPANT_TITLE_PREFIX + record.participant().name();
+            String payload = JSON_MAPPER.writeValueAsString(Map.of("spaceId", space, "status", "current", "title", title, "parentId", parent,
                     "body", Map.of("representation", "storage", "value", storage.toString())));
             String response = restClient.post().uri(baseUri.resolve("/wiki/api/v2/pages")).headers(headers -> {
                 headers.setBasicAuth(accountEmail, authToken, StandardCharsets.UTF_8); headers.setContentType(org.springframework.http.MediaType.APPLICATION_JSON);
@@ -118,6 +128,13 @@ public final class ConfluencePageHierarchyAdapter implements ParticipantCreation
             if (node.getNodeType() == org.w3c.dom.Node.TEXT_NODE && node.getTextContent().isBlank()) continue;
             String type = switch (node.getNodeName()) { case "h2" -> "heading_2"; case "p" -> "paragraph"; case "li" -> "bulleted_list_item"; case "pre" -> "code"; default -> null; };
             if (node.getNodeName().equals("ul")) { storageBlocks(node, blocks); continue; }
+            if (node.getNodeName().equals("p") && node instanceof org.w3c.dom.Element paragraph) {
+                var inlineCode = paragraph.getElementsByTagName("code");
+                if (inlineCode.getLength() == 1 && paragraph.getTextContent().equals(inlineCode.item(0).getTextContent())) {
+                    blocks.add(new TransferPageCodec.Block("code", inlineCode.item(0).getTextContent()));
+                    continue;
+                }
+            }
             if (node.getNodeName().equals("ac:structured-macro") && node instanceof org.w3c.dom.Element e && "code".equals(e.getAttribute("ac:name"))) {
                 var bodies = e.getElementsByTagName("ac:plain-text-body"); if (bodies.getLength() != 1) throw transferInvalid(); blocks.add(new TransferPageCodec.Block("code", bodies.item(0).getTextContent())); continue;
             }

@@ -217,15 +217,19 @@ public final class DocumentTransferService {
             Map<String, TransferRecord> targetParticipantsByKey, String sourceFingerprint) {
         var transfer = meeting.marker().transfer();
         if (transfer == null) throw conflict(TransferConflictException.Code.UNMARKED_COLLISION);
-        Map<String, String> resolvedMap = new LinkedHashMap<>();
+        TransferRecord sourceMeeting = source.meetings().stream()
+                .filter(candidate -> candidate.sourceDocumentId().equals(transfer.sourceDocumentId()))
+                .findFirst().orElseThrow(() -> conflict(TransferConflictException.Code.PARTICIPANT_MAPPING_MISMATCH));
+        Map<String, String> currentMap = new LinkedHashMap<>();
         for (TransferRecord participant : source.participants()) {
             TransferRecord targetParticipant = targetParticipantsByKey.get(sourceKey(sourceFingerprint, participant.sourceDocumentId()));
             if (targetParticipant == null) throw conflict(TransferConflictException.Code.PARTICIPANT_MAPPING_MISMATCH);
-            resolvedMap.put(participant.participant().id(), targetParticipant.participant().id());
+            currentMap.put(participant.participant().id(), targetParticipant.participant().id());
         }
-        if (resolvedMap.values().stream().anyMatch(DocumentTransferService::blank)
-                || new HashSet<>(resolvedMap.values()).size() != resolvedMap.size()
-                || !resolvedMap.equals(transfer.participantIdMap())) {
+        Map<String, String> expectedMap = expectedParticipantMapping(sourceMeeting, currentMap);
+        if (expectedMap.values().stream().anyMatch(DocumentTransferService::blank)
+                || new HashSet<>(expectedMap.values()).size() != expectedMap.size()
+                || !expectedMap.equals(transfer.participantIdMap())) {
             throw conflict(TransferConflictException.Code.PARTICIPANT_MAPPING_MISMATCH);
         }
     }
@@ -298,8 +302,22 @@ public final class DocumentTransferService {
             if (transfer == null || !sourceFingerprint.equals(transfer.sourceConnectionFingerprint())
                     || !expected.sourceDocumentId().equals(transfer.sourceDocumentId())
                     || !safeDigest(expected).equals(transfer.canonicalDigest())
-                    || !idMap.equals(transfer.participantIdMap())) throw conflict(TransferConflictException.Code.RECONCILIATION_REQUIRED);
+                    || !expectedParticipantMapping(expected, idMap).equals(transfer.participantIdMap())) {
+                throw conflict(TransferConflictException.Code.RECONCILIATION_REQUIRED);
+            }
         }
+    }
+
+    private Map<String, String> expectedParticipantMapping(TransferRecord meeting, Map<String, String> currentMap) {
+        var previousTransfer = meeting.marker().transfer();
+        if (previousTransfer == null || previousTransfer.participantIdMap().isEmpty()) return currentMap;
+        Map<String, String> composed = new LinkedHashMap<>();
+        previousTransfer.participantIdMap().forEach((canonicalId, sourceId) -> {
+            String targetId = currentMap.get(sourceId);
+            if (blank(targetId)) throw conflict(TransferConflictException.Code.PARTICIPANT_MAPPING_MISMATCH);
+            composed.put(canonicalId, targetId);
+        });
+        return Map.copyOf(composed);
     }
 
     private void verifySourceUnchanged(DocumentTransferPort source, SourceSnapshot snapshot, String fingerprint) {

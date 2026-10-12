@@ -6,6 +6,7 @@ import com.meetingautomation.document.transfer.*;
 import java.nio.charset.StandardCharsets;
 import java.time.OffsetDateTime;
 import java.util.*;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.http.MediaType;
@@ -40,6 +41,17 @@ class DocumentTransferAdapterTests {
             assertThrows(TransferCodec.ValidationException.class, f.port::readManifest, defect);
             f.server.verify();
         }
+    }
+
+    @Test
+    void notionManifestIgnoresBootstrapSentinelsInMeetingAndParticipantContainers() {
+        Fixture f = new Fixture(true, 0, "bootstrap-marker");
+
+        TransferManifest manifest = f.port.readManifest();
+
+        assertTrue(manifest.participants().isEmpty());
+        assertTrue(manifest.meetings().isEmpty());
+        f.server.verify();
     }
 
     @ParameterizedTest @ValueSource(booleans = {true, false})
@@ -78,6 +90,71 @@ class DocumentTransferAdapterTests {
         assertEquals(participant.id(), read.marker().speakers().getFirst().participantId());
         assertEquals(List.of(participant.id()), read.marker().participantIds());
         assertEquals(CODEC.canonicalDigest(source), CODEC.canonicalDigest(read));
+        f.server.verify();
+    }
+
+    @Test
+    void confluenceTransferUsesDistinctPageTitlesWhenParticipantAndMeetingNamesMatch() {
+        Fixture f = new Fixture(false, 0, null);
+        String fingerprint = CODEC.connectionFingerprint("notion", "source-root");
+        Participant imported = f.port.importParticipant(participant("same-name-participant"), fingerprint);
+        TransferRecord source = meeting("same-name-meeting", List.of(), null);
+        source = new TransferRecord(source.sourceDocumentId(), source.sourceRevision(), source.documentUrl(), source.marker(),
+                imported.name(), source.minutes(), source.transcript(), source.participants(), null);
+
+        MeetingDocumentRef meeting = f.port.importMeeting(source, Map.of(), fingerprint);
+
+        List<String> titles = f.saved.values().stream().map(JSON::readTree).map(data -> data.path("title").asString()).toList();
+        assertEquals(2, titles.size());
+        assertEquals(2, titles.stream().distinct().count());
+        assertEquals(imported.name(), f.port.readManifest().participants().getFirst().participant().name());
+        assertEquals(imported.name(), f.port.exportMeeting(meeting.documentId()).title());
+        f.server.verify();
+    }
+
+    @Test
+    void confluenceReadBackRecognizesProviderNormalizedInlineCodeMarker() {
+        Fixture f = new Fixture(false, 0, "inline-code-marker");
+        String fingerprint = CODEC.connectionFingerprint("notion", "source-root");
+        TransferRecord source = meeting("inline-code", List.of(), null);
+
+        MeetingDocumentRef created = f.port.importMeeting(source, Map.of(), fingerprint);
+        TransferRecord actual = f.port.exportMeeting(created.documentId());
+
+        assertEquals(source.title(), actual.title());
+        assertEquals(CODEC.canonicalDigest(source), CODEC.canonicalDigest(actual));
+        assertEquals(CODEC.transferKey(fingerprint, source.sourceDocumentId()), actual.marker().transfer().transferKey());
+        f.server.verify();
+    }
+
+    @Test
+    void transferComposesEarlierParticipantIdsIntoNewProviderMarker() {
+        Fixture f = new Fixture(false, 0, null);
+        String originalFingerprint = CODEC.connectionFingerprint("notion", "original-root");
+        String nextFingerprint = CODEC.connectionFingerprint("notion", "source-root");
+        Participant targetParticipant = f.port.importParticipant(participant("local-person"), originalFingerprint);
+        TransferRecord base = meeting("local-meeting", List.of("local-person"), null);
+        TransferMarker.Transfer pendingTransfer = new TransferMarker.Transfer(
+                CODEC.transferKey(originalFingerprint, "origin-meeting"), originalFingerprint, "origin-meeting", "r1",
+                "sha256:" + "0".repeat(64), Map.of("canonical-person", "local-person"));
+        TransferMarker marker = new TransferMarker(base.marker().format(), base.marker().recordType(), base.marker().schemaVersion(),
+                base.marker().externalSessionId(), base.marker().meetingAt(), base.marker().templateId(), base.marker().participantIds(),
+                base.marker().speakers(), base.marker().failure(), null, pendingTransfer);
+        TransferRecord pending = new TransferRecord(base.sourceDocumentId(), base.sourceRevision(), base.documentUrl(), marker,
+                base.title(), base.minutes(), base.transcript(), base.participants(), null);
+        String digest = CODEC.canonicalDigest(pending);
+        TransferMarker.Transfer originalTransfer = new TransferMarker.Transfer(pendingTransfer.transferKey(), originalFingerprint,
+                "origin-meeting", "r1", digest, pendingTransfer.participantIdMap());
+        TransferRecord source = new TransferRecord(pending.sourceDocumentId(), pending.sourceRevision(), pending.documentUrl(),
+                new TransferMarker(marker.format(), marker.recordType(), marker.schemaVersion(), marker.externalSessionId(),
+                        marker.meetingAt(), marker.templateId(), marker.participantIds(), marker.speakers(), marker.failure(), null,
+                        originalTransfer), pending.title(), pending.minutes(), pending.transcript(), pending.participants(), null);
+
+        MeetingDocumentRef copied = f.port.importMeeting(source, Map.of("local-person", targetParticipant.id()), nextFingerprint);
+        TransferRecord actual = f.port.exportMeeting(copied.documentId());
+
+        assertEquals(Map.of("canonical-person", targetParticipant.id()), actual.marker().transfer().participantIdMap());
+        assertEquals(digest, CODEC.canonicalDigest(actual));
         f.server.verify();
     }
 
@@ -274,6 +351,9 @@ class DocumentTransferAdapterTests {
                             String kind = id.equals("2") ? "meetings" : "participants"; requested.add(kind + ":" + start);
                             List<Object> children = new ArrayList<>();
                             for (int i = start; i < Math.min(start + 100, count); i++) children.add(child(Integer.toString((id.equals("2") ? 2000 : 1000) + i), id.equals("2") ? "Synthetic meeting" : "Ada"));
+                            if (notion && start == 0 && "bootstrap-marker".equals(defect)) {
+                                children.add(block("paragraph", "meeting-automation/bootstrap/qa_operation/" + (id.equals("2") ? "MEETINGS" : "PARTICIPANTS")));
+                            }
                             if ("duplicate-page".equals(defect) && start == 100) children.add(child("1000", "Ada"));
                             if (start == 0) for (var entry : saved.entrySet()) {
                                 var data = JSON.readTree(entry.getValue());
@@ -342,7 +422,10 @@ class DocumentTransferAdapterTests {
             if (saved.containsKey(id)) {
                 var data = JSON.readTree(saved.get(id));
                 title = notion ? data.path("properties").path("title").path("title").get(0).path("text").path("content").asString() : data.path("title").asString();
-                if (!notion) storage = data.path("body").path("value").asString();
+                if (!notion) {
+                    storage = data.path("body").path("value").asString();
+                    if ("inline-code-marker".equals(defect)) storage = storage.replace("<pre>", "<p><code>").replace("</pre>", "</code></p>");
+                }
                 if ("readback".equals(defect)) title = "Changed after create";
             } else storage += "fragments".equals(defect) ? "<ac:structured-macro ac:name=\"code\"><ac:plain-text-body><![CDATA[" + marker(id) + "]]></ac:plain-text-body></ac:structured-macro>"
                     : "<pre>" + marker(id).replace("&", "&amp;").replace("<", "&lt;") + "</pre>";

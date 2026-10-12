@@ -11,6 +11,7 @@ class DocumentTransferServiceTests {
     private static final TransferCodec CODEC = new TransferCodec();
     private static final String SOURCE_FP = "sha256:" + "1".repeat(64);
     private static final String TARGET_FP = "sha256:" + "2".repeat(64);
+    private static final String THIRD_FP = "sha256:" + "3".repeat(64);
 
     @Test void transferImportsParticipantsFirstAndRewritesEveryMeetingReference() {
         var source = sourceWithOneParticipantAndMeeting();
@@ -119,6 +120,30 @@ class DocumentTransferServiceTests {
         assertEquals(0, result.meetingsCopied());
         assertTrue(target.writes.isEmpty());
         assertEquals(Map.of("source-person", "target-person"), result.participantIdMap());
+    }
+
+    @Test void transferComposesParticipantMappingsAcrossMultipleProviderHopsAndReusesTheCopy() {
+        var original = sourceWithOneParticipantAndMeeting();
+        var intermediate = new StatefulPort(TARGET_FP, "intermediate");
+        intermediate.addParticipant(importedParticipant(original.participants.get("source-person"), SOURCE_FP,
+                "intermediate-person", TARGET_FP));
+        intermediate.addMeeting(intermediate.remap(original.meetings.get("source-meeting"),
+                Map.of("source-person", "intermediate-person"), SOURCE_FP, "intermediate-meeting"));
+        var target = new StatefulPort(THIRD_FP, "target");
+
+        TransferResult copied = new DocumentTransferService().transfer(intermediate, target);
+        assertEquals(CODEC.transferKey(TARGET_FP, "intermediate-person"),
+                target.participants.get("target-person").marker().transfer().transferKey());
+        assertEquals(Map.of("source-person", "intermediate-person"),
+                intermediate.meetings.get("intermediate-meeting").marker().transfer().participantIdMap());
+        TransferResult replay = new DocumentTransferService().transfer(intermediate, target);
+
+        assertEquals(1, copied.meetingsCopied());
+        assertEquals(1, replay.meetingsReused());
+        assertEquals(Map.of("source-person", "target-person"),
+                target.meetings.get("target-meeting").marker().transfer().participantIdMap());
+        assertEquals(CODEC.canonicalDigest(original.meetings.get("source-meeting")),
+                CODEC.canonicalDigest(target.meetings.get("target-meeting")));
     }
 
     @Test void transferRejectsReusableMeetingWithStaleParticipantMapBeforeWritingParticipants() {
@@ -381,8 +406,13 @@ class DocumentTransferServiceTests {
         TransferRecord remap(TransferRecord r, Map<String,String> map, String sourceFingerprint, String targetId) {
             var mapper = (java.util.function.Function<String,String>) id -> id == null ? null : map.get(id);
             String digest = CODEC.canonicalDigest(r);
+            Map<String, String> canonicalMap = new LinkedHashMap<>();
+            if (r.marker().transfer() != null && !r.marker().transfer().participantIdMap().isEmpty()) {
+                r.marker().transfer().participantIdMap().forEach((canonicalId, sourceId) ->
+                        canonicalMap.put(canonicalId, map.get(sourceId)));
+            } else canonicalMap.putAll(map);
             var transfer = new TransferMarker.Transfer(CODEC.transferKey(sourceFingerprint, r.sourceDocumentId()), sourceFingerprint,
-                    r.sourceDocumentId(), r.sourceRevision(), digest, map);
+                    r.sourceDocumentId(), r.sourceRevision(), digest, canonicalMap);
             var m = r.marker();
             var marker = new TransferMarker(m.format(), m.recordType(), m.schemaVersion(), m.externalSessionId(), m.meetingAt(), m.templateId(),
                     m.participantIds().stream().map(mapper).toList(), m.speakers().stream().map(s -> new TransferMarker.Speaker(s.speakerId(), s.label(), mapper.apply(s.participantId()))).toList(),

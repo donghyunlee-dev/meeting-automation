@@ -69,7 +69,15 @@ public abstract class ProviderTransferSupport implements DocumentTransferPort {
     private TransferRecord target(TransferRecord r, Map<String,String> map, String fingerprint) {
         String digest = codec.canonicalDigest(r); var m = r.marker();
         java.util.function.Function<String,String> mapped = id -> { if (id == null) return null; String value = map.get(id); if (value == null || value.isBlank()) throw new TransferCodec.ValidationException(TransferCodec.Code.BROKEN_REFERENCE); return value; };
-        var transfer = new TransferMarker.Transfer(codec.transferKey(fingerprint, r.sourceDocumentId()), fingerprint, r.sourceDocumentId(), r.sourceRevision(), digest, map);
+        Map<String, String> canonicalParticipantMap = new LinkedHashMap<>();
+        if (m.transfer() != null && !m.transfer().participantIdMap().isEmpty()) {
+            m.transfer().participantIdMap().forEach((canonicalId, sourceId) ->
+                    canonicalParticipantMap.put(canonicalId, mapped.apply(sourceId)));
+        } else {
+            canonicalParticipantMap.putAll(map);
+        }
+        var transfer = new TransferMarker.Transfer(codec.transferKey(fingerprint, r.sourceDocumentId()), fingerprint,
+                r.sourceDocumentId(), r.sourceRevision(), digest, canonicalParticipantMap);
         var marker = new TransferMarker(m.format(), m.recordType(), m.schemaVersion(), m.externalSessionId(), m.meetingAt(), m.templateId(), m.participantIds().stream().map(mapped).toList(),
                 m.speakers().stream().map(s -> new TransferMarker.Speaker(s.speakerId(), s.label(), mapped.apply(s.participantId()))).toList(), m.failure(), r.participant() == null ? null : digest, transfer);
         StructuredMinutes minutes = r.minutes();
