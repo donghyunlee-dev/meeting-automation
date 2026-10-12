@@ -78,6 +78,26 @@ class DocumentSwitchUseCaseTests {
     }
 
     @Test
+    void startingANewSwitchPurgesTerminalOperationHistoryOlderThanThirtyDays() {
+        var fixture = new Fixture();
+        var expired = new GlobalDocumentSettings.Operation("expired-operation", "SWITCH", "SUCCEEDED",
+                "old-draft", 1, "ACTIVATE", Map.of(), null, false,
+                Instant.parse("2026-09-11T23:59:59Z"));
+        fixture.store.transaction(current -> new GlobalSettingsStore.Change<>(new GlobalDocumentSettings(1,
+                current.version(), current.active(), current.draft(), current.operation(),
+                current.idempotencyRecords(), Map.of(expired.operationId(), expired)), null));
+
+        assertThatThrownBy(() -> fixture.useCase.operation("expired-operation"))
+                .isInstanceOf(SettingsException.class)
+                .extracting("code").isEqualTo("DOCUMENT_OPERATION_NOT_FOUND");
+
+        fixture.useCase.start(10, "switch-after-history-expiry", new DocumentSwitchUseCase.Request(
+                "draft-target", 1, "START_EMPTY", true));
+
+        assertThat(fixture.store.read().operationHistory()).doesNotContainKey("expired-operation");
+    }
+
+    @Test
     void cancellingQueuedSwitchKeepsOriginalConnectionAndPreventsWorkerActivation() {
         var fixture = new Fixture();
         var accepted = fixture.useCase.start(10, "switch-empty", new DocumentSwitchUseCase.Request(
