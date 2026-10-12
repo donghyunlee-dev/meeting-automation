@@ -73,11 +73,11 @@ class ConfluencePageHierarchyAdapterTests extends com.meetingautomation.document
             method(HttpMethod.POST).match(request);
             header(HttpHeaders.AUTHORIZATION, AUTHORIZATION).match(request);
             header(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE).match(request);
-            org.springframework.test.web.client.match.MockRestRequestMatchers.content().json("""
+            org.springframework.test.web.client.match.MockRestRequestMatchers.content().json(markedJson("""
                     {"spaceId":"SPACE-KEY","status":"current","title":"Ada Lovelace",
                      "parentId":"888","body":{"representation":"storage",
                      "value":"<p>Email: ada&amp;co@example.test</p>"}}
-                    """).match(request);
+                    """, "Ada Lovelace", "ada&co@example.test", true)).match(request);
         }).andRespond(jsonSuccess("{\"id\":98765}"));
         client.server().expect(confluenceRequest(BASE_URL
                         + "/wiki/api/v2/pages/888/direct-children?limit=100"))
@@ -116,13 +116,15 @@ class ConfluencePageHierarchyAdapterTests extends com.meetingautomation.document
     }
 
     @Test
-    void updatesConfluenceTitleOnlyWithoutRewritingPageBody() {
+    void updatesConfluenceTitleAndMarkerInOneVersionedWrite() {
         TestClient client = client(BASE_URL, EMAIL, TOKEN, ROOT_ID);
+        client.server().expect(confluenceRequest(BASE_URL + "/wiki/api/v2/pages/888?body-format=storage"))
+                .andRespond(jsonSuccess(participantPage("Ada Lovelace", "ada@example.test")));
         client.server().expect(request -> {
-            requestTo(BASE_URL + "/wiki/api/v2/pages/888/title").match(request);
+            requestTo(BASE_URL + "/wiki/api/v2/pages/888").match(request);
             method(HttpMethod.PUT).match(request);
             org.springframework.test.web.client.match.MockRestRequestMatchers.content().json(
-                    "{\"status\":\"current\",\"title\":\"Grace Hopper\"}").match(request);
+                    markedJson("{\"status\":\"current\",\"title\":\"Grace Hopper\",\"version\":{\"number\":5},\"body\":{\"value\":\"<p>Email: ada@example.test</p>\"}}", "Grace Hopper", "ada@example.test", true)).match(request);
         }).andRespond(jsonSuccess("{}"));
 
         assertEquals(new Participant("888", "Grace Hopper", "ada@example.test"),
@@ -141,8 +143,8 @@ class ConfluencePageHierarchyAdapterTests extends com.meetingautomation.document
         client.server().expect(confluenceRequest(pageUri)).andRespond(jsonSuccess(
                 "{\"body\":{\"storage\":{\"value\":\"<p>Email: ada@example.test</p>\"}}}"));
         client.server().expect(request -> {
-            requestTo(BASE_URL + "/wiki/api/v2/pages/888/title").match(request);
-            method(HttpMethod.PUT).match(request);
+            requestTo(BASE_URL + "/wiki/api/v2/pages/888?body-format=storage").match(request);
+            method(HttpMethod.GET).match(request);
         }).andRespond(withStatus(HttpStatusCode.valueOf(404)).contentType(MediaType.APPLICATION_JSON)
                 .body("{\"message\":\"confluence-page-secret-marker\"}"));
 
@@ -165,20 +167,20 @@ class ConfluencePageHierarchyAdapterTests extends com.meetingautomation.document
     void updatesConfluenceEmailWithVersionIncrementAndPreservesOtherStorageContent() {
         TestClient client = client(BASE_URL, EMAIL, TOKEN, ROOT_ID);
         String pageUri = BASE_URL + "/wiki/api/v2/pages/888?body-format=storage";
-        client.server().expect(confluenceRequest(pageUri)).andRespond(jsonSuccess("""
+        client.server().expect(confluenceRequest(pageUri)).andRespond(jsonSuccess(markedJson("""
                 {"id":"888","status":"current","title":"Ada Lovelace","spaceId":"SPACE-KEY",
                  "parentId":"777","version":{"number":4},"body":{"storage":{"value":
                  "<p>Role: Engineer</p><p>Email: old@example.test</p><p>Keep this section</p>"}}}
-                """));
+                """, "Ada Lovelace", "old@example.test", false)));
         client.server().expect(request -> {
             requestTo(BASE_URL + "/wiki/api/v2/pages/888").match(request);
             method(HttpMethod.PUT).match(request);
-            org.springframework.test.web.client.match.MockRestRequestMatchers.content().json("""
+            org.springframework.test.web.client.match.MockRestRequestMatchers.content().json(markedJson("""
                     {"id":"888","status":"current","title":"Ada Lovelace","spaceId":"SPACE-KEY",
                      "parentId":"777","body":{"representation":"storage","value":
                      "<p>Role: Engineer</p><p>Email: new&amp;co@example.test</p><p>Keep this section</p>"},
                      "version":{"number":5}}
-                    """).match(request);
+                    """, "Ada Lovelace", "new&co@example.test", true)).match(request);
         }).andRespond(jsonSuccess("{}"));
 
         assertEquals(new Participant("888", "Ada Lovelace", "new&co@example.test"),
@@ -191,19 +193,19 @@ class ConfluencePageHierarchyAdapterTests extends com.meetingautomation.document
     void updatesBothConfluenceFieldsInOneVersionedPageMutation() {
         TestClient client = client(BASE_URL, EMAIL, TOKEN, ROOT_ID);
         String pageUri = BASE_URL + "/wiki/api/v2/pages/888?body-format=storage";
-        client.server().expect(confluenceRequest(pageUri)).andRespond(jsonSuccess("""
+        client.server().expect(confluenceRequest(pageUri)).andRespond(jsonSuccess(markedJson("""
                 {"id":"888","status":"current","title":"Ada Lovelace","spaceId":"SPACE-KEY",
                  "parentId":"777","version":{"number":8},"body":{"storage":{"value":
                  "<p>Email: old@example.test</p><p>Keep this section</p>"}}}
-                """));
+                """, "Ada Lovelace", "old@example.test", false)));
         client.server().expect(request -> {
             requestTo(BASE_URL + "/wiki/api/v2/pages/888").match(request);
             method(HttpMethod.PUT).match(request);
-            org.springframework.test.web.client.match.MockRestRequestMatchers.content().json("""
+            org.springframework.test.web.client.match.MockRestRequestMatchers.content().json(markedJson("""
                     {"id":"888","status":"current","title":"Grace Hopper","spaceId":"SPACE-KEY",
                      "parentId":"777","body":{"representation":"storage","value":
                      "<p>Email: new@example.test</p><p>Keep this section</p>"},"version":{"number":9}}
-                    """).match(request);
+                    """, "Grace Hopper", "new@example.test", true)).match(request);
         }).andRespond(jsonSuccess("{}"));
 
         assertEquals(new Participant("888", "Grace Hopper", "new@example.test"),
@@ -233,8 +235,10 @@ class ConfluencePageHierarchyAdapterTests extends com.meetingautomation.document
     @Test
     void confluenceMutationFailureIsSafeAndNeverMarkedRetryable() {
         TestClient client = client(BASE_URL, EMAIL, TOKEN, ROOT_ID);
+        client.server().expect(confluenceRequest(BASE_URL + "/wiki/api/v2/pages/888?body-format=storage"))
+                .andRespond(jsonSuccess(participantPage("Ada Lovelace", "ada@example.test")));
         client.server().expect(request -> {
-            requestTo(BASE_URL + "/wiki/api/v2/pages/888/title").match(request);
+            requestTo(BASE_URL + "/wiki/api/v2/pages/888").match(request);
             method(HttpMethod.PUT).match(request);
         }).andRespond(withStatus(HttpStatusCode.valueOf(503)).contentType(MediaType.APPLICATION_JSON)
                 .body("{\"message\":\"provider-secret-marker\"}"));
@@ -249,6 +253,25 @@ class ConfluencePageHierarchyAdapterTests extends com.meetingautomation.document
         assertFalse(failure.getMessage().contains("provider-secret-marker"));
         assertEquals(null, failure.getCause());
         client.server().verify();
+    }
+
+    private static String participantPage(String name, String email) {
+        var mapper = tools.jackson.databind.json.JsonMapper.builder().build();
+        return markedJson(mapper.writeValueAsString(java.util.Map.of("id", "888", "status", "current", "title", name, "spaceId", "SPACE-KEY", "parentId", "777", "version", java.util.Map.of("number", 4),
+                "body", java.util.Map.of("storage", java.util.Map.of("value", "<p>Email: " + email + "</p>")))), name, email, false);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static String markedJson(String json, String name, String email, boolean write) {
+        var mapper = tools.jackson.databind.json.JsonMapper.builder().build();
+        java.util.Map<String,Object> data = mapper.readValue(json, java.util.Map.class);
+        java.util.Map<String,Object> body = (java.util.Map<String,Object>) data.get("body");
+        java.util.Map<String,Object> storage = write ? body : (java.util.Map<String,Object>) body.get("storage");
+        var codec = new com.meetingautomation.document.transfer.TransferCodec();
+        String marker = codec.encodeMarker(com.meetingautomation.document.transfer.ParticipantTransferMarkers.refreshed(new Participant("888", name, email), null));
+        marker = marker.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;").replace("'", "&#39;");
+        storage.put("value", storage.get("value") + "<pre>" + marker + "</pre>");
+        return mapper.writeValueAsString(data);
     }
 
     @Test
