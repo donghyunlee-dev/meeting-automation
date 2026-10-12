@@ -45,9 +45,7 @@ class NotionPageHierarchyAdapterTests extends com.meetingautomation.document.Doc
                         "Notion-Version", NotionPageHierarchyAdapter.API_VERSION))
                 .andExpect(content().json("""
                         {"parent":{"page_id":"participants-page"},
-                         "properties":{"title":{"title":[{"text":{"content":"Ada Lovelace"}}]}},
-                         "children":[{"object":"block","type":"paragraph","paragraph":{"rich_text":[
-                           {"type":"text","text":{"content":"Email: ada@example.test"}}]}}]}
+                         "properties":{"title":{"title":[{"text":{"content":"Ada Lovelace"}}]}}}
                         """))
                 .andRespond(jsonSuccess("{\"id\":\"new-notion-page\"}"));
 
@@ -61,14 +59,14 @@ class NotionPageHierarchyAdapterTests extends com.meetingautomation.document.Doc
     void updatesOnlyRequestedNotionParticipantFieldsAndPreservesOtherBlockText() {
         TestClient client = client(TOKEN, ROOT_ID);
         String childrenUrl = "https://api.notion.com/v1/blocks/person-page/children";
-        client.server().expect(notionRequest(childrenUrl)).andRespond(jsonSuccess(
+        client.server().expect(notionRequest(childrenUrl)).andRespond(jsonSuccess(withMarker(
                 "{\"has_more\":false,\"next_cursor\":null,\"results\":["
                         + "{\"id\":\"email-block\",\"type\":\"paragraph\",\"paragraph\":{"
                         + "\"rich_text\":["
                         + "{\"type\":\"text\",\"text\":{\"content\":\"Email: old@\"},"
                         + "\"annotations\":{\"bold\":true}},"
                         + "{\"type\":\"text\",\"text\":{\"content\":\"example.test\\nRole: Engineer\"},"
-                        + "\"annotations\":{\"italic\":true}}]}}]}"));
+                        + "\"annotations\":{\"italic\":true}}]}}]}", "Ada Lovelace", "old@example.test")));
         client.server().expect(requestTo("https://api.notion.com/v1/blocks/email-block"))
                 .andExpect(method(HttpMethod.PATCH))
                 .andExpect(content().json("""
@@ -79,6 +77,7 @@ class NotionPageHierarchyAdapterTests extends com.meetingautomation.document.Doc
                         ]}}
                         """))
                 .andRespond(jsonSuccess("{\"id\":\"email-block\"}"));
+        expectMarkerWrite(client, "Ada Lovelace", "new@example.test");
 
         assertEquals(new Participant("person-page", "Ada Lovelace", "new@example.test"),
                 client.adapter().updateParticipant("person-page", new ParticipantUpdateCommand(
@@ -87,14 +86,17 @@ class NotionPageHierarchyAdapterTests extends com.meetingautomation.document.Doc
     }
 
     @Test
-    void updatesNotionTitleWithoutRewritingParticipantBody() {
+    void updatesNotionTitleAndRefreshesMarkerWithoutRewritingEmailBody() {
         TestClient client = client(TOKEN, ROOT_ID);
+        client.server().expect(notionRequest("https://api.notion.com/v1/blocks/person-page/children"))
+                .andRespond(jsonSuccess(withMarker("{\"has_more\":false,\"next_cursor\":null,\"results\":[]}", "Ada Lovelace", "ada@example.test")));
         client.server().expect(requestTo("https://api.notion.com/v1/pages/person-page"))
                 .andExpect(method(HttpMethod.PATCH))
                 .andExpect(content().json("""
                         {"properties":{"title":{"title":[{"text":{"content":"Grace Hopper"}}]}}}
                         """))
                 .andRespond(jsonSuccess("{\"id\":\"person-page\"}"));
+        expectMarkerWrite(client, "Grace Hopper", "ada@example.test");
 
         assertEquals(new Participant("person-page", "Grace Hopper", "ada@example.test"),
                 client.adapter().updateParticipant("person-page", new ParticipantUpdateCommand(
@@ -105,8 +107,8 @@ class NotionPageHierarchyAdapterTests extends com.meetingautomation.document.Doc
     @Test
     void missingNotionTargetOnPageMutationReturnsParticipantNotFound() {
         TestClient client = client(TOKEN, ROOT_ID);
-        client.server().expect(requestTo("https://api.notion.com/v1/pages/person-page"))
-                .andExpect(method(HttpMethod.PATCH))
+        client.server().expect(requestTo("https://api.notion.com/v1/blocks/person-page/children"))
+                .andExpect(method(HttpMethod.GET))
                 .andRespond(withStatus(HttpStatusCode.valueOf(404)).contentType(MediaType.APPLICATION_JSON)
                         .body("{\"message\":\"notion-page-secret-marker\"}"));
 
@@ -121,6 +123,26 @@ class NotionPageHierarchyAdapterTests extends com.meetingautomation.document.Doc
         assertFalse(failure.getMessage().contains("notion-page-secret-marker"));
         assertEquals(null, failure.getCause());
         client.server().verify();
+    }
+
+    private static String withMarker(String json, String name, String email) {
+        var codec = new com.meetingautomation.document.transfer.TransferCodec();
+        var marker = com.meetingautomation.document.transfer.ParticipantTransferMarkers.refreshed(new Participant("person-page", name, email), null);
+        var mapper = tools.jackson.databind.json.JsonMapper.builder().build();
+        String block = mapper.writeValueAsString(java.util.Map.of("id", "marker-block", "type", "code", "code", java.util.Map.of("rich_text", java.util.List.of(java.util.Map.of("plain_text", codec.encodeMarker(marker))))));
+        return json.substring(0, json.length() - 2) + (json.endsWith("[]}") ? "" : ",") + block + "]}";
+    }
+
+    private static void expectMarkerWrite(TestClient client, String name, String email) {
+        client.server().expect(requestTo("https://api.notion.com/v1/blocks/marker-block"))
+                .andExpect(method(HttpMethod.PATCH)).andExpect(request -> {
+                    var mapper = tools.jackson.databind.json.JsonMapper.builder().build();
+                    var body = mapper.readTree(((org.springframework.mock.http.client.MockClientHttpRequest) request).getBodyAsBytes());
+                    var codec = new com.meetingautomation.document.transfer.TransferCodec();
+                    var marker = codec.parseMarker(body.path("code").path("rich_text").valueStream().map(run -> run.path("text").path("content").asString()).toList());
+                    assertEquals("participant", marker.recordType());
+                    assertEquals(com.meetingautomation.document.transfer.ParticipantTransferMarkers.refreshed(new Participant("person-page", name, email), null).canonicalDigest(), marker.canonicalDigest());
+                }).andRespond(jsonSuccess("{}"));
     }
 
     @Test

@@ -81,10 +81,7 @@ class SelectedDocumentProviderApiTests {
                 .andExpect(content().json("""
                         {
                           "parent":{"page_id":"participants-page"},
-                          "properties":{"title":{"title":[{"text":{"content":"Ada Lovelace"}}]}},
-                          "children":[{"object":"block","type":"paragraph","paragraph":{"rich_text":[
-                            {"type":"text","text":{"content":"Email: ada@example.test"}}
-                          ]}}]
+                          "properties":{"title":{"title":[{"text":{"content":"Ada Lovelace"}}]}}
                         }
                         """))
                 .andRespond(jsonSuccess("{\"id\":\"created-participant-id\"}"));
@@ -282,12 +279,15 @@ class SelectedDocumentProviderApiTests {
                 .andRespond(jsonSuccess("{\"has_more\":false,\"next_cursor\":null,\"results\":["
                         + "{\"id\":\"email-block-id\",\"type\":\"paragraph\",\"paragraph\":{"
                         + "\"rich_text\":[{\"plain_text\":\"Email: old@example.test\"}]}}]}"));
+        mockServer.expect(notionRequestTo("https://api.notion.com/v1/blocks/person-page-id/children"))
+                .andRespond(jsonSuccess(participantText("Email: old@example.test")));
         mockServer.expect(requestTo("https://api.notion.com/v1/pages/person-page-id"))
                 .andExpect(method(HttpMethod.PATCH))
                 .andExpect(content().json("""
                         {"properties":{"title":{"title":[{"text":{"content":"New Name"}}]}}}
                         """))
                 .andRespond(jsonSuccess("{\"id\":\"person-page-id\"}"));
+        expectMarkerWrite("New Name", "old@example.test");
 
         mockMvc.perform(patch("/api/v1/participants/person-page-id")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -318,6 +318,7 @@ class SelectedDocumentProviderApiTests {
                         ]}}
                         """))
                 .andRespond(jsonSuccess("{\"id\":\"email-block-id\"}"));
+        expectMarkerWrite("Old Name", "new@example.test");
 
         mockMvc.perform(patch("/api/v1/participants/person-page-id")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -428,6 +429,7 @@ class SelectedDocumentProviderApiTests {
         mockServer.expect(requestTo("https://api.notion.com/v1/pages/person-page-id"))
                 .andExpect(method(HttpMethod.PATCH))
                 .andRespond(jsonSuccess("{\"id\":\"person-page-id\"}"));
+        expectMarkerWrite("New Name", "new@example.test");
 
         mockMvc.perform(patch("/api/v1/participants/person-page-id")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -752,9 +754,26 @@ class SelectedDocumentProviderApiTests {
 
     private static String participantText(String text) {
         String escaped = text.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n");
+        var mapper = tools.jackson.databind.json.JsonMapper.builder().build();
+        var codec = new com.meetingautomation.document.transfer.TransferCodec();
+        String email = text.split("\\R", -1)[0].substring("Email: ".length());
+        var marker = com.meetingautomation.document.transfer.ParticipantTransferMarkers.refreshed(new com.meetingautomation.document.Participant("person-page-id", "Old Name", email), null);
+        String markerBlock = mapper.writeValueAsString(java.util.Map.of("id", "marker-block-id", "type", "code", "code", java.util.Map.of("rich_text", java.util.List.of(java.util.Map.of("plain_text", codec.encodeMarker(marker))))));
         return "{\"has_more\":false,\"next_cursor\":null,\"results\":["
                 + "{\"id\":\"email-block-id\",\"type\":\"paragraph\",\"paragraph\":{"
-                + "\"rich_text\":[{\"plain_text\":\"" + escaped + "\"}]}}]}";
+                + "\"rich_text\":[{\"plain_text\":\"" + escaped + "\"}]}} ," + markerBlock + "]}";
+    }
+
+    private void expectMarkerWrite(String name, String email) {
+        mockServer.expect(requestTo("https://api.notion.com/v1/blocks/marker-block-id"))
+                .andExpect(method(HttpMethod.PATCH)).andExpect(request -> {
+                    var mapper = tools.jackson.databind.json.JsonMapper.builder().build();
+                    var body = mapper.readTree(((org.springframework.mock.http.client.MockClientHttpRequest) request).getBodyAsBytes());
+                    var codec = new com.meetingautomation.document.transfer.TransferCodec();
+                    var marker = codec.parseMarker(body.path("code").path("rich_text").valueStream().map(run -> run.path("text").path("content").asString()).toList());
+                    org.junit.jupiter.api.Assertions.assertEquals("participant", marker.recordType());
+                    org.junit.jupiter.api.Assertions.assertEquals(com.meetingautomation.document.transfer.ParticipantTransferMarkers.refreshed(new com.meetingautomation.document.Participant("person-page-id", name, email), null).canonicalDigest(), marker.canonicalDigest());
+                }).andRespond(jsonSuccess("{}"));
     }
 
     @TestConfiguration(proxyBeanMethods = false)

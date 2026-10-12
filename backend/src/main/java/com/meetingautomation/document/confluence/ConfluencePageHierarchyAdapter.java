@@ -9,6 +9,9 @@ import com.meetingautomation.document.ParticipantCreationProvider;
 import com.meetingautomation.document.ParticipantUpdateCommand;
 import com.meetingautomation.document.ParticipantUpdatingProvider;
 import com.meetingautomation.document.ParticipantPageMapper;
+import com.meetingautomation.document.MeetingDocumentRef;
+import com.meetingautomation.document.transfer.*;
+import java.util.Map;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -29,8 +32,10 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
 /** Confluence Cloud implementation of the document hierarchy and health slice. */
-public final class ConfluencePageHierarchyAdapter implements ParticipantCreationProvider, ParticipantUpdatingProvider {
+public final class ConfluencePageHierarchyAdapter implements ParticipantCreationProvider, ParticipantUpdatingProvider, DocumentTransferPort {
     private static final int PAGE_LIMIT = 100;
+    private static final String TRANSFER_PARTICIPANT_TITLE_PREFIX = "Participant: ";
+    private static final TransferCodec TRANSFER_CODEC = new TransferCodec();
     private static final String DIRECT_CHILDREN_PATH = "/wiki/api/v2/pages/{id}/direct-children";
     private static final Pattern NEXT_LINK = Pattern.compile("<([^>]+)>\\s*;\\s*rel\\s*=\\s*\"?next\"?",
             Pattern.CASE_INSENSITIVE);
@@ -42,6 +47,108 @@ public final class ConfluencePageHierarchyAdapter implements ParticipantCreation
     private final String authToken;
     private final String configuredRootId;
     private final boolean configured;
+
+    private final ProviderTransferSupport transfer = new ProviderTransferSupport() {
+        @Override protected String fingerprint() { return codec.connectionFingerprint("confluence", baseUri.getHost() + "/" + configuredRootId); }
+        @Override protected DocumentStructure structure() { return discoverStructure(configuredRootId); }
+        @Override protected List<String> children(String root) { return transferChildren(root); }
+        @Override protected TransferRecord read(String id) { return readTransferPage(id, pages); }
+        @Override protected String create(String parent, TransferRecord record) { return createTransferPage(parent, record, pages); }
+    };
+    @Override public TransferManifest readManifest() { return transfer.readManifest(); }
+    @Override public TransferRecord exportMeeting(String id) { return transfer.exportMeeting(id); }
+    @Override public Participant importParticipant(TransferRecord r, String fingerprint) { return transfer.importParticipant(r, fingerprint); }
+    @Override public MeetingDocumentRef importMeeting(TransferRecord r, Map<String,String> map, String fingerprint) { return transfer.importMeeting(r, map, fingerprint); }
+
+    private List<String> transferChildren(String root) {
+        List<String> children = new ArrayList<>(); Set<String> seen = new HashSet<>(); URI uri = initialChildrenUri(root);
+        while (uri != null) {
+            if (!seen.add(uri.toASCIIString())) throw transferInvalid();
+            ResponseEnvelope response = get(uri); JsonNode body = parseBody(response); JsonNode results = body.get("results");
+            if (results == null || !results.isArray()) throw transferInvalid();
+            for (JsonNode page : results) {
+                if (!page.isObject() || !"page".equals(transferText(page.get("type")))) throw transferInvalid();
+                transferText(page.get("title")); String id = transferText(page.get("id")); if (!isNumericId(id)) throw transferInvalid(); children.add(id);
+            }
+            URI next = nextUri(body, response.linkHeader(), uri, response.statusCode());
+            if (next != null && (!next.getPath().equals(uri.getPath()) || isBlank(next.getQuery()) || !next.getQuery().matches(".*(?:^|&)cursor=[^&]+(?:&.*)?"))) throw transferInvalid();
+            uri = next;
+        }
+        return children;
+    }
+    private TransferRecord readTransferPage(String id, TransferPageCodec mapper) {
+        if (!isNumericId(id)) throw transferInvalid();
+        JsonNode page = parseBody(get(baseUri.resolve("/wiki/api/v2/pages/" + encodePathSegment(id) + "?body-format=storage")));
+        if (!id.equals(transferText(page.get("id")))) throw transferInvalid();
+        JsonNode version = page.path("version").path("number"); if (!version.isIntegralNumber() || version.longValue() <= 0) throw transferInvalid();
+        List<TransferPageCodec.Block> blocks = storageBlocks(transferText(page.path("body").path("storage").get("value")));
+        String title = transferText(page.get("title"));
+        List<String> markers = blocks.stream().filter(block -> block.type().equals("code")).map(TransferPageCodec.Block::text).toList();
+        TransferMarker marker = TRANSFER_CODEC.parseMarker(markers);
+        if (marker.recordType().equals("participant") && title.startsWith(TRANSFER_PARTICIPANT_TITLE_PREFIX)) {
+            String unprefixedTitle = title.substring(TRANSFER_PARTICIPANT_TITLE_PREFIX.length());
+            try {
+                return mapper.decode(id, version.asString(), baseUri.resolve("/wiki/pages/" + id).toASCIIString(), unprefixedTitle, blocks);
+            } catch (TransferCodec.ValidationException prefixedLegacyName) {
+                // Older transfers used the participant's name directly as the page title.
+                // The canonical digest distinguishes that legacy name from our disambiguation prefix.
+            }
+        }
+        return mapper.decode(id, version.asString(), baseUri.resolve("/wiki/pages/" + id).toASCIIString(), title, blocks);
+    }
+    private String createTransferPage(String parent, TransferRecord record, TransferPageCodec mapper) {
+        JsonNode root = parseBody(get(baseUri.resolve("/wiki/api/v2/pages/" + encodePathSegment(parent) + "?body-format=storage")));
+        String space = transferText(root.get("spaceId")); StringBuilder storage = new StringBuilder();
+        for (var block : mapper.encode(record)) {
+            String tag = switch (block.type()) { case "heading_2" -> "h2"; case "bulleted_list_item" -> "li"; case "code" -> "pre"; default -> "p"; };
+            if (tag.equals("li")) storage.append("<ul>");
+            storage.append('<').append(tag).append('>').append(escapeHtml(block.text())).append("</").append(tag).append('>');
+            if (tag.equals("li")) storage.append("</ul>");
+        }
+        try {
+            String title = record.participant() == null ? record.title() : TRANSFER_PARTICIPANT_TITLE_PREFIX + record.participant().name();
+            String payload = JSON_MAPPER.writeValueAsString(Map.of("spaceId", space, "status", "current", "title", title, "parentId", parent,
+                    "body", Map.of("representation", "storage", "value", storage.toString())));
+            String response = restClient.post().uri(baseUri.resolve("/wiki/api/v2/pages")).headers(headers -> {
+                headers.setBasicAuth(accountEmail, authToken, StandardCharsets.UTF_8); headers.setContentType(org.springframework.http.MediaType.APPLICATION_JSON);
+            }).body(payload).exchange((request, result) -> { if (result.getStatusCode().isError()) throw transferInvalid(); return StreamUtils.copyToString(result.getBody(), StandardCharsets.UTF_8); });
+            String id = transferText(JSON_MAPPER.readTree(response).get("id")); if (!isNumericId(id)) throw transferInvalid(); return id;
+        } catch (Exception e) { throw transferInvalid(); }
+    }
+    private static List<TransferPageCodec.Block> storageBlocks(String storage) {
+        try {
+            var factory = javax.xml.parsers.DocumentBuilderFactory.newInstance(); factory.setNamespaceAware(false);
+            factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+            factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
+            factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+            factory.setAttribute(javax.xml.XMLConstants.ACCESS_EXTERNAL_DTD, ""); factory.setAttribute(javax.xml.XMLConstants.ACCESS_EXTERNAL_SCHEMA, "");
+            var builder = factory.newDocumentBuilder(); builder.setErrorHandler(new org.xml.sax.helpers.DefaultHandler());
+            var document = builder.parse(new org.xml.sax.InputSource(new java.io.StringReader("<body>" + storage + "</body>")));
+            List<TransferPageCodec.Block> blocks = new ArrayList<>(); storageBlocks(document.getDocumentElement(), blocks); return blocks;
+        } catch (Exception e) { throw transferInvalid(); }
+    }
+    private static void storageBlocks(org.w3c.dom.Node root, List<TransferPageCodec.Block> blocks) {
+        var nodes = root.getChildNodes();
+        for (int i = 0; i < nodes.getLength(); i++) {
+            var node = nodes.item(i);
+            if (node.getNodeType() == org.w3c.dom.Node.TEXT_NODE && node.getTextContent().isBlank()) continue;
+            String type = switch (node.getNodeName()) { case "h2" -> "heading_2"; case "p" -> "paragraph"; case "li" -> "bulleted_list_item"; case "pre" -> "code"; default -> null; };
+            if (node.getNodeName().equals("ul")) { storageBlocks(node, blocks); continue; }
+            if (node.getNodeName().equals("p") && node instanceof org.w3c.dom.Element paragraph) {
+                var inlineCode = paragraph.getElementsByTagName("code");
+                if (inlineCode.getLength() == 1 && paragraph.getTextContent().equals(inlineCode.item(0).getTextContent())) {
+                    blocks.add(new TransferPageCodec.Block("code", inlineCode.item(0).getTextContent()));
+                    continue;
+                }
+            }
+            if (node.getNodeName().equals("ac:structured-macro") && node instanceof org.w3c.dom.Element e && "code".equals(e.getAttribute("ac:name"))) {
+                var bodies = e.getElementsByTagName("ac:plain-text-body"); if (bodies.getLength() != 1) throw transferInvalid(); blocks.add(new TransferPageCodec.Block("code", bodies.item(0).getTextContent())); continue;
+            }
+            if (type == null) throw transferInvalid(); blocks.add(new TransferPageCodec.Block(type, node.getTextContent()));
+        }
+    }
+    private static String transferText(JsonNode node) { if (node == null || !(node.isString() || node.isNumber()) || node.asString().isBlank()) throw transferInvalid(); return node.asString(); }
+    private static TransferCodec.ValidationException transferInvalid() { return new TransferCodec.ValidationException(TransferCodec.Code.INVALID_RECORD); }
 
     public ConfluencePageHierarchyAdapter(
             RestClient.Builder restClientBuilder,
@@ -165,7 +272,8 @@ public final class ConfluencePageHierarchyAdapter implements ParticipantCreation
                     "parentId", participantsPageId,
                     "body", java.util.Map.of(
                             "representation", "storage",
-                            "value", "<p>Email: " + escapeHtml(command.email()) + "</p>")));
+                            "value", "<p>Email: " + escapeHtml(command.email()) + "</p><pre>" + escapeHtml(new TransferCodec().encodeMarker(
+                                    ParticipantTransferMarkers.refreshed(new Participant("pending", command.name(), command.email()), null))) + "</pre>")));
             URI createUri = baseUri.resolve("/wiki/api/v2/pages");
             response = restClient.post()
                     .uri(createUri)
@@ -215,10 +323,7 @@ public final class ConfluencePageHierarchyAdapter implements ParticipantCreation
         if (!configured || !isNumericId(participantId)) {
             throw DocumentProviderException.documentFailed(false);
         }
-        if (command.email() == null) {
-            String uri = "/wiki/api/v2/pages/" + encodePathSegment(participantId) + "/title";
-            mutate(uri, java.util.Map.of("status", "current", "title", command.updatedName()));
-        } else {
+        {
             URI pageUri = baseUri.resolve("/wiki/api/v2/pages/" + encodePathSegment(participantId)
                     + "?body-format=storage");
             JsonNode page;
@@ -241,7 +346,17 @@ public final class ConfluencePageHierarchyAdapter implements ParticipantCreation
                     || !statusNode.isTextual() || spaceNode == null || parentNode == null) {
                 throw DocumentProviderException.documentFailed(false);
             }
-            String updatedBody = replaceEmailLine(bodyNode.textValue(), command.updatedEmail());
+            TransferCodec codec = new TransferCodec();
+            TransferMarker marker = codec.parseMarker(storageBlocks(bodyNode.stringValue()).stream().filter(b -> b.type().equals("code")).map(TransferPageCodec.Block::text).toList());
+            ParticipantTransferMarkers.validateCurrent(command.existing(), marker);
+            String updatedBody = command.email() == null ? bodyNode.stringValue() : replaceEmailLine(bodyNode.stringValue(), command.updatedEmail());
+            TransferMarker updatedMarker = ParticipantTransferMarkers.refreshed(new Participant(participantId, command.updatedName(), command.updatedEmail()), marker);
+            Matcher codeBlock = Pattern.compile("(?s)<pre(?:\\s[^>]*)?>.*?</pre>|<ac:structured-macro[^>]*>.*?</ac:structured-macro>").matcher(updatedBody);
+            boolean replaced = false;
+            while (codeBlock.find()) if (codeBlock.group().contains("meeting-automation")) {
+                updatedBody = updatedBody.substring(0, codeBlock.start()) + "<pre>" + escapeHtml(codec.encodeMarker(updatedMarker)) + "</pre>" + updatedBody.substring(codeBlock.end()); replaced = true; break;
+            }
+            if (!replaced) throw transferInvalid();
             java.util.Map<String, Object> requestBody = new java.util.LinkedHashMap<>();
             requestBody.put("id", participantId);
             requestBody.put("status", statusNode.textValue());
@@ -413,7 +528,9 @@ public final class ConfluencePageHierarchyAdapter implements ParticipantCreation
 
         try {
             URI parsed = new URI(rawNext);
-            URI resolved = parsed.isAbsolute() ? parsed : currentUri.resolve(parsed);
+            URI resolved = parsed.isAbsolute() ? parsed : rawNext.startsWith("?")
+                    ? new URI(currentUri.getScheme(), currentUri.getAuthority(), currentUri.getPath(), parsed.getQuery(), null)
+                    : currentUri.resolve(parsed);
             if (!sameOrigin(baseUri, resolved)) {
                 throw new ConfluenceApiFailure(true, statusCode);
             }
@@ -528,7 +645,7 @@ public final class ConfluencePageHierarchyAdapter implements ParticipantCreation
 
     private static String escapeHtml(String value) {
         return value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-                .replace("\"", "&quot;").replace("'", "&#39;");
+                .replace("\"", "&quot;").replace("'", "&#39;").replace("\r", "&#13;");
     }
 
     private static boolean isAuthenticationFailure(int statusCode) {
