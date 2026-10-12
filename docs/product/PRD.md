@@ -2332,7 +2332,7 @@ Meeting UI
 
 구현 상태는 이 표와 GitHub Issue/PR, `docs/evidence/`의 head별 검증 기록으로 관리한다. 기존 세부 TASK 표의 `설계 상태 / 문서`와 설계 커서는 설계 상태만 나타내며 개발 상태를 대신하지 않는다.
 
-**다음 개발 대상 커서: `TASK-022.03`**
+**다음 개발 대상 커서: `TASK-022.04`**
 
 **실행 우선순위:** TASK-022.01 → TASK-022.02 → TASK-022.03 → TASK-022.04 → TASK-022.05 → TASK-022.06 → TASK-004.04 재검증 → 기존 커서 순서. 새 변경 작업이 모두 완료되기 전 일반 기능 개발과 PR #95 병합을 진행하지 않는다. GitHub Issue 번호나 생성일 정렬을 실행 순서로 해석하지 않는다.
 
@@ -2358,7 +2358,7 @@ Meeting UI
 | `TASK-004.03` | DONE | DONE | [Issue #16](https://github.com/donghyunlee-dev/meeting-automation/issues/16) / [PR #94](https://github.com/donghyunlee-dev/meeting-automation/pull/94) | [검증 증거](../evidence/TASK-004.03/verification.md), tests/review/QA PASS at `b043f1a` | `cea7902fb10cb0ea44c3c845cd9636ad0ebb2f0c` | 2026-10-10 00:04 KST |
 | `TASK-022.01` | DONE | DONE | [Issue #96](https://github.com/donghyunlee-dev/meeting-automation/issues/96) / [PR #103](https://github.com/donghyunlee-dev/meeting-automation/pull/103) | [검증 증거](../evidence/TASK-022.01/verification.md), tests/review/QA PASS at `129431905` | `bb1c9b6bd81509197e1b1bc3dd3ef0568222eaa5` | 2026-10-11 11:19 KST |
 | `TASK-022.02` | DONE | DONE | [Issue #97](https://github.com/donghyunlee-dev/meeting-automation/issues/97) / [PR #104](https://github.com/donghyunlee-dev/meeting-automation/pull/104); live QA 수정 [Issue #105](https://github.com/donghyunlee-dev/meeting-automation/issues/105) / [PR #106](https://github.com/donghyunlee-dev/meeting-automation/pull/106) | [검증 증거](../evidence/TASK-022.02/verification.md), Java 25 build 210 PASS; fixture 49 PASS; Notion·Confluence 제품 API live create/reuse/replay/denial PASS; review blocking 없음 | `47ec4dce9b916f70a679f0a785ed0a244b67a409` | 2026-10-11 18:25 KST |
-| `TASK-022.03` | TODO | DESIGN_READY | [Issue #98](https://github.com/donghyunlee-dev/meeting-automation/issues/98) / — | — | — | — |
+| `TASK-022.03` | DONE | DONE | [Issue #98](https://github.com/donghyunlee-dev/meeting-automation/issues/98) / [PR #107](https://github.com/donghyunlee-dev/meeting-automation/pull/107) | [검증 증거](../evidence/TASK-022.03/verification.md), frontend 36 tests/lint/build PASS; backend clean build PASS; exact-head review/QA PASS, live Confluence TEST·초기화·READY 확인 | `b5db50625ff885ad686382480dce78e41a3cb4b4` | 2026-10-12 10:56 KST |
 | `TASK-022.04` | TODO | DESIGN_READY | [Issue #99](https://github.com/donghyunlee-dev/meeting-automation/issues/99) / — | — | — | — |
 | `TASK-022.05` | TODO | DESIGN_READY | [Issue #100](https://github.com/donghyunlee-dev/meeting-automation/issues/100) / — | — | — | — |
 | `TASK-022.06` | TODO | DESIGN_READY | [Issue #101](https://github.com/donghyunlee-dev/meeting-automation/issues/101) / — | — | — | — |
