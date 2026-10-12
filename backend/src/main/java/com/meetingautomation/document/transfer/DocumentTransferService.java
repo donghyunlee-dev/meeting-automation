@@ -4,6 +4,7 @@ import com.meetingautomation.document.MeetingDocumentRef;
 import com.meetingautomation.document.Participant;
 import com.meetingautomation.document.StructuredMinutes;
 import java.util.*;
+import java.util.function.Consumer;
 
 /** Validates the complete transfer before writes, then copies participants followed by meetings. */
 public final class DocumentTransferService {
@@ -13,9 +14,16 @@ public final class DocumentTransferService {
     DocumentTransferService(TransferCodec codec) { this.codec = Objects.requireNonNull(codec); }
 
     public TransferResult transfer(DocumentTransferPort source, DocumentTransferPort target) {
+        return transfer(source, target, progress -> { });
+    }
+
+    public TransferResult transfer(DocumentTransferPort source, DocumentTransferPort target,
+            Consumer<TransferProgress> progress) {
         Objects.requireNonNull(source); Objects.requireNonNull(target);
+        Objects.requireNonNull(progress);
         TransferManifest sourceManifest = source.readManifest();
         SourceSnapshot snapshot = validateSource(source, sourceManifest);
+        progress.accept(progress("PREFLIGHT", snapshot, 0, 0, 0, 0, Map.of()));
         TransferManifest targetBefore = target.readManifest();
         TargetSnapshot targetSnapshot = validateTarget(target, targetBefore, snapshot, sourceManifest.sourceConnectionFingerprint());
 
@@ -28,6 +36,7 @@ public final class DocumentTransferService {
             if (existing != null) {
                 idMap.put(sourceParticipant.participant().id(), existing.participant().id());
                 participantsReused++;
+                progress.accept(progress("PARTICIPANTS", snapshot, participantsCopied, participantsReused, 0, 0, idMap));
                 continue;
             }
             Participant imported;
@@ -43,6 +52,7 @@ public final class DocumentTransferService {
             }
             idMap.put(sourceParticipant.participant().id(), imported.id());
             participantsCopied++;
+            progress.accept(progress("PARTICIPANTS", snapshot, participantsCopied, participantsReused, 0, 0, idMap));
         }
         validateCompleteMap(snapshot.participants(), idMap);
         TransferManifest targetAfterParticipants = readTarget(target);
@@ -56,6 +66,7 @@ public final class DocumentTransferService {
                 throw conflict(TransferConflictException.Code.RECONCILIATION_REQUIRED);
             }
         }
+        progress.accept(progress("PARTICIPANTS_VERIFIED", snapshot, participantsCopied, participantsReused, 0, 0, idMap));
 
         Map<String, String> targetMeetingIds = new LinkedHashMap<>();
         int meetingsCopied = 0;
@@ -66,6 +77,8 @@ public final class DocumentTransferService {
             if (existing != null) {
                 targetMeetingIds.put(sourceMeeting.sourceDocumentId(), existing.sourceDocumentId());
                 meetingsReused++;
+                progress.accept(progress("MEETINGS", snapshot, participantsCopied, participantsReused,
+                        meetingsCopied, meetingsReused, idMap));
                 continue;
             }
             MeetingDocumentRef imported;
@@ -79,14 +92,26 @@ public final class DocumentTransferService {
             }
             targetMeetingIds.put(sourceMeeting.sourceDocumentId(), imported.documentId());
             meetingsCopied++;
+            progress.accept(progress("MEETINGS", snapshot, participantsCopied, participantsReused,
+                    meetingsCopied, meetingsReused, idMap));
         }
 
         TransferManifest targetAfter = readTarget(target);
         verifyTargetMeetings(target, targetAfter, snapshot, sourceManifest.sourceConnectionFingerprint(), idMap, targetMeetingIds);
+        // Persist the final public progress snapshot before the last source check so no store write
+        // creates an avoidable gap between source revalidation and atomic activation.
+        progress.accept(progress("VERIFY", snapshot, participantsCopied, participantsReused,
+                meetingsCopied, meetingsReused, idMap));
         verifySourceUnchanged(source, snapshot, sourceManifest.sourceConnectionFingerprint());
         return new TransferResult(sourceManifest.sourceConnectionFingerprint(), targetAfter.sourceConnectionFingerprint(),
                 participantsCopied, participantsReused, meetingsCopied, meetingsReused, idMap,
                 new ArrayList<>(targetMeetingIds.values()));
+    }
+
+    private static TransferProgress progress(String stage, SourceSnapshot snapshot, int participantsCopied,
+            int participantsReused, int meetingsCopied, int meetingsReused, Map<String, String> participantIdMap) {
+        return new TransferProgress(stage, snapshot.participants().size(), participantsCopied, participantsReused,
+                snapshot.meetings().size(), meetingsCopied, meetingsReused, participantIdMap);
     }
 
     private SourceSnapshot validateSource(DocumentTransferPort source, TransferManifest manifest) {

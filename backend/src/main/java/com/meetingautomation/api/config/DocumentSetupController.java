@@ -12,11 +12,14 @@ import org.springframework.web.bind.annotation.*;
 public final class DocumentSetupController {
     private final GlobalSettingsUseCase settings;
     private final com.meetingautomation.document.bootstrap.DocumentBootstrapUseCase bootstrap;
+    private final com.meetingautomation.document.transfer.DocumentSwitchUseCase switching;
     private final Set<String> origins;
     public DocumentSetupController(GlobalSettingsUseCase settings, com.meetingautomation.document.bootstrap.DocumentBootstrapUseCase bootstrap,
+            com.meetingautomation.document.transfer.DocumentSwitchUseCase switching,
             @Value("${ALLOWED_ORIGINS:}") String origins) {
         this.settings = settings;
         this.bootstrap = bootstrap;
+        this.switching = switching;
         this.origins = new HashSet<>(Arrays.stream(origins.split(",")).map(String::trim).filter(s -> !s.isEmpty()).toList());
     }
     @GetMapping public ResponseEntity<Map<String, Object>> status() {
@@ -42,8 +45,35 @@ public final class DocumentSetupController {
         if (input.draftRevision()==null || !Boolean.TRUE.equals(input.confirmStructure())) throw SettingsException.invalid();
         return result(bootstrap.initialize(version,request.getHeader("Idempotency-Key"),draftId,input.draftRevision(),true));
     }
+    @PostMapping(value = "/switch", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<String> switchConnection(HttpServletRequest request, @RequestBody SwitchRequest input) {
+        long version = validate(request);
+        if (input == null) throw SettingsException.invalid();
+        return result(switching.start(version, request.getHeader("Idempotency-Key"),
+                new com.meetingautomation.document.transfer.DocumentSwitchUseCase.Request(
+                        input.draftId(), input.draftRevision() == null ? 0 : input.draftRevision(), input.mode(), input.confirmSourcePreserved())));
+    }
+    @PostMapping(value = "/operations/{operationId}/retry", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<String> retry(HttpServletRequest request, @PathVariable String operationId,
+            @RequestBody(required = false) Map<String, Object> input) {
+        long version = validate(request);
+        return result(switching.retry(version, request.getHeader("Idempotency-Key"), operationId));
+    }
+    @PostMapping(value = "/operations/{operationId}/cancel", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<String> cancel(HttpServletRequest request, @PathVariable String operationId,
+            @RequestBody(required = false) Map<String, Object> input) {
+        long version = validate(request);
+        return result(switching.cancel(version, request.getHeader("Idempotency-Key"), operationId));
+    }
     @GetMapping("/operations/{operationId}")
     public ResponseEntity<Map<String,Object>> operation(@PathVariable String operationId) {
+        try {
+            var summary = switching.operation(operationId);
+            return ResponseEntity.ok().cacheControl(CacheControl.noStore()).eTag('"'+Long.toString(summary.version())+'"')
+                .body(Map.of("data",summary));
+        } catch (SettingsException notSwitchOperation) {
+            if (!"DOCUMENT_OPERATION_NOT_FOUND".equals(notSwitchOperation.code())) throw notSwitchOperation;
+        }
         var summary=bootstrap.operation(operationId);
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).eTag('"'+Long.toString(summary.version())+'"')
             .body(Map.of("data",summary));
@@ -62,6 +92,11 @@ public final class DocumentSetupController {
         return ResponseEntity.status(result.status()).contentType(MediaType.APPLICATION_JSON)
             .cacheControl(CacheControl.noStore()).eTag('"' + Long.toString(result.version()) + '"').body(result.responseJson());
     }
+    private static ResponseEntity<String> result(com.meetingautomation.document.transfer.DocumentSwitchUseCase.MutationResult result) {
+        return ResponseEntity.status(result.status()).contentType(MediaType.APPLICATION_JSON)
+            .cacheControl(CacheControl.noStore()).eTag('"' + Long.toString(result.version()) + '"').body(result.responseJson());
+    }
     public record TestRequest(Long draftRevision) { }
     public record InitializeRequest(Long draftRevision,Boolean confirmStructure) { }
+    public record SwitchRequest(String draftId, Long draftRevision, String mode, Boolean confirmSourcePreserved) { }
 }

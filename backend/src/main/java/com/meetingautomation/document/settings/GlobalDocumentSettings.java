@@ -37,17 +37,40 @@ public record GlobalDocumentSettings(int schemaVersion, long version, Connection
     public record TestResult(Instant testedAt, Instant expiresAt, boolean authenticated,
             boolean parentAccessible, String writeCapability) { }
     public record Operation(String operationId, String type, String status, String draftId, long draftRevision,
-            String stage, Map<String, Creation> journal, String errorCode, boolean retryable, Instant updatedAt) {
+            String stage, Map<String, Creation> journal, String errorCode, boolean retryable, Instant updatedAt,
+            boolean cancelRequested, long participantsTotal, long participantsCopied, long meetingsTotal,
+            long meetingsCopied, Map<String, String> participantIdMap) {
         public Operation {
             journal=journal==null ? Map.of() : Map.copyOf(journal);
             stage=stage==null ? "PREFLIGHT" : stage;
             updatedAt=updatedAt==null ? Instant.EPOCH : updatedAt;
+            participantIdMap=participantIdMap==null ? Map.of() : Map.copyOf(participantIdMap);
+        }
+        public Operation(String operationId, String type, String status, String draftId, long draftRevision,
+                String stage, Map<String, Creation> journal, String errorCode, boolean retryable, Instant updatedAt) {
+            this(operationId,type,status,draftId,draftRevision,stage,journal,errorCode,retryable,updatedAt,
+                    false,0,0,0,0,Map.of());
         }
         public Operation(String operationId, String type, String status) {
             this(operationId, type, status, null, 0, "PREFLIGHT", Map.of(), null, false, Instant.EPOCH);
         }
         public Operation transition(String status, String stage, Map<String, Creation> journal, String error, boolean retryable, Instant now) {
-            return new Operation(operationId, type, status, draftId, draftRevision, stage, Map.copyOf(journal), error, retryable, now);
+            return new Operation(operationId, type, status, draftId, draftRevision, stage, Map.copyOf(journal), error,
+                    retryable, now, "CANCELLED".equals(status) ? false : cancelRequested, participantsTotal, participantsCopied, meetingsTotal,
+                    meetingsCopied, participantIdMap);
+        }
+        public Operation progress(String stage, long participantsTotal, long participantsCopied, long meetingsTotal,
+                long meetingsCopied, Map<String, String> participantIdMap, Instant now) {
+            return new Operation(operationId,type,status,draftId,draftRevision,stage,journal,errorCode,retryable,now,
+                    cancelRequested,participantsTotal,participantsCopied,meetingsTotal,meetingsCopied,participantIdMap);
+        }
+        public Operation requestCancel(Instant now) {
+            return new Operation(operationId,type,status,draftId,draftRevision,stage,journal,errorCode,retryable,now,
+                    true,participantsTotal,participantsCopied,meetingsTotal,meetingsCopied,participantIdMap);
+        }
+        public Operation resume(Instant now) {
+            return new Operation(operationId,type,"PENDING",draftId,draftRevision,"PREFLIGHT",journal,null,false,now,
+                    false,participantsTotal,participantsCopied,meetingsTotal,meetingsCopied,participantIdMap);
         }
         @Override public String toString() { return "Operation[redacted]"; }
     }
