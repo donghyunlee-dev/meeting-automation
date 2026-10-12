@@ -121,6 +121,47 @@ class DocumentTransferLiveProviderTests {
         assertEquals(0, reverseReplay.meetingsCopied());
     }
 
+    @Test
+    void transfersSyntheticMeetingAndParticipantBetweenNotionRootsAndReadsBackOnReplay() {
+        String notionToken = required("NOTION_API_TOKEN");
+        String notionSourceRoot = required("NOTION_TRANSFER_QA_SOURCE_ROOT_ID");
+        String notionTargetRoot = required("NOTION_TRANSFER_QA_TARGET_ROOT_ID");
+        assumeTrue(List.of(notionToken, notionSourceRoot, notionTargetRoot).stream().allMatch(v -> !v.isBlank()),
+                "Notion-only live QA requires a token and dedicated synthetic source and target roots");
+
+        var notionSource = new NotionPageHierarchyAdapter(RestClient.builder(), notionToken, notionSourceRoot);
+        var notionTarget = new NotionPageHierarchyAdapter(RestClient.builder(), notionToken, notionTargetRoot);
+        String runId = UUID.randomUUID().toString();
+        String sourceParticipantId = "qa-notion-participant-" + runId;
+        String externalSessionId = "qa-notion-session-" + runId;
+        String name = "Notion Transfer QA " + runId;
+        String email = "notion-transfer-qa+" + runId + "@example.test";
+        var codec = new TransferCodec();
+        String seedFingerprint = codec.connectionFingerprint("notion", "synthetic-notion-transfer-qa-seed-" + runId);
+
+        Participant seededParticipant = notionSource.importParticipant(
+                participant(sourceParticipantId, name, email, codec), seedFingerprint);
+        MeetingDocumentRef seededMeeting = notionSource.importMeeting(
+                meeting(sourceParticipantId, name, externalSessionId),
+                Map.of(sourceParticipantId, seededParticipant.id()), seedFingerprint);
+        assertNotNull(seededMeeting.documentId());
+
+        var service = new DocumentTransferService();
+        TransferResult first = service.transfer(notionSource, notionTarget);
+
+        assertEquals(1, first.meetingsCopied());
+        assertTrue(first.participantsCopied() >= 1);
+        assertTargetRecord(notionTarget, externalSessionId, name, email);
+
+        TransferResult replay = service.transfer(notionSource, notionTarget);
+
+        assertEquals(0, replay.participantsCopied());
+        assertEquals(0, replay.meetingsCopied());
+        assertTrue(replay.participantsReused() >= 1);
+        assertEquals(1, replay.meetingsReused());
+        assertTargetRecord(notionTarget, externalSessionId, name, email);
+    }
+
     private static void assertTargetRecord(DocumentTransferPort target, String sessionId, String name, String email) {
         TransferManifest manifest = target.readManifest();
         TransferRecord participant = manifest.participants().stream()
