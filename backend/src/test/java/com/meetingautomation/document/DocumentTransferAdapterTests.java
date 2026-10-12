@@ -65,7 +65,7 @@ class DocumentTransferAdapterTests {
         String fingerprint = CODEC.connectionFingerprint("notion", "source-root");
         Participant participant = f.port.importParticipant(participant("old"), fingerprint);
         TransferRecord simple = meeting("source", List.of("old"), null);
-        StructuredMinutes minutes = new StructuredMinutes("default.md", "1.0.0", "Summary <&>\r\nsecond line", List.of("Discuss"), List.of("Decide"),
+        StructuredMinutes minutes = new StructuredMinutes("project.md", "1.0.0", "Summary <&>\r\nsecond line", List.of("Discuss"), List.of("Decide"),
                 List.of(new StructuredMinutes.ActionItem("old", "Task", java.time.LocalDate.of(2026, 11, 1))), List.of("Follow"));
         TransferRecord source = new TransferRecord("source", "r1", null, simple.marker(), "Synthetic <&> meeting", minutes,
                 List.of(new TranscriptSegment("seg", "speaker", 0, 42, "Transcript <&>\r\nline")), List.of(new ParticipantSummary("old", "Ada")), null);
@@ -73,6 +73,7 @@ class DocumentTransferAdapterTests {
         TransferRecord read = f.port.exportMeeting(ref.documentId());
         assertEquals(source.title(), read.title()); assertEquals(source.transcript(), read.transcript());
         assertEquals(source.minutes().summary(), read.minutes().summary());
+        assertEquals("project.md", read.minutes().templateId()); assertEquals("default.md", read.marker().templateId());
         assertEquals(participant.id(), read.minutes().actionItems().getFirst().ownerParticipantId());
         assertEquals(participant.id(), read.marker().speakers().getFirst().participantId());
         assertEquals(List.of(participant.id()), read.marker().participantIds());
@@ -177,6 +178,28 @@ class DocumentTransferAdapterTests {
     void notionManifestPreservesOpaqueCursorWithoutDoubleEncoding() {
         Fixture f = new Fixture(true, 101, "opaque");
         assertEquals(101, f.port.readManifest().participants().size()); assertTrue(f.requested.contains("participants:100"));
+    }
+
+    @org.junit.jupiter.api.Test
+    void notionRichTextChunksNeverSplitSupplementaryUnicodeAtTwoThousandBoundary() {
+        Fixture f = new Fixture(true, 0, null); TransferRecord simple = meeting("source", List.of(), null);
+        String summary = "x".repeat(1999) + "\uD83D\uDE80" + "y";
+        StructuredMinutes minutes = new StructuredMinutes("default.md", "1.0.0", summary, List.of(), List.of(), List.of(), List.of());
+        TransferRecord source = new TransferRecord("source", "r1", null, simple.marker(), simple.title(), minutes, null, List.of(), null);
+        var created = f.port.importMeeting(source, Map.of(), CODEC.connectionFingerprint("confluence", "source-root"));
+        List<String> summaryRuns = new ArrayList<>();
+        for (var block : JSON.readTree(f.createdBody).path("children")) {
+            var runs = block.path("paragraph").path("rich_text");
+            String joined = String.join("", runs.valueStream().map(run -> run.path("text").path("content").asString()).toList());
+            if (summary.equals(joined)) summaryRuns = runs.valueStream().map(run -> run.path("text").path("content").asString()).toList();
+        }
+        assertEquals(2, summaryRuns.size());
+        for (String run : summaryRuns) {
+            assertTrue(run.length() <= 2000);
+            assertFalse(Character.isHighSurrogate(run.charAt(run.length() - 1)));
+            assertFalse(Character.isLowSurrogate(run.charAt(0)));
+        }
+        assertEquals(summary, f.port.exportMeeting(created.documentId()).minutes().summary());
     }
 
     private static TransferRecord meeting(String id, List<String> ids, TransferMarker.Failure failure) {

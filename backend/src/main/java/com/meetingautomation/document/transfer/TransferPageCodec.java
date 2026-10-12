@@ -19,7 +19,7 @@ public final class TransferPageCodec {
             for (TransferMarker.Speaker s : r.marker().speakers()) { paragraph(b, "Speaker: " + s.speakerId()); paragraph(b, s.label()); paragraph(b, "Participant: " + Objects.toString(s.participantId(), "")); }
             if (r.marker().failure() != null) paragraph(b, "녹음 변환 결과: 실패");
             if (r.minutes() != null) {
-                var m = r.minutes(); heading(b, "Summary"); paragraph(b, "Template version: " + m.templateVersion()); paragraph(b, m.summary());
+                var m = r.minutes(); heading(b, "Summary"); paragraph(b, "Minutes template: " + m.templateId()); paragraph(b, "Template version: " + m.templateVersion()); paragraph(b, m.summary());
                 heading(b, "Discussion points"); items(b, m.discussionPoints()); heading(b, "Decisions"); items(b, m.decisions());
                 heading(b, "Action Items");
                 for (var a : m.actionItems()) { paragraph(b, "Owner: " + Objects.toString(a.ownerParticipantId(), "")); paragraph(b, "Due: " + Objects.toString(a.dueDate(), "")); paragraph(b, a.task()); }
@@ -51,11 +51,11 @@ public final class TransferPageCodec {
             if (marker.failure() != null && !read.paragraph().equals("녹음 변환 결과: 실패")) throw invalid(INVALID_RECORD);
             StructuredMinutes minutes = null; List<TranscriptSegment> transcript = null;
             if (read.hasHeading("Summary")) {
-                read.heading("Summary"); String version = read.field("Template version: "); String summary = read.paragraph();
+                read.heading("Summary"); String minutesTemplate = read.field("Minutes template: "); String version = read.field("Template version: "); String summary = read.paragraph();
                 read.heading("Discussion points"); List<String> discussion = read.items(); read.heading("Decisions"); List<String> decisions = read.items(); read.heading("Action Items");
                 List<StructuredMinutes.ActionItem> actions = new ArrayList<>();
                 while (read.hasParagraph()) { String owner = read.field("Owner: "); String due = read.field("Due: "); actions.add(new StructuredMinutes.ActionItem(owner.isEmpty() ? null : owner, read.paragraph(), due.isEmpty() ? null : LocalDate.parse(due))); }
-                read.heading("Follow ups"); minutes = new StructuredMinutes(marker.templateId(), version, summary, discussion, decisions, actions, read.items());
+                read.heading("Follow ups"); minutes = new StructuredMinutes(minutesTemplate, version, summary, discussion, decisions, actions, read.items());
             }
             if (read.hasHeading("Transcript")) {
                 read.heading("Transcript"); transcript = new ArrayList<>();

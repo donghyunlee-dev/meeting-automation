@@ -126,7 +126,13 @@ public final class NotionPageHierarchyAdapter implements ParticipantCreationProv
     }
     private static List<Object> transferRuns(String value) {
         List<Object> runs = new ArrayList<>();
-        for (int start = 0; start < value.length(); start += 2000) runs.add(Map.of("type", "text", "text", Map.of("content", value.substring(start, Math.min(start + 2000, value.length())))));
+        for (int start = 0; start < value.length();) {
+            int end = Math.min(start + 2000, value.length());
+            if (end < value.length() && Character.isHighSurrogate(value.charAt(end - 1))
+                    && Character.isLowSurrogate(value.charAt(end))) end--;
+            runs.add(Map.of("type", "text", "text", Map.of("content", value.substring(start, end))));
+            start = end;
+        }
         if (runs.isEmpty()) runs.add(Map.of("type", "text", "text", Map.of("content", "")));
         return runs;
     }
