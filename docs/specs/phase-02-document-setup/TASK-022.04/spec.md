@@ -15,6 +15,48 @@
 
 readManifest는 pagination을 완료하고 source revision/digest를 반환한다. exportMeeting은 schemaVersion 검증을 수행한다. importParticipant/importMeeting은 생성 payload에 transferKey·canonical digest를 기록한다. 기존 target가 같은 키·같은 digest인 경우만 재사용한다. participant ID map으로 mapping/owner 참조를 변경하고 externalSessionId를 보존한다.
 
+## 📦 표준 문서 형식과 전송 marker
+
+Notion과 Confluence 모두 페이지 본문에 같은 schema v1 JSON code block을 저장한다. Provider별 block API만 다르고 JSON 필드·정규화 규칙은 공유 codec 하나를 사용한다. 사용자는 기계용 block을 볼 수 있으며 이를 수정하지 않도록 설명한다. Notion code block과 Confluence preformatted code block을 사용하고, 회의록 본문은 제품 data spec의 고정 순서대로 사람이 읽을 수 있는 heading/paragraph/list로 저장한다. JSON block에는 본문이나 Transcript를 중복해서 넣지 않는다. Provider rich-text 응답의 여러 조각은 순서대로 이어 붙인 뒤 JSON으로 검증한다.
+
+Meeting marker 예시:
+
+```json
+{
+  "format": "meeting-automation",
+  "recordType": "meeting",
+  "schemaVersion": "1.0",
+  "externalSessionId": "ms_source",
+  "meetingAt": "2026-10-10T10:00:00+09:00",
+  "templateId": "default.md",
+  "participantIds": ["source-pt-1"],
+  "speakers": [{"speakerId":"speaker-a","label":"Speaker A","participantId":"source-pt-1"}],
+  "failure": null,
+  "transfer": {
+    "transferKey": "sha256:<hex>",
+    "sourceConnectionFingerprint": "sha256:<hex>",
+    "sourceDocumentId": "source-page-id",
+    "sourceRevision": "provider-revision",
+    "canonicalDigest": "sha256:<hex>",
+    "participantIdMap": {"source-pt-1":"target-pt-1"}
+  }
+}
+```
+
+`transfer` is omitted for an ordinary meeting created by Publish and required for an imported record. Participant pages use the same envelope with `recordType: "participant"`, schema version, and the participant content digest; their provider page ID remains the local `Participant.id`. Meeting body fields are the standard title/date/template, structured Minutes, Transcript, Speaker mappings, and participant roster from `data-spec.md`. Optional Minutes and Transcript remain absent when the source has none. A failed meeting carries `failure: {"stage":"...","errorCode":"...","audioDisposition":"..."}` and does not synthesize either content section.
+
+The canonical digest is lowercase SHA-256 over UTF-8 canonical JSON of the normalized standard record: object keys are sorted, serialization has no insignificant whitespace, array order is preserved, timestamps use their ISO offset representation, and provider page IDs/URLs, revisions, and transfer envelope are excluded. For a copied record, participant references are translated back through `participantIdMap` before calculating/comparing the source digest. The provider revision is stored separately. A transfer key is lowercase SHA-256 of the canonical JSON object `{sourceConnectionFingerprint, sourceDocumentId}`. The fingerprint identifies provider type plus configured root identity; tokens, account emails, authorization headers, and other credentials are never used in or stored by this value.
+
+## 🔁 Manifest, import, and conflict behavior
+
+- `readManifest` exhausts every provider page cursor and returns every app-managed meeting with source ID, revision, normalized digest, and transfer key. It must not use `listMeetings(max=100)` as a complete manifest. Every child page under the configured Meetings/Participants roots must have one valid supported marker; a missing/duplicate marker, repeated/invalid cursor, malformed page, unknown schema, or broken reference fails the whole preflight; it is never silently skipped.
+- The transfer service validates the complete source manifest and references before any target create. It creates/reuses participants first and builds a source participant ID → target participant ID map. It then rewrites Meeting `participantIds`, Speaker `participantId` mappings, and Minutes `ownerParticipantId` references. It preserves `externalSessionId`, title, meeting date, template, content, speaker IDs, and failure metadata.
+- Target participants are matched only by transfer key, never by display name or email. A target with the same transfer key and same canonical digest is reusable. A repeated transfer key with a different digest, duplicate marker, duplicate `externalSessionId`, existing unmarked collision, or digest/read-back mismatch is a conflict; the adapter does not overwrite an existing page.
+- After a create, the adapter reads the page and marker back and verifies content, references, transfer key, and digest. If a write response is ambiguous, it exhausts target pagination and checks the marker. Exactly one verified matching target is reused; a mismatched or duplicate match is a conflict. If absence or correctness cannot be established, return `RECONCILIATION_REQUIRED` and do not automatically issue another create.
+- The source is read-only. Before returning a completed manifest/import result, the source revision/digest is rechecked against preflight. Source edits discovered during the operation invalidate completion. No source page is updated, moved, or deleted.
+
+This task provides provider-neutral codecs and transfer ports/adapters only. It does not add a public migration API, durable migration operation/journal, copy UI, or active-provider switching; TASK-022.05/06 own those flows. The codec and adapter tests use synthetic content. Any real Provider QA uses dedicated test pages and must not copy private meeting content.
+
 ## ✅ 수용 기준
 
 - **TRANSFER-ROUNDTRIP**: title/date/template/Minutes/Transcript/Speaker IDs가 정규화 후 동일.
