@@ -4,6 +4,7 @@ import com.meetingautomation.api.idempotency.ParticipantCreationCoordinator;
 import com.meetingautomation.document.CreateParticipantCommand;
 import com.meetingautomation.document.DocumentProviderException;
 import com.meetingautomation.document.DocumentProviderResolver;
+import com.meetingautomation.document.DocumentConnectionGate;
 import com.meetingautomation.document.Participant;
 import com.meetingautomation.document.ParticipantCreationProvider;
 import com.meetingautomation.document.ParticipantListingProvider;
@@ -16,12 +17,15 @@ import org.springframework.stereotype.Service;
 public final class ParticipantService {
     private final DocumentProviderResolver providerResolver;
     private final ParticipantCreationCoordinator creationCoordinator;
+    private final DocumentConnectionGate connectionGate;
 
     public ParticipantService(
             DocumentProviderResolver providerResolver,
-            ParticipantCreationCoordinator creationCoordinator) {
+            ParticipantCreationCoordinator creationCoordinator,
+            DocumentConnectionGate connectionGate) {
         this.providerResolver = providerResolver;
         this.creationCoordinator = creationCoordinator;
+        this.connectionGate = connectionGate;
     }
 
     public List<Participant> listParticipants() {
@@ -47,28 +51,40 @@ public final class ParticipantService {
 
     public Participant createParticipant(String idempotencyKey, ParticipantCreateRequest request) {
         providerResolver.requireActive();
-        ParticipantCreationProvider provider = providerResolver.selectedProvider()
-                .filter(ParticipantCreationProvider.class::isInstance)
-                .map(ParticipantCreationProvider.class::cast)
-                .orElseThrow(() -> new IllegalStateException("Selected provider cannot create participants."));
-        CreateParticipantCommand command = new CreateParticipantCommand(request.name(), request.email());
-        return creationCoordinator.execute(idempotencyKey.trim(), command, () -> {
-            if (!providerResolver.configured()) {
-                throw DocumentProviderException.structureNotFound();
-            }
-            var structure = provider.discoverParticipantCreateStructure(providerResolver.rootId());
-            try {
-                return provider.createParticipant(structure.participantsPageId(), command);
-            } catch (DocumentProviderException failure) {
-                throw failure;
-            } catch (RuntimeException providerFailure) {
-                throw DocumentProviderException.documentFailed(false, providerFailure);
-            }
-        });
+        var connection = providerResolver.active().orElseThrow(() ->
+                new com.meetingautomation.document.settings.SettingsException("DOCUMENT_SETUP_REQUIRED", 409));
+        try (var ignored = connectionGate.beginWrite(connection.connectionVersion())) {
+            ParticipantCreationProvider provider = providerResolver.selectedProvider()
+                    .filter(ParticipantCreationProvider.class::isInstance)
+                    .map(ParticipantCreationProvider.class::cast)
+                    .orElseThrow(() -> new IllegalStateException("Selected provider cannot create participants."));
+            CreateParticipantCommand command = new CreateParticipantCommand(request.name(), request.email());
+            return creationCoordinator.execute(idempotencyKey.trim(), command, () -> {
+                if (!providerResolver.configured()) {
+                    throw DocumentProviderException.structureNotFound();
+                }
+                var structure = provider.discoverParticipantCreateStructure(providerResolver.rootId());
+                try {
+                    return provider.createParticipant(structure.participantsPageId(), command);
+                } catch (DocumentProviderException failure) {
+                    throw failure;
+                } catch (RuntimeException providerFailure) {
+                    throw DocumentProviderException.documentFailed(false, providerFailure);
+                }
+            });
+        }
     }
 
     public Participant updateParticipant(String participantId, ParticipantUpdateRequest request) {
         providerResolver.requireActive();
+        var connection = providerResolver.active().orElseThrow(() ->
+                new com.meetingautomation.document.settings.SettingsException("DOCUMENT_SETUP_REQUIRED", 409));
+        try (var ignored = connectionGate.beginWrite(connection.connectionVersion())) {
+            return updateParticipantWithinLease(participantId, request);
+        }
+    }
+
+    private Participant updateParticipantWithinLease(String participantId, ParticipantUpdateRequest request) {
         ParticipantUpdatingProvider provider = providerResolver.selectedProvider()
                 .filter(ParticipantUpdatingProvider.class::isInstance)
                 .map(ParticipantUpdatingProvider.class::cast)

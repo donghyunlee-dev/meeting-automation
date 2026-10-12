@@ -35,6 +35,38 @@ class DocumentTransferServiceTests {
         assertEquals(0, result.meetingsReused());
     }
 
+    @Test void transferProgressReportsContentFreeCountsAndParticipantMapAtEachSafePoint() {
+        var source = sourceWithOneParticipantAndMeeting();
+        var target = new StatefulPort(TARGET_FP, "target");
+        List<TransferProgress> progress = new ArrayList<>();
+
+        new DocumentTransferService().transfer(source, target, progress::add);
+
+        assertEquals(List.of("PREFLIGHT", "PARTICIPANTS", "PARTICIPANTS_VERIFIED", "MEETINGS", "VERIFY", "COMPLETE"),
+                progress.stream().map(TransferProgress::stage).toList());
+        assertEquals(new TransferProgress("PARTICIPANTS", 1, 1, 0, 1, 0, 0,
+                Map.of("source-person", "target-person")), progress.get(1));
+        assertEquals(1, progress.getLast().participantsTotal());
+        assertEquals(1, progress.getLast().participantsCopied());
+        assertEquals(1, progress.getLast().meetingsTotal());
+        assertEquals(1, progress.getLast().meetingsCopied());
+    }
+
+    @Test void transferCancellationAtSafePointPreservesPartialTargetAndDoesNotStartNextMeetingWrite() {
+        var source = sourceWithOneParticipantAndMeeting();
+        var target = new StatefulPort(TARGET_FP, "target");
+
+        var failure = assertThrows(TransferCancelledException.class, () -> new DocumentTransferService().transfer(source,
+                target, progress -> {
+                    if ("PARTICIPANTS".equals(progress.stage())) throw new TransferCancelledException();
+                }));
+
+        assertNotNull(failure);
+        assertEquals(1, target.participants.size());
+        assertTrue(target.meetings.isEmpty());
+        assertEquals(List.of("participant:source-person"), target.writes);
+    }
+
     @Test void transferPreservesAbsentOptionalSectionsAndFailureMetadata() {
         var source = new StatefulPort(SOURCE_FP, "source");
         var failed = meeting("failed", List.of(), null, null,
