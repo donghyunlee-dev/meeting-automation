@@ -292,8 +292,8 @@ public final class DocumentSwitchUseCase {
     }
 
     private static OperationSummary summary(GlobalDocumentSettings.Operation operation, long version) {
-        List<String> actions = operation.cancelRequested() ? List.of() : switch (operation.status()) {
-            case "PENDING", "RUNNING" -> List.of("CANCEL");
+        List<String> actions = switch (operation.status()) {
+            case "PENDING", "RUNNING" -> operation.cancelRequested() ? List.of() : List.of("CANCEL");
             case "INTERRUPTED" -> List.of("RETRY", "CANCEL");
             case "FAILED" -> operation.retryable() ? List.of("RETRY", "CANCEL") : List.of("CANCEL");
             case "RECONCILIATION_REQUIRED" -> List.of("REVIEW_PROVIDER", "CANCEL");

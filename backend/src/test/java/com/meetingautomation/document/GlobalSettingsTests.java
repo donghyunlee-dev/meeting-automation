@@ -39,6 +39,29 @@ class GlobalSettingsTests {
         assertFalse(file.contains(next.draft().draftId()));
         assertFalse(next.toString().contains("synthetic"));
     }
+    @Test void encryptedSnapshotDurablyPersistsTransferProgressAndIdentifierMapWithoutMeetingContent() throws Exception {
+        var active = new GlobalDocumentSettings.Connection("source-connection", 7, "NOTION", Map.of(),
+                Map.of("token", "synthetic-provider-secret"), "source-root", "source-meetings", "source-participants", Instant.now());
+        var operation = new GlobalDocumentSettings.Operation("operation-switch", "SWITCH", "INTERRUPTED", "draft", 3,
+                "MEETINGS", Map.of("MODE", new GlobalDocumentSettings.Creation(null, "COPY_ALL", null, null)),
+                "DOCUMENT_FAILED", true, Instant.now(), false, 5, 4, 12, 9,
+                Map.of("source-participant-id", "target-participant-id"));
+        store().transaction(current -> new GlobalSettingsStore.Change<>(new GlobalDocumentSettings(1,
+                current.version() + 1, active, null, operation, Map.of()), null));
+
+        var restored = store().read();
+
+        assertEquals("INTERRUPTED", restored.operation().status());
+        assertEquals(5, restored.operation().participantsTotal());
+        assertEquals(4, restored.operation().participantsCopied());
+        assertEquals(12, restored.operation().meetingsTotal());
+        assertEquals(9, restored.operation().meetingsCopied());
+        assertEquals(Map.of("source-participant-id", "target-participant-id"), restored.operation().participantIdMap());
+        String encrypted = Files.readString(directory.resolve("settings.enc"));
+        assertFalse(encrypted.contains("synthetic-provider-secret"));
+        assertFalse(encrypted.contains("Transcript"));
+        assertFalse(encrypted.contains("Minutes"));
+    }
     @Test void setupConcurrencyOnlyOneSameVersionMutationCommitsAcrossStoreInstances() throws Exception {
         try (var executor = Executors.newFixedThreadPool(2)) {
             var start = new CountDownLatch(1);

@@ -56,7 +56,7 @@ public record GlobalDocumentSettings(int schemaVersion, long version, Connection
         }
         public Operation transition(String status, String stage, Map<String, Creation> journal, String error, boolean retryable, Instant now) {
             return new Operation(operationId, type, status, draftId, draftRevision, stage, Map.copyOf(journal), error,
-                    retryable, now, cancelRequested, participantsTotal, participantsCopied, meetingsTotal,
+                    retryable, now, "CANCELLED".equals(status) ? false : cancelRequested, participantsTotal, participantsCopied, meetingsTotal,
                     meetingsCopied, participantIdMap);
         }
         public Operation progress(String stage, long participantsTotal, long participantsCopied, long meetingsTotal,
