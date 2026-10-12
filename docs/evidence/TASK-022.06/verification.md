@@ -5,10 +5,10 @@
 ## Revision and review
 
 - Base: `eba6acc0a5d7323b52aadf30fe66172c9eeb254c`
-- Current verified head: `920fca800669bb725fda5bc3eca5f0856b065d53`
+- Implementation and live-test head: `518645240f9f88e0e6d7cd07b0385be573f87436`
 - Implementation commit: `6ce5fe04a596776fbdebd55d18b4257d11638fa1`
-- Current-head independent review: pending.
-- PR #110 remains a draft until remaining Notion transfer QA is resolved.
+- Current-head code review and final QA review: pending after this evidence update.
+- PR #110 remains a draft until final-head checks are recorded.
 
 ## Automated checks
 
@@ -17,21 +17,23 @@
 | `frontend/npm test` | PASS, 52 tests across 4 files |
 | `frontend/npm run lint` | PASS |
 | `frontend/npm run build` | PASS, TypeScript and Vite |
-| `backend: .\gradlew.bat test --no-daemon --console=plain` | PASS on cached Temurin JDK 25 |
+| `backend: .\gradlew.bat test --no-daemon --console=plain` | PASS, 306 tests; 0 failures/errors, 2 environment-gated skips |
+| Notion-only live transfer test | PASS, 1 test; 0 failures, 0 errors, 0 skipped |
 | `git diff --check` | PASS |
 
-The first backend invocation inherited an invalid Java 17 `JAVA_HOME` and did not start Gradle. Re-running the same wrapper with the cached Temurin JDK 25 completed successfully.
+The first backend invocation inherited an invalid Java 17 `JAVA_HOME` and did not start Gradle. The corrected wrapper run with cached Temurin JDK 25 passed. The two environment-gated live-provider tests were skipped in this full-suite run; the focused Notion live test ran separately with only the Notion token and synthetic source/target roots, and passed. No Confluence environment variables were present in that process.
 
 ## Browser and provider QA
 
-- Local Settings opened the existing document setup wizard. The initial Notion connection and structure setup, plus a synthetic participant roster query, had passed in the earlier QA run on the same implementation commit.
-- Current browser verification used Playwright at a 360×800 viewport on `/setup/document`: viewport and document widths were both 360px; the setup card measured 324px wide at x=18, and both provider buttons measured 290px wide at x=35. No horizontal overflow was present.
-- Keyboard focus to the connection-test action and return-to-settings link passed in the earlier QA run. After the invalid-provider test, the active Notion connection remained visible and credential fields were empty.
-- A separate Notion initialization attempt selected an existing page whose title did not match the required `Meeting Automation` root. The app stopped with `DOCUMENT_STRUCTURE_CONFLICT` before creating or changing provider pages. No copied records or provider writes resulted from that attempt.
-- **Confluence live QA is excluded by the user’s instruction.** No Confluence pass is claimed; product support remains in scope.
-- Notion transfer/read-back between independently prepared source and target hierarchies remains unverified. The task stays blocked on this acceptance evidence.
+- Local Settings Notion connection test and initial structure creation succeeded on dedicated synthetic parents.
+- Settings `COPY_ALL` completed with 1/1 synthetic participant copied and 0/0 meetings. The target roster showed the synthetic participant after switching.
+- The Notion-only adapter live test created one unique synthetic participant and meeting on the source, transferred both to the target, then read back the meeting title, structured minutes, transcript, and rewritten participant reference. Replaying the transfer copied 0 participants and 0 meetings and reused the existing records.
+- Current browser verification used Playwright at 360×800 on `/setup/document`: viewport and document widths were both 360px; the setup card measured 324px wide at x=18, and both provider buttons measured 290px wide at x=35. No horizontal overflow was present.
+- Keyboard focus to the connection-test action and return-to-settings link passed in the earlier QA run. Credential fields were empty after connection testing.
+- One initial Notion attempt using a mismatched existing root stopped with `DOCUMENT_STRUCTURE_CONFLICT` before provider writes. The later fresh synthetic source and target setup succeeded; the failed operation did not affect those roots.
+- **Confluence live QA is excluded by user instruction.** No Confluence result is claimed; product support remains in scope.
 - Synthetic QA records only; no real meeting content was used. No credentials, account email, provider page IDs, transcript, or minutes content is stored here.
 
 ## Acceptance status
 
-Automated checks, initial Notion setup checks, keyboard behavior, and the 360px viewport check pass. Confluence live QA is waived for this execution by user direction. Notion provider copy/read-back and the new-roster verification after that copy remain open; do not advance the PRD cursor, close Issue #101, or merge PR #110 until those Notion acceptance checks pass and current-head review/QA are recorded.
+Notion setup, participant transfer/read-back, adapter-level meeting and transcript/minutes transfer/read-back, replay idempotency, keyboard behavior, and 360px viewport checks pass. Confluence live QA is waived for this execution by user direction and is not counted as passed. Do not close Issue #101, mark the PRD task complete, or merge until the final current-head review and QA records are confirmed.
