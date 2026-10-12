@@ -227,6 +227,29 @@ class MeetingSessionCreationApiTests {
     }
 
     @Test
+    void transientProviderFailureAllowsSameIdempotencyKeyAndPayloadToRetry() throws Exception {
+        mockServer.expect(requestTo(ROOT_URL))
+                .andRespond(withServerError().body("temporary-provider-response"));
+
+        mockMvc.perform(createRequest("transient-provider-retry-key", validRequest()))
+                .andExpect(status().isBadGateway())
+                .andExpect(jsonPath("$.error.code").value("PARTICIPANT_LIST_FAILED"));
+        org.assertj.core.api.Assertions.assertThat(sessionStore.size()).isZero();
+
+        mockServer.reset();
+        expectRoster();
+        String response = mockMvc.perform(createRequest("transient-provider-retry-key", validRequest()))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.status").value("CREATED"))
+                .andReturn().getResponse().getContentAsString();
+
+        String sessionId = com.jayway.jsonpath.JsonPath.read(response, "$.data.sessionId");
+        org.assertj.core.api.Assertions.assertThat(sessionStore.size()).isEqualTo(1);
+        org.assertj.core.api.Assertions.assertThat(sessionStore.find(sessionId)).isPresent();
+        mockServer.verify();
+    }
+
+    @Test
     void missingParticipantStructureReturns422WithoutSavingSession() throws Exception {
         mockServer.expect(requestTo(ROOT_URL))
                 .andRespond(withSuccess("{\"has_more\":false,\"next_cursor\":null,\"results\":[]}",

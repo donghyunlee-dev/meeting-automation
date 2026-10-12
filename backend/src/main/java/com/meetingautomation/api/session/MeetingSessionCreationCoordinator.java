@@ -9,7 +9,7 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.function.Supplier;
 import org.springframework.stereotype.Component;
 
-/** Replays a terminal create outcome for matching keys during this process lifetime. */
+/** Replays successful create outcomes for matching keys during this process lifetime. */
 @Component
 public final class MeetingSessionCreationCoordinator {
     private final ConcurrentMap<String, Entry> entries = new ConcurrentHashMap<>();
@@ -27,6 +27,7 @@ public final class MeetingSessionCreationCoordinator {
             return result;
         } catch (RuntimeException failure) {
             candidate.outcome.complete(new Outcome(null, failure));
+            entries.remove(key, candidate);
             throw failure;
         }
     }
