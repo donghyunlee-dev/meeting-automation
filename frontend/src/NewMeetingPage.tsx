@@ -67,13 +67,14 @@ export function NewMeetingPage({ onSubmit }: { onSubmit: (attempt: MeetingSessio
   }, []);
 
   const loadParticipants = useCallback(async (clearSelection = false) => {
-    setParticipants((current) => ({ status: 'loading', data: current.data }));
+    if (clearSelection) setParticipantIds([]);
+    setParticipants((current) => clearSelection ? { status: 'loading' } : { status: 'loading', data: current.data });
     try {
       const items = await listMeetingParticipants();
       setParticipants({ status: 'ready', data: items });
       setParticipantIds((current) => clearSelection ? [] : current.filter((id) => items.some((item) => item.id === id)));
     } catch {
-      setParticipants((current) => ({ status: 'error', data: current.data }));
+      setParticipants((current) => clearSelection ? { status: 'error' } : { status: 'error', data: current.data });
     }
   }, []);
 

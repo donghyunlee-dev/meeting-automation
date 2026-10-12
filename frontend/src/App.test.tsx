@@ -306,6 +306,45 @@ describe('Participants settings', () => {
     expect((posts[1][1]?.headers as Record<string, string>)['Idempotency-Key']).not.toBe((posts[0][1]?.headers as Record<string, string>)['Idempotency-Key']);
   });
 
+  it('does not restore an old selection when stale-connection roster refresh fails then a new provider reuses its ID', async () => {
+    let rosterReads = 0;
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = new URL(String(input)).pathname;
+      if (path.endsWith('/document-setup')) return Promise.resolve(readySetupResponse());
+      if (path.endsWith('/app-config')) return Promise.resolve(response({ data: {
+        company: { id: 'c1', name: 'Example', timezone: 'Asia/Seoul' },
+        document: { provider: 'NOTION', configured: true, connectionVersion: 7, rootUrl: 'https://notion.example' },
+        setup: { status: 'READY', required: false, canCreateMeeting: true, operationId: null },
+      } }));
+      if (path.endsWith('/templates')) return Promise.resolve(response({ data: { items: [{ id: 'default.md', name: 'Default', version: '1.0.0' }] } }));
+      if (path.endsWith('/participants')) {
+        rosterReads += 1;
+        if (rosterReads === 1) return Promise.resolve(response({ data: { items: participants } }));
+        if (rosterReads === 2) return Promise.resolve(response({ error: { code: 'PARTICIPANT_LIST_FAILED' } }, 502));
+        return Promise.resolve(response({ data: { items: [{ id: 'p1', name: 'Grace Hopper', email: 'grace@new-provider.example' }] } }));
+      }
+      if (path.endsWith('/meeting-sessions')) return Promise.resolve(response({ error: { code: 'DOCUMENT_CONNECTION_CHANGED' } }, 409));
+      return Promise.reject(new Error(`Unexpected request: ${path} ${init?.method ?? 'GET'}`));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<MemoryRouter initialEntries={['/meetings/new']}><App /></MemoryRouter>);
+    await screen.findByText('Asia/Seoul');
+    fireEvent.change(screen.getByLabelText('회의 제목'), { target: { value: 'Roster refresh retry' } });
+    fireEvent.click(screen.getByRole('button', { name: '참석자 추가' }));
+    fireEvent.click(within(screen.getByRole('group', { name: '참석자 선택' })).getByRole('checkbox', { name: 'Ada Lovelace ada@example.com' }));
+    fireEvent.click(screen.getByRole('button', { name: '참석자 선택 닫기' }));
+    fireEvent.click(screen.getByRole('button', { name: '회의 시작' }));
+
+    expect(await screen.findByText(/문서 연결이 바뀌었습니다/)).toBeTruthy();
+    expect(await screen.findByRole('button', { name: '참석자 목록 다시 시도' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '참석자 목록 다시 시도' }));
+    fireEvent.click(await screen.findByRole('button', { name: '참석자 추가' }));
+    const newProviderCheckbox = await screen.findByRole('checkbox', { name: 'Grace Hopper grace@new-provider.example' });
+    expect(newProviderCheckbox).toHaveProperty('checked', false);
+    expect(screen.queryByRole('list', { name: '선택한 참석자' })).toBeNull();
+    expect(rosterReads).toBe(3);
+  });
+
   it('blocks API-006 while API-001 says a document switch is in progress', async () => {
     const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       const path = new URL(String(input)).pathname;
