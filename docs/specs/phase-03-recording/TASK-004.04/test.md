@@ -35,3 +35,7 @@ Upload policy가 설정 기준을 반환하고 Server process 외부 저장소�
 ## 🔗 전역 연결 소비자 실제 연동 회귀
 
 이 작업은 TASK-022에서 계약 fixture로만 검증한 실제 API-006 소비자를 연결한다. READY 성공 생성, 미설정/전환 중/stale connectionVersion 409, 생성과 전환의 원자 경쟁 및 Session 등록/종료 gate 사용을 실제 요청과 공용 registry 계약으로 검증한다.
+
+## TASK-022.05 gate integration revalidation (TASK-004.04)
+
+The API-006 regression suite also covers the v1.9 connection contract: a missing or non-positive `documentConnectionVersion` is rejected with 400; unconfigured, switching, and stale-version requests return their documented 409 errors before provider lookup; a successful create stores the accepted connection version and holds the shared `DocumentConnectionGate` session registration; session removal releases that registration; and provider failure releases the lease without saving a session. From `backend/`, run `.\gradlew.bat test --tests com.meetingautomation.MeetingSessionCreationApiTests` on Java 25.

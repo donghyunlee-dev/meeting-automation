@@ -3,6 +3,7 @@ package com.meetingautomation.api.session;
 import com.meetingautomation.api.template.TemplateCatalog;
 import com.meetingautomation.api.template.TemplateMetadata;
 import com.meetingautomation.api.error.ApiValidationException;
+import com.meetingautomation.document.DocumentConnectionGate;
 import com.meetingautomation.document.DocumentProviderException;
 import com.meetingautomation.document.DocumentProviderResolver;
 import com.meetingautomation.document.DocumentStructure;
@@ -22,6 +23,7 @@ public final class MeetingSessionService {
     private final DocumentProviderResolver providerResolver;
     private final MeetingSessionStore sessionStore;
     private final MeetingSessionCreationCoordinator coordinator;
+    private final DocumentConnectionGate connectionGate;
     private final UploadPolicy uploadPolicy;
 
     public MeetingSessionService(
@@ -29,6 +31,7 @@ public final class MeetingSessionService {
             DocumentProviderResolver providerResolver,
             MeetingSessionStore sessionStore,
             MeetingSessionCreationCoordinator coordinator,
+            DocumentConnectionGate connectionGate,
             @Value("${RECORDING_CHUNK_DURATION_SECONDS:15}") int chunkDurationSeconds,
             @Value("${MAX_CHUNK_BYTES:5242880}") int maxChunkBytes,
             @Value("${ACCEPTED_AUDIO_MIME_TYPES:audio/webm,audio/mp4}") String acceptedMimeTypes) {
@@ -36,6 +39,7 @@ public final class MeetingSessionService {
         this.providerResolver = providerResolver;
         this.sessionStore = sessionStore;
         this.coordinator = coordinator;
+        this.connectionGate = connectionGate;
         this.uploadPolicy = new UploadPolicy(chunkDurationSeconds, maxChunkBytes,
                 List.of(acceptedMimeTypes.split(",")).stream().map(String::trim).toList());
     }
@@ -53,41 +57,50 @@ public final class MeetingSessionService {
     }
 
     private MeetingSession createOnce(MeetingSessionCreationCoordinator.Command command) {
-        Set<String> supportedTemplateIds = templateCatalog.listTemplates().data().items().stream()
-                .map(TemplateMetadata::id).collect(Collectors.toUnmodifiableSet());
-        if (!supportedTemplateIds.contains(command.templateId())) throw validationFailure("templateId");
-
-        providerResolver.validateSelection();
-        ParticipantListingProvider provider = providerResolver.selectedProvider()
-                .filter(ParticipantListingProvider.class::isInstance)
-                .map(ParticipantListingProvider.class::cast)
-                .orElseThrow(() -> new IllegalStateException("Participant provider is unavailable."));
-        if (!providerResolver.configured()) {
-            throw new IllegalStateException("Participant provider is not configured.");
-        }
-
-        DocumentStructure structure;
+        MeetingSession candidate = MeetingSessionCreationCoordinator.newSession(command);
+        DocumentConnectionGate.SessionLease registration = connectionGate.beginSession(
+                command.documentConnectionVersion(), candidate.sessionId());
+        boolean saved = false;
         try {
-            structure = provider.discoverParticipantStructure(providerResolver.rootId());
-        } catch (DocumentProviderException failure) {
-            if ("DOCUMENT_STRUCTURE_NOT_FOUND".equals(failure.code())) throw failure;
-            throw DocumentProviderException.participantListFailed(failure.retryable(), failure);
-        } catch (RuntimeException providerFailure) {
-            throw DocumentProviderException.participantListFailed(false, providerFailure);
-        }
-        List<Participant> participants;
-        try {
-            participants = List.copyOf(provider.listParticipants(structure.participantsPageId()));
-        } catch (DocumentProviderException failure) {
-            if ("DOCUMENT_STRUCTURE_NOT_FOUND".equals(failure.code())) throw failure;
-            throw DocumentProviderException.participantListFailed(failure.retryable(), failure);
-        } catch (RuntimeException providerFailure) {
-            throw DocumentProviderException.participantListFailed(false, providerFailure);
-        }
-        Set<String> availableIds = participants.stream().map(Participant::id).collect(Collectors.toSet());
-        if (!availableIds.containsAll(command.participantIds())) throw validationFailure("participantIds");
+            Set<String> supportedTemplateIds = templateCatalog.listTemplates().data().items().stream()
+                    .map(TemplateMetadata::id).collect(Collectors.toUnmodifiableSet());
+            if (!supportedTemplateIds.contains(command.templateId())) throw validationFailure("templateId");
 
-        return sessionStore.save(MeetingSessionCreationCoordinator.newSession(command));
+            ParticipantListingProvider provider = providerResolver.selectedProvider()
+                    .filter(ParticipantListingProvider.class::isInstance)
+                    .map(ParticipantListingProvider.class::cast)
+                    .orElseThrow(() -> new IllegalStateException("Participant provider is unavailable."));
+            if (!providerResolver.configured()) {
+                throw new IllegalStateException("Participant provider is not configured.");
+            }
+
+            DocumentStructure structure;
+            try {
+                structure = provider.discoverParticipantStructure(providerResolver.rootId());
+            } catch (DocumentProviderException failure) {
+                if ("DOCUMENT_STRUCTURE_NOT_FOUND".equals(failure.code())) throw failure;
+                throw DocumentProviderException.participantListFailed(failure.retryable(), failure);
+            } catch (RuntimeException providerFailure) {
+                throw DocumentProviderException.participantListFailed(false, providerFailure);
+            }
+            List<Participant> participants;
+            try {
+                participants = List.copyOf(provider.listParticipants(structure.participantsPageId()));
+            } catch (DocumentProviderException failure) {
+                if ("DOCUMENT_STRUCTURE_NOT_FOUND".equals(failure.code())) throw failure;
+                throw DocumentProviderException.participantListFailed(failure.retryable(), failure);
+            } catch (RuntimeException providerFailure) {
+                throw DocumentProviderException.participantListFailed(false, providerFailure);
+            }
+            Set<String> availableIds = participants.stream().map(Participant::id).collect(Collectors.toSet());
+            if (!availableIds.containsAll(command.participantIds())) throw validationFailure("participantIds");
+
+            sessionStore.save(candidate, registration);
+            saved = true;
+            return candidate;
+        } finally {
+            if (!saved) registration.close();
+        }
     }
 
     private static MeetingSessionCreationCoordinator.Command normalize(CreateMeetingSessionRequest request) {
@@ -109,7 +122,9 @@ public final class MeetingSessionService {
         }
         if (timezone == null || !isIanaTimezone(timezone)) throw validationFailure("timezone");
         if (recoveryKey == null || recoveryKey.isBlank()) throw validationFailure("recoveryKey");
-        return new MeetingSessionCreationCoordinator.Command(title, templateId, participantIds, timezone, recoveryKey);
+        if (request.documentConnectionVersion() < 1) throw validationFailure("documentConnectionVersion");
+        return new MeetingSessionCreationCoordinator.Command(title, templateId, participantIds, timezone,
+                request.documentConnectionVersion(), recoveryKey);
     }
 
     private static boolean isIanaTimezone(String timezone) {

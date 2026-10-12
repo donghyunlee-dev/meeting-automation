@@ -21,6 +21,10 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.test.web.servlet.MockMvc;
+import com.meetingautomation.api.session.MeetingSessionStore;
+import com.meetingautomation.document.DocumentConnectionGate;
+import com.meetingautomation.document.settings.GlobalDocumentSettings;
+import com.meetingautomation.document.settings.GlobalSettingsStore;
 
 @SpringBootTest(properties = {
         "DOCUMENT_PROVIDER=NOTION",
@@ -43,16 +47,32 @@ class MeetingSessionCreationApiTests {
     @Autowired
     private MockRestServiceServer mockServer;
 
+    @Autowired
+    private GlobalSettingsStore settingsStore;
+
+    @Autowired
+    private DocumentConnectionGate connectionGate;
+
+    @Autowired
+    private MeetingSessionStore sessionStore;
+
     @BeforeEach
     void resetMockServer() {
         mockServer.reset();
+        settingsStore.transaction(current -> new GlobalSettingsStore.Change<>(
+                new GlobalDocumentSettings(1, current.version() + 1,
+                        new GlobalDocumentSettings.Connection("connection-fixture", 1, "NOTION",
+                                java.util.Map.of(), java.util.Map.of("token", TOKEN), "session-create-root-secret",
+                                "meetings-page", "participants-page", java.time.Instant.now()),
+                        null, null, java.util.Map.of()), null));
+        for (String sessionId : sessionStore.sessionIds()) sessionStore.remove(sessionId);
     }
 
     @Test
     void validRequestCreatesSessionAndReturnsServerOwnedUploadPolicy() throws Exception {
         expectRoster();
 
-        mockMvc.perform(post("/api/v1/meeting-sessions")
+        String body = mockMvc.perform(post("/api/v1/meeting-sessions")
                         .header("Idempotency-Key", "session-create-key-1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(validRequest()))
@@ -64,7 +84,74 @@ class MeetingSessionCreationApiTests {
                 .andExpect(jsonPath("$.data.uploadPolicy.chunkDurationSeconds").value(15))
                 .andExpect(jsonPath("$.data.uploadPolicy.maxChunkBytes").value(5242880))
                 .andExpect(jsonPath("$.data.uploadPolicy.acceptedMimeTypes[0]").value("audio/webm"))
-                .andExpect(jsonPath("$.data.uploadPolicy.acceptedMimeTypes[1]").value("audio/mp4"));
+                .andExpect(jsonPath("$.data.uploadPolicy.acceptedMimeTypes[1]").value("audio/mp4"))
+                .andReturn().getResponse().getContentAsString();
+        String sessionId = com.jayway.jsonpath.JsonPath.read(body, "$.data.sessionId");
+        org.assertj.core.api.Assertions.assertThat(sessionStore.find(sessionId))
+                .get().extracting("documentConnectionVersion").isEqualTo(1L);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> connectionGate.beginSwitch(settingsStore.read().version()))
+                .isInstanceOf(com.meetingautomation.document.settings.SettingsException.class)
+                .extracting("code").isEqualTo("DOCUMENT_CHANGE_BUSY");
+        mockServer.verify();
+    }
+
+    @Test
+    void missingDocumentConnectionVersionIsRejectedBeforeProviderLookup() throws Exception {
+        mockMvc.perform(createRequest("missing-version", validRequest().replace(
+                        ",\"documentConnectionVersion\":1", "")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("VALIDATION_FAILED"));
+        mockMvc.perform(createRequest("zero-version", validRequest().replace(
+                        "\"documentConnectionVersion\":1", "\"documentConnectionVersion\":0")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("VALIDATION_FAILED"));
+        mockServer.verify();
+    }
+
+    @Test
+    void staleDocumentConnectionVersionReturnsConflictWithoutProviderLookup() throws Exception {
+        mockMvc.perform(createRequest("stale-version", validRequest().replace(
+                        "\"documentConnectionVersion\":1", "\"documentConnectionVersion\":2")))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error.code").value("DOCUMENT_CONNECTION_CHANGED"));
+        mockServer.verify();
+    }
+
+    @Test
+    void unconfiguredConnectionReturnsSetupRequiredConflict() throws Exception {
+        settingsStore.transaction(current -> new GlobalSettingsStore.Change<>(
+                new GlobalDocumentSettings(1, current.version() + 1, null, null, null, java.util.Map.of()), null));
+        mockMvc.perform(createRequest("unconfigured", validRequest()))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error.code").value("DOCUMENT_SETUP_REQUIRED"));
+        mockServer.verify();
+    }
+
+    @Test
+    void switchingConnectionReturnsBusyConflictWithoutProviderLookup() throws Exception {
+        settingsStore.transaction(current -> new GlobalSettingsStore.Change<>(
+                new GlobalDocumentSettings(1, current.version() + 1, current.active(), null,
+                        new GlobalDocumentSettings.Operation("switch-1", "SWITCH", "RUNNING"),
+                        java.util.Map.of()), null));
+        mockMvc.perform(createRequest("switching", validRequest()))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error.code").value("DOCUMENT_CHANGE_BUSY"));
+        mockServer.verify();
+    }
+
+    @Test
+    void removingSessionReleasesSharedConnectionRegistration() throws Exception {
+        expectRoster();
+        String body = mockMvc.perform(createRequest("remove-session", validRequest()))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        String sessionId = com.jayway.jsonpath.JsonPath.read(body, "$.data.sessionId");
+
+        org.assertj.core.api.Assertions.assertThat(sessionStore.remove(sessionId)).isTrue();
+
+        try (var switchLease = connectionGate.beginSwitch(settingsStore.read().version())) {
+            org.assertj.core.api.Assertions.assertThat(switchLease).isNotNull();
+        }
         mockServer.verify();
     }
 
@@ -133,6 +220,9 @@ class MeetingSessionCreationApiTests {
                         org.hamcrest.Matchers.containsString("provider-secret-response"))))
                 .andExpect(content().string(org.hamcrest.Matchers.not(
                         org.hamcrest.Matchers.containsString(TOKEN))));
+        try (var switchLease = connectionGate.beginSwitch(settingsStore.read().version())) {
+            org.assertj.core.api.Assertions.assertThat(switchLease).isNotNull();
+        }
         mockServer.verify();
     }
 
@@ -173,7 +263,7 @@ class MeetingSessionCreationApiTests {
 
     private static String validRequest() {
         return "{\"title\":\"  Sprint Planning  \",\"templateId\":\"default.md\","
-                + "\"participantIds\":[\"participant-1\"],\"timezone\":\"Asia/Seoul\","
+                + "\"participantIds\":[\"participant-1\"],\"timezone\":\"Asia/Seoul\",\"documentConnectionVersion\":1,"
                 + "\"recoveryKey\":\"browser-recovery-key\"}";
     }
 

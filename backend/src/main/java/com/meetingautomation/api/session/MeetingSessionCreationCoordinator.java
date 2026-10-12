@@ -32,7 +32,7 @@ public final class MeetingSessionCreationCoordinator {
     }
 
     public record Command(String title, String templateId, List<String> participantIds,
-            String timezone, String recoveryKey) {
+            String timezone, long documentConnectionVersion, String recoveryKey) {
         public Command {
             participantIds = List.copyOf(participantIds);
         }
@@ -43,6 +43,7 @@ public final class MeetingSessionCreationCoordinator {
                 "ms_" + UUID.randomUUID(),
                 1,
                 "CREATED",
+                command.documentConnectionVersion(),
                 new MeetingSession.Meeting(command.title(), command.templateId(),
                         command.participantIds(), command.timezone()));
     }
