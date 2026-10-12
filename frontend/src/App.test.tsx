@@ -54,6 +54,192 @@ function renderParticipantsApp() {
 }
 
 describe('Participants settings', () => {
+  it('creates a session with the loaded connection version and navigates with its runtime context', async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = new URL(String(input)).pathname;
+      if (path.endsWith('/document-setup')) return Promise.resolve(readySetupResponse());
+      if (path.endsWith('/app-config')) return Promise.resolve(response({ data: {
+        company: { id: 'c1', name: 'Example', timezone: 'Asia/Seoul' },
+        document: { provider: 'NOTION', configured: true, connectionVersion: 7, rootUrl: 'https://notion.example' },
+        setup: { status: 'READY', required: false, canCreateMeeting: true, operationId: null },
+      } }));
+      if (path.endsWith('/templates')) return Promise.resolve(response({ data: { items: [{ id: 'default.md', name: 'Default', version: '1.0.0' }] } }));
+      if (path.endsWith('/participants')) return Promise.resolve(response({ data: { items: participants } }));
+      if (path.endsWith('/meeting-sessions')) return Promise.resolve(response({ data: {
+        sessionId: 'session-123', version: 1, status: 'CREATED',
+        uploadPolicy: { chunkDurationSeconds: 30, maxChunkBytes: 1000000, acceptedMimeTypes: ['audio/webm'] },
+      } }, 201));
+      return Promise.reject(new Error(`Unexpected request: ${path} ${init?.method ?? 'GET'}`));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<MemoryRouter initialEntries={['/meetings/new']}><App /></MemoryRouter>);
+
+    await screen.findByText('Asia/Seoul');
+    fireEvent.change(screen.getByLabelText('회의 제목'), { target: { value: 'Planning' } });
+    fireEvent.click(screen.getByRole('button', { name: '참석자 추가' }));
+    fireEvent.click(within(screen.getByRole('group', { name: '참석자 선택' })).getByRole('checkbox', { name: 'Ada Lovelace ada@example.com' }));
+    fireEvent.click(screen.getByRole('button', { name: '회의 시작' }));
+
+    expect(await screen.findByText('Recording session-123')).toBeTruthy();
+    const post = fetchMock.mock.calls.find(([url]) => new URL(String(url)).pathname.endsWith('/meeting-sessions'));
+    expect(post).toBeTruthy();
+    const request = post?.[1];
+    const body = JSON.parse(String(request?.body));
+    expect(body).toMatchObject({ title: 'Planning', templateId: 'default.md', participantIds: ['p1'], timezone: 'Asia/Seoul', documentConnectionVersion: 7 });
+    expect(typeof body.recoveryKey).toBe('string');
+    expect(request?.headers).toHaveProperty('Idempotency-Key');
+    expect(String(post?.[0])).not.toMatch(/recoveryKey|idempotency/i);
+  });
+
+  it('reuses one immutable attempt for an uncertain response and blocks duplicate clicks', async () => {
+    let rejectFirst!: (error: Error) => void;
+    let resolveSecond!: (value: Response) => void;
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = new URL(String(input)).pathname;
+      if (path.endsWith('/document-setup')) return Promise.resolve(readySetupResponse());
+      if (path.endsWith('/app-config')) return Promise.resolve(response({ data: {
+        company: { id: 'c1', name: 'Example', timezone: 'Asia/Seoul' }, document: { provider: 'NOTION', configured: true, connectionVersion: 7, rootUrl: 'https://notion.example' }, setup: { status: 'READY', required: false, canCreateMeeting: true, operationId: null },
+      } }));
+      if (path.endsWith('/templates')) return Promise.resolve(response({ data: { items: [{ id: 'default.md', name: 'Default', version: '1.0.0' }] } }));
+      if (path.endsWith('/participants')) return Promise.resolve(response({ data: { items: participants } }));
+      if (path.endsWith('/meeting-sessions')) return fetchMock.mock.calls.filter(([url]) => new URL(String(url)).pathname.endsWith('/meeting-sessions')).length === 1
+        ? new Promise<Response>((_resolve, reject) => { rejectFirst = reject; })
+        : new Promise<Response>((resolve) => { resolveSecond = resolve; });
+      return Promise.reject(new Error(`Unexpected request: ${path} ${init?.method ?? 'GET'}`));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<MemoryRouter initialEntries={['/meetings/new']}><App /></MemoryRouter>);
+    await screen.findByText('Asia/Seoul');
+    fireEvent.change(screen.getByLabelText('회의 제목'), { target: { value: 'Retry safely' } });
+    fireEvent.click(screen.getByRole('button', { name: '참석자 추가' }));
+    fireEvent.click(within(screen.getByRole('group', { name: '참석자 선택' })).getByRole('checkbox', { name: 'Ada Lovelace ada@example.com' }));
+    fireEvent.click(screen.getByRole('button', { name: '회의 시작' }));
+    await waitFor(() => expect(fetchMock.mock.calls.filter(([url]) => new URL(String(url)).pathname.endsWith('/meeting-sessions'))).toHaveLength(1));
+    expect(screen.getByRole('button', { name: '회의 시작 중…' })).toHaveProperty('disabled', true);
+    fireEvent.click(screen.getByRole('button', { name: '회의 시작 중…' }));
+    expect(fetchMock.mock.calls.filter(([url]) => new URL(String(url)).pathname.endsWith('/meeting-sessions'))).toHaveLength(1);
+    rejectFirst(new Error('connection dropped before response'));
+    expect((await screen.findByRole('alert')).textContent).toContain('회의를 시작하지 못했습니다.');
+    fireEvent.click(screen.getByRole('button', { name: '회의 시작' }));
+    await waitFor(() => expect(resolveSecond).toBeTypeOf('function'));
+    const posts = fetchMock.mock.calls.filter(([url]) => new URL(String(url)).pathname.endsWith('/meeting-sessions'));
+    const firstBody = JSON.parse(String(posts[0][1]?.body));
+    const retryBody = JSON.parse(String(posts[1][1]?.body));
+    expect(retryBody).toEqual(firstBody);
+    expect((posts[1][1]?.headers as Record<string, string>)['Idempotency-Key']).toBe((posts[0][1]?.headers as Record<string, string>)['Idempotency-Key']);
+    resolveSecond(response({ data: { sessionId: 'session-retry', version: 1, status: 'CREATED', uploadPolicy: { chunkDurationSeconds: 30, maxChunkBytes: 1000000, acceptedMimeTypes: ['audio/webm'] } } }, 201));
+    expect(await screen.findByText('Recording session-retry')).toBeTruthy();
+  });
+
+  it('rotates keys after a definitive API error and never displays provider details', async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = new URL(String(input)).pathname;
+      if (path.endsWith('/document-setup')) return Promise.resolve(readySetupResponse());
+      if (path.endsWith('/app-config')) return Promise.resolve(response({ data: {
+        company: { id: 'c1', name: 'Example', timezone: 'Asia/Seoul' }, document: { provider: 'NOTION', configured: true, connectionVersion: 7, rootUrl: 'https://notion.example' }, setup: { status: 'READY', required: false, canCreateMeeting: true, operationId: null },
+      } }));
+      if (path.endsWith('/templates')) return Promise.resolve(response({ data: { items: [{ id: 'default.md', name: 'Default', version: '1.0.0' }] } }));
+      if (path.endsWith('/participants')) return Promise.resolve(response({ data: { items: participants } }));
+      if (path.endsWith('/meeting-sessions')) {
+        const count = fetchMock.mock.calls.filter(([url]) => new URL(String(url)).pathname.endsWith('/meeting-sessions')).length;
+        return Promise.resolve(count === 1
+          ? response({ error: { code: 'VALIDATION_FAILED', message: 'provider token=private-secret' } }, 400)
+          : response({ data: { sessionId: 'session-edited', version: 1, status: 'CREATED', uploadPolicy: { chunkDurationSeconds: 30, maxChunkBytes: 1000000, acceptedMimeTypes: ['audio/webm'] } } }, 201));
+      }
+      return Promise.reject(new Error(`Unexpected request: ${path} ${init?.method ?? 'GET'}`));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<MemoryRouter initialEntries={['/meetings/new']}><App /></MemoryRouter>);
+    await screen.findByText('Asia/Seoul');
+    fireEvent.change(screen.getByLabelText('회의 제목'), { target: { value: 'Before edit' } });
+    fireEvent.click(screen.getByRole('button', { name: '참석자 추가' }));
+    fireEvent.click(within(screen.getByRole('group', { name: '참석자 선택' })).getByRole('checkbox', { name: 'Ada Lovelace ada@example.com' }));
+    fireEvent.click(screen.getByRole('button', { name: '회의 시작' }));
+    expect((await screen.findByRole('alert')).textContent).toContain('요청을 완료하지 못했습니다.');
+    expect(screen.queryByText(/private-secret|provider token/)).toBeNull();
+    fireEvent.change(screen.getByLabelText('회의 제목'), { target: { value: 'After edit' } });
+    fireEvent.click(screen.getByRole('button', { name: '회의 시작' }));
+    expect(await screen.findByText('Recording session-edited')).toBeTruthy();
+    const posts = fetchMock.mock.calls.filter(([url]) => new URL(String(url)).pathname.endsWith('/meeting-sessions'));
+    expect(JSON.parse(String(posts[0][1]?.body)).title).toBe('Before edit');
+    expect(JSON.parse(String(posts[1][1]?.body)).title).toBe('After edit');
+    expect((posts[1][1]?.headers as Record<string, string>)['Idempotency-Key']).not.toBe((posts[0][1]?.headers as Record<string, string>)['Idempotency-Key']);
+  });
+
+  it('refreshes setup and roster after a stale connection and submits with a new attempt', async () => {
+    let configReads = 0;
+    let rosterReads = 0;
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = new URL(String(input)).pathname;
+      if (path.endsWith('/document-setup')) return Promise.resolve(readySetupResponse());
+      if (path.endsWith('/app-config')) {
+        configReads += 1;
+        const connectionVersion = configReads === 1 ? 7 : 8;
+        return Promise.resolve(response({ data: {
+          company: { id: 'c1', name: 'Example', timezone: 'Asia/Seoul' },
+          document: { provider: 'NOTION', configured: true, connectionVersion, rootUrl: 'https://notion.example' },
+          setup: { status: 'READY', required: false, canCreateMeeting: true, operationId: null },
+        } }));
+      }
+      if (path.endsWith('/templates')) return Promise.resolve(response({ data: { items: [{ id: 'default.md', name: 'Default', version: '1.0.0' }] } }));
+      if (path.endsWith('/participants')) {
+        rosterReads += 1;
+        return Promise.resolve(response({ data: { items: rosterReads === 1 ? participants : [{ id: 'p2', name: 'Grace Hopper', email: 'grace@navy.example' }] } }));
+      }
+      if (path.endsWith('/meeting-sessions')) {
+        const count = fetchMock.mock.calls.filter(([url]) => new URL(String(url)).pathname.endsWith('/meeting-sessions')).length;
+        return Promise.resolve(count === 1
+          ? response({ error: { code: 'DOCUMENT_CONNECTION_CHANGED' } }, 409)
+          : response({ data: { sessionId: 'session-new-connection', version: 1, status: 'CREATED', uploadPolicy: { chunkDurationSeconds: 30, maxChunkBytes: 1000000, acceptedMimeTypes: ['audio/webm'] } } }, 201));
+      }
+      return Promise.reject(new Error(`Unexpected request: ${path} ${init?.method ?? 'GET'}`));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<MemoryRouter initialEntries={['/meetings/new']}><App /></MemoryRouter>);
+    await screen.findByText('Asia/Seoul');
+    fireEvent.change(screen.getByLabelText('회의 제목'), { target: { value: 'Current connection' } });
+    fireEvent.click(screen.getByRole('button', { name: '참석자 추가' }));
+    fireEvent.click(within(screen.getByRole('group', { name: '참석자 선택' })).getByRole('checkbox', { name: 'Ada Lovelace ada@example.com' }));
+    fireEvent.click(screen.getByRole('button', { name: '회의 시작' }));
+
+    expect(await screen.findByText(/문서 연결이 바뀌었습니다/)).toBeTruthy();
+    expect(configReads).toBe(2);
+    expect(rosterReads).toBe(2);
+    expect(screen.queryByText('Ada Lovelace')).toBeNull();
+    fireEvent.click(within(screen.getByRole('group', { name: '참석자 선택' })).getByRole('checkbox', { name: 'Grace Hopper grace@navy.example' }));
+    fireEvent.click(screen.getByRole('button', { name: '참석자 선택 닫기' }));
+    fireEvent.click(screen.getByRole('button', { name: '회의 시작' }));
+    expect(await screen.findByText('Recording session-new-connection')).toBeTruthy();
+    const posts = fetchMock.mock.calls.filter(([url]) => new URL(String(url)).pathname.endsWith('/meeting-sessions'));
+    const first = JSON.parse(String(posts[0][1]?.body));
+    const second = JSON.parse(String(posts[1][1]?.body));
+    expect(first.documentConnectionVersion).toBe(7);
+    expect(second).toMatchObject({ participantIds: ['p2'], documentConnectionVersion: 8 });
+    expect(second.recoveryKey).not.toBe(first.recoveryKey);
+    expect((posts[1][1]?.headers as Record<string, string>)['Idempotency-Key']).not.toBe((posts[0][1]?.headers as Record<string, string>)['Idempotency-Key']);
+  });
+
+  it('blocks API-006 while API-001 says a document switch is in progress', async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = new URL(String(input)).pathname;
+      if (path.endsWith('/document-setup')) return Promise.resolve(readySetupResponse());
+      if (path.endsWith('/app-config')) return Promise.resolve(response({ data: {
+        company: { id: 'c1', name: 'Example', timezone: 'Asia/Seoul' },
+        document: { provider: 'NOTION', configured: true, connectionVersion: 7, rootUrl: 'https://notion.example' },
+        setup: { status: 'SWITCHING', required: false, canCreateMeeting: false, operationId: 'switch-1' },
+      } }));
+      if (path.endsWith('/templates')) return Promise.resolve(response({ data: { items: [{ id: 'default.md', name: 'Default', version: '1.0.0' }] } }));
+      if (path.endsWith('/participants')) return Promise.resolve(response({ data: { items: participants } }));
+      return Promise.reject(new Error(`Unexpected request: ${path} ${init?.method ?? 'GET'}`));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<MemoryRouter initialEntries={['/meetings/new']}><App /></MemoryRouter>);
+    await screen.findByText('Asia/Seoul');
+    expect(screen.getByRole('link', { name: 'Open document settings' }).getAttribute('href')).toBe('/setup/document');
+    expect(screen.getByRole('button', { name: '회의 시작' })).toHaveProperty('disabled', true);
+    expect(fetchMock.mock.calls.some(([url]) => new URL(String(url)).pathname.endsWith('/meeting-sessions'))).toBe(false);
+  });
+
   it('renders the SCR-001 Home content and navigation without fetching recent meetings', async () => {
     const fetchMock = vi.fn();
     installFetchMock(fetchMock);

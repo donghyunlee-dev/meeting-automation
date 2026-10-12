@@ -8,8 +8,9 @@ import {
   updateParticipant,
 } from './participantsApi';
 import './app.css';
-import { Link, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router';
+import { Link, NavLink, Route, Routes, useLocation, useNavigate, useParams } from 'react-router';
 import { NewMeetingPage, type NewMeetingPayload } from './NewMeetingPage';
+import { createMeetingSession, type MeetingSession, type MeetingSessionAttempt } from './newMeetingApi';
 import { DocumentSetupWizard } from './DocumentSetupWizard';
 import { getSetupSnapshot } from './documentSetupApi';
 
@@ -324,6 +325,32 @@ function SetupGate({ children }: { children: React.ReactNode }) {
   return allowed ? <>{children}</> : <main className="setup-page"><p role="status">문서 연결 상태를 확인하는 중…</p></main>;
 }
 
+function NewMeetingRoute({ onCreated, onSubmitted }: {
+  onCreated: (session: MeetingSession) => void;
+  onSubmitted?: (payload: NewMeetingPayload) => void;
+}) {
+  const navigate = useNavigate();
+  async function submit(attempt: MeetingSessionAttempt) {
+    const session = await createMeetingSession(attempt);
+    onCreated(session);
+    onSubmitted?.({
+      title: attempt.title,
+      templateId: attempt.templateId,
+      participantIds: [...attempt.participantIds],
+      timezone: attempt.timezone,
+      documentConnectionVersion: attempt.documentConnectionVersion,
+    });
+    navigate(`/meetings/${encodeURIComponent(session.sessionId)}/recording`);
+  }
+  return <NewMeetingPage onSubmit={submit} />;
+}
+
+function MeetingRecordingRoute({ session }: { session: MeetingSession | null }) {
+  const { sessionId } = useParams();
+  if (!session || session.sessionId !== sessionId) return <main className="future-page"><h1>Recording session unavailable</h1><p>Start a new meeting to create a recording session.</p></main>;
+  return <main className="future-page"><h1>Recording {session.sessionId}</h1><p>Status: {session.status}</p><p>Upload policy: {session.uploadPolicy.acceptedMimeTypes.join(', ')}</p></main>;
+}
+
 function BottomNavigation() {
   return (
     <nav className="bottom-navigation" aria-label="주요 메뉴">
@@ -335,6 +362,7 @@ function BottomNavigation() {
 }
 
 export function App({ onNewMeetingSubmit = () => undefined }: { onNewMeetingSubmit?: (payload: NewMeetingPayload) => void } = {}) {
+  const [createdSession, setCreatedSession] = useState<MeetingSession | null>(null);
   return (
     <div className="app-shell">
       <Routes>
@@ -342,7 +370,8 @@ export function App({ onNewMeetingSubmit = () => undefined }: { onNewMeetingSubm
         <Route path="/setup/document" element={<DocumentSetupWizard />} />
         <Route path="/settings" element={<DocumentSetupWizard settings />} />
         <Route path="/settings/document" element={<DocumentSetupWizard settings />} />
-        <Route path="/meetings/new" element={<SetupGate><NewMeetingPage onSubmit={onNewMeetingSubmit} /></SetupGate>} />
+        <Route path="/meetings/new" element={<SetupGate><NewMeetingRoute onCreated={setCreatedSession} onSubmitted={onNewMeetingSubmit} /></SetupGate>} />
+        <Route path="/meetings/:sessionId/recording" element={<MeetingRecordingRoute session={createdSession} />} />
         <Route path="/settings/participants" element={<SetupGate><ParticipantsPage /></SetupGate>} />
         <Route path="*" element={<FutureRouteNotice />} />
       </Routes>

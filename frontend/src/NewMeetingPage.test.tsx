@@ -1,7 +1,8 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { NewMeetingPage, type NewMeetingPayload } from './NewMeetingPage';
+import { NewMeetingPage } from './NewMeetingPage';
+import type { MeetingSessionAttempt } from './newMeetingApi';
 import { MeetingParticipantSelector } from './MeetingParticipantSelector';
 
 const templates = [
@@ -17,7 +18,7 @@ function response(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 }
 
-function renderPage(onSubmit = vi.fn<(payload: NewMeetingPayload) => void>()) {
+function renderPage(onSubmit = vi.fn<(payload: MeetingSessionAttempt) => void>()) {
   return {
     onSubmit,
     ...render(<MemoryRouter><NewMeetingPage onSubmit={onSubmit} /></MemoryRouter>),
@@ -27,7 +28,7 @@ function renderPage(onSubmit = vi.fn<(payload: NewMeetingPayload) => void>()) {
 function mockSuccess() {
   const fetchMock = vi.fn((input: RequestInfo | URL) => {
     const path = String(input);
-    if (path.endsWith('/app-config')) return Promise.resolve(response({ data: { company: { id: 'c1', name: 'Example', timezone: 'Asia/Seoul' } } }));
+    if (path.endsWith('/app-config')) return Promise.resolve(response({ data: { company: { id: 'c1', name: 'Example', timezone: 'Asia/Seoul' }, document: { provider: 'NOTION', configured: true, connectionVersion: 1, rootUrl: 'https://notion.example' }, setup: { status: 'READY', required: false, canCreateMeeting: true, operationId: null } } }));
     if (path.endsWith('/templates')) return Promise.resolve(response({ data: { items: templates } }));
     if (path.endsWith('/participants')) return Promise.resolve(response({ data: { items: participants } }));
     return Promise.reject(new Error(`Unexpected request: ${path}`));
@@ -82,7 +83,7 @@ describe('New Meeting input and selection', () => {
     let failParticipants = true;
     const fetchMock = vi.fn((input: RequestInfo | URL) => {
       const path = String(input);
-      if (path.endsWith('/app-config')) return Promise.resolve(response({ data: { company: { id: 'c1', name: 'Example', timezone: 'Asia/Seoul' } } }));
+      if (path.endsWith('/app-config')) return Promise.resolve(response({ data: { company: { id: 'c1', name: 'Example', timezone: 'Asia/Seoul' }, document: { provider: 'NOTION', configured: true, connectionVersion: 1, rootUrl: 'https://notion.example' }, setup: { status: 'READY', required: false, canCreateMeeting: true, operationId: null } } }));
       if (path.endsWith('/templates')) return Promise.resolve(response({ data: { items: templates } }));
       if (path.endsWith('/participants')) return Promise.resolve(failParticipants
         ? response({ error: { code: 'PARTICIPANT_LIST_FAILED' } }, 502)
@@ -112,7 +113,7 @@ describe('New Meeting input and selection', () => {
       const requestPath = String(input);
       if (requestPath.endsWith('/app-config')) return path === '/app-config' && shouldFail
         ? Promise.resolve(response({ error: { code: 'CONFIG_UNAVAILABLE' } }, 503))
-        : Promise.resolve(response({ data: { company: { id: 'c1', name: 'Example', timezone: 'Asia/Seoul' } } }));
+        : Promise.resolve(response({ data: { company: { id: 'c1', name: 'Example', timezone: 'Asia/Seoul' }, document: { provider: 'NOTION', configured: true, connectionVersion: 1, rootUrl: 'https://notion.example' }, setup: { status: 'READY', required: false, canCreateMeeting: true, operationId: null } } }));
       if (requestPath.endsWith('/templates')) return path === '/templates' && shouldFail
         ? Promise.resolve(response({ error: { code: 'TEMPLATE_LIST_FAILED' } }, 502))
         : Promise.resolve(response({ data: { items: templates } }));
@@ -170,9 +171,10 @@ describe('New Meeting input and selection', () => {
     fireEvent.click(screen.getByRole('button', { name: '회의 시작' }));
 
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
-    expect(onSubmit).toHaveBeenCalledWith({
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
       title: '주간 계획', templateId: 'default.md', participantIds: ['p1', 'p2'], timezone: 'Asia/Seoul',
-    });
+      documentConnectionVersion: 1, recoveryKey: expect.any(String), idempotencyKey: expect.any(String),
+    }));
     expect(fetchMock.mock.calls.map(([url]) => new URL(String(url)).pathname)).toEqual([
       '/api/v1/app-config', '/api/v1/templates', '/api/v1/participants',
     ]);
@@ -182,7 +184,7 @@ describe('New Meeting input and selection', () => {
   it('keeps submit unavailable when template or roster is empty', async () => {
     const fetchMock = vi.fn((input: RequestInfo | URL) => {
       const path = String(input);
-      if (path.endsWith('/app-config')) return Promise.resolve(response({ data: { company: { id: 'c1', name: 'Example', timezone: 'Asia/Seoul' } } }));
+      if (path.endsWith('/app-config')) return Promise.resolve(response({ data: { company: { id: 'c1', name: 'Example', timezone: 'Asia/Seoul' }, document: { provider: 'NOTION', configured: true, connectionVersion: 1, rootUrl: 'https://notion.example' }, setup: { status: 'READY', required: false, canCreateMeeting: true, operationId: null } } }));
       if (path.endsWith('/templates')) return Promise.resolve(response({ data: { items: [] } }));
       return Promise.resolve(response({ data: { items: [] } }));
     });
