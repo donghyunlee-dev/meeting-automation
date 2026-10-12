@@ -2,6 +2,7 @@ import type { Participant } from './participantsApi';
 
 export type MeetingTemplate = { id: string; name: string; version: string };
 export type CompanyConfig = { id: string; name: string; timezone: string };
+export type DocumentAppConfig = { company: CompanyConfig; document?: { provider: string; configured: boolean; connectionVersion: number; rootUrl: string }; setup?: { status: string; required: boolean; canCreateMeeting: boolean; operationId: string | null } };
 
 type ApiErrorBody = { error?: { code?: string } };
 
@@ -38,9 +39,13 @@ async function get<T>(path: string): Promise<T> {
 }
 
 export async function getCompanyConfig(): Promise<CompanyConfig> {
-  const result = await get<{ data: { company: CompanyConfig } }>('/app-config');
+  return (await getDocumentAppConfig()).company;
+}
+
+export async function getDocumentAppConfig(): Promise<DocumentAppConfig> {
+  const result = await get<{ data: DocumentAppConfig }>('/app-config');
   if (!result.data?.company?.timezone) throw new NewMeetingApiError('INVALID_APP_CONFIG');
-  return result.data.company;
+  return result.data;
 }
 
 export async function listMeetingTemplates(): Promise<MeetingTemplate[]> {

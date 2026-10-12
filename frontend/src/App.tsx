@@ -197,7 +197,9 @@ function ParticipantsPage() {
     } catch (error) {
       if (error instanceof ParticipantApiError) {
         setFieldErrors(error.fieldErrors);
-        setFormError(error.code === 'PARTICIPANT_NOT_FOUND'
+        setFormError(error.code === 'DOCUMENT_CHANGE_BUSY' || error.code === 'DOCUMENT_SETTINGS_VERSION_CONFLICT'
+          ? error.message
+          : error.code === 'PARTICIPANT_NOT_FOUND'
           ? '이 참석자는 목록에서 사라졌습니다. 목록을 새로고침한 뒤 다시 시도해 주세요.'
           : error.code === 'VALIDATION_FAILED'
             ? '입력 내용을 확인해 주세요.'

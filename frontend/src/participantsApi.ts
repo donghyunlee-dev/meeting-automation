@@ -23,6 +23,8 @@ export class ParticipantApiError extends Error {
 }
 
 function safeMessage(code: string): string {
+  if (code === 'DOCUMENT_CHANGE_BUSY') return '문서 서비스 변경 중에는 참석자 쓰기가 차단됩니다. 변경 완료 후 목록을 새로고침하고 다시 시도해 주세요.';
+  if (code === 'DOCUMENT_SETTINGS_VERSION_CONFLICT') return '문서 연결 버전이 변경되었습니다. 목록을 새로고침하고 다시 시도해 주세요.';
   if (code === 'PARTICIPANT_NOT_FOUND') return '이 참석자는 목록에서 사라졌습니다. 목록을 새로고침해 주세요.';
   if (code === 'VALIDATION_FAILED') return '입력 내용을 확인해 주세요.';
   if (code === 'PARTICIPANT_LIST_FAILED') return '참석자 목록을 불러오지 못했습니다.';
