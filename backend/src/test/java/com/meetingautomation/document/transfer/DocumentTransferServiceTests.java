@@ -39,10 +39,15 @@ class DocumentTransferServiceTests {
         var source = sourceWithOneParticipantAndMeeting();
         var target = new StatefulPort(TARGET_FP, "target");
         List<TransferProgress> progress = new ArrayList<>();
+        List<String> verificationOrder = new ArrayList<>();
+        source.orderEvents = verificationOrder;
 
-        new DocumentTransferService().transfer(source, target, progress::add);
+        new DocumentTransferService().transfer(source, target, update -> {
+            progress.add(update);
+            verificationOrder.add("PROGRESS:" + update.stage());
+        });
 
-        assertEquals(List.of("PREFLIGHT", "PARTICIPANTS", "PARTICIPANTS_VERIFIED", "MEETINGS", "VERIFY", "COMPLETE"),
+        assertEquals(List.of("PREFLIGHT", "PARTICIPANTS", "PARTICIPANTS_VERIFIED", "MEETINGS", "VERIFY"),
                 progress.stream().map(TransferProgress::stage).toList());
         assertEquals(new TransferProgress("PARTICIPANTS", 1, 1, 0, 1, 0, 0,
                 Map.of("source-person", "target-person")), progress.get(1));
@@ -50,6 +55,8 @@ class DocumentTransferServiceTests {
         assertEquals(1, progress.getLast().participantsCopied());
         assertEquals(1, progress.getLast().meetingsTotal());
         assertEquals(1, progress.getLast().meetingsCopied());
+        assertEquals(List.of("PROGRESS:VERIFY", "SOURCE_READ"),
+                verificationOrder.subList(verificationOrder.size() - 2, verificationOrder.size()));
     }
 
     @Test void transferCancellationAtSafePointPreservesPartialTargetAndDoesNotStartNextMeetingWrite() {
@@ -378,6 +385,7 @@ class DocumentTransferServiceTests {
         final List<String> sourceWrites = new ArrayList<>();
         final Map<String, TransferRecord> sourceMeetings;
         final Map<String, TransferRecord> sourceParticipants;
+        List<String> orderEvents = new ArrayList<>();
         int manifestReads;
         int createParticipantCalls;
         int createMeetingCalls;
@@ -396,6 +404,7 @@ class DocumentTransferServiceTests {
 
         @Override public TransferManifest readManifest() {
             manifestReads++;
+            if (prefix.equals("source")) orderEvents.add("SOURCE_READ");
             if (changeMeetingOnFinalManifestRead && manifestReads > 1 && !meetings.isEmpty()) {
                 var existing = meetings.values().iterator().next();
                 meetings.put(existing.sourceDocumentId(), new TransferRecord(existing.sourceDocumentId(), "r2", null,

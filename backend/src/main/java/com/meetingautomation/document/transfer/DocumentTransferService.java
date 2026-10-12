@@ -96,13 +96,13 @@ public final class DocumentTransferService {
                     meetingsCopied, meetingsReused, idMap));
         }
 
-        progress.accept(progress("VERIFY", snapshot, participantsCopied, participantsReused,
-                meetingsCopied, meetingsReused, idMap));
         TransferManifest targetAfter = readTarget(target);
         verifyTargetMeetings(target, targetAfter, snapshot, sourceManifest.sourceConnectionFingerprint(), idMap, targetMeetingIds);
-        verifySourceUnchanged(source, snapshot, sourceManifest.sourceConnectionFingerprint());
-        progress.accept(progress("COMPLETE", snapshot, participantsCopied, participantsReused,
+        // Persist the final public progress snapshot before the last source check so no store write
+        // creates an avoidable gap between source revalidation and atomic activation.
+        progress.accept(progress("VERIFY", snapshot, participantsCopied, participantsReused,
                 meetingsCopied, meetingsReused, idMap));
+        verifySourceUnchanged(source, snapshot, sourceManifest.sourceConnectionFingerprint());
         return new TransferResult(sourceManifest.sourceConnectionFingerprint(), targetAfter.sourceConnectionFingerprint(),
                 participantsCopied, participantsReused, meetingsCopied, meetingsReused, idMap,
                 new ArrayList<>(targetMeetingIds.values()));
