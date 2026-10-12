@@ -124,7 +124,9 @@ class DocumentTransferServiceTests {
     @Test void transferRejectsReusableMeetingWithStaleParticipantMapBeforeWritingParticipants() {
         var source = sourceWithOneParticipantAndMeeting();
         var target = new StatefulPort(TARGET_FP, "target");
-        target.addParticipant(participant("wrong-target-person", "Ada", "ada@example.test"));
+        target.addParticipant(importedParticipant(source.participants.get("source-person"), SOURCE_FP, "target-person", TARGET_FP));
+        target.addParticipant(importedParticipant(participant("decoy-source-person", "Grace", "grace@example.test"),
+                CODEC.connectionFingerprint("notion", "decoy-root"), "wrong-target-person", TARGET_FP));
         target.addMeeting(target.remap(source.meetings.get("source-meeting"), Map.of("source-person", "wrong-target-person"),
                 SOURCE_FP, "reused-meeting"));
 
