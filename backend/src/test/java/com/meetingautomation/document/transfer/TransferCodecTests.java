@@ -80,6 +80,18 @@ class TransferCodecTests {
         assertEquals("SYNTHETIC_ERROR", codec.parseMarker(List.of(codec.encodeMarker(marker))).failure().errorCode());
         assertNotEquals(codec.canonicalDigest(record), codec.canonicalDigest(meeting(codec.parseMarker(List.of(MARKER)), null)));
     }
+    @Test void canonicalDigestRejectsTargetParticipantReferenceMissingFromReverseMap() {
+        var copied = copiedMeeting(Map.of("source-pt", "target-pt"), "unmapped-target-pt");
+
+        assertEquals(TransferCodec.Code.BROKEN_REFERENCE,
+                assertThrows(TransferCodec.ValidationException.class, () -> codec.canonicalDigest(copied)).code());
+    }
+    @Test void canonicalDigestRejectsTwoSourceParticipantsMappedToOneTargetParticipant() {
+        var copied = copiedMeeting(Map.of("source-pt", "target-pt", "other-source-pt", "target-pt"), "target-pt");
+
+        assertEquals(TransferCodec.Code.BROKEN_REFERENCE,
+                assertThrows(TransferCodec.ValidationException.class, () -> codec.canonicalDigest(copied)).code());
+    }
     @Test void participantDigestIgnoresLocalIdAndMarkerStoresContentDigestOnly() {
         var marker = new TransferMarker("meeting-automation", "participant", "1.0", null, null, null,
                 List.of(), List.of(), null, "sha256:" + "a".repeat(64), null);
@@ -107,11 +119,40 @@ class TransferCodecTests {
                     () -> codec.transferKey(raw, "source-doc")).code());
         }
     }
+    @Test void connectionFingerprintRejectsAccountEmailAsRootIdentity() {
+        assertEquals(TransferCodec.Code.INVALID_IDENTITY,
+                assertThrows(TransferCodec.ValidationException.class,
+                        () -> codec.connectionFingerprint("notion", "synthetic@example.test")).code());
+    }
+    @Test void connectionFingerprintRejectsBearerCredentialAsRootIdentity() {
+        assertEquals(TransferCodec.Code.INVALID_IDENTITY,
+                assertThrows(TransferCodec.ValidationException.class,
+                        () -> codec.connectionFingerprint("notion", "Bearer synthetic-token")).code());
+    }
+    @Test void connectionFingerprintRejectsBlankRootIdentity() {
+        assertEquals(TransferCodec.Code.INVALID_IDENTITY,
+                assertThrows(TransferCodec.ValidationException.class,
+                        () -> codec.connectionFingerprint("notion", " ")).code());
+    }
+    @Test void connectionFingerprintRejectsUnsupportedProvider() {
+        assertEquals(TransferCodec.Code.INVALID_IDENTITY,
+                assertThrows(TransferCodec.ValidationException.class,
+                        () -> codec.connectionFingerprint("unsupported-provider", "root-synthetic")).code());
+    }
     private void failure(List<String> blocks, TransferCodec.Code expected) {
         assertEquals(expected, assertThrows(TransferCodec.ValidationException.class, () -> codec.parseMarker(blocks)).code());
     }
     private TransferRecord meeting(TransferMarker marker, List<TranscriptSegment> transcript) {
         return new TransferRecord("source-doc", "revision-1", "https://example.test/source", marker,
                 "Synthetic meeting", null, transcript, List.of(new ParticipantSummary("source-pt", "Synthetic A")), null);
+    }
+    private TransferRecord copiedMeeting(Map<String, String> participantIdMap, String targetParticipantId) {
+        var envelope = new TransferMarker.Transfer("sha256:" + "a".repeat(64), "sha256:" + "b".repeat(64),
+                "source-doc", "revision-1", "sha256:" + "c".repeat(64), participantIdMap);
+        var marker = new TransferMarker("meeting-automation", "meeting", "1.0", "session-synthetic",
+                OffsetDateTime.parse("2026-10-10T10:00:00+09:00"), "default.md", List.of(targetParticipantId),
+                List.of(new TransferMarker.Speaker("speaker-a", "Synthetic A", targetParticipantId)), null, null, envelope);
+        return new TransferRecord("target-doc", "revision-2", "https://example.test/target", marker,
+                "Synthetic meeting", null, null, List.of(new ParticipantSummary(targetParticipantId, "Synthetic A")), null);
     }
 }
