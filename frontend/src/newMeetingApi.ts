@@ -49,7 +49,7 @@ export async function createMeetingSession(attempt: MeetingSessionAttempt): Prom
 
   let body: { data?: MeetingSession; error?: { code?: string } } | undefined;
   try { body = await response.json() as typeof body; } catch { /* invalid response is handled below */ }
-  if (!response.ok) throw new NewMeetingApiError(body?.error?.code ?? 'REQUEST_FAILED');
+  if (!response.ok) throw new NewMeetingApiError(body?.error?.code ?? 'REQUEST_FAILED', response.status >= 500);
   if (!body?.data?.sessionId || !body.data.uploadPolicy) throw new NewMeetingApiError('INVALID_SESSION_RESPONSE', true);
   return body.data;
 }

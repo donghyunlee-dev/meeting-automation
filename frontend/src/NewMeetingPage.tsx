@@ -66,12 +66,12 @@ export function NewMeetingPage({ onSubmit }: { onSubmit: (attempt: MeetingSessio
     }
   }, []);
 
-  const loadParticipants = useCallback(async () => {
+  const loadParticipants = useCallback(async (clearSelection = false) => {
     setParticipants((current) => ({ status: 'loading', data: current.data }));
     try {
       const items = await listMeetingParticipants();
       setParticipants({ status: 'ready', data: items });
-      setParticipantIds((current) => current.filter((id) => items.some((item) => item.id === id)));
+      setParticipantIds((current) => clearSelection ? [] : current.filter((id) => items.some((item) => item.id === id)));
     } catch {
       setParticipants((current) => ({ status: 'error', data: current.data }));
     }
@@ -149,7 +149,7 @@ export function NewMeetingPage({ onSubmit }: { onSubmit: (attempt: MeetingSessio
         if (latest.setup?.status !== 'READY' || latest.setup.canCreateMeeting !== true
           || latest.document?.connectionVersion !== entry.attempt.documentConnectionVersion) {
           setConfig({ status: 'ready', data: latest });
-          await loadParticipants();
+          await loadParticipants(true);
           attemptRef.current = null;
           setSubmitError('문서 연결이 바뀌었습니다. 설정과 참석자 목록을 새로 확인했습니다. 내용을 확인한 뒤 다시 시작해 주세요.');
           submittingRef.current = false;
@@ -170,7 +170,7 @@ export function NewMeetingPage({ onSubmit }: { onSubmit: (attempt: MeetingSessio
     } catch (error) {
       if (error instanceof NewMeetingApiError && error.code === 'DOCUMENT_CONNECTION_CHANGED') {
         attemptRef.current = null;
-        await Promise.all([loadConfig(), loadParticipants()]);
+        await Promise.all([loadConfig(), loadParticipants(true)]);
         setSubmitError('문서 연결이 바뀌었습니다. 설정과 참석자 목록을 새로 확인했습니다. 내용을 확인한 뒤 다시 시작해 주세요.');
       } else {
         const uncertain = error instanceof NewMeetingApiError && error.responseUncertain;
