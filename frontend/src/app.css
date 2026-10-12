@@ -26,6 +26,25 @@ button:disabled { cursor: not-allowed; opacity: .6; }
 .future-page { max-width: 920px; margin: 0 auto; padding: 64px 24px; }
 .future-page h1 { color: #182230; }
 .future-page p { color: #697586; }
+.setup-page { width: min(100%, 760px); margin: 0 auto; padding: 38px 24px 96px; overflow-wrap: anywhere; }
+.setup-heading { margin-bottom: 24px; }
+.setup-heading h1, .setup-page > h1 { margin: 7px 0; color: #182230; font-size: clamp(25px, 6vw, 32px); letter-spacing: -.04em; }
+.setup-heading > p:last-child { margin: 0; color: #697586; font-size: 14px; line-height: 1.6; }
+.setup-card { display: grid; gap: 15px; min-width: 0; margin: 0 0 16px; border: 1px solid #e5e9ef; border-radius: 14px; padding: 20px; background: #fff; }
+.setup-card h2 { margin: 0; color: #253044; font-size: 17px; }
+.setup-card p { margin: 0; color: #596578; font-size: 13px; line-height: 1.6; }
+.setup-card-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+.setup-card-heading > div { display: grid; gap: 8px; min-width: 0; }
+.setup-choice { display: flex; flex-wrap: wrap; gap: 10px; }
+.setup-form { gap: 18px; }
+.setup-field { display: grid; gap: 8px; min-width: 0; }
+.setup-field label { color: #475467; font-size: 13px; font-weight: 650; }
+.setup-field input { width: 100%; min-width: 0; min-height: 46px; border: 1px solid #dce2ea; border-radius: 9px; padding: 0 12px; color: #293548; background: #fff; }
+.setup-field input:focus { outline: 3px solid #8796ef; outline-offset: 2px; }
+.setup-field small { color: #697586; font-size: 12px; line-height: 1.5; }
+.setup-error { border-left: 3px solid #b13e3e; padding: 11px 13px; color: #9b3030; background: #fffafa; font-size: 13px; line-height: 1.5; }
+.setup-notice { color: #217a52; font-size: 13px; line-height: 1.5; }
+.setup-back { display: block; min-height: 44px; margin: 14px auto; border: 0; color: #596578; background: transparent; text-decoration: underline; }
 .new-meeting-page { width: min(100%, 760px); margin: 0 auto; padding: 38px 24px 88px; }
 .new-meeting-heading { margin-bottom: 28px; }
 .new-meeting-heading h1 { margin: 7px 0 6px; color: #182230; font-size: clamp(26px, 5vw, 32px); letter-spacing: -.04em; }
@@ -137,6 +156,11 @@ button:disabled { cursor: not-allowed; opacity: .6; }
 }
 
 @media (max-width: 520px) {
+  .setup-page { padding: 28px 18px 92px; }
+  .setup-card { padding: 16px; }
+  .setup-card-heading { flex-direction: column; }
+  .setup-choice { flex-direction: column; }
+  .setup-choice .button, .setup-card > .button, .setup-form > .button { width: 100%; }
   .topbar { height: 66px; padding: 0 18px; }
   .breadcrumbs { padding: 18px 18px 0; }
   .participants-page { padding: 28px 18px 54px; }
