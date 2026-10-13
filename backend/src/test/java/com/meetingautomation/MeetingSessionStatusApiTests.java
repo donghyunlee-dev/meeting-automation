@@ -132,7 +132,7 @@ class MeetingSessionStatusApiTests {
                 List.of(new TranscriptSegment("seg_1", "speaker_a", 0, 1000, "private-transcript-sentinel")),
                 new ProcessingFailure("TRANSCRIPTION", "PROVIDER_ERROR", true),
                 new StructuredMinutes("default.md", "1.0.0", "private-minutes-sentinel",
-                        List.of(), List.of(), List.of(), List.of()));
+                        List.of("private-provider-detail-sentinel"), List.of(), List.of(), List.of()));
         sessionStore.save(failed, null);
 
         String body = mockMvc.perform(get(STATUS_URL, SESSION_ID))
@@ -140,13 +140,20 @@ class MeetingSessionStatusApiTests {
                 .andExpect(jsonPath("$.data.status").value("PROCESSING_FAILED"))
                 .andExpect(jsonPath("$.data.processing.stage").value("TRANSCRIPTION"))
                 .andExpect(jsonPath("$.data.processing.progressPercent").value(34))
+                .andExpect(jsonPath("$.data.processing.errorCode").value("PROVIDER_ERROR"))
+                .andExpect(jsonPath("$.data.processing.retryable").value(true))
+                .andExpect(jsonPath("$.data.processing.audioAvailable").value(false))
+                .andExpect(jsonPath("$.data.processing.audioExpiresAt").value(Matchers.nullValue()))
                 .andExpect(jsonPath("$.data.speakers").isEmpty())
                 .andExpect(jsonPath("$.data.transcript").isEmpty())
                 .andExpect(jsonPath("$.data.minutes").value(Matchers.nullValue()))
                 .andExpect(jsonPath("$.data.allowedActions").isEmpty())
                 .andReturn().getResponse().getContentAsString();
 
-        assertThat(body).doesNotContain("private-transcript-sentinel", "private-minutes-sentinel", "PROVIDER_ERROR");
+        assertThat(body).doesNotContain("private-transcript-sentinel", "private-minutes-sentinel",
+                "private-provider-detail-sentinel");
+        assertThat(statusService.get(SESSION_ID).toString()).doesNotContain("private-transcript-sentinel",
+                "private-minutes-sentinel", "private-provider-detail-sentinel");
     }
 
     @Test

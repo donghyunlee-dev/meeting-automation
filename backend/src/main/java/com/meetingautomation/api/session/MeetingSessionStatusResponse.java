@@ -2,6 +2,7 @@ package com.meetingautomation.api.session;
 
 import com.meetingautomation.document.StructuredMinutes;
 import com.meetingautomation.document.TranscriptSegment;
+import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
 
@@ -32,7 +33,13 @@ public record MeetingSessionStatusResponse(Data data) {
         }
     }
 
-    public record Processing(String stage, int progressPercent) {
+    public record Processing(
+            String stage,
+            int progressPercent,
+            String errorCode,
+            Boolean retryable,
+            Boolean audioAvailable,
+            Instant audioExpiresAt) {
     }
 
     public record SpeakerView(String speakerId, String label, String participantId) {
@@ -52,7 +59,13 @@ public record MeetingSessionStatusResponse(Data data) {
     }
 
     static MeetingSessionStatusResponse from(MeetingSession session) {
-        Processing processing = new Processing(session.processingStage(), session.progressPercent());
+        boolean failed = "PROCESSING_FAILED".equals(session.status());
+        ProcessingFailure failure = failed ? session.processingFailure() : null;
+        Processing processing = new Processing(session.processingStage(), session.progressPercent(),
+                failure == null ? null : failure.errorCode(),
+                failure == null ? null : failure.retryable(),
+                failed ? false : null,
+                null);
         boolean reviewReady = "REVIEW".equals(session.status());
         List<SpeakerView> speakers = reviewReady
                 ? session.speakers().stream()
