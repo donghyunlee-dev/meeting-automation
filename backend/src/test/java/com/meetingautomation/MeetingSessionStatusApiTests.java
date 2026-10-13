@@ -84,7 +84,7 @@ class MeetingSessionStatusApiTests {
                 new MeetingSession.Meeting("Planning", "default.md", "1.0.0", List.of("participant-1"),
                         "Asia/Seoul", List.of()),
                 "DRAFT_READY", 100,
-                List.of(new Speaker("speaker_a", "Speaker A")),
+                List.of(new Speaker("speaker_a", "Speaker A", "participant-1")),
                 List.of(new TranscriptSegment("seg_2", "speaker_a", 1200, 1800, "Later discussion"),
                         new TranscriptSegment("seg_1", "speaker_a", 300, 900, "Opening discussion")),
                 null, minutes);
@@ -98,7 +98,7 @@ class MeetingSessionStatusApiTests {
                 .andExpect(jsonPath("$.data.processing.progressPercent").value(100))
                 .andExpect(jsonPath("$.data.speakers[0].speakerId").value("speaker_a"))
                 .andExpect(jsonPath("$.data.speakers[0].label").value("Speaker A"))
-                .andExpect(jsonPath("$.data.speakers[0].participantId").value(Matchers.nullValue()))
+                .andExpect(jsonPath("$.data.speakers[0].participantId").value("participant-1"))
                 .andExpect(jsonPath("$.data.transcript[0].segmentId").value("seg_1"))
                 .andExpect(jsonPath("$.data.transcript[0].startMs").value(300))
                 .andExpect(jsonPath("$.data.transcript[0].text").value("Opening discussion"))
