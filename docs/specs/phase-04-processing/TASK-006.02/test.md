@@ -16,7 +16,12 @@
 | STT-10 | sentinel Audio, transcript, Secret로 로그 capture | 모든 sentinel이 log/error response에 없음 | security/log assertion |
 | STT-11 | 서로 다른 `TRANSCRIPTION_MODEL` 설정 | 같은 provider-neutral port 결과 타입 사용 | configuration wiring test |
 
-Backend root에서 `./gradlew test`, `./gradlew clean build`를 실행하고 결과를 기록한다.
+Backend root에서 다음 focused tests를 실행한다. 무관한 Backend 테스트를 포함한 전체 suite, clean build는 실행하지 않는다.
+
+backend/에서 실행:
+`.\gradlew.bat test --tests com.meetingautomation.transcription.TranscriptionCommandTests --tests com.meetingautomation.transcription.ProviderTranscriptionResponseTests --tests com.meetingautomation.transcription.openai.OpenAiTranscriptionAdapterTests`
+
+별도 컴파일 확인이 필요하면 `compileJava` 또는 `compileTestJava`를 사용한다.
 
 ## 통합/수동 QA
 

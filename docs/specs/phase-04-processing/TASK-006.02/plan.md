@@ -29,4 +29,9 @@
 
 ## 검증 명령
 
-Backend root에서 `./gradlew test`, `./gradlew clean build`를 실행한다. 고정 Audio fixture는 실제 audio 대신 mock transport에서 sentinel bytes로 전송해 로그 비노출을 확인한다.
+Backend root에서 다음 focused tests를 실행한다. 무관한 Backend 테스트를 포함한 전체 suite, clean build는 실행하지 않는다.
+
+backend/에서 실행:
+`.\gradlew.bat test --tests com.meetingautomation.transcription.TranscriptionCommandTests --tests com.meetingautomation.transcription.ProviderTranscriptionResponseTests --tests com.meetingautomation.transcription.openai.OpenAiTranscriptionAdapterTests`
+
+별도 컴파일 확인이 필요하면 `compileJava` 또는 `compileTestJava`를 사용한다.
