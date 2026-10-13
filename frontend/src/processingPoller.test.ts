@@ -84,6 +84,46 @@ describe('ProcessingPoller', () => {
     poller.stop();
   });
 
+  it('uses the full capped backoff sequence and resets to one second after a successful snapshot', async () => {
+    vi.useFakeTimers();
+    const delays: number[] = [];
+    const getStatus = vi.fn()
+      .mockRejectedValueOnce(new ProcessingApiError('NETWORK_ERROR'))
+      .mockRejectedValueOnce(new ProcessingApiError('NETWORK_ERROR'))
+      .mockRejectedValueOnce(new ProcessingApiError('NETWORK_ERROR'))
+      .mockRejectedValueOnce(new ProcessingApiError('NETWORK_ERROR'))
+      .mockRejectedValueOnce(new ProcessingApiError('NETWORK_ERROR'))
+      .mockRejectedValueOnce(new ProcessingApiError('NETWORK_ERROR'))
+      .mockResolvedValueOnce(snapshot())
+      .mockRejectedValueOnce(new ProcessingApiError('NETWORK_ERROR'))
+      .mockResolvedValue(snapshot('PROCESSING_FAILED'));
+    const poller = new ProcessingPoller({
+      sessionId: 's1', getStatus, onSnapshot: vi.fn(), onError: vi.fn(),
+      schedule: (callback, delayMs) => { delays.push(delayMs); return setTimeout(callback, delayMs); },
+    });
+    const flushRequest = async () => { await Promise.resolve(); await Promise.resolve(); };
+    poller.start();
+    await flushRequest();
+    expect(delays).toEqual([1_000]);
+
+    for (const [delay, expected] of [[1_000, 2_000], [2_000, 4_000], [4_000, 8_000], [8_000, 10_000], [10_000, 10_000]] as const) {
+      await vi.advanceTimersByTimeAsync(delay);
+      await flushRequest();
+      expect(delays.at(-1)).toBe(expected);
+    }
+
+    await vi.advanceTimersByTimeAsync(10_000);
+    await flushRequest();
+    expect(delays.at(-1)).toBe(1_000);
+    await vi.advanceTimersByTimeAsync(1_000);
+    await flushRequest();
+    expect(delays.at(-1)).toBe(1_000);
+    await vi.advanceTimersByTimeAsync(1_000);
+    await flushRequest();
+    expect(getStatus).toHaveBeenCalledTimes(9);
+    poller.stop();
+  });
+
   it('aborts the active request on stop and never publishes after cancellation', async () => {
     let signal: AbortSignal | undefined;
     const onSnapshot = vi.fn();
