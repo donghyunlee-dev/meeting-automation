@@ -83,6 +83,33 @@ class GroundedMinutesResultNormalizerTests {
     }
 
     @Test
+    void removesTextClaimWithBlankEvidenceIdAndKeepsSupportedSibling() {
+        GroundedMinutesResult result = new GroundedMinutesResult(
+                "default.md", "1.0.0",
+                List.of(new GroundedMinutesResult.TextClaim("Unsupported summary", List.of(" ")),
+                        claim("Supported summary", "seg_001")),
+                List.of(), List.of(), List.of(), List.of());
+
+        StructuredMinutes normalized = normalizer.normalize(command(TRANSCRIPT), result);
+
+        assertThat(normalized.summary()).isEqualTo("Supported summary");
+    }
+
+    @Test
+    void blankOwnerAndDateEvidenceClearOnlyThoseActionFields() {
+        GroundedMinutesResult result = new GroundedMinutesResult(
+                "default.md", "1.0.0", List.of(), List.of(), List.of(),
+                List.of(action("Send the project update", List.of("seg_001"), "participant-1",
+                        List.of(" "), "2026-10-16", List.of(""))),
+                List.of());
+
+        StructuredMinutes normalized = normalizer.normalize(command(TRANSCRIPT), result);
+
+        assertThat(normalized.actionItems()).containsExactly(
+                new StructuredMinutes.ActionItem(null, "Send the project update", null));
+    }
+
+    @Test
     void rejectsTemplateMismatchRosterExternalOwnerAndInvalidCalendarDate() {
         GroundedMinutesResult wrongTemplate = new GroundedMinutesResult(
                 "project.md", "1.0.0", List.of(), List.of(), List.of(), List.of(), List.of());
@@ -109,12 +136,19 @@ class GroundedMinutesResultNormalizerTests {
     }
 
     @Test
-    void rejectsMissingClaimEvidenceShapeInsteadOfSilentlyFilteringMalformedOutput() {
+    void rejectsMissingEvidenceArraysAndNullElementsInsteadOfSilentlyFilteringMalformedOutput() {
         GroundedMinutesResult malformed = new GroundedMinutesResult(
                 "default.md", "1.0.0", List.of(new GroundedMinutesResult.TextClaim("Claim", null)),
                 List.of(), List.of(), List.of(), List.of());
 
         assertThatThrownBy(() -> normalizer.normalize(command(TRANSCRIPT), malformed))
+                .isInstanceOf(IllegalArgumentException.class);
+
+        GroundedMinutesResult nullEvidenceId = new GroundedMinutesResult(
+                "default.md", "1.0.0", List.of(new GroundedMinutesResult.TextClaim(
+                        "Claim", java.util.Arrays.asList((String) null))),
+                List.of(), List.of(), List.of(), List.of());
+        assertThatThrownBy(() -> normalizer.normalize(command(TRANSCRIPT), nullEvidenceId))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 

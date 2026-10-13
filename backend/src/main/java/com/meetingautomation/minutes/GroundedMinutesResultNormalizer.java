@@ -126,7 +126,7 @@ public final class GroundedMinutesResultNormalizer {
     }
 
     private static List<String> validatedEvidence(List<String> evidence) {
-        if (evidence == null || evidence.stream().anyMatch(GroundedMinutesResultNormalizer::blank)) {
+        if (evidence == null || evidence.stream().anyMatch(id -> id == null)) {
             throw invalidResult();
         }
         return evidence;
