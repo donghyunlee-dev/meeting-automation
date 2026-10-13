@@ -66,3 +66,232 @@ test('keeps speaker selection keyboard accessible and within a 360px viewport', 
   expect(layout.refreshButton.width).toBeGreaterThanOrEqual(44);
   expect(layout.refreshButton.height).toBeGreaterThanOrEqual(44);
 });
+
+test('saves a full Structured Minutes snapshot with If-Match and confirms it through API-010', async ({ page }) => {
+  const initialMinutes = {
+    templateId: 'weekly', templateVersion: '4', summary: 'Initial summary',
+    discussionPoints: ['Discussion'], decisions: [], actionItems: [], followUps: [],
+  };
+  let postWriteReads = 0;
+  let updateSubmitted = false;
+  let submittedMinutes: typeof initialMinutes | undefined;
+  let ifMatch: string | undefined;
+  await page.route('**/api/v1/app-config', (route) => route.fulfill({ json: { data: {
+    company: { id: 'company-1', name: 'Example', timezone: 'Asia/Seoul' },
+    document: { provider: 'NOTION', configured: false, connectionVersion: 1, rootUrl: null },
+  } } }));
+  await page.route('**/api/v1/participants', (route) => route.fulfill({ json: { data: { items: [
+    { id: 'p1', name: 'Ada Lovelace', email: 'ada.private@example.com' },
+  ] } } }));
+  await page.route('**/api/v1/meeting-sessions/minutes-e2e**', async (route) => {
+    const request = route.request();
+    if (request.method() === 'PUT') {
+      submittedMinutes = request.postDataJSON() as typeof initialMinutes;
+      ifMatch = request.headers()['if-match'];
+      updateSubmitted = true;
+      await route.fulfill({ json: { data: { version: 8, minutes: submittedMinutes } } });
+      return;
+    }
+    if (updateSubmitted) postWriteReads += 1;
+    const minutes = updateSubmitted ? submittedMinutes ?? initialMinutes : initialMinutes;
+    await route.fulfill({ json: { data: {
+      sessionId: 'minutes-e2e', version: updateSubmitted ? 8 : 7, status: 'REVIEW',
+      meeting: { participantIds: ['p1'] }, speakers: [{ speakerId: 'speaker-a', label: 'Speaker A', participantId: 'p1' }],
+      transcript: [], minutes, allowedActions: ['UPDATE_MINUTES'],
+    } } });
+  });
+
+  await page.goto('/meetings/minutes-e2e/review');
+  const summary = page.locator('#minutes-summary');
+  await expect(summary).toHaveValue('Initial summary');
+  await summary.fill('Saved through API-012');
+  await page.locator('.review-minutes-save-controls button').click();
+
+  await expect.poll(() => postWriteReads).toBeGreaterThan(0);
+  await expect(summary).toHaveValue('Saved through API-012');
+  await expect(page.locator('.review-minutes-save-controls button')).toBeDisabled();
+  expect(submittedMinutes).toEqual({ ...initialMinutes, summary: 'Saved through API-012' });
+  expect(ifMatch).toBe('"7"');
+});
+
+test('keeps edits made during a failed in-flight Minutes save and does not send a second PUT', async ({ page }) => {
+  const initialMinutes = {
+    templateId: 'weekly', templateVersion: '4', summary: 'Initial summary',
+    discussionPoints: ['Discussion'], decisions: [], actionItems: [], followUps: [],
+  };
+  let releasePut!: () => void;
+  let markPutStarted!: () => void;
+  const putStarted = new Promise<void>((resolve) => { markPutStarted = resolve; });
+  const putReleased = new Promise<void>((resolve) => { releasePut = resolve; });
+  let putCount = 0;
+  await page.route('**/api/v1/app-config', (route) => route.fulfill({ json: { data: {
+    company: { id: 'company-1', name: 'Example', timezone: 'Asia/Seoul' },
+    document: { provider: null, configured: false, connectionVersion: 1, rootUrl: null },
+  } } }));
+  await page.route('**/api/v1/participants', (route) => route.fulfill({ json: { data: { items: [] } } }));
+  await page.route('**/api/v1/meeting-sessions/minutes-failure-e2e**', async (route) => {
+    const request = route.request();
+    if (request.method() === 'PUT') {
+      putCount += 1;
+      markPutStarted();
+      await putReleased;
+      await route.fulfill({ status: 422, json: { error: { code: 'INVALID_MINUTES', details: { fieldErrors: [] } } } });
+      return;
+    }
+    await route.fulfill({ json: { data: {
+      sessionId: 'minutes-failure-e2e', version: 3, status: 'REVIEW', meeting: { participantIds: [] },
+      speakers: [], transcript: [], minutes: initialMinutes, allowedActions: ['UPDATE_MINUTES'],
+    } } });
+  });
+
+  await page.goto('/meetings/minutes-failure-e2e/review');
+  const summary = page.locator('#minutes-summary');
+  await expect(summary).toHaveValue('Initial summary');
+  await summary.fill('Submitted draft');
+  const save = page.locator('.review-minutes-save-controls button');
+  await save.click();
+  await putStarted;
+  await expect(save).toBeDisabled();
+  await summary.fill('Newer edit stays in the draft');
+  releasePut();
+
+  await expect(page.getByRole('alert')).toBeVisible();
+  await expect(summary).toHaveValue('Newer edit stays in the draft');
+  await expect(save).toBeEnabled();
+  expect(putCount).toBe(1);
+});
+
+test('keeps a clean Minutes draft as a no-op without sending API-012', async ({ page }) => {
+  let putCount = 0;
+  const minutes = {
+    templateId: 'weekly', templateVersion: '4', summary: 'Already saved',
+    discussionPoints: ['Discussion'], decisions: [], actionItems: [], followUps: [],
+  };
+  await page.route('**/api/v1/app-config', (route) => route.fulfill({ json: { data: {
+    company: { id: 'company-1', name: 'Example', timezone: 'Asia/Seoul' },
+    document: { provider: 'NOTION', configured: true, connectionVersion: 1, rootUrl: 'https://notion.example' },
+  } } }));
+  await page.route('**/api/v1/participants', (route) => route.fulfill({ json: { data: { items: [] } } }));
+  await page.route('**/api/v1/meeting-sessions/minutes-clean-e2e**', async (route) => {
+    if (route.request().method() === 'PUT') {
+      putCount += 1;
+      await route.fulfill({ json: { data: { version: 5, minutes } } });
+      return;
+    }
+    await route.fulfill({ json: { data: {
+      sessionId: 'minutes-clean-e2e', version: 4, status: 'REVIEW', meeting: { participantIds: [] },
+      speakers: [], transcript: [], minutes, allowedActions: ['UPDATE_MINUTES'],
+    } } });
+  });
+
+  await page.goto('/meetings/minutes-clean-e2e/review');
+  const save = page.getByRole('button', { name: '회의록 저장' });
+  await expect(page.getByLabel('회의 요약')).toHaveValue('Already saved');
+  await expect(save).toBeDisabled();
+  expect(putCount).toBe(0);
+});
+
+test('keeps the prior full Review snapshot until explicit retry confirms API-010 after a successful Minutes PUT', async ({ page }) => {
+  const initialMinutes = {
+    templateId: 'weekly', templateVersion: '4', summary: 'Initial summary',
+    discussionPoints: ['Discussion'], decisions: [], actionItems: [], followUps: [],
+  };
+  const submittedMinutes = { ...initialMinutes, summary: 'Saved through API-012' };
+  let postWriteReads = 0;
+  let putCount = 0;
+  await page.route('**/api/v1/app-config', (route) => route.fulfill({ json: { data: {
+    company: { id: 'company-1', name: 'Example', timezone: 'Asia/Seoul' },
+    document: { provider: 'NOTION', configured: true, connectionVersion: 1, rootUrl: 'https://notion.example' },
+  } } }));
+  await page.route('**/api/v1/participants', (route) => route.fulfill({ json: { data: { items: [
+    { id: 'p1', name: 'Ada Lovelace', email: 'ada.private@example.com' },
+  ] } } }));
+  await page.route('**/api/v1/meeting-sessions/minutes-reconcile-e2e**', async (route) => {
+    if (route.request().method() === 'PUT') {
+      putCount += 1;
+      await route.fulfill({ json: { data: { version: 8, minutes: submittedMinutes } } });
+      return;
+    }
+    if (putCount > 0) {
+      postWriteReads += 1;
+      if (postWriteReads === 1) {
+        await route.fulfill({ status: 503, json: { error: { code: 'TEMPORARILY_UNAVAILABLE' } } });
+        return;
+      }
+      await route.fulfill({ json: { data: {
+        sessionId: 'minutes-reconcile-e2e', version: 8, status: 'REVIEW', meeting: { participantIds: ['p1'] },
+        speakers: [{ speakerId: 'speaker-a', label: 'Updated Speaker', participantId: 'p1', participantName: 'Ada Lovelace' }],
+        transcript: [{ segmentId: 'latest', speakerId: 'speaker-a', startMs: 10, endMs: 20, text: 'Authoritative transcript' }],
+        minutes: submittedMinutes, allowedActions: ['UPDATE_MINUTES'],
+      } } });
+      return;
+    }
+    await route.fulfill({ json: { data: {
+      sessionId: 'minutes-reconcile-e2e', version: 7, status: 'REVIEW', meeting: { participantIds: ['p1'] },
+      speakers: [{ speakerId: 'speaker-a', label: 'Original Speaker', participantId: 'p1', participantName: 'Ada Lovelace' }],
+      transcript: [{ segmentId: 'initial', speakerId: 'speaker-a', startMs: 1, endMs: 2, text: 'Prior transcript' }],
+      minutes: initialMinutes, allowedActions: ['UPDATE_MINUTES', 'UPDATE_SPEAKER_MAPPING'],
+    } } });
+  });
+
+  await page.goto('/meetings/minutes-reconcile-e2e/review');
+  await page.getByLabel('회의 요약').fill(submittedMinutes.summary);
+  await page.getByRole('button', { name: '회의록 저장' }).click();
+
+  await expect.poll(() => postWriteReads).toBe(1);
+  await expect(page.getByText(/저장 완료\. 최신 회의 정보를 확인하지 못했습니다/)).toBeVisible();
+  await expect(page.getByRole('button', { name: '저장 결과 다시 확인' })).toBeVisible();
+  await expect(page.getByLabel('Original Speaker 참가자')).toBeVisible();
+  await expect(page.getByText('Prior transcript')).toBeVisible();
+  await expect(page.getByRole('button', { name: '매핑 저장' })).toBeVisible();
+  expect(putCount).toBe(1);
+
+  await page.getByRole('button', { name: '저장 결과 다시 확인' }).click();
+  await expect.poll(() => postWriteReads).toBe(2);
+  await expect(page.getByLabel('Updated Speaker 참가자')).toBeVisible();
+  await expect(page.getByText('Authoritative transcript')).toBeVisible();
+  await expect(page.getByText('Prior transcript')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '매핑 저장' })).toHaveCount(0);
+  expect(putCount).toBe(1);
+});
+
+test('saves Minutes with an unconfigured provider while preserving an existing Action Item owner', async ({ page }) => {
+  const initialMinutes = {
+    templateId: 'weekly', templateVersion: '4', summary: 'Initial summary',
+    discussionPoints: ['Discussion'], decisions: [],
+    actionItems: [{ ownerParticipantId: 'p1', task: 'Existing task', dueDate: '2026-10-20' }], followUps: [],
+  };
+  const expectedMinutes = { ...initialMinutes, summary: 'Edited with no provider' };
+  let submittedMinutes: unknown;
+  let ifMatch: string | undefined;
+  await page.route('**/api/v1/app-config', (route) => route.fulfill({ json: { data: {
+    company: { id: 'company-1', name: 'Example', timezone: 'Asia/Seoul' },
+    document: { provider: null, configured: false, connectionVersion: 0, rootUrl: null },
+  } } }));
+  await page.route('**/api/v1/participants', (route) => route.fulfill({ json: { data: { items: [
+    { id: 'p1', name: 'Ada Lovelace', email: 'ada.private@example.com' },
+  ] } } }));
+  await page.route('**/api/v1/meeting-sessions/minutes-provider-e2e**', async (route) => {
+    if (route.request().method() === 'PUT') {
+      submittedMinutes = route.request().postDataJSON();
+      ifMatch = route.request().headers()['if-match'];
+      await route.fulfill({ json: { data: { version: 6, minutes: expectedMinutes } } });
+      return;
+    }
+    await route.fulfill({ json: { data: {
+      sessionId: 'minutes-provider-e2e', version: 5, status: 'REVIEW', meeting: { participantIds: ['p1'] },
+      speakers: [], transcript: [], minutes: initialMinutes, allowedActions: ['UPDATE_MINUTES'],
+    } } });
+  });
+
+  await page.goto('/meetings/minutes-provider-e2e/review');
+  await expect(page.getByLabel('담당자 1')).toHaveValue('p1');
+  await expect(page.getByLabel('담당자 1')).toBeDisabled();
+  await page.getByLabel('회의 요약').fill(expectedMinutes.summary);
+  await page.getByRole('button', { name: '회의록 저장' }).click();
+
+  await expect(page.getByText('저장 완료')).toBeVisible();
+  expect(submittedMinutes).toEqual(expectedMinutes);
+  expect(ifMatch).toBe('"5"');
+  expect(await page.getByLabel('담당자 1').inputValue()).toBe('p1');
+});

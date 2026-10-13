@@ -22,9 +22,23 @@ export type ReviewSession = {
 export type SpeakerMappingInput = { speakerId: string; participantId: string | null };
 export type SpeakerMappingResult = { speakerId: string; participantId: string | null; participantName: string | null };
 export type SpeakerMappingUpdate = { version: number; mappings: SpeakerMappingResult[] };
+export type MinutesUpdate = { version: number; minutes: StructuredMinutes };
+export type ReviewMinutesRequestOptions = { timeoutMs?: number };
+
+const DEFAULT_MINUTES_REQUEST_TIMEOUT_MS = 15_000;
+
+class MinutesRequestTimeoutError extends Error {
+  constructor(readonly status?: number) { super('Minutes update request timed out'); }
+}
 
 export class ReviewApiError extends Error {
-  constructor(readonly code: 'SESSION_NOT_FOUND' | 'INVALID_REVIEW' | 'REQUEST_FAILED' | 'MAPPING_FAILED', readonly status?: number, readonly outcomeUnknown = false) {
+  constructor(
+    readonly code: 'SESSION_NOT_FOUND' | 'SESSION_NOT_IN_REVIEW' | 'INVALID_REVIEW' | 'REQUEST_FAILED' | 'MAPPING_FAILED' | 'MINUTES_UPDATE_FAILED',
+    readonly status?: number,
+    readonly outcomeUnknown = false,
+    readonly apiCode?: string,
+    readonly fieldErrors: string[] = [],
+  ) {
     super(code);
     this.name = 'ReviewApiError';
   }
@@ -69,6 +83,23 @@ function parseMinutes(raw: unknown): StructuredMinutes | null {
   };
 }
 
+function parseError(body: unknown): { apiCode?: string; fieldErrors: string[] } {
+  if (typeof body !== 'object' || body === null || !('error' in body)) return { fieldErrors: [] };
+  const error = (body as { error: unknown }).error;
+  if (typeof error !== 'object' || error === null) return { fieldErrors: [] };
+  const value = error as Record<string, unknown>;
+  const allowedFields = new Set(['templateId', 'templateVersion', 'summary', 'discussionPoints', 'decisions', 'actionItems', 'followUps', 'request', 'If-Match']);
+  const details = typeof value.details === 'object' && value.details !== null ? value.details as Record<string, unknown> : undefined;
+  const fieldErrors = Array.isArray(details?.fieldErrors)
+    ? details.fieldErrors.flatMap((item) => {
+      if (typeof item !== 'object' || item === null) return [];
+      const field = (item as Record<string, unknown>).field;
+      return typeof field === 'string' && allowedFields.has(field) ? [field] : [];
+    })
+    : [];
+  return { apiCode: typeof value.code === 'string' ? value.code : undefined, fieldErrors };
+}
+
 export async function getReviewSession(sessionId: string): Promise<ReviewSession> {
   let response: Response;
   try {
@@ -81,7 +112,9 @@ export async function getReviewSession(sessionId: string): Promise<ReviewSession
   try {
     const raw = parseData(await response.json());
     const meeting = typeof raw.meeting === 'object' && raw.meeting !== null ? raw.meeting as Record<string, unknown> : null;
-    if (raw.sessionId !== sessionId || raw.status !== 'REVIEW' || !meeting || !Array.isArray(meeting.participantIds)
+    if (raw.sessionId !== sessionId) throw new Error('invalid');
+    if (raw.status !== 'REVIEW') throw new ReviewApiError('SESSION_NOT_IN_REVIEW', response.status);
+    if (!meeting || !Array.isArray(meeting.participantIds)
       || !meeting.participantIds.every((id) => typeof id === 'string') || !Array.isArray(raw.speakers)) throw new Error('invalid');
     const speakers = raw.speakers.map((speaker): ReviewSpeaker => {
       if (typeof speaker !== 'object' || speaker === null) throw new Error('invalid');
@@ -104,8 +137,78 @@ export async function getReviewSession(sessionId: string): Promise<ReviewSession
       minutes: parseMinutes(raw.minutes),
       allowedActions: Array.isArray(raw.allowedActions) ? raw.allowedActions.filter((action): action is string => typeof action === 'string') : [],
     };
-  } catch {
+  } catch (error) {
+    if (error instanceof ReviewApiError) throw error;
     throw new ReviewApiError('INVALID_REVIEW', response.status);
+  }
+}
+
+export async function updateReviewMinutes(
+  sessionId: string,
+  version: number,
+  minutes: StructuredMinutes,
+  fetchImpl: typeof fetch = fetch,
+  options: ReviewMinutesRequestOptions = {},
+): Promise<MinutesUpdate> {
+  let response: Response;
+  let body: unknown;
+  try {
+    ({ response, body } = await requestAndRead(fetchImpl, `${baseUrl()}/api/v1/meeting-sessions/${encodeURIComponent(sessionId)}/minutes`, {
+      method: 'PUT',
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json', 'If-Match': `"${version}"` },
+      body: JSON.stringify(minutes),
+    }, options.timeoutMs ?? DEFAULT_MINUTES_REQUEST_TIMEOUT_MS));
+  } catch (error) {
+    const status = error instanceof MinutesRequestTimeoutError ? error.status : undefined;
+    throw new ReviewApiError('MINUTES_UPDATE_FAILED', status, true);
+  }
+  if (!response.ok) {
+    const parsed = parseError(body);
+    const outcomeUnknown = response.status >= 500 || response.status === 408 || response.status === 429;
+    throw new ReviewApiError('MINUTES_UPDATE_FAILED', response.status, outcomeUnknown, parsed.apiCode, parsed.fieldErrors);
+  }
+  try {
+    const raw = parseData(body);
+    const updatedMinutes = parseMinutes(raw.minutes);
+    if (typeof raw.version !== 'number' || updatedMinutes === null) throw new Error('invalid');
+    return { version: raw.version, minutes: updatedMinutes };
+  } catch {
+    throw new ReviewApiError('MINUTES_UPDATE_FAILED', response.status, true);
+  }
+}
+
+async function requestAndRead(
+  fetchImpl: typeof fetch,
+  input: RequestInfo | URL,
+  init: RequestInit,
+  timeoutMs: number,
+): Promise<{ response: Response; body: unknown }> {
+  const controller = new AbortController();
+  let response: Response | undefined;
+  let timeoutTriggered = false;
+  let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_resolve, reject) => {
+    timeoutHandle = setTimeout(() => {
+      timeoutTriggered = true;
+      reject(new MinutesRequestTimeoutError(response?.status));
+      controller.abort();
+    }, timeoutMs);
+  });
+  const request = (async () => {
+    try {
+      response = await fetchImpl(input, { ...init, signal: controller.signal });
+      const body = await response.json();
+      return { response, body };
+    } catch (error) {
+      if (timeoutTriggered) throw new MinutesRequestTimeoutError(response?.status);
+      if (response) return { response, body: undefined };
+      throw error;
+    }
+  })();
+  try {
+    return await Promise.race([request, timeout]);
+  } finally {
+    if (timeoutHandle !== undefined) clearTimeout(timeoutHandle);
   }
 }
 
