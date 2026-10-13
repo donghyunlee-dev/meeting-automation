@@ -1715,7 +1715,11 @@ Response:
 ```
 
 Errors: - `AUDIO_CHUNK_CONFLICT` - `AUDIO_CHUNK_INVALID` -
-`AUDIO_STORAGE_FAILED` - `SESSION_NOT_FOUND`
+`INTERNAL_ERROR` (temporary storage failure) - `SESSION_NOT_FOUND`
+
+Temporary storage failures return the generic `INTERNAL_ERROR` response. The
+response and logs must not expose storage paths, exception details, audio
+bytes, or audio digests.
 
 ------------------------------------------------------------------------
 
