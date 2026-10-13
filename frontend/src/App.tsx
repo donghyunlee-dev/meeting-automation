@@ -487,6 +487,11 @@ function ActiveMeetingRecordingRoute({ session, setState, mediaAdapter }: {
       onChange: (next) => {
         setSnapshot(next);
         setState(next.state);
+        if (next.errorMessage && stopWaiter.current) {
+          const waiter = stopWaiter.current;
+          stopWaiter.current = null;
+          waiter.reject(new Error('Recorder did not stop cleanly.'));
+        }
       },
       onChunk: (chunk) => {
         const persisted = persistenceTail.current.catch(() => undefined).then(() => chunkAdapter.accept(chunk));

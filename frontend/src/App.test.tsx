@@ -961,6 +961,62 @@ describe('Recording route', () => {
     await waitFor(() => expect(screen.getByTestId('current-path').textContent).toBe(`/meetings/${session.sessionId}/processing`));
   });
 
+  it('settles a recorder stop error without starting processing and keeps previously persisted audio', async () => {
+    await deleteChunkDatabase();
+    const session = {
+      sessionId: 'session-stop-error', title: 'Stop error recovery', version: 1, status: 'CREATED',
+      uploadPolicy: { chunkDurationSeconds: 15, maxChunkBytes: 1000000, acceptedMimeTypes: ['audio/webm'] },
+    };
+    sessionStorage.setItem('meeting-automation.recording-session', JSON.stringify(session));
+    vi.stubGlobal('crypto', webcrypto);
+    const recorder: RecorderLike = {
+      mimeType: 'audio/webm', onstart: null, onpause: null, onresume: null, onstop: null, onerror: null, ondataavailable: null,
+      start: () => recorder.onstart?.(), pause: () => recorder.onpause?.(), resume: () => recorder.onresume?.(),
+      stop: vi.fn(),
+    };
+    const mediaAdapter: MediaRecorderAdapter = {
+      isMediaRecorderSupported: () => true,
+      isTypeSupported: () => true,
+      getUserMedia: vi.fn(async () => ({ getTracks: () => [{ stop: vi.fn() }] })),
+      createRecorder: vi.fn(() => recorder),
+      now: () => 4_250,
+      nowEpoch: () => 1_700_000_004_250,
+      setInterval: () => 1,
+      clearInterval: () => undefined,
+      createChunkId: () => 'pre-error-chunk',
+    };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const path = new URL(String(input)).pathname;
+      if (path.endsWith('/audio')) return response({ data: { receivedSequences: [], receivedChunks: 0, totalBytes: 0 } });
+      if (path.endsWith('/audio/chunks/0')) return response({ error: { code: 'AUDIO_UPLOAD_REJECTED' } }, 422);
+      if (path.endsWith('/process')) return response({ data: { sessionId: session.sessionId, status: 'PROCESSING', stage: 'AUDIO_ASSEMBLY' } }, 202);
+      throw new Error(`Unexpected request: ${path}`);
+    });
+    installFetchMock(fetchMock);
+
+    render(<MemoryRouter initialEntries={[`/meetings/${session.sessionId}/recording`]}><App mediaAdapter={mediaAdapter} /></MemoryRouter>);
+    fireEvent.click(await screen.findByRole('button', { name: '녹음 시작' }));
+    await screen.findByText('녹음 중');
+    recorder.ondataavailable?.({ data: new NodeBlob(['already saved audio'], { type: 'audio/webm' }) as Blob });
+    const repository = new ChunkRepository({ dbName: 'meeting-automation-chunks', maxChunkBytes: 1_000_000 });
+    try {
+      await waitFor(async () => expect((await repository.getPending(session.sessionId)).chunks).toHaveLength(1));
+
+      fireEvent.click(screen.getByRole('button', { name: '회의 종료' }));
+      fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: '회의 종료' }));
+      recorder.onerror?.({ error: { name: 'UnknownError' } });
+
+      await waitFor(() => expect(screen.getByLabelText('처리 시작 상태').textContent).toContain('처리를 시작하지 못했습니다.'), { timeout: 1_000 });
+      expect(fetchMock.mock.calls.filter(([url]) => new URL(String(url)).pathname.endsWith('/process'))).toHaveLength(0);
+      const recoverable = await repository.getRecoverable(session.sessionId);
+      expect(recoverable.chunks.map(({ chunkId, uploadState, blob }) => [chunkId, uploadState, blob.size])).toEqual([
+        ['pre-error-chunk', 'PENDING', new Blob(['already saved audio']).size],
+      ]);
+    } finally {
+      repository.close();
+    }
+  });
+
   it('offers a new meeting and no recording controls when runtime session context is missing or mismatched', () => {
     render(<MemoryRouter initialEntries={['/meetings/missing-session/recording']}><App /></MemoryRouter>);
 
