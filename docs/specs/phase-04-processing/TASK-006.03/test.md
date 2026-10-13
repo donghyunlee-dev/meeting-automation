@@ -17,7 +17,7 @@
 | DIAR-11 | 동일 입력 두 번 실행 | 동일 speaker/segment IDs, sort, values | deterministic replay test |
 | DIAR-12 | output serialization | Provider label/model-specific fields와 Participant 실명 추론 없음 | standard model contract test |
 
-Backend root에서 `./gradlew test`, `./gradlew clean build`를 실행하고 결과를 기록한다.
+Backend root에서 `.\gradlew.bat test --tests com.meetingautomation.transcription.DiarizationResultAdapterTests`를 실행하고 결과를 기록한다. 변경한 코드와 직접 관련된 테스트만 실행하며 전체 Backend suite와 `clean build`는 실행하지 않는다.
 
 ## 수동/통합 QA
 

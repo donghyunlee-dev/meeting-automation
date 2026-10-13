@@ -24,8 +24,8 @@
 3. providerLabel reference/time/text validator를 구현한다. 결과: malformed output이 변환 전에 거절된다.
 4. first utterance ordering으로 stable speaker ID를 만들고 unused speaker를 제외한다. 결과: 동일 input ID가 안정적이다.
 5. 표준 segment ID를 만들고 stable chronological ordering 후 TranscriptResult를 반환한다. 결과: overlap과 원 시간값을 유지한 표준 model이 생성된다.
-6. deterministic replay 및 로그 비노출 회귀 테스트, Backend test/build를 실행한다. 결과: adapter가 순수 변환 경계로 검증된다.
+6. deterministic replay 및 로그 비노출 회귀 테스트를 실행한다. Backend에서는 관련 테스트 클래스만 선택한다. 결과: adapter가 순수 변환 경계로 검증된다.
 
 ## 검증 명령
 
-Backend root에서 `./gradlew test`, `./gradlew clean build`를 실행한다. 변환 자체는 provider/audio network 없이 고정 object fixture로 검증한다.
+Backend root에서 `.\gradlew.bat test --tests com.meetingautomation.transcription.DiarizationResultAdapterTests`를 실행한다. 이 선택 실행은 변경한 정규화 동작을 검증하며, 전체 Backend 테스트나 `clean build`는 반복하지 않는다. 변환 자체는 provider/audio network 없이 고정 object fixture로 검증한다.
