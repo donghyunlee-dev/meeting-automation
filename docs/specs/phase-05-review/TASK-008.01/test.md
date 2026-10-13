@@ -24,7 +24,7 @@
 | API-012-16 | Minutes/Transcript/Email/Secret sentinel validation/provider-independent error | 응답/로그에 sentinel 미노출 | privacy/log redaction test |
 | API-012-17 | ownerParticipantId가 빈 문자열 | HTTP 400 `VALIDATION_FAILED`, 저장 없음 | owner field validation test |
 
-Backend root에서 `./gradlew test`, `./gradlew clean build`를 실행하고 결과를 기록한다. 설계 단계에서는 테스트를 실행하지 않는다.
+Windows Backend root에서 `& .\gradlew.bat test --tests com.meetingautomation.MeetingSessionMinutesApiTests`를 실행하고 결과를 기록한다. API-012 validation, storage, CAS, and API-010 read-after-write를 같은 integration test class에서 직접 검증한다. 개발자/QA 검증에서 전체 Backend suite, `clean build`, 무관한 테스트를 반복하는 명령은 실행하지 않으며 GitHub Actions CI 설정은 변경하지 않는다. 별도 compilation check가 필요할 때만 `compileJava` 또는 `compileTestJava`를 실행한다. 설계 단계에서는 테스트를 실행하지 않는다.
 
 ## 통합/수동 QA
 

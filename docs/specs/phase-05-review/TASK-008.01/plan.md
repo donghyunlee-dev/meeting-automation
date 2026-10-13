@@ -25,8 +25,8 @@
 3. API-012 request DTO와 full-body validation을 구현한다. 결과: 잘못된 field 하나라도 있으면 저장 boundary에 도달하지 않는다.
 4. `REVIEW`/allowed action/If-Match를 검증하고 version compare-and-set로 Minutes 전체를 교체한다. 결과: success는 single version mutation, stale update는 412다.
 5. 공통 response/error mapper와 API-010 read-after-write integration을 연결한다. 결과: saved content/version이 동일하게 다시 조회된다.
-6. error/log redaction 및 Backend 전체 test/build를 수행한다. 결과: privacy와 회귀 evidence가 기록된다.
+6. error/log redaction과 Minutes API/CAS focused tests를 수행한다. 결과: privacy와 회귀 evidence가 기록된다.
 
 ## 검증 명령
 
-Backend root에서 `./gradlew test`, `./gradlew clean build`를 실행한다. API-012 mutation 후 API-010 GET으로 version, Minutes 필드, Transcript/Speaker immutability를 통합 확인한다.
+Windows Backend root에서 `& .\gradlew.bat test --tests com.meetingautomation.MeetingSessionMinutesApiTests`를 실행한다. API-012 mutation 후 API-010 GET으로 version, Minutes 필드, Transcript/Speaker immutability와 같은 version의 동시 요청 CAS를 통합 확인한다. 개발자/QA 검증에서는 전체 Backend suite, `clean build`, 또는 무관한 테스트를 다시 실행하는 명령을 사용하지 않는다. 기존 GitHub Actions CI는 바꾸지 않는다. 별도 compile check가 필요하면 `compileJava` 또는 `compileTestJava`를 선택적으로 실행한다.
