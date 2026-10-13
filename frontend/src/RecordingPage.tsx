@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, type MouseEvent } from 'react';
+import { Link } from 'react-router';
 import { formatElapsedTime } from './recordingTime';
 import type { ChunkUploadSnapshot } from './chunkUploadCoordinator';
+import type { RecordingEndSnapshot } from './recordingEndCoordinator';
 
 export type RecordingViewState = 'Ready' | 'Recording' | 'Paused';
 
@@ -23,8 +25,11 @@ type RecordingPageProps = RecordingSessionContext & RecordingCallbacks & {
   elapsedMs: number;
   errorMessage?: string;
   completed?: boolean;
+  endFlowFailed?: boolean;
   uploadSnapshot?: ChunkUploadSnapshot;
+  endSnapshot?: RecordingEndSnapshot;
   onRetryUpload?: () => void;
+  onRetryProcessing?: () => void;
 };
 
 const statusByState: Record<RecordingViewState, string> = {
@@ -33,7 +38,7 @@ const statusByState: Record<RecordingViewState, string> = {
   Paused: '일시정지됨',
 };
 
-export function RecordingPage({ sessionId, title, state, elapsedMs, errorMessage, completed = false, uploadSnapshot, onRetryUpload, onStart, onPause, onResume, onRequestEnd, onConfirmEnd, onCancelEnd }: RecordingPageProps) {
+export function RecordingPage({ sessionId, title, state, elapsedMs, errorMessage, completed = false, endFlowFailed = false, uploadSnapshot, endSnapshot, onRetryUpload, onRetryProcessing, onStart, onPause, onResume, onRequestEnd, onConfirmEnd, onCancelEnd }: RecordingPageProps) {
   const [isConfirmOpen, setConfirmOpen] = useState(false);
   const endTrigger = useRef<HTMLButtonElement>(null);
   const cancelButton = useRef<HTMLButtonElement>(null);
@@ -101,6 +106,13 @@ export function RecordingPage({ sessionId, title, state, elapsedMs, errorMessage
         </p>
         <p className="recording-timer" aria-label="경과 시간">{formatElapsedTime(state === 'Ready' && !completed ? 0 : elapsedMs)}</p>
         {errorMessage && <p className="recording-error" role="alert">{errorMessage}</p>}
+        {endSnapshot?.message && endSnapshot.status !== 'idle' && <div className="recording-end-state" aria-label="처리 시작 상태">
+          <p role={['stopping', 'persisting', 'uploading', 'starting'].includes(endSnapshot.status) ? 'status' : ['retryable', 'incomplete', 'upload-failed', 'failed'].includes(endSnapshot.status) ? 'alert' : 'status'} aria-live={['stopping', 'persisting', 'uploading', 'starting'].includes(endSnapshot.status) ? 'polite' : undefined}>
+            {endSnapshot.message}
+          </p>
+          {['stopping', 'persisting', 'uploading', 'starting'].includes(endSnapshot.status) && <progress aria-label="처리 시작 진행" />}
+          {['retryable', 'incomplete'].includes(endSnapshot.status) && onRetryProcessing && <button className="button button-secondary" type="button" onClick={onRetryProcessing}>처리 시작 재시도</button>}
+        </div>}
         {uploadSnapshot && (uploadSnapshot.totalCount > 0 || uploadSnapshot.message) && <div className="recording-upload" aria-label="오디오 업로드">
           <div className="recording-upload-heading"><strong>오디오 업로드</strong><span>{uploadSnapshot.confirmedCount}/{uploadSnapshot.totalCount}</span></div>
           {uploadSnapshot.totalCount > 0 && <progress aria-label="오디오 업로드 진행" value={uploadSnapshot.confirmedCount} max={uploadSnapshot.totalCount} />}
@@ -112,7 +124,8 @@ export function RecordingPage({ sessionId, title, state, elapsedMs, errorMessage
           {uploadSnapshot.status === 'retryable' && onRetryUpload && <button className="button button-secondary" type="button" onClick={onRetryUpload}>업로드 재시도</button>}
         </div>}
         <div className="recording-actions">
-          {state === 'Ready' && !completed && <button className="button button-primary recording-primary-action" type="button" onClick={onStart}>녹음 시작</button>}
+          {state === 'Ready' && !completed && !endFlowFailed && <button className="button button-primary recording-primary-action" type="button" onClick={onStart}>녹음 시작</button>}
+          {state === 'Ready' && endFlowFailed && <Link className="button button-primary recording-primary-action" to="/meetings/new">새 회의 시작</Link>}
           {state === 'Recording' && <>
             <button className="button button-secondary" type="button" onClick={onPause}>일시정지</button>
             <button className="button button-danger recording-primary-action" type="button" ref={endTrigger} onClick={requestEnd}>회의 종료</button>

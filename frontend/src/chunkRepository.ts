@@ -10,7 +10,7 @@ export type StoredChunk = RecordingChunkInput & {
   sessionId: string;
   sequence: number;
   sizeBytes: number;
-  uploadState: 'PENDING';
+  uploadState: 'PENDING' | 'ACKNOWLEDGED';
 };
 
 export type ChunkSessionMetadata = {
@@ -38,7 +38,7 @@ export class ChunkStoreError extends Error {
   }
 }
 
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 const CHUNKS = 'chunks';
 const SESSIONS = 'sessions';
 const SEQUENCES = 'sequences';
@@ -191,6 +191,15 @@ export class ChunkRepository {
   }
 
   async getPending(sessionId: string): Promise<PendingChunks> {
+    const stored = await this.getStoredSession(sessionId);
+    return { ...stored, chunks: stored.chunks.filter(({ uploadState }) => uploadState === 'PENDING') };
+  }
+
+  async getRecoverable(sessionId: string): Promise<PendingChunks> {
+    return this.getStoredSession(sessionId);
+  }
+
+  private async getStoredSession(sessionId: string): Promise<PendingChunks> {
     return this.transaction([CHUNKS, SESSIONS, SEQUENCES], 'readonly', (tx, setResult, setFailure) => {
       const chunksRequest = tx.objectStore(CHUNKS).index(SESSION_INDEX).getAll(sessionId) as IDBRequest<StoredChunk[]>;
       const sessionRequest = tx.objectStore(SESSIONS).get(sessionId) as IDBRequest<ChunkSessionMetadata | undefined>;
@@ -219,28 +228,43 @@ export class ChunkRepository {
       const key: IDBValidKey = [sessionId, sequence];
       const target = chunks.get(key) as IDBRequest<StoredChunk | undefined>;
       target.onsuccess = () => {
-        if (!target.result) { setResult(undefined); return; }
-        const all = chunks.index(SESSION_INDEX).getAll(sessionId) as IDBRequest<StoredChunk[]>;
-        all.onsuccess = () => {
+        const chunk = target.result;
+        if (!chunk || chunk.uploadState === 'ACKNOWLEDGED') { setResult(undefined); return; }
+        const session = sessions.get(sessionId) as IDBRequest<ChunkSessionMetadata | undefined>;
+        session.onsuccess = () => {
           try {
-            chunks.delete(key);
-            const remaining = all.result.length - 1;
-            if (remaining <= 0) sessions.delete(sessionId);
-            else {
-              const request = sessions.get(sessionId) as IDBRequest<ChunkSessionMetadata | undefined>;
-              request.onsuccess = () => {
-                if (request.result) sessions.put({ ...request.result, pendingCount: remaining, updatedAtMs: Date.now() });
-                setResult(undefined);
-              };
-              request.onerror = () => setFailure(request.error);
-              return;
-            }
+            chunks.put({ ...chunk, uploadState: 'ACKNOWLEDGED' });
+            if (session.result) sessions.put({
+              ...session.result,
+              pendingCount: Math.max(0, session.result.pendingCount - 1),
+              updatedAtMs: Date.now(),
+            });
             setResult(undefined);
           } catch (error) { setFailure(error); try { tx.abort(); } catch { /* inactive */ } }
         };
-        all.onerror = () => setFailure(all.error);
+        session.onerror = () => setFailure(session.error);
       };
       target.onerror = () => setFailure(target.error);
+    });
+  }
+
+  async clearSessionAudio(sessionId: string): Promise<void> {
+    await this.transaction<void>([CHUNKS, SESSIONS, SEQUENCES], 'readwrite', (tx, setResult, setFailure) => {
+      const cursorRequest = tx.objectStore(CHUNKS).index(SESSION_INDEX).openCursor(sessionId);
+      cursorRequest.onsuccess = () => {
+        const cursor = cursorRequest.result;
+        if (cursor) {
+          try { cursor.delete(); cursor.continue(); }
+          catch (error) { setFailure(error); try { tx.abort(); } catch { /* inactive */ } }
+          return;
+        }
+        try {
+          tx.objectStore(SESSIONS).delete(sessionId);
+          tx.objectStore(SEQUENCES).delete(sessionId);
+          setResult(undefined);
+        } catch (error) { setFailure(error); try { tx.abort(); } catch { /* inactive */ } }
+      };
+      cursorRequest.onerror = () => setFailure(cursorRequest.error);
     });
   }
 

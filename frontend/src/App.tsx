@@ -20,6 +20,8 @@ import { ChunkRecorderAdapter } from './chunkRecorderAdapter';
 import { ChunkRepository } from './chunkRepository';
 import { getReceivedAudioStatus, putAudioChunk } from './audioUploadApi';
 import { ChunkUploadCoordinator, type ChunkUploadSnapshot } from './chunkUploadCoordinator';
+import { startProcessing } from './processingStartApi';
+import { ProcessingAttemptStore, RecordingEndCoordinator, type RecordingEndSnapshot } from './recordingEndCoordinator';
 
 type ViewState = 'loading' | 'ready' | 'error';
 type FormState = { mode: 'create' } | { mode: 'edit'; participant: Participant };
@@ -392,11 +394,17 @@ function ActiveMeetingRecordingRoute({ session, setState, mediaAdapter }: {
   setState: (state: RecordingViewState) => void;
   mediaAdapter: MediaRecorderAdapter;
 }) {
+  const navigate = useNavigate();
   const [snapshot, setSnapshot] = useState<RecordingSnapshot>({ state: 'Ready', elapsedMs: 0 });
   const [storageError, setStorageError] = useState('');
   const [uploadSnapshot, setUploadSnapshot] = useState<ChunkUploadSnapshot>({ status: 'idle', totalCount: 0, confirmedCount: 0, pendingCount: 0 });
+  const [endSnapshot, setEndSnapshot] = useState<RecordingEndSnapshot>({ status: 'idle' });
   const controllerRef = useRef<RecordingController | null>(null);
   const persistenceTail = useRef<Promise<unknown>>(Promise.resolve());
+  const persistenceError = useRef<unknown>(null);
+  const finalDurationMs = useRef<number | null>(null);
+  const stopPromise = useRef<Promise<number> | null>(null);
+  const stopWaiter = useRef<{ resolve: (durationMs: number) => void; reject: (error: unknown) => void } | null>(null);
   const repository = useMemo(() => new ChunkRepository({
     dbName: 'meeting-automation-chunks',
     maxChunkBytes: session.uploadPolicy.maxChunkBytes,
@@ -412,6 +420,50 @@ function ActiveMeetingRecordingRoute({ session, setState, mediaAdapter }: {
       onChange: setUploadSnapshot,
     });
   }, [repository]);
+  const endCoordinator = useRef<RecordingEndCoordinator | null>(null);
+  useEffect(() => {
+    const coordinator = new RecordingEndCoordinator({
+      sessionId: session.sessionId,
+      stopRecorderAndWait: () => {
+        if (finalDurationMs.current !== null) return Promise.resolve(finalDurationMs.current);
+        if (stopPromise.current) return stopPromise.current;
+        const waitingForStop = new Promise<number>((resolve, reject) => {
+          const controller = controllerRef.current;
+          if (!controller) { reject(new Error('Recorder is unavailable.')); return; }
+          stopWaiter.current = { resolve, reject };
+          controller.stop();
+          const current = controller.getSnapshot();
+          if (current.errorMessage && !current.completed) {
+            stopWaiter.current = null;
+            reject(new Error('Recorder did not stop cleanly.'));
+          }
+        });
+        stopPromise.current = waitingForStop;
+        return waitingForStop;
+      },
+      waitForPersistence: async () => {
+        await persistenceTail.current;
+        if (persistenceError.current) throw new Error('Chunk persistence did not complete.');
+      },
+      flushUploads: async () => {
+        const result = await uploader.uploadPending(session.sessionId);
+        const pending = await repository.getPending(session.sessionId);
+        if (pending.chunks.length > 0 || (pending.session?.pendingCount ?? 0) > 0) {
+          return { ...result, status: 'retryable', pendingCount: pending.chunks.length };
+        }
+        return result;
+      },
+      reconcileUploads: () => uploader.reconcile(session.sessionId),
+      getAudioState: () => repository.getPending(session.sessionId),
+      startProcessing: (request, idempotencyKey) => startProcessing(session.sessionId, request, idempotencyKey),
+      clearLocalAudio: () => repository.clearSessionAudio(session.sessionId),
+      navigateToProcessing: (sessionId) => navigate(`/meetings/${encodeURIComponent(sessionId)}/processing`),
+      attemptStore: new ProcessingAttemptStore(),
+      onChange: setEndSnapshot,
+    });
+    endCoordinator.current = coordinator;
+    return () => { if (endCoordinator.current === coordinator) endCoordinator.current = null; };
+  }, [navigate, repository, session.sessionId, uploader]);
 
   useEffect(() => () => repository.close(), [repository]);
   useEffect(() => {
@@ -435,16 +487,28 @@ function ActiveMeetingRecordingRoute({ session, setState, mediaAdapter }: {
       onChange: (next) => {
         setSnapshot(next);
         setState(next.state);
+        if (next.errorMessage && stopWaiter.current) {
+          const waiter = stopWaiter.current;
+          stopWaiter.current = null;
+          waiter.reject(new Error('Recorder did not stop cleanly.'));
+        }
       },
       onChunk: (chunk) => {
-        const persisted = persistenceTail.current.then(() => chunkAdapter.accept(chunk));
-        persistenceTail.current = persisted.catch(() => undefined);
-        void persisted.then(() => uploader.uploadPending(session.sessionId)).catch(() => undefined);
+        const persisted = persistenceTail.current.catch(() => undefined).then(() => chunkAdapter.accept(chunk));
+        persistenceTail.current = persisted;
+        void persisted.then(() => uploader.uploadPending(session.sessionId)).catch((error: unknown) => {
+          persistenceError.current = error;
+          setStorageError('녹음 데이터를 브라우저 임시 저장소에 보관하지 못했습니다. 저장 공간이나 브라우저 상태를 확인해 주세요.');
+          controllerRef.current?.stop();
+        });
       },
       onStopComplete: (elapsedMs) => {
+        finalDurationMs.current = elapsedMs;
         setSnapshot((previous) => ({ ...previous, state: 'Ready', elapsedMs, completed: true }));
         setState('Ready');
         void persistenceTail.current.then(() => uploader.uploadPending(session.sessionId)).catch(() => undefined);
+        stopWaiter.current?.resolve(elapsedMs);
+        stopWaiter.current = null;
       },
     });
     controllerRef.current = current;
@@ -462,13 +526,20 @@ function ActiveMeetingRecordingRoute({ session, setState, mediaAdapter }: {
     elapsedMs={snapshot.elapsedMs}
     errorMessage={storageError || snapshot.errorMessage}
     completed={snapshot.completed}
+    endFlowFailed={endSnapshot.status === 'failed'}
     uploadSnapshot={uploadSnapshot}
-    onRetryUpload={() => { void uploader.retryManually(session.sessionId); }}
+    endSnapshot={endSnapshot}
+    onRetryUpload={() => {
+      void uploader.retryManually(session.sessionId).then((result) => {
+        if (endSnapshot.status === 'upload-failed' && result.status === 'complete') void endCoordinator.current?.start();
+      });
+    }}
+    onRetryProcessing={() => { void endCoordinator.current?.start(); }}
     onStart={() => { if (controllerRef.current) void controllerRef.current.start(); }}
     onPause={() => controllerRef.current?.pause()}
     onResume={() => controllerRef.current?.resume()}
     onRequestEnd={() => undefined}
-    onConfirmEnd={() => controllerRef.current?.stop()}
+    onConfirmEnd={() => { void endCoordinator.current?.start(); }}
     onCancelEnd={() => undefined}
   />;
 }
@@ -500,6 +571,7 @@ export function App({ onNewMeetingSubmit = () => undefined, mediaAdapter = brows
         <Route path="/settings/document" element={<DocumentSetupWizard settings />} />
         <Route path="/meetings/new" element={<SetupGate><NewMeetingRoute onCreated={(session) => { setCreatedSession(session); saveRecordingSession(session); setRecordingState('Ready'); }} onSubmitted={onNewMeetingSubmit} /></SetupGate>} />
         <Route path="/meetings/:sessionId/recording" element={<MeetingRecordingRoute session={createdSession} setState={setRecordingState} mediaAdapter={mediaAdapter} />} />
+        <Route path="/meetings/:sessionId/processing" element={<FutureRouteNotice />} />
         <Route path="/settings/participants" element={<SetupGate><ParticipantsPage /></SetupGate>} />
         <Route path="*" element={<FutureRouteNotice />} />
       </Routes>
