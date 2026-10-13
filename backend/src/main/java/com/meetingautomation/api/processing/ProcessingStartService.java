@@ -8,11 +8,11 @@ import com.meetingautomation.api.session.MeetingSession;
 import com.meetingautomation.api.session.MeetingSessionStore;
 import com.meetingautomation.api.session.SessionStateConflictException;
 import com.meetingautomation.api.session.UploadPolicy;
-import java.math.BigDecimal;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import tools.jackson.databind.JsonNode;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -91,22 +91,18 @@ public final class ProcessingStartService {
         return new Command(idempotencyKey.trim(), expectedChunks, durationMs, mimeType);
     }
 
-    private static int exactInteger(BigDecimal value, String field) {
-        if (value == null) throw new ApiValidationException(field);
-        try {
-            return value.intValueExact();
-        } catch (ArithmeticException invalidInteger) {
+    private static int exactInteger(JsonNode value, String field) {
+        if (value == null || !value.isIntegralNumber() || !value.canConvertToInt()) {
             throw new ApiValidationException(field);
         }
+        return value.intValue();
     }
 
-    private static long exactLong(BigDecimal value, String field) {
-        if (value == null) throw new ApiValidationException(field);
-        try {
-            return value.longValueExact();
-        } catch (ArithmeticException invalidInteger) {
+    private static long exactLong(JsonNode value, String field) {
+        if (value == null || !value.isIntegralNumber() || !value.canConvertToLong()) {
             throw new ApiValidationException(field);
         }
+        return value.longValue();
     }
 
     private void validateCompletedChunks(String sessionId, int expectedChunks, UploadPolicy policy) {

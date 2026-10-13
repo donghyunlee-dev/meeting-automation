@@ -1,6 +1,6 @@
 package com.meetingautomation.api.processing;
 
-import java.math.BigDecimal;
+import tools.jackson.databind.JsonNode;
 
-public record ProcessingStartRequest(BigDecimal expectedChunks, BigDecimal durationMs, String mimeType) {
+public record ProcessingStartRequest(JsonNode expectedChunks, JsonNode durationMs, String mimeType) {
 }

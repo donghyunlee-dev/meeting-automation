@@ -232,6 +232,32 @@ class ProcessingStartApiTests {
     }
 
     @Test
+    void stringExpectedChunkCountIsRejectedBeforeQueueing() throws Exception {
+        upload("0", new byte[] {11}, "string-count-upload").andExpect(status().isOk());
+
+        mockMvc.perform(process("string-count-key", "{\"expectedChunks\":\"1\",\"durationMs\":15000,"
+                        + "\"mimeType\":\"audio/webm\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("VALIDATION_FAILED"));
+
+        assertThat(processingExecutor.acceptedCount()).isZero();
+        assertThat(sessionStore.find(SESSION_ID).orElseThrow().status()).isEqualTo("UPLOADING");
+    }
+
+    @Test
+    void stringDurationIsRejectedBeforeQueueing() throws Exception {
+        upload("0", new byte[] {11}, "string-duration-upload").andExpect(status().isOk());
+
+        mockMvc.perform(process("string-duration-key", "{\"expectedChunks\":1,\"durationMs\":\"15000\","
+                        + "\"mimeType\":\"audio/webm\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("VALIDATION_FAILED"));
+
+        assertThat(processingExecutor.acceptedCount()).isZero();
+        assertThat(sessionStore.find(SESSION_ID).orElseThrow().status()).isEqualTo("UPLOADING");
+    }
+
+    @Test
     void durationMimeAndIdempotencyKeyAreValidatedBeforeQueueing() throws Exception {
         upload("0", new byte[] {11}, "valid-upload").andExpect(status().isOk());
 
