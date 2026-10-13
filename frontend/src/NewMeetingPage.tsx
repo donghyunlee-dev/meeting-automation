@@ -1,12 +1,14 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link } from 'react-router';
 import type { Participant } from './participantsApi';
 import { MeetingParticipantSelector } from './MeetingParticipantSelector';
 import {
-  getCompanyConfig,
+  getDocumentAppConfig,
   listMeetingParticipants,
   listMeetingTemplates,
-  type CompanyConfig,
+  NewMeetingApiError,
+  type DocumentAppConfig,
+  type MeetingSessionAttempt,
   type MeetingTemplate,
 } from './newMeetingApi';
 
@@ -15,6 +17,7 @@ export type NewMeetingPayload = {
   templateId: string;
   participantIds: string[];
   timezone: string;
+  documentConnectionVersion: number;
 };
 
 type Resource<T> =
@@ -28,8 +31,8 @@ const QUERY_MESSAGES = {
   participants: '참석자 목록을 불러오지 못했습니다. 다시 시도해 주세요.',
 };
 
-export function NewMeetingPage({ onSubmit }: { onSubmit: (payload: NewMeetingPayload) => void }) {
-  const [config, setConfig] = useState<Resource<CompanyConfig>>({ status: 'loading' });
+export function NewMeetingPage({ onSubmit }: { onSubmit: (attempt: MeetingSessionAttempt) => void | Promise<void> }) {
+  const [config, setConfig] = useState<Resource<DocumentAppConfig>>({ status: 'loading' });
   const [templates, setTemplates] = useState<Resource<MeetingTemplate[]>>({ status: 'loading' });
   const [participants, setParticipants] = useState<Resource<Participant[]>>({ status: 'loading' });
   const [title, setTitle] = useState('');
@@ -37,11 +40,15 @@ export function NewMeetingPage({ onSubmit }: { onSubmit: (payload: NewMeetingPay
   const [participantIds, setParticipantIds] = useState<string[]>([]);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState('');
+  const attemptRef = useRef<{ signature: string; attempt: MeetingSessionAttempt; uncertain: boolean } | null>(null);
+  const submittingRef = useRef(false);
 
   const loadConfig = useCallback(async () => {
     setConfig((current) => ({ status: 'loading', data: current.data }));
     try {
-      const result = await getCompanyConfig();
+      const result = await getDocumentAppConfig();
       setConfig({ status: 'ready', data: result });
     } catch {
       setConfig((current) => ({ status: 'error', data: current.data }));
@@ -59,18 +66,21 @@ export function NewMeetingPage({ onSubmit }: { onSubmit: (payload: NewMeetingPay
     }
   }, []);
 
-  const loadParticipants = useCallback(async () => {
-    setParticipants((current) => ({ status: 'loading', data: current.data }));
+  const loadParticipants = useCallback(async (clearSelection = false) => {
+    if (clearSelection) setParticipantIds([]);
+    setParticipants((current) => clearSelection ? { status: 'loading' } : { status: 'loading', data: current.data });
     try {
-      setParticipants({ status: 'ready', data: await listMeetingParticipants() });
+      const items = await listMeetingParticipants();
+      setParticipants({ status: 'ready', data: items });
+      setParticipantIds((current) => clearSelection ? [] : current.filter((id) => items.some((item) => item.id === id)));
     } catch {
-      setParticipants((current) => ({ status: 'error', data: current.data }));
+      setParticipants((current) => clearSelection ? { status: 'error' } : { status: 'error', data: current.data });
     }
   }, []);
 
   useEffect(() => {
     let active = true;
-    void getCompanyConfig().then((result) => {
+    void getDocumentAppConfig().then((result) => {
       if (active) setConfig({ status: 'ready', data: result });
     }).catch(() => {
       if (active) setConfig({ status: 'error' });
@@ -99,19 +109,81 @@ export function NewMeetingPage({ onSubmit }: { onSubmit: (payload: NewMeetingPay
   const unavailable = config.status === 'error' || templates.status === 'error' || participants.status === 'error'
     || (templates.status === 'ready' && availableTemplates.length === 0)
     || (participants.status === 'ready' && availableParticipants.length === 0)
-    || (config.status === 'ready' && !config.data.timezone);
+    || (config.status === 'ready' && (!config.data.company.timezone
+      || config.data.setup?.status !== 'READY' || config.data.setup.canCreateMeeting !== true
+      || !Number.isInteger(config.data.document?.connectionVersion) || (config.data.document?.connectionVersion ?? 0) < 1));
 
   function toggleParticipant(id: string) {
     setParticipantIds((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
   }
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (submittingRef.current) return;
     setSubmitted(true);
     if (anyLoading || unavailable) return;
     const trimmedTitle = title.trim();
-    if (!trimmedTitle || !templateId || participantIds.length === 0 || !config.data?.timezone) return;
-    onSubmit({ title: trimmedTitle, templateId, participantIds: [...participantIds], timezone: config.data.timezone });
+    const currentConfig = config.data;
+    if (!trimmedTitle || !templateId || participantIds.length === 0 || !currentConfig?.company.timezone
+      || currentConfig.setup?.status !== 'READY' || currentConfig.setup.canCreateMeeting !== true
+      || !currentConfig.document || currentConfig.document.connectionVersion < 1) return;
+
+    const formSnapshot = {
+      title: trimmedTitle,
+      templateId,
+      participantIds: Object.freeze([...participantIds]),
+      timezone: currentConfig.company.timezone,
+      documentConnectionVersion: currentConfig.document.connectionVersion,
+    };
+    const signature = JSON.stringify(formSnapshot);
+    submittingRef.current = true;
+    setSubmitting(true);
+    setSubmitError('');
+    let entry = attemptRef.current;
+    if (!entry || entry.signature !== signature || !entry.uncertain) {
+      const key = () => globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      entry = { signature, attempt: Object.freeze({ ...formSnapshot, recoveryKey: key(), idempotencyKey: key() }), uncertain: false };
+      attemptRef.current = entry;
+    } else {
+      try {
+        const latest = await getDocumentAppConfig();
+        if (latest.setup?.status !== 'READY' || latest.setup.canCreateMeeting !== true
+          || latest.document?.connectionVersion !== entry.attempt.documentConnectionVersion) {
+          setConfig({ status: 'ready', data: latest });
+          await loadParticipants(true);
+          attemptRef.current = null;
+          setSubmitError('문서 연결이 바뀌었습니다. 설정과 참석자 목록을 새로 확인했습니다. 내용을 확인한 뒤 다시 시작해 주세요.');
+          submittingRef.current = false;
+          setSubmitting(false);
+          return;
+        }
+      } catch {
+        setSubmitError('문서 연결 상태를 확인하지 못했습니다. 다시 시도해 주세요.');
+        submittingRef.current = false;
+        setSubmitting(false);
+        return;
+      }
+    }
+
+    try {
+      await onSubmit(entry.attempt);
+      attemptRef.current = null;
+    } catch (error) {
+      if (error instanceof NewMeetingApiError && error.code === 'DOCUMENT_CONNECTION_CHANGED') {
+        attemptRef.current = null;
+        await Promise.all([loadConfig(), loadParticipants(true)]);
+        setSubmitError('문서 연결이 바뀌었습니다. 설정과 참석자 목록을 새로 확인했습니다. 내용을 확인한 뒤 다시 시작해 주세요.');
+      } else {
+        const uncertain = error instanceof NewMeetingApiError && error.responseUncertain;
+        if (attemptRef.current) attemptRef.current.uncertain = uncertain;
+        setSubmitError(error instanceof NewMeetingApiError && error.code !== 'NETWORK_ERROR'
+          ? error.message
+          : '회의를 시작하지 못했습니다. 연결을 확인한 뒤 다시 시도해 주세요.');
+      }
+    } finally {
+      submittingRef.current = false;
+      setSubmitting(false);
+    }
   }
 
   const titleError = submitted && !title.trim();
@@ -137,7 +209,8 @@ export function NewMeetingPage({ onSubmit }: { onSubmit: (payload: NewMeetingPay
           <h2 id="timezone-label">회사 시간대</h2>
           {config.status === 'loading' && <p className="meeting-query-state" role="status">회사 시간대를 불러오는 중…</p>}
           {config.status === 'error' && <div className="meeting-query-error" role="alert"><p>{QUERY_MESSAGES.config}</p><button className="button button-secondary" type="button" onClick={() => void loadConfig()} disabled={configLoading}>회사 시간대 다시 시도</button></div>}
-          {config.status === 'ready' && <p className="meeting-timezone">{config.data.timezone}</p>}
+          {config.status === 'ready' && <p className="meeting-timezone">{config.data.company.timezone}</p>}
+          {config.status === 'ready' && (config.data.setup?.status !== 'READY' || !config.data.setup.canCreateMeeting) && <p className="meeting-query-error" role="alert">Document connection setup or switching must finish before a meeting can start. <Link to="/setup/document">Open document settings</Link></p>}
         </section>
 
         <div className="meeting-field">
@@ -171,8 +244,9 @@ export function NewMeetingPage({ onSubmit }: { onSubmit: (payload: NewMeetingPay
           {participantError && <p className="meeting-field-error" id="meeting-participants-error">참석자를 한 명 이상 추가해 주세요.</p>}
         </section>
 
+        {submitError && <p role="alert" className="meeting-query-error">{submitError}</p>}
         <div className="meeting-form-footer">
-          <button className="button button-primary meeting-submit" type="submit" disabled={anyLoading || unavailable}>회의 시작</button>
+          <button className="button button-primary meeting-submit" type="submit" disabled={anyLoading || unavailable || submitting}>{submitting ? '회의 시작 중…' : '회의 시작'}</button>
         </div>
       </form>
     </main>

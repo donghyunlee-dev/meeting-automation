@@ -24,7 +24,7 @@ API-006 Backend 구현, 녹음/MediaRecorder/Audio upload, Session 복구 endpoi
 
 201 응답 `{sessionId,version,status,uploadPolicy}`는 Session Context에 저장하고 `/meetings/{sessionId}/recording`으로 이동한다. `recoveryKey`나 Idempotency-Key는 Provider나 URL에 노출하지 않는다. Session context는 Browser runtime memory이며 page reload/process restart 복구를 보장하지 않는다.
 
-400 검증, 409 key conflict, 500 내부 오류, 502 roster Provider 오류는 API 공통 envelope의 안전한 `message`를 사용해 표시한다. 실패 시 사용자가 입력한 폼 draft를 보존하고 수정 또는 같은 시도 재전송을 제공한다. Provider raw body/stack/secret은 표시하지 않는다. Document `provider:null`은 최초 설정 위저드로 안내하며 Session 생성 요청을 차단한다.
+400 검증, 409 충돌/연결 변경, 500 내부 오류, 502 roster Provider 오류는 API 공통 envelope의 안전한 `message`를 사용해 표시한다. 실패 시 사용자가 입력한 폼 draft를 보존하고 수정 또는 재시도를 제공한다. Provider raw body/stack/secret은 표시하지 않는다. API-001의 설정 상태가 `READY`가 아니거나 `canCreateMeeting`이 false이면 최초 설정 위저드 또는 전환 안내로 보내고 Session 생성 요청을 차단한다. `DOCUMENT_CONNECTION_CHANGED`를 받으면 설정과 참석자 목록을 다시 읽고 이전 제출 snapshot/key pair를 버린다. 같은 연결에서 응답 유실만 같은 snapshot/key pair로 재시도한다.
 
 ## 수용 기준
 

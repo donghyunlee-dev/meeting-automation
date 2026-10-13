@@ -13,8 +13,9 @@
 | SCR-002-16 | API 400/409/500/502 응답 | 안전 메시지 표시, form draft 유지, 성공 navigation 없음 | Error handling test |
 | SCR-002-17 | API 201 응답 | sessionId/version/status/uploadPolicy를 Session Context에 저장 | Context test |
 | SCR-002-18 | API 201 후 router | `/meetings/{sessionId}/recording`으로 이동 | Router integration test |
-| SCR-002-19 | Session 생성 요청에서 App Config의 document.provider가 null | Session 요청 가능; provider 선택 여부로 막지 않음 | Component test |
-| SCR-002-20 | 오류 message fixture에 Provider raw body/secret | 화면에는 공통 안전 message만 노출 | Security/UI test |
+| SCR-002-19 | API-001 setup 상태가 `READY`가 아니거나 `canCreateMeeting=false` | 안내 화면/경로를 제공하고 API-006 요청은 전송하지 않음 | Component/router test |
+| SCR-002-20 | API-006이 `DOCUMENT_CONNECTION_CHANGED` 반환 | 설정과 참석자 목록을 다시 읽고 기존 snapshot/key pair를 폐기; 다음 제출에 새 version/key pair 사용 | Integration test |
+| SCR-002-21 | 오류 message fixture에 Provider raw body/secret | 화면에는 공통 안전 message만 노출 | Security/UI test |
 
 Frontend 기반 Issue #2의 `npm run test`, `npm run lint`, `npm run build`로 검증하고 evidence를 남긴다. 문서 작성 단계에서는 실행하지 않는다.
 
@@ -32,6 +33,6 @@ Recording 화면이 구현되기 전 destination fixture로 route contract를 �
 
 ## ⚙️ 연결 변경 회귀
 
-- 미설정 또는 전환 잠금 중 New Meeting 제출은 API-006 호출 없이 설정/진행 안내를 보인다.
-- API-001의 connectionVersion을 POST와 불변 snapshot에 포함한다. stale 409 뒤 설정·참석자 roster를 다시 읽고 새 key로 요청한다.
+- API-001의 setup 상태가 `READY`이고 `canCreateMeeting=true`일 때만 제출을 허용한다. 미설정·전환 잠금 중에는 API-006을 호출하지 않고 설정/진행 안내를 보인다.
+- API-001의 connectionVersion을 POST와 불변 snapshot에 포함한다. `DOCUMENT_CONNECTION_CHANGED` 뒤 설정·참석자 roster를 다시 읽고 이전 시도를 폐기해 다음 제출에 새 key pair를 쓴다.
 - 동일 연결에서 응답 유실 재시도는 같은 version/payload/key를 유지한다.
