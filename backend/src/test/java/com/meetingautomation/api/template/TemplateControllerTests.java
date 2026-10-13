@@ -21,6 +21,24 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 class TemplateControllerTests {
 
     @Test
+    void loadsTheSelectedStaticTemplateWithItsCatalogVersion() {
+        TemplateDefinition template = new TemplateCatalog(new org.springframework.core.io.DefaultResourceLoader())
+                .loadTemplate("default.md");
+
+        org.junit.jupiter.api.Assertions.assertEquals("default.md", template.id());
+        org.junit.jupiter.api.Assertions.assertEquals("1.0.0", template.version());
+        org.junit.jupiter.api.Assertions.assertTrue(template.content().contains("## 회의 요약"));
+    }
+
+    @Test
+    void rejectsUnknownTemplateIdsWithoutResolvingAResourcePath() {
+        TemplateCatalog catalog = new TemplateCatalog(new org.springframework.core.io.DefaultResourceLoader());
+
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
+                () -> catalog.loadTemplate("../application.properties"));
+    }
+
+    @Test
     void missingRequiredResourceReturnsSafeInternalErrorWithoutPartialList() throws Exception {
         TemplateCatalog catalog = new TemplateCatalog(resourceLoaderWithMissingProjectTemplate());
         MockMvc mockMvc = MockMvcBuilders.standaloneSetup(new TemplateController(catalog))

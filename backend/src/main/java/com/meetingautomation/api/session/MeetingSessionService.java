@@ -12,7 +12,9 @@ import com.meetingautomation.document.ParticipantListingProvider;
 import java.time.DateTimeException;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -62,9 +64,11 @@ public final class MeetingSessionService {
                 command.documentConnectionVersion(), candidate.sessionId());
         boolean saved = false;
         try {
-            Set<String> supportedTemplateIds = templateCatalog.listTemplates().data().items().stream()
-                    .map(TemplateMetadata::id).collect(Collectors.toUnmodifiableSet());
-            if (!supportedTemplateIds.contains(command.templateId())) throw validationFailure("templateId");
+            TemplateMetadata selectedTemplate = templateCatalog.listTemplates().data().items().stream()
+                    .filter(template -> template.id().equals(command.templateId()))
+                    .findFirst()
+                    .orElseThrow(() -> validationFailure("templateId"));
+            candidate = candidate.withTemplateVersion(selectedTemplate.version());
 
             ParticipantListingProvider provider = providerResolver.selectedProvider()
                     .filter(ParticipantListingProvider.class::isInstance)
@@ -92,9 +96,24 @@ public final class MeetingSessionService {
             } catch (RuntimeException providerFailure) {
                 throw DocumentProviderException.participantListFailed(false, providerFailure);
             }
-            Set<String> availableIds = participants.stream().map(Participant::id).collect(Collectors.toSet());
+            if (participants.stream().anyMatch(participant -> participant == null
+                    || participant.id() == null || participant.id().isBlank()
+                    || participant.name() == null || participant.name().isBlank())) {
+                throw DocumentProviderException.participantListFailed(false);
+            }
+            if (participants.stream().map(Participant::id).distinct().count() != participants.size()) {
+                throw DocumentProviderException.participantListFailed(false);
+            }
+            Map<String, Participant> participantsById = participants.stream().collect(Collectors.toMap(
+                    Participant::id, Function.identity()));
+            Set<String> availableIds = participantsById.keySet();
             if (!availableIds.containsAll(command.participantIds())) throw validationFailure("participantIds");
 
+            List<MeetingSession.ParticipantReference> selectedParticipants = command.participantIds().stream()
+                    .map(participantsById::get)
+                    .map(participant -> new MeetingSession.ParticipantReference(participant.id(), participant.name()))
+                    .toList();
+            candidate = candidate.withParticipantReferences(selectedParticipants);
             sessionStore.save(candidate, registration, uploadPolicy);
             saved = true;
             return candidate;

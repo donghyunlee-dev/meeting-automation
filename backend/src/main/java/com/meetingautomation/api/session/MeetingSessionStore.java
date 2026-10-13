@@ -2,8 +2,10 @@ package com.meetingautomation.api.session;
 
 import com.meetingautomation.document.DocumentConnectionGate;
 import com.meetingautomation.document.Speaker;
+import com.meetingautomation.document.StructuredMinutes;
 import com.meetingautomation.document.TranscriptSegment;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -137,6 +139,23 @@ public final class MeetingSessionStore {
         return updated;
     }
 
+    /** Commits a complete Minutes draft and the REVIEW transition as one synchronized mutation. */
+    public synchronized MeetingSession saveMinutesAndComplete(String sessionId, StructuredMinutes minutes) {
+        MeetingSession current = requireProcessing(sessionId);
+        if (minutes == null || !"MINUTES_GENERATION".equals(current.processingStage())
+                || current.progressPercent() != 100 || current.minutes() != null
+                || !current.meeting().templateId().equals(minutes.templateId())
+                || !Objects.equals(current.meeting().templateVersion(), minutes.templateVersion())
+                || minutes.templateVersion() == null || minutes.templateVersion().isBlank()
+                || minutes.summary() == null) {
+            throw new IllegalArgumentException("Minutes result cannot be saved.");
+        }
+        MeetingSession updated = copy(current, Math.addExact(current.version(), 1), "REVIEW",
+                "DRAFT_READY", 100, current.speakers(), current.transcript(), null, minutes);
+        sessions.put(sessionId, updated);
+        return updated;
+    }
+
     public synchronized MeetingSession failProcessing(
             String sessionId, String stage, int lastCompletedProgress, String errorCode, boolean retryable) {
         MeetingSession current = requireProcessing(sessionId);
@@ -157,7 +176,14 @@ public final class MeetingSessionStore {
     private static MeetingSession copy(MeetingSession current, int version, String status,
             String processingStage, int progressPercent, java.util.List<Speaker> speakers,
             java.util.List<TranscriptSegment> transcript, ProcessingFailure failure) {
+        return copy(current, version, status, processingStage, progressPercent,
+                speakers, transcript, failure, current.minutes());
+    }
+
+    private static MeetingSession copy(MeetingSession current, int version, String status,
+            String processingStage, int progressPercent, java.util.List<Speaker> speakers,
+            java.util.List<TranscriptSegment> transcript, ProcessingFailure failure, StructuredMinutes minutes) {
         return new MeetingSession(current.sessionId(), version, status, current.documentConnectionVersion(),
-                current.meeting(), processingStage, progressPercent, speakers, transcript, failure);
+                current.meeting(), processingStage, progressPercent, speakers, transcript, failure, minutes);
     }
 }
