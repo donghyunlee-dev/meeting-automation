@@ -1,6 +1,6 @@
 # Processing 상태 및 Review 데이터 조회 API
 
-> **계약 갱신:** 이 패키지가 작성될 당시 `PROCESSING_FAILED`의 `allowedActions`는 빈 배열이었다. 사용자 승인으로 추가된 변환 retry/download/finalize action은 [TASK-017.02](../../phase-07-security/TASK-017.02/spec.md) Issue #61 및 후속 UI task가 해당 기준을 대체한다. 실패 응답의 안전한 오류 경계와 partial Review data 비노출은 계속 유효하다.
+> **계약 갱신:** 이 패키지가 작성될 당시 `PROCESSING_FAILED`의 `allowedActions`는 빈 배열이었다. 사용자 승인으로 추가된 변환 retry/download/finalize action과 Audio 보존 metadata는 [TASK-017.02](../../phase-07-security/TASK-017.02/spec.md) Issue #61 및 후속 UI task가 해당 기준을 대체한다. 현재 task는 기존 API-010의 안전한 `errorCode`, `retryable`, `audioAvailable` 필드를 유지하고 Audio 복구 기능이 없으므로 `audioAvailable:false`, 빈 `allowedActions`를 반환한다. 실패 응답의 안전한 오류 경계와 partial Review data 비노출은 계속 유효하다.
 
 ## 목표
 
@@ -26,11 +26,11 @@ GET /api/v1/meeting-sessions/{sessionId}
 Accept: application/json
 ```
 
-모든 성공은 `{ "data": { sessionId, version, status, processing, ... } }` envelope를 사용한다. 필수 common fields는 `sessionId`, 현재 snapshot `version`, `status`, `processing:{stage,progressPercent}`다.
+모든 성공은 `{ "data": { sessionId, version, status, processing, ... } }` envelope를 사용한다. 필수 common fields는 `sessionId`, 현재 snapshot `version`, `status`, `processing:{stage,progressPercent}`다. `processing` 객체는 모든 상태에서 존재하며, `CREATED`/`UPLOADING`처럼 처리가 시작되지 않은 상태의 `stage`는 `null`, progress는 `0`이다. 이렇게 해야 아직 stage가 없는 Session도 공통 응답 형태를 유지한다.
 
 - `PROCESSING` 및 다른 REVIEW 이전 상태에는 `speakers:[]`, `transcript:[]`, `minutes:null`, `allowedActions:[]`을 반환해 partial review data를 노출하지 않는다. `processing.stage`/`progressPercent`는 API-009/006.04/006.05가 기록한 현재 snapshot을 사용한다.
-- `PROCESSING_FAILED`에는 실패 stage와 마지막 완료 progress를 유지하고 `speakers:[]`, `transcript:[]`, `minutes:null`을 반환한다. API-010은 현재 Audio/retry availability에 따라 action과 만료 정보를 제공하며, 구체 계약은 TASK-017.02/#61에 정의한다. 내부/provider 예외 원문은 제공하지 않는다.
-- `REVIEW`에서만 완료된 `speakers`, 시간순 `transcript`, Structured `minutes`, `allowedActions`를 한 Session version snapshot으로 반환한다. Speaker는 표준 `{speakerId,label,participantId}`; segment는 `{segmentId,speakerId,startMs,endMs,text}`; Minutes는 `data-spec.md` StructuredMinutes schema를 따른다.
+- `PROCESSING_FAILED`에는 실패 stage와 마지막 완료 progress, 저장된 safe `errorCode`, `retryable`, `audioAvailable:false`를 `processing`에 포함하고 `speakers:[]`, `transcript:[]`, `minutes:null`, `allowedActions:[]`을 반환한다. 현재는 Audio download/retry 기능과 expiry가 없으므로 `audioExpiresAt`은 생략하거나 null이다. TASK-017.02/#61이 Audio lifecycle을 구현할 때 가용성, expiry 및 복구 action을 갱신한다. 내부/provider 예외 원문은 제공하지 않는다.
+- `REVIEW`에서만 완료된 `speakers`, 시간순 `transcript`, Structured `minutes`, `allowedActions`를 한 Session version snapshot으로 반환한다. Speaker는 표준 `{speakerId,label,participantId}`이며, Speaker mapping 전 `participantId`는 `null`이다. segment는 `{segmentId,speakerId,startMs,endMs,text}`; Minutes는 `data-spec.md` StructuredMinutes schema를 따른다.
 - REVIEW `allowedActions`는 현재 API-011~014에 해당하는 유효 action만 포함한다. 초기 Review는 `UPDATE_SPEAKER_MAPPING`, `UPDATE_MINUTES`, `REGENERATE_MINUTES`, `CONFIRM`; Session mutation/전이에 따라 매 query에서 재계산한다. Review 전/최종 상태에는 빈 배열이다.
 - Session이 없거나 Backend 재시작 후 memory에서 사라졌으면 HTTP 404 `SESSION_NOT_FOUND` common error envelope.
 - query는 status/version/processing progress를 변경하지 않는다. Transcript/Minutes/Secret/Provider 원문을 로그에 쓰지 않는다.
@@ -46,4 +46,4 @@ Accept: application/json
 
 ## 결정 및 전제
 
-API-010 기존 response schema와 공통 `{data}` envelope를 우선 사용한다. error 원문을 새 field로 확장하지 않고 status/stage 기반 상태를 반환해 API response의 secret/privacy 경계를 유지한다. Review data는 모든 생성 단계가 완료된 단일 Session commit 이후 공개한다.
+API-010 기존 response schema와 공통 `{data}` envelope를 우선 사용한다. `processing` 객체는 항상 포함하고 시작 전에는 null stage와 0 progress로 나타낸다. 현재 `Speaker` 모델에는 participant mapping이 없으므로 Review 응답의 `participantId`는 null로 나타낸다. 실패 응답은 Session에 저장된 safe error code/retryability와 현재 지원하지 않는 Audio 복구 상태를 표시하되 provider 원문을 확장하지 않는다. TASK-017.02/#61이 Audio lifecycle/expiry와 recovery action을 구현한다. Review data는 모든 생성 단계가 완료된 단일 Session commit 이후 공개한다.
