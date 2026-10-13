@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import {
   createParticipant,
   listParticipants,
@@ -23,6 +23,8 @@ import { ChunkUploadCoordinator, type ChunkUploadSnapshot } from './chunkUploadC
 import { startProcessing } from './processingStartApi';
 import { ProcessingAttemptStore, RecordingEndCoordinator, type RecordingEndSnapshot } from './recordingEndCoordinator';
 import { ProcessingPage } from './ProcessingPage';
+import { ReviewSpeakerPage } from './ReviewSpeakerPage';
+import type { ReviewSpeaker } from './reviewApi';
 
 type ViewState = 'loading' | 'ready' | 'error';
 type FormState = { mode: 'create' } | { mode: 'edit'; participant: Participant };
@@ -561,7 +563,24 @@ export function App({ onNewMeetingSubmit = () => undefined, mediaAdapter = brows
 } = {}) {
   const [createdSession, setCreatedSession] = useState<RecordingSession | null>(restoreRecordingSession);
   const [recordingState, setRecordingState] = useState<RecordingViewState>('Ready');
+  const [speakerDrafts, setSpeakerDrafts] = useState<Record<string, Record<string, string | null>>>({});
   const location = useLocation();
+  const initializeSpeakerDraft = useCallback((sessionId: string, speakers: ReviewSpeaker[]) => {
+    setSpeakerDrafts((current) => {
+      const sessionDraft = current[sessionId] ?? {};
+      const nextDraft = { ...sessionDraft };
+      for (const speaker of speakers) {
+        if (!Object.prototype.hasOwnProperty.call(nextDraft, speaker.speakerId)) nextDraft[speaker.speakerId] = speaker.participantId;
+      }
+      return { ...current, [sessionId]: nextDraft };
+    });
+  }, []);
+  const updateSpeakerDraft = useCallback((sessionId: string, speakerId: string, participantId: string | null) => {
+    setSpeakerDrafts((current) => ({
+      ...current,
+      [sessionId]: { ...(current[sessionId] ?? {}), [speakerId]: participantId },
+    }));
+  }, []);
   const isActiveRecording = (/^\/meetings\/[^/]+\/recording$/.test(location.pathname) && recordingState !== 'Ready') || /^\/meetings\/[^/]+\/processing$/.test(location.pathname);
   return (
     <div className="app-shell">
@@ -573,6 +592,7 @@ export function App({ onNewMeetingSubmit = () => undefined, mediaAdapter = brows
         <Route path="/meetings/new" element={<SetupGate><NewMeetingRoute onCreated={(session) => { setCreatedSession(session); saveRecordingSession(session); setRecordingState('Ready'); }} onSubmitted={onNewMeetingSubmit} /></SetupGate>} />
         <Route path="/meetings/:sessionId/recording" element={<MeetingRecordingRoute session={createdSession} setState={setRecordingState} mediaAdapter={mediaAdapter} />} />
         <Route path="/meetings/:sessionId/processing" element={<ProcessingPage />} />
+        <Route path="/meetings/:sessionId/review" element={<ReviewSpeakerPage drafts={speakerDrafts} onInitialize={initializeSpeakerDraft} onChange={updateSpeakerDraft} />} />
         <Route path="/settings/participants" element={<SetupGate><ParticipantsPage /></SetupGate>} />
         <Route path="*" element={<FutureRouteNotice />} />
       </Routes>

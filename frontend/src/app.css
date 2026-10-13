@@ -197,6 +197,34 @@ button:disabled { cursor: not-allowed; opacity: .6; }
 .setup-mode input, .setup-confirm input { flex-shrink: 0; margin-top: 6px; }
 .setup-confirm { margin-bottom: 20px; }
 
+.review-speaker-page { width: min(100%, 760px); min-width: 0; margin: 0 auto; padding: 38px 24px 48px; overflow-wrap: anywhere; }
+.review-speaker-heading { margin-bottom: 24px; }
+.review-speaker-heading h1 { margin: 8px 0; color: #182230; font-size: clamp(26px, 6vw, 34px); letter-spacing: -.04em; }
+.review-speaker-heading > p:last-child { margin: 0; color: #697586; font-size: 14px; line-height: 1.6; }
+.review-speaker-card, .review-speaker-message { display: grid; gap: 16px; min-width: 0; border: 1px solid #e5e9ef; border-radius: 14px; padding: 20px; background: #fff; }
+.review-speaker-card-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+.review-speaker-card-heading > div { display: grid; gap: 8px; min-width: 0; }
+.review-speaker-card h2 { margin: 0; color: #253044; font-size: 17px; }
+.review-speaker-card p, .review-speaker-message p { margin: 0; color: #596578; font-size: 13px; line-height: 1.6; }
+.review-speaker-list { display: grid; gap: 10px; }
+.review-speaker-row { display: grid; grid-template-columns: minmax(120px, .7fr) minmax(0, 1fr); align-items: center; gap: 14px; min-width: 0; border: 1px solid #e5e9ef; border-radius: 11px; padding: 12px; }
+.review-speaker-row label { min-width: 0; color: #344054; font-size: 14px; font-weight: 650; overflow-wrap: anywhere; }
+.review-speaker-row select { width: 100%; min-width: 0; min-height: 48px; border: 1px solid #dce2ea; border-radius: 9px; padding: 0 12px; color: #293548; background: #fff; }
+.review-speaker-row select:focus-visible { outline: 3px solid #8796ef; outline-offset: 2px; }
+.review-speaker-row select:disabled { cursor: not-allowed; color: #697586; background: #f7f8fa; }
+.review-speaker-current { overflow-wrap: anywhere; }
+.review-speaker-message { justify-items: start; border-color: #e5e9ef; background: #fbfcfe; }
+.review-speaker-message[role="alert"] { border-color: #f0d6d6; background: #fffafa; }
+.review-speaker-message[role="alert"] p { color: #9b3b3b; }
+.review-speaker-message .button { min-height: 48px; text-decoration: none; }
+@media (max-width: 520px) {
+  .review-speaker-page { padding: 28px 18px 48px; }
+  .review-speaker-card, .review-speaker-message { padding: 16px; }
+  .review-speaker-card-heading { flex-direction: column; }
+  .review-speaker-card-heading .button, .review-speaker-message .button { width: 100%; }
+  .review-speaker-row { grid-template-columns: minmax(0, 1fr); gap: 8px; padding: 12px; }
+}
+
 .recording-unavailable { display: grid; justify-items: start; gap: 14px; width: min(100%, 600px); margin: 0 auto; padding: 64px 24px; overflow-wrap: anywhere; }
 .recording-unavailable h1 { margin: 0; color: #182230; font-size: clamp(24px, 6vw, 32px); }
 .recording-unavailable p { margin: 0 0 6px; color: #697586; line-height: 1.6; }

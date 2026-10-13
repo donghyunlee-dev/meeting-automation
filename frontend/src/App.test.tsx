@@ -1,5 +1,5 @@
 import 'fake-indexeddb/auto';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { StrictMode, useLayoutEffect, useRef } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router';
@@ -59,6 +59,16 @@ function DestinationFixture() {
 function CurrentPath() {
   const location = useLocation();
   return <p data-testid="current-path">{location.pathname}</p>;
+}
+
+function ReturnToReview({ sessionId }: { sessionId: string }) {
+  const navigate = useNavigate();
+  return <button type="button" onClick={() => navigate(`/meetings/${sessionId}/review`)}>Review로 돌아가기</button>;
+}
+
+function NavigateToReviewSession({ sessionId }: { sessionId: string }) {
+  const navigate = useNavigate();
+  return <button type="button" onClick={() => navigate(`/meetings/${sessionId}/review`)}>Open another Review session</button>;
 }
 
 function NavigateToMismatchedRecordingSession() {
@@ -1053,14 +1063,20 @@ describe('Processing route', () => {
   });
 
   it('moves to review only after a REVIEW snapshot for the route Session', async () => {
-    const fetchMock = vi.fn(async () => response({ data: {
-      sessionId: 'review-session', version: 4, status: 'REVIEW',
-      processing: { stage: 'DRAFT_READY', progressPercent: 100 }, allowedActions: [],
-    } }));
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const path = new URL(String(input)).pathname;
+      if (path.endsWith('/meeting-sessions/review-session')) return response({ data: {
+        sessionId: 'review-session', version: 4, status: 'REVIEW', meeting: { participantIds: [] },
+        processing: { stage: 'DRAFT_READY', progressPercent: 100 }, speakers: [], allowedActions: [],
+      } });
+      if (path.endsWith('/participants')) return response({ data: { items: [] } });
+      if (path.endsWith('/app-config')) return response({ data: { company: { id: 'c1', name: 'Example', timezone: 'Asia/Seoul' }, document: { provider: 'NOTION', configured: true, connectionVersion: 1, rootUrl: 'https://notion.example' } } });
+      return Promise.reject(new Error(`Unexpected request: ${path}`));
+    });
     vi.stubGlobal('fetch', fetchMock);
     render(<MemoryRouter initialEntries={['/meetings/review-session/processing']}><App /><CurrentPath /></MemoryRouter>);
     await waitFor(() => expect(screen.getByTestId('current-path').textContent).toBe('/meetings/review-session/review'));
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls.filter(([url]) => new URL(String(url)).pathname.endsWith('/meeting-sessions/review-session'))).toHaveLength(2);
   });
 
   it('blocks review navigation when API-010 returns a different Session ID', async () => {
@@ -1128,14 +1144,20 @@ describe('Processing route', () => {
   });
 
   it('treats REVIEW with a DRAFT_READY stage as completed and navigates to review', async () => {
-    const fetchMock = vi.fn(async () => response({ data: {
-      sessionId: 'draft-ready', version: 2, status: 'REVIEW',
-      processing: { stage: 'DRAFT_READY', progressPercent: 100 }, allowedActions: [],
-    } }));
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const path = new URL(String(input)).pathname;
+      if (path.endsWith('/meeting-sessions/draft-ready')) return response({ data: {
+        sessionId: 'draft-ready', version: 2, status: 'REVIEW', meeting: { participantIds: [] },
+        processing: { stage: 'DRAFT_READY', progressPercent: 100 }, speakers: [], allowedActions: [],
+      } });
+      if (path.endsWith('/participants')) return response({ data: { items: [] } });
+      if (path.endsWith('/app-config')) return response({ data: { company: { id: 'c1', name: 'Example', timezone: 'Asia/Seoul' }, document: { provider: 'NOTION', configured: true, connectionVersion: 1, rootUrl: 'https://notion.example' } } });
+      return Promise.reject(new Error(`Unexpected request: ${path}`));
+    });
     vi.stubGlobal('fetch', fetchMock);
     render(<MemoryRouter initialEntries={['/meetings/draft-ready/processing']}><App /><CurrentPath /></MemoryRouter>);
     await waitFor(() => expect(screen.getByTestId('current-path').textContent).toBe('/meetings/draft-ready/review'));
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls.filter(([url]) => new URL(String(url)).pathname.endsWith('/meeting-sessions/draft-ready'))).toHaveLength(2);
   });
 
   it('aborts the active API-010 request when leaving the route', async () => {
@@ -1149,5 +1171,240 @@ describe('Processing route', () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
     view.unmount();
     expect(requestSignal?.aborted).toBe(true);
+  });
+});
+
+describe('Review speaker selection', () => {
+  it('ignores a late Session B retry after Session C has loaded', async () => {
+    let sessionBCalls = 0;
+    let resolveSessionBRetry: ((result: Response) => void) | undefined;
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const path = new URL(String(input)).pathname;
+      if (path.endsWith('/meeting-sessions/session-b')) {
+        sessionBCalls += 1;
+        if (sessionBCalls === 1) return Promise.resolve(response({ error: { code: 'SESSION_UNAVAILABLE' } }, 503));
+        return new Promise<Response>((resolve) => { resolveSessionBRetry = resolve; });
+      }
+      if (path.endsWith('/meeting-sessions/session-c')) return Promise.resolve(response({ data: {
+        sessionId: 'session-c', version: 1, status: 'REVIEW', meeting: { participantIds: ['p3'] },
+        processing: { stage: 'DRAFT_READY', progressPercent: 100 },
+        speakers: [{ speakerId: 'speaker-c', label: 'Speaker C', participantId: 'p3' }],
+      } }));
+      if (path.endsWith('/participants')) return Promise.resolve(response({ data: { items: [
+        { id: 'p1', name: 'Ada Lovelace', email: 'ada.private@example.com' },
+        { id: 'p3', name: 'Grace Hopper', email: 'grace.private@example.com' },
+      ] } }));
+      if (path.endsWith('/app-config')) return Promise.resolve(response({ data: { company: { id: 'c1', name: 'Example', timezone: 'Asia/Seoul' }, document: { provider: 'NOTION', configured: true, connectionVersion: 1, rootUrl: 'https://notion.example' } } }));
+      return Promise.reject(new Error(`Unexpected request: ${path}`));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<MemoryRouter initialEntries={['/meetings/session-b/review']}><App /><NavigateToReviewSession sessionId="session-c" /></MemoryRouter>);
+
+    expect((await screen.findByRole('alert')).textContent).toContain('회의 화자 정보를 불러오지 못했습니다');
+    fireEvent.click(screen.getByRole('button', { name: '회의 정보 다시 불러오기' }));
+    await waitFor(() => expect(resolveSessionBRetry).toBeDefined());
+    fireEvent.click(screen.getByRole('button', { name: 'Open another Review session' }));
+    const sessionCSelect = await screen.findByRole('combobox', { name: 'Speaker C 참가자' });
+    expect((sessionCSelect as HTMLSelectElement).value).toBe('p3');
+
+    await act(async () => {
+      resolveSessionBRetry?.(response({ data: {
+        sessionId: 'session-b', version: 2, status: 'REVIEW', meeting: { participantIds: ['p1'] },
+        processing: { stage: 'DRAFT_READY', progressPercent: 100 },
+        speakers: [{ speakerId: 'speaker-b', label: 'Speaker B', participantId: 'p1' }],
+      } }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(screen.queryByRole('status', { name: '회의의 화자 정보를 불러오는 중입니다.' })).toBeNull();
+    expect(screen.getByRole('combobox', { name: 'Speaker C 참가자' })).toBeTruthy();
+    expect((screen.getByRole('combobox', { name: 'Speaker C 참가자' }) as HTMLSelectElement).value).toBe('p3');
+    expect(screen.queryByRole('combobox', { name: 'Speaker B 참가자' })).toBeNull();
+    expect(screen.queryByText('회의의 화자 정보를 불러오는 중입니다.')).toBeNull();
+  });
+
+  it('hides the prior Session speaker data while a new Session loads and after its request fails', async () => {
+    let rejectSessionB: ((error: Error) => void) | undefined;
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const path = new URL(String(input)).pathname;
+      if (path.endsWith('/meeting-sessions/session-a')) return Promise.resolve(response({ data: {
+        sessionId: 'session-a', version: 1, status: 'REVIEW', meeting: { participantIds: ['p1'] },
+        processing: { stage: 'DRAFT_READY', progressPercent: 100 },
+        speakers: [{ speakerId: 'speaker-a', label: 'Speaker A', participantId: 'p1' }],
+      } }));
+      if (path.endsWith('/meeting-sessions/session-b')) return new Promise<Response>((_resolve, reject) => { rejectSessionB = reject; });
+      if (path.endsWith('/participants')) return Promise.resolve(response({ data: { items: [{ id: 'p1', name: 'Ada Lovelace', email: 'ada.private@example.com' }] } }));
+      if (path.endsWith('/app-config')) return Promise.resolve(response({ data: { company: { id: 'c1', name: 'Example', timezone: 'Asia/Seoul' }, document: { provider: 'NOTION', configured: true, connectionVersion: 1, rootUrl: 'https://notion.example' } } }));
+      return Promise.reject(new Error(`Unexpected request: ${path}`));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<MemoryRouter initialEntries={['/meetings/session-a/review']}><App /><NavigateToReviewSession sessionId="session-b" /></MemoryRouter>);
+
+    expect(await screen.findByRole('combobox', { name: 'Speaker A 참가자' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Open another Review session' }));
+    await waitFor(() => expect(rejectSessionB).toBeDefined());
+    expect(await screen.findByText('회의의 화자 정보를 불러오는 중입니다.')).toBeTruthy();
+    expect(screen.queryByRole('combobox', { name: 'Speaker A 참가자' })).toBeNull();
+
+    rejectSessionB?.(new TypeError('network details must stay hidden'));
+    expect((await screen.findByRole('alert')).textContent).toContain('회의 화자 정보를 불러오지 못했습니다');
+    expect(screen.queryByRole('combobox', { name: 'Speaker A 참가자' })).toBeNull();
+    expect(screen.queryByText('Ada Lovelace')).toBeNull();
+  });
+
+  it('renders one name-only Participant dropdown per API-010 Speaker and keeps mappings speaker-scoped', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const path = new URL(String(input)).pathname;
+      if (path.endsWith('/meeting-sessions/review-speakers')) return response({ data: {
+        sessionId: 'review-speakers', version: 3, status: 'REVIEW',
+        processing: { stage: 'DRAFT_READY', progressPercent: 100 },
+        meeting: { participantIds: ['p1', 'p2'] },
+        speakers: [
+          { speakerId: 'speaker-a', label: 'Speaker A', participantId: 'p2' },
+          { speakerId: 'speaker-b', label: 'Speaker B', participantId: null },
+        ],
+        transcript: [
+          { segmentId: 'segment-a1', speakerId: 'speaker-a', text: 'First sentence' },
+          { segmentId: 'segment-a2', speakerId: 'speaker-a', text: 'Second sentence' },
+        ],
+        allowedActions: ['UPDATE_SPEAKER_MAPPING'],
+      } });
+      if (path.endsWith('/participants')) return response({ data: { items: [
+        { id: 'p1', name: 'Ada Lovelace', email: 'ada.private@example.com' },
+        { id: 'p2', name: 'Grace Hopper', email: 'grace.private@example.com' },
+      ] } });
+      if (path.endsWith('/app-config')) return response({ data: {
+        company: { id: 'c1', name: 'Example', timezone: 'Asia/Seoul' },
+        document: { provider: 'NOTION', configured: true, connectionVersion: 2, rootUrl: 'https://notion.example' },
+        setup: { status: 'READY', required: false, canCreateMeeting: true, operationId: null },
+      } });
+      return Promise.reject(new Error(`Unexpected request: ${path}`));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<MemoryRouter initialEntries={['/meetings/review-speakers/review']}><App /></MemoryRouter>);
+
+    expect(await screen.findByRole('heading', { name: '회의록 검토' })).toBeTruthy();
+    const selects = await screen.findAllByRole('combobox');
+    expect(selects).toHaveLength(2);
+    expect((screen.getByRole('combobox', { name: 'Speaker A 참가자' }) as HTMLSelectElement).value).toBe('p2');
+    expect((screen.getByRole('combobox', { name: 'Speaker B 참가자' }) as HTMLSelectElement).value).toBe('');
+    expect(within(selects[0]).getByRole('option', { name: 'Grace Hopper' })).toBeTruthy();
+    expect(screen.queryByText(/private@example\.com/)).toBeNull();
+    fireEvent.change(screen.getByRole('combobox', { name: 'Speaker A 참가자' }), { target: { value: 'p1' } });
+    expect((screen.getByRole('combobox', { name: 'Speaker A 참가자' }) as HTMLSelectElement).value).toBe('p1');
+    expect((screen.getByRole('combobox', { name: 'Speaker B 참가자' }) as HTMLSelectElement).value).toBe('');
+    expect(screen.queryByText(/저장 완료|저장되었습니다/)).toBeNull();
+    expect(fetchMock.mock.calls.filter(([url]) => new URL(String(url)).pathname.endsWith('/speaker-mappings'))).toHaveLength(0);
+  });
+
+  it('preserves the speaker draft during roster reload failure and successful retry', async () => {
+    let rosterCalls = 0;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const path = new URL(String(input)).pathname;
+      if (path.endsWith('/meeting-sessions/roster-retry')) return response({ data: {
+        sessionId: 'roster-retry', version: 1, status: 'REVIEW', meeting: { participantIds: ['p1', 'p2'] },
+        processing: { stage: 'DRAFT_READY', progressPercent: 100 },
+        speakers: [{ speakerId: 'speaker-a', label: 'Speaker A', participantId: 'p2' }],
+      } });
+      if (path.endsWith('/participants')) {
+        rosterCalls += 1;
+        if (rosterCalls === 2) throw new TypeError('network detail must remain hidden');
+        return response({ data: { items: [
+          { id: 'p1', name: 'Ada Lovelace', email: 'ada.private@example.com' },
+          ...(rosterCalls === 3 ? [] : [{ id: 'p2', name: 'Grace Hopper', email: 'grace.private@example.com' }]),
+        ] } });
+      }
+      if (path.endsWith('/app-config')) return response({ data: { company: { id: 'c1', name: 'Example', timezone: 'Asia/Seoul' }, document: { provider: 'NOTION', configured: true, connectionVersion: 1, rootUrl: 'https://notion.example' } } });
+      return Promise.reject(new Error(`Unexpected request: ${path}`));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<MemoryRouter initialEntries={['/meetings/roster-retry/review']}><App /></MemoryRouter>);
+    const select = await screen.findByRole('combobox', { name: 'Speaker A 참가자' }) as HTMLSelectElement;
+    fireEvent.change(select, { target: { value: 'p1' } });
+    fireEvent.click(screen.getByRole('button', { name: '참석자 목록 새로고침' }));
+    expect((await screen.findByRole('alert')).textContent).toContain('기존 선택은 유지됩니다');
+    expect((screen.getByRole('combobox', { name: 'Speaker A 참가자' }) as HTMLSelectElement).value).toBe('p1');
+    fireEvent.click(screen.getByRole('button', { name: '참석자 목록 다시 불러오기' }));
+    await waitFor(() => expect((screen.getByRole('combobox', { name: 'Speaker A 참가자' }) as HTMLSelectElement).value).toBe('p1'));
+    expect(screen.queryByText(/ada\.private@example\.com/)).toBeNull();
+  });
+
+  it('shows Settings without selecting a provider when App Config has no document provider', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const path = new URL(String(input)).pathname;
+      if (path.endsWith('/meeting-sessions/no-provider')) return response({ data: {
+        sessionId: 'no-provider', version: 1, status: 'REVIEW', meeting: { participantIds: ['p1'] },
+        processing: { stage: 'DRAFT_READY', progressPercent: 100 }, speakers: [{ speakerId: 'speaker-a', label: 'Speaker A', participantId: null }],
+      } });
+      if (path.endsWith('/participants')) return response({ data: { items: [{ id: 'p1', name: 'Ada Lovelace', email: 'ada.private@example.com' }] } });
+      if (path.endsWith('/app-config')) return response({ data: { company: { id: 'c1', name: 'Example', timezone: 'Asia/Seoul' }, document: { provider: null, configured: false, connectionVersion: 0, rootUrl: null } } });
+      return Promise.reject(new Error(`Unexpected request: ${path}`));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<MemoryRouter initialEntries={['/meetings/no-provider/review']}><App /></MemoryRouter>);
+    expect((await screen.findByRole('link', { name: '문서 설정 열기' })).getAttribute('href')).toBe('/settings');
+    expect(screen.queryByRole('combobox', { name: 'Speaker A 참가자' })).toBeNull();
+    expect(screen.getByText(/문서 서비스를 연결하면/)).toBeTruthy();
+    expect(screen.queryByText(/CONFLUENCE|NOTION/)).toBeNull();
+  });
+
+  it('shows the Settings route when a provider exists but is not configured', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const path = new URL(String(input)).pathname;
+      if (path.endsWith('/meeting-sessions/provider-unconfigured')) return response({ data: {
+        sessionId: 'provider-unconfigured', version: 1, status: 'REVIEW', meeting: { participantIds: ['p1'] },
+        processing: { stage: 'DRAFT_READY', progressPercent: 100 }, speakers: [{ speakerId: 'speaker-a', label: 'Speaker A', participantId: null }],
+      } });
+      if (path.endsWith('/participants')) return response({ data: { items: [{ id: 'p1', name: 'Ada Lovelace', email: 'ada.private@example.com' }] } });
+      if (path.endsWith('/app-config')) return response({ data: { company: { id: 'c1', name: 'Example', timezone: 'Asia/Seoul' }, document: { provider: 'NOTION', configured: false, connectionVersion: 1, rootUrl: 'https://notion.example' } } });
+      return Promise.reject(new Error(`Unexpected request: ${path}`));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<MemoryRouter initialEntries={['/meetings/provider-unconfigured/review']}><App /></MemoryRouter>);
+    expect((await screen.findByRole('link', { name: '문서 설정 열기' })).getAttribute('href')).toBe('/settings');
+    expect(screen.queryByRole('combobox')).toBeNull();
+    expect(screen.queryByText('NOTION')).toBeNull();
+    expect(fetchMock.mock.calls.filter(([url]) => new URL(String(url)).pathname.endsWith('/speaker-mappings'))).toHaveLength(0);
+  });
+
+  it('offers Participants management for an empty roster and retains the existing speaker mapping', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const path = new URL(String(input)).pathname;
+      if (path.endsWith('/meeting-sessions/empty-roster')) return response({ data: {
+        sessionId: 'empty-roster', version: 1, status: 'REVIEW', meeting: { participantIds: ['p2'] },
+        processing: { stage: 'DRAFT_READY', progressPercent: 100 }, speakers: [{ speakerId: 'speaker-a', label: 'Speaker A', participantId: 'p2' }],
+      } });
+      if (path.endsWith('/participants')) return response({ data: { items: [] } });
+      if (path.endsWith('/app-config')) return response({ data: { company: { id: 'c1', name: 'Example', timezone: 'Asia/Seoul' }, document: { provider: 'NOTION', configured: true, connectionVersion: 1, rootUrl: 'https://notion.example' } } });
+      return Promise.reject(new Error(`Unexpected request: ${path}`));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<MemoryRouter initialEntries={['/meetings/empty-roster/review']}><App /></MemoryRouter>);
+    expect(await screen.findByRole('link', { name: '참석자 관리' })).toBeTruthy();
+    expect((screen.getByRole('combobox', { name: 'Speaker A 참가자' }) as HTMLSelectElement).value).toBe('p2');
+  });
+
+  it('keeps speaker draft in the App owner while Settings is open and after returning to Review', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const path = new URL(String(input)).pathname;
+      if (path.endsWith('/meeting-sessions/return-draft')) return response({ data: {
+        sessionId: 'return-draft', version: 1, status: 'REVIEW', meeting: { participantIds: ['p1', 'p2'] },
+        processing: { stage: 'DRAFT_READY', progressPercent: 100 }, speakers: [{ speakerId: 'speaker-a', label: 'Speaker A', participantId: 'p2' }],
+      } });
+      if (path.endsWith('/participants')) return response({ data: { items: [
+        { id: 'p1', name: 'Ada Lovelace', email: 'ada@example.com' }, { id: 'p2', name: 'Grace Hopper', email: 'grace@example.com' },
+      ] } });
+      if (path.endsWith('/app-config')) return response({ data: { company: { id: 'c1', name: 'Example', timezone: 'Asia/Seoul' }, document: { provider: 'NOTION', configured: true, connectionVersion: 1, rootUrl: 'https://notion.example' } } });
+      if (path.endsWith('/document-setup')) return readySetupResponse();
+      return Promise.reject(new Error(`Unexpected request: ${path}`));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<MemoryRouter initialEntries={['/meetings/return-draft/review']}><App /><ReturnToReview sessionId="return-draft" /><CurrentPath /></MemoryRouter>);
+    const speakerSelect = await screen.findByRole('combobox', { name: 'Speaker A 참가자' }) as HTMLSelectElement;
+    fireEvent.change(speakerSelect, { target: { value: 'p1' } });
+    fireEvent.click(within(screen.getByRole('navigation', { name: '주요 메뉴' })).getByRole('link', { name: '설정' }));
+    await screen.findByText('설정');
+    expect(screen.getByTestId('current-path').textContent).toBe('/settings');
+    fireEvent.click(screen.getByRole('button', { name: 'Review로 돌아가기' }));
+    await waitFor(() => expect((screen.getByRole('combobox', { name: 'Speaker A 참가자' }) as HTMLSelectElement).value).toBe('p1'));
   });
 });
