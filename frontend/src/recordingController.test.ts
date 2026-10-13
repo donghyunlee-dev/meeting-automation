@@ -148,6 +148,7 @@ describe('RecordingController', () => {
   it('delivers nonempty 15-second chunks with stable identifiers, selected MIME, and recorded timestamp', async () => {
     const fixture = createFixture();
     await startRecording(fixture);
+    fixture.advanceTo(2_750);
     fixture.recorder.ondataavailable?.({ data: new Blob([]) });
     fixture.recorder.ondataavailable?.({ data: new Blob(['audio-data'], { type: acceptedMimeTypes[0] }) });
     expect(fixture.recorder.timeslice).toBe(15_000);
@@ -156,7 +157,8 @@ describe('RecordingController', () => {
       chunkId: 'chunk-stable-1',
       blob: expect.any(Blob),
       mimeType: acceptedMimeTypes[0],
-      recordedAtMs: 1_700_000_000_000,
+      recordedAtMs: 1_700_000_002_750,
+      recordedElapsedMs: 2_750,
     });
     expect(fixture.adapter.createChunkId).toHaveBeenCalledTimes(1);
   });
@@ -172,6 +174,7 @@ describe('RecordingController', () => {
     fixture.recorder.ondataavailable?.({ data: finalBlob });
     fixture.recorder.onstop?.();
     expect(fixture.onChunk).toHaveBeenCalledWith(expect.objectContaining({ blob: finalBlob }));
+    expect(fixture.onChunk).toHaveBeenCalledWith(expect.objectContaining({ blob: finalBlob, recordedElapsedMs: 5_000 }));
     expect(fixture.onStopComplete).toHaveBeenCalledTimes(1);
     expect(fixture.onChunk.mock.invocationCallOrder[0]).toBeLessThan(fixture.onStopComplete.mock.invocationCallOrder[0]);
     expect(fixture.track.stop).toHaveBeenCalledTimes(1);
