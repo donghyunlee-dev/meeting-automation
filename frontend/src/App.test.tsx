@@ -1,9 +1,13 @@
+import 'fake-indexeddb/auto';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { StrictMode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router';
 import { App } from './App';
 import type { MediaRecorderAdapter, RecorderLike } from './recordingController';
+import { ChunkRepository } from './chunkRepository';
+// @ts-expect-error Node's Blob exercises browser-style IndexedDB structured cloning in jsdom.
+import { Blob as NodeBlob } from 'node:buffer';
 
 const participants = [
   { id: 'p1', name: 'Ada Lovelace', email: 'ada@example.com' },
@@ -652,6 +656,12 @@ describe('Recording route', () => {
       } }, 201));
       return Promise.reject(new Error(`Unexpected request: ${path} ${init?.method ?? 'GET'}`));
     });
+    await new Promise<void>((resolve, reject) => {
+      const deletion = indexedDB.deleteDatabase('meeting-automation-chunks');
+      deletion.onsuccess = () => resolve();
+      deletion.onerror = () => reject(deletion.error);
+      deletion.onblocked = () => reject(new Error('Chunk test database is still open'));
+    });
     vi.stubGlobal('fetch', fetchMock);
     render(<StrictMode><MemoryRouter initialEntries={['/meetings/new']}><App mediaAdapter={mediaAdapter} /><NavigateToMismatchedRecordingSession /></MemoryRouter></StrictMode>);
 
@@ -671,6 +681,14 @@ describe('Recording route', () => {
     fireEvent.click(screen.getByRole('button', { name: '녹음 시작' }));
     expect(mediaAdapter.getUserMedia).toHaveBeenCalledTimes(1);
     expect(await screen.findByText('녹음 중')).toBeTruthy();
+    const recorder = vi.mocked(mediaAdapter.createRecorder).mock.results[0].value;
+    recorder.ondataavailable?.({ data: new NodeBlob(['audio-data'], { type: 'audio/webm' }) });
+    const chunkRepository = new ChunkRepository({ dbName: 'meeting-automation-chunks', maxChunkBytes: 1_000_000 });
+    await waitFor(async () => {
+      const pending = await chunkRepository.getPending('session-ready');
+      expect(pending.chunks.map(({ chunkId, sequence }) => [chunkId, sequence])).toEqual([['chunk-test', 0]]);
+    });
+    chunkRepository.close();
     expect(screen.queryByRole('navigation', { name: '주요 메뉴' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: '회의 종료' }));
     fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: '계속 녹음' }));

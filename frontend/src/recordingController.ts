@@ -46,6 +46,7 @@ export type RecordingChunk = {
   blob: Blob;
   mimeType: string;
   recordedAtMs: number;
+  recordedElapsedMs: number;
 };
 
 type ControllerOptions = {
@@ -191,7 +192,7 @@ export class RecordingController {
       };
       recorder.ondataavailable = ({ data }) => {
         if (this.disposed || data.size === 0) return;
-        this.options.onChunk({ chunkId: this.options.adapter.createChunkId(), blob: data, mimeType: this.selectedMime, recordedAtMs: this.options.adapter.nowEpoch() });
+        this.options.onChunk({ chunkId: this.options.adapter.createChunkId(), blob: data, mimeType: this.selectedMime, recordedAtMs: this.options.adapter.nowEpoch(), recordedElapsedMs: this.elapsedNow() });
       };
       recorder.onstop = () => {
         if (this.disposed || this.stopCompleted) return;

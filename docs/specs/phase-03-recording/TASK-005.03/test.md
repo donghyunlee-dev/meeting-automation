@@ -29,3 +29,5 @@
 ## 한계 확인
 
 동일 origin/browser profile 영속성만 확인한다. IndexedDB를 삭제·정리한 경우와 Backend 프로세스 재시작으로 memory-only Session이 사라진 경우는 복구할 수 없으며, 이 한계를 제품 오류 안내가 숨기지 않는지 확인한다.
+
+- CHUNK-STORE-13: 마지막 pending Chunk ACK 및 DB reopen 뒤에도 Session별 durable sequence ledger에서 다음 순번을 이어 받는다. (sequence ledger regression test)

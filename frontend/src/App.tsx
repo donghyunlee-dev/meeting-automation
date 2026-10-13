@@ -16,6 +16,8 @@ import { DocumentSetupWizard } from './DocumentSetupWizard';
 import { getSetupSnapshot } from './documentSetupApi';
 import { browserMediaAdapter } from './browserMediaAdapter';
 import { RecordingController, type MediaRecorderAdapter, type RecordingSnapshot } from './recordingController';
+import { ChunkRecorderAdapter } from './chunkRecorderAdapter';
+import { ChunkRepository } from './chunkRepository';
 
 type ViewState = 'loading' | 'ready' | 'error';
 type FormState = { mode: 'create' } | { mode: 'edit'; participant: Participant };
@@ -372,9 +374,26 @@ function ActiveMeetingRecordingRoute({ session, setState, mediaAdapter }: {
   mediaAdapter: MediaRecorderAdapter;
 }) {
   const [snapshot, setSnapshot] = useState<RecordingSnapshot>({ state: 'Ready', elapsedMs: 0 });
+  const [storageError, setStorageError] = useState('');
   const controllerRef = useRef<RecordingController | null>(null);
+  const repository = useMemo(() => new ChunkRepository({
+    dbName: 'meeting-automation-chunks',
+    maxChunkBytes: session.uploadPolicy.maxChunkBytes,
+  }), [session.uploadPolicy.maxChunkBytes]);
+
+  useEffect(() => () => repository.close(), [repository]);
 
   useEffect(() => {
+    let active = true;
+    const chunkAdapter = new ChunkRecorderAdapter({
+      repository,
+      sessionId: session.sessionId,
+      onError: () => {
+        if (!active) return;
+        setStorageError('녹음 데이터를 브라우저 임시 저장소에 보관하지 못했습니다. 저장 공간이나 브라우저 상태를 확인해 주세요.');
+        controllerRef.current?.stop();
+      },
+    });
     const current = new RecordingController({
       uploadPolicy: session.uploadPolicy,
       adapter: mediaAdapter,
@@ -382,7 +401,7 @@ function ActiveMeetingRecordingRoute({ session, setState, mediaAdapter }: {
         setSnapshot(next);
         setState(next.state);
       },
-      onChunk: () => undefined,
+      onChunk: (chunk) => { void chunkAdapter.accept(chunk).catch(() => undefined); },
       onStopComplete: (elapsedMs) => {
         setSnapshot((previous) => ({ ...previous, state: 'Ready', elapsedMs, completed: true }));
         setState('Ready');
@@ -390,17 +409,18 @@ function ActiveMeetingRecordingRoute({ session, setState, mediaAdapter }: {
     });
     controllerRef.current = current;
     return () => {
+      active = false;
       current.dispose();
       if (controllerRef.current === current) controllerRef.current = null;
     };
-  }, [session, setState, mediaAdapter]);
+  }, [session, setState, mediaAdapter, repository]);
 
   return <RecordingPage
     sessionId={session.sessionId}
     title={session.title}
     state={snapshot.state}
     elapsedMs={snapshot.elapsedMs}
-    errorMessage={snapshot.errorMessage}
+    errorMessage={storageError || snapshot.errorMessage}
     completed={snapshot.completed}
     onStart={() => { if (controllerRef.current) void controllerRef.current.start(); }}
     onPause={() => controllerRef.current?.pause()}
