@@ -8,6 +8,8 @@ import type { MediaRecorderAdapter, RecorderLike } from './recordingController';
 import { ChunkRepository } from './chunkRepository';
 // @ts-expect-error Node's Blob exercises browser-style IndexedDB structured cloning in jsdom.
 import { Blob as NodeBlob } from 'node:buffer';
+// @ts-expect-error Node WebCrypto exercises the production digest path in jsdom.
+import { webcrypto } from 'node:crypto';
 
 const participants = [
   { id: 'p1', name: 'Ada Lovelace', email: 'ada@example.com' },
@@ -52,6 +54,11 @@ afterEach(() => {
 function DestinationFixture() {
   const location = useLocation();
   return <p>New Meeting fixture: {location.pathname}</p>;
+}
+
+function CurrentPath() {
+  const location = useLocation();
+  return <p data-testid="current-path">{location.pathname}</p>;
 }
 
 function NavigateToMismatchedRecordingSession() {
@@ -818,6 +825,140 @@ describe('Recording route', () => {
     expect(screen.getByRole('heading', { name: '녹음 세션을 찾을 수 없습니다' })).toBeTruthy();
     expect(screen.getByRole('link', { name: '새 회의 시작' }).getAttribute('href')).toBe('/meetings/new');
     expect(screen.queryByRole('button', { name: '회의 종료' })).toBeNull();
+  });
+
+  it('waits for the final Chunk ACK before starting processing with the recorded metadata', async () => {
+    await deleteChunkDatabase();
+    const session = {
+      sessionId: 'session-processing', title: 'Processing planning', version: 1, status: 'CREATED',
+      uploadPolicy: { chunkDurationSeconds: 15, maxChunkBytes: 1000000, acceptedMimeTypes: ['audio/webm'] },
+    };
+    sessionStorage.setItem('meeting-automation.recording-session', JSON.stringify(session));
+    vi.stubGlobal('crypto', webcrypto);
+    let elapsedMs = 0;
+    const recorder: RecorderLike = {
+      mimeType: 'audio/webm', onstart: null, onpause: null, onresume: null, onstop: null, onerror: null, ondataavailable: null,
+      start: () => recorder.onstart?.(), pause: () => recorder.onpause?.(), resume: () => recorder.onresume?.(),
+      stop: () => {
+        recorder.ondataavailable?.({ data: new NodeBlob(['final audio'], { type: 'audio/webm' }) as Blob });
+        recorder.onstop?.();
+      },
+    };
+    const mediaAdapter: MediaRecorderAdapter = {
+      isMediaRecorderSupported: () => true,
+      isTypeSupported: () => true,
+      getUserMedia: vi.fn(async () => ({ getTracks: () => [{ stop: vi.fn() }] })),
+      createRecorder: vi.fn(() => recorder),
+      now: () => elapsedMs,
+      nowEpoch: () => 1_700_000_000_000 + elapsedMs,
+      setInterval: () => 1,
+      clearInterval: () => undefined,
+      createChunkId: () => 'final-chunk',
+    };
+    const events: string[] = [];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = new URL(String(input)).pathname;
+      if (path.endsWith('/audio')) {
+        events.push('API-008');
+        return response({ data: { receivedSequences: [], receivedChunks: 0, totalBytes: 0 } });
+      }
+      if (path.endsWith('/audio/chunks/0')) {
+        events.push('API-007');
+        return response({ data: { sequence: 0, received: true } });
+      }
+      if (path.endsWith('/process')) {
+        events.push('API-009');
+        return response({ data: { sessionId: session.sessionId, status: 'PROCESSING', stage: 'AUDIO_ASSEMBLY' } }, 202);
+      }
+      throw new Error(`Unexpected request: ${path} ${init?.method ?? 'GET'}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<MemoryRouter initialEntries={[`/meetings/${session.sessionId}/recording`]}>
+      <App mediaAdapter={mediaAdapter} />
+      <CurrentPath />
+    </MemoryRouter>);
+
+    fireEvent.click(await screen.findByRole('button', { name: '녹음 시작' }));
+    await screen.findByText('녹음 중');
+    elapsedMs = 4_250;
+    fireEvent.click(screen.getByRole('button', { name: '회의 종료' }));
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: '회의 종료' }));
+
+    await waitFor(() => {
+      const paths = fetchMock.mock.calls.map(([url]) => new URL(String(url)).pathname);
+      expect(paths.filter((path) => path.endsWith('/process'))).toHaveLength(1);
+    });
+
+    const processCall = fetchMock.mock.calls.find(([url]) => new URL(String(url)).pathname.endsWith('/process'));
+    expect(processCall).toBeDefined();
+    expect(processCall?.[1]?.method).toBe('POST');
+    expect(JSON.parse(String(processCall?.[1]?.body))).toEqual({ expectedChunks: 1, durationMs: 4_250, mimeType: 'audio/webm' });
+    expect(new Headers(processCall?.[1]?.headers).get('Idempotency-Key')).toBeTruthy();
+    expect(events.indexOf('API-007')).toBeGreaterThanOrEqual(0);
+    expect(events.indexOf('API-007')).toBeLessThan(events.indexOf('API-009'));
+    await waitFor(() => expect(screen.getByTestId('current-path').textContent).toBe(`/meetings/${session.sessionId}/processing`));
+  });
+
+  it('retries an uncertain API-009 response with the same key and payload', async () => {
+    await deleteChunkDatabase();
+    const session = {
+      sessionId: 'session-processing-retry', title: 'Retry planning', version: 1, status: 'CREATED',
+      uploadPolicy: { chunkDurationSeconds: 15, maxChunkBytes: 1000000, acceptedMimeTypes: ['audio/webm'] },
+    };
+    sessionStorage.setItem('meeting-automation.recording-session', JSON.stringify(session));
+    vi.stubGlobal('crypto', webcrypto);
+    let elapsedMs = 0;
+    const recorder: RecorderLike = {
+      mimeType: 'audio/webm', onstart: null, onpause: null, onresume: null, onstop: null, onerror: null, ondataavailable: null,
+      start: () => recorder.onstart?.(), pause: () => recorder.onpause?.(), resume: () => recorder.onresume?.(),
+      stop: () => {
+        recorder.ondataavailable?.({ data: new NodeBlob(['retry audio'], { type: 'audio/webm' }) as Blob });
+        recorder.onstop?.();
+      },
+    };
+    const mediaAdapter: MediaRecorderAdapter = {
+      isMediaRecorderSupported: () => true, isTypeSupported: () => true,
+      getUserMedia: vi.fn(async () => ({ getTracks: () => [{ stop: vi.fn() }] })),
+      createRecorder: vi.fn(() => recorder), now: () => elapsedMs, nowEpoch: () => 1_700_000_000_000 + elapsedMs,
+      setInterval: () => 1, clearInterval: () => undefined, createChunkId: () => 'retry-final-chunk',
+    };
+    let processAttempts = 0;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
+      const path = new URL(String(input)).pathname;
+      if (path.endsWith('/audio')) return response({ data: { receivedSequences: [], receivedChunks: 0, totalBytes: 0 } });
+      if (path.endsWith('/audio/chunks/0')) return response({ data: { sequence: 0, received: true } });
+      if (path.endsWith('/process')) {
+        processAttempts += 1;
+        if (processAttempts === 1) throw new TypeError('connection lost after request was sent');
+        return response({ data: { sessionId: session.sessionId, status: 'PROCESSING', stage: 'AUDIO_ASSEMBLY' } }, 202);
+      }
+      throw new Error(`Unexpected request: ${path} ${_init?.method ?? 'GET'}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<MemoryRouter initialEntries={[`/meetings/${session.sessionId}/recording`]}>
+      <App mediaAdapter={mediaAdapter} />
+      <CurrentPath />
+    </MemoryRouter>);
+
+    fireEvent.click(await screen.findByRole('button', { name: '녹음 시작' }));
+    await screen.findByText('녹음 중');
+    elapsedMs = 8_500;
+    fireEvent.click(screen.getByRole('button', { name: '회의 종료' }));
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: '회의 종료' }));
+    const retryButton = await screen.findByRole('button', { name: '처리 시작 재시도' });
+    fireEvent.click(retryButton);
+
+    await waitFor(() => expect(processAttempts).toBe(2));
+
+    const processCalls = fetchMock.mock.calls.filter(([url]) => new URL(String(url)).pathname.endsWith('/process'));
+    const firstRequest = processCalls[0]?.[1];
+    const secondRequest = processCalls[1]?.[1];
+    expect(firstRequest?.body).toBe(secondRequest?.body);
+    expect(JSON.parse(String(firstRequest?.body))).toEqual({ expectedChunks: 1, durationMs: 8_500, mimeType: 'audio/webm' });
+    expect(new Headers(firstRequest?.headers).get('Idempotency-Key')).toBeTruthy();
+    expect(new Headers(secondRequest?.headers).get('Idempotency-Key')).toBe(new Headers(firstRequest?.headers).get('Idempotency-Key'));
+    await waitFor(() => expect(screen.getByTestId('current-path').textContent).toBe(`/meetings/${session.sessionId}/processing`));
   });
 
   it('offers a new meeting and no recording controls when runtime session context is missing or mismatched', () => {

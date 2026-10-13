@@ -196,6 +196,11 @@ button:disabled { cursor: not-allowed; opacity: .6; }
 .recording-session-id span { font-variant-numeric: tabular-nums; }
 .recording-content { display: grid; justify-items: center; gap: 18px; min-width: 0; text-align: center; }
 .recording-upload { display: grid; gap: 8px; width: min(100%, 420px); padding: 14px 16px; border: 1px solid #d0d5dd; border-radius: 12px; background: #fff; text-align: left; }
+.recording-end-state { display: grid; gap: 8px; width: min(100%, 420px); padding: 14px 16px; border: 1px solid #d0d5dd; border-radius: 12px; background: #fff; text-align: left; }
+.recording-end-state p { margin: 0; color: #596578; font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.recording-end-state [role="alert"] { color: #b42318; }
+.recording-end-state progress { width: 100%; height: 10px; accent-color: #175cd3; }
+.recording-end-state .button { justify-self: start; min-height: 44px; }
 .recording-upload-heading { display: flex; justify-content: space-between; gap: 12px; color: #344054; font-size: 13px; }
 .recording-upload progress { width: 100%; height: 10px; accent-color: #175cd3; }
 .recording-upload p { margin: 0; color: #596578; font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }

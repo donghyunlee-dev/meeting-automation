@@ -25,6 +25,19 @@ function makeChunk(chunkId: string, contents = chunkId, recordedElapsedMs = 0): 
   return { chunkId, blob: new NodeBlob([contents], { type: 'audio/webm' }), mimeType: 'audio/webm', recordedAtMs: 1_700_000_000_000, recordedElapsedMs };
 }
 
+function readPersistedChunks(dbName: string, sessionId: string): Promise<Array<{ sequence: number; uploadState: string; blob: Blob }>> {
+  return new Promise((resolve, reject) => {
+    const open = indexedDB.open(dbName);
+    open.onerror = () => reject(open.error);
+    open.onsuccess = () => {
+      const db = open.result;
+      const request = db.transaction('chunks', 'readonly').objectStore('chunks').index('sessionId').getAll(sessionId);
+      request.onsuccess = () => { db.close(); resolve(request.result); };
+      request.onerror = () => { db.close(); reject(request.error); };
+    };
+  });
+}
+
 describe('ChunkRepository', () => {
   it('atomically stores the first chunk at sequence zero with session metadata', async () => {
     const store = createRepository();
@@ -84,7 +97,7 @@ describe('ChunkRepository', () => {
     expect(await repository.append('session-a', makeChunk('chunk-2'))).toEqual({ sequence: 2, duplicate: false });
   });
 
-  it('deletes only the acknowledged sequence and removes metadata after the final pending chunk', async () => {
+  it('marks only the acknowledged sequence as uploaded and keeps pending metadata accurate', async () => {
     const store = createRepository();
     await store.append('session-a', makeChunk('chunk-0'));
     await store.append('session-a', makeChunk('chunk-1'));
@@ -97,16 +110,30 @@ describe('ChunkRepository', () => {
     await store.acknowledge('session-a', 0);
     pending = await store.getPending('session-a');
     expect(pending.chunks).toEqual([]);
-    expect(pending.session).toBeNull();
+    expect(pending.session).toMatchObject({ pendingCount: 0, nextSequence: 2 });
+    expect((await store.getRecoverable('session-a')).chunks.map(({ sequence, uploadState }) => [sequence, uploadState])).toEqual([[0, 'ACKNOWLEDGED'], [1, 'ACKNOWLEDGED']]);
     await expect(store.acknowledge('session-a', 0)).resolves.toBeUndefined();
   });
 
-  it('keeps the next sequence after final ACK cleanup and database reopen', async () => {
+  it('retains ACKed audio and sequence metadata for processing recovery until the session is cleared', async () => {
+    const store = createRepository();
+    await store.append('session-a', makeChunk('chunk-a', 'recoverable audio', 4_200));
+
+    await store.acknowledge('session-a', 0);
+
+    const pending = await store.getPending('session-a');
+    const persisted = await readPersistedChunks(store.dbName, 'session-a');
+    expect(pending).toMatchObject({ nextSequence: 1, chunks: [], session: { pendingCount: 0, mimeType: 'audio/webm', totalRecordingDurationMs: 4_200 } });
+    expect(persisted.map(({ sequence, uploadState }) => [sequence, uploadState])).toEqual([[0, 'ACKNOWLEDGED']]);
+    expect(await persisted[0].blob.text()).toBe('recoverable audio');
+  });
+
+  it('keeps recoverable audio and the next sequence after final ACK and database reopen', async () => {
     const store = createRepository();
     await store.append('session-a', makeChunk('first'));
     const dbName = store.dbName;
     await store.acknowledge('session-a', 0);
-    expect(await store.getPending('session-a')).toMatchObject({ session: null, chunks: [], nextSequence: 1 });
+    expect(await store.getPending('session-a')).toMatchObject({ session: { pendingCount: 0 }, chunks: [], nextSequence: 1 });
     store.close();
     repository = new ChunkRepository({ dbName, maxChunkBytes: 1_024 });
 
@@ -114,7 +141,18 @@ describe('ChunkRepository', () => {
     expect(await repository.getPending('session-a')).toMatchObject({ nextSequence: 2, chunks: [{ sequence: 1, chunkId: 'second' }] });
   });
 
-  it('migrates a v1 session sequence before ACK cleanup can remove its metadata', async () => {
+  it('clears retained audio only after processing has been accepted', async () => {
+    const store = createRepository();
+    await store.append('session-a', makeChunk('chunk-a', 'completed audio', 4_200));
+    await store.acknowledge('session-a', 0);
+
+    await store.clearSessionAudio('session-a');
+
+    expect(await store.getRecoverable('session-a')).toMatchObject({ session: null, chunks: [], nextSequence: 0 });
+    expect(await readPersistedChunks(store.dbName, 'session-a')).toEqual([]);
+  });
+
+  it('migrates a v1 session sequence and retains legacy audio after its ACK', async () => {
     const dbName = `chunk-store-v1-${crypto.randomUUID()}`;
     await new Promise<void>((resolve, reject) => {
       const open = indexedDB.open(dbName, 1);
@@ -142,7 +180,8 @@ describe('ChunkRepository', () => {
 
     await expect(repository.getPending('session-legacy')).resolves.toMatchObject({ nextSequence: 1, chunks: [{ sequence: 0 }] });
     await repository.acknowledge('session-legacy', 0);
-    expect(await repository.getPending('session-legacy')).toMatchObject({ session: null, nextSequence: 1 });
+    expect(await repository.getPending('session-legacy')).toMatchObject({ session: { pendingCount: 0 }, nextSequence: 1, chunks: [] });
+    expect((await repository.getRecoverable('session-legacy')).chunks[0]).toMatchObject({ uploadState: 'ACKNOWLEDGED' });
     expect(await repository.append('session-legacy', makeChunk('legacy-second'))).toEqual({ sequence: 1, duplicate: false });
   });
 

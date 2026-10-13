@@ -16,7 +16,7 @@ type UploadApi = {
   putChunk: (sessionId: string, chunk: StoredChunk) => Promise<UploadAck>;
 };
 
-type Repository = Pick<ChunkRepository, 'getPending' | 'acknowledge'>;
+type Repository = Pick<ChunkRepository, 'getPending' | 'acknowledge'> & Partial<Pick<ChunkRepository, 'getRecoverable'>>;
 type CoordinatorOptions = {
   repository: Repository;
   api: UploadApi;
@@ -43,28 +43,33 @@ export class ChunkUploadCoordinator {
   }
 
   uploadPending(sessionId: string): Promise<ChunkUploadSnapshot> {
-    return this.enqueue(sessionId);
+    return this.enqueue(sessionId, false);
   }
 
   retryManually(sessionId: string): Promise<ChunkUploadSnapshot> {
-    return this.enqueue(sessionId);
+    return this.enqueue(sessionId, false);
+  }
+
+  reconcile(sessionId: string): Promise<ChunkUploadSnapshot> {
+    return this.enqueue(sessionId, true);
   }
 
   getSnapshot(sessionId: string): ChunkUploadSnapshot {
     return this.snapshots.get(sessionId) ?? { status: 'idle', totalCount: 0, confirmedCount: 0, pendingCount: 0 };
   }
 
-  private enqueue(sessionId: string): Promise<ChunkUploadSnapshot> {
+  private enqueue(sessionId: string, includeAcknowledged: boolean): Promise<ChunkUploadSnapshot> {
     const previous = this.queues.get(sessionId) ?? Promise.resolve(this.getSnapshot(sessionId));
-    const current = previous.catch(() => this.getSnapshot(sessionId)).then(() => this.run(sessionId)).catch((error: unknown) =>
+    const current = previous.catch(() => this.getSnapshot(sessionId)).then(() => this.run(sessionId, includeAcknowledged)).catch((error: unknown) =>
       this.failFor(error, sessionId, 0, 0, 0));
     this.queues.set(sessionId, current);
     void current.finally(() => { if (this.queues.get(sessionId) === current) this.queues.delete(sessionId); });
     return current;
   }
 
-  private async run(sessionId: string): Promise<ChunkUploadSnapshot> {
-    const { chunks: unsorted } = await this.repository.getPending(sessionId);
+  private async run(sessionId: string, includeAcknowledged: boolean): Promise<ChunkUploadSnapshot> {
+    const source = includeAcknowledged ? this.repository.getRecoverable?.(sessionId) : undefined;
+    const { chunks: unsorted } = await (source ?? this.repository.getPending(sessionId));
     const chunks = [...unsorted].sort((a, b) => a.sequence - b.sequence);
     const totalCount = chunks.length;
     let confirmedCount = 0;

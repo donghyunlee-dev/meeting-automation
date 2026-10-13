@@ -278,6 +278,39 @@ describe('ChunkUploadCoordinator', () => {
     }
   });
 
+  it('keeps ACKed audio for API-009 recovery without re-uploading it during an ordinary flush', async () => {
+    const repository = new ChunkRepository({ dbName: `upload-recovery-${crypto.randomUUID()}`, maxChunkBytes: 1024 });
+    try {
+      await repository.append('session-recovery', {
+        chunkId: 'retained-chunk', blob: new NodeBlob(['retained audio']) as Blob, mimeType: 'audio/webm',
+        recordedAtMs: 1, recordedElapsedMs: 4_200,
+      });
+      await repository.acknowledge('session-recovery', 0);
+      const getReceivedSequences = vi.fn(async () => []);
+      const putChunk = vi.fn(async (_sessionId: string, chunk: StoredChunk) => ({ sequence: chunk.sequence, received: true as const }));
+      const coordinator = new ChunkUploadCoordinator({
+        repository,
+        api: { getReceivedSequences, putChunk },
+        sleep: async () => undefined,
+      });
+
+      const ordinaryFlush = await coordinator.uploadPending('session-recovery');
+
+      expect(ordinaryFlush.status).toBe('complete');
+      expect(getReceivedSequences).not.toHaveBeenCalled();
+      expect(putChunk).not.toHaveBeenCalled();
+      expect((await repository.getRecoverable('session-recovery')).chunks.map(({ uploadState }) => uploadState)).toEqual(['ACKNOWLEDGED']);
+
+      const reconciliation = await coordinator.reconcile('session-recovery');
+
+      expect(reconciliation.status).toBe('complete');
+      expect(getReceivedSequences).toHaveBeenCalledTimes(1);
+      expect(putChunk.mock.calls.map(([, chunk]) => [chunk.sequence, chunk.uploadState])).toEqual([[0, 'ACKNOWLEDGED']]);
+    } finally {
+      repository.close();
+    }
+  });
+
   it('turns repository-open failures into a visible terminal snapshot instead of rejecting', async () => {
     const h = harness([]);
     h.getPending.mockRejectedValue(new Error('IndexedDB unavailable'));
