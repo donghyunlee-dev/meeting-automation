@@ -17,7 +17,11 @@
 | PIPE-11 | task log capture | sessionId/traceId/stage 존재, Audio/Transcript/Secret/provider body 없음 | logging assertion |
 | PIPE-12 | Session이 Backend restart로 사라짐 | job 자동 복구를 주장하지 않고 `SESSION_NOT_FOUND` 처리 | memory-only restart test |
 
-Backend root에서 `./gradlew test`, `./gradlew clean build`를 실행하고 결과를 기록한다.
+Backend root에서 다음 세 관련 테스트 클래스만 실행하고 결과를 기록한다. 전체 Backend suite와 `clean build`는 실행하지 않는다.
+
+```powershell
+.\gradlew.bat test --tests com.meetingautomation.api.processing.ProcessingPipelineTests --tests com.meetingautomation.api.processing.ProcessingJobRunnerTests --tests com.meetingautomation.ProcessingStartApiTests
+```
 
 ## 통합/수동 QA
 

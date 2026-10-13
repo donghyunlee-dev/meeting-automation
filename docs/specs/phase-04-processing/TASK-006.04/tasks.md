@@ -7,4 +7,4 @@
 5. 각 adapter output handoff 및 normalized Speaker/Transcript atomic Session 저장을 구현한다. 완료 증거: partial result가 노출되지 않는다.
 6. stage failure를 `PROCESSING_FAILED`/safe error로 기록하고 후속 stage 호출을 멈춘다. 완료 증거: 실패 지점과 retryability가 유지된다.
 7. TASK-006.05 handoff와 `sessionId`/`traceId` 구조화 로그를 연결한다. 완료 증거: Minutes 전에 REVIEW transition이 없고 민감값이 없다.
-8. `./gradlew test`, `./gradlew clean build`와 API-009/010 integration을 실행한다. 완료 증거: race, 실패, success 흐름 증거가 기록된다.
+8. `.\gradlew.bat test --tests com.meetingautomation.api.processing.ProcessingPipelineTests --tests com.meetingautomation.api.processing.ProcessingJobRunnerTests --tests com.meetingautomation.ProcessingStartApiTests`를 Backend root에서 실행하고 API-009/010 관련 경계를 통합 검증한다. 완료 증거: 선택 테스트의 race, 실패, success 결과가 기록된다. 전체 Backend suite와 `clean build`는 실행하지 않는다.

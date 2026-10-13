@@ -1,6 +1,8 @@
 package com.meetingautomation.api.session;
 
 import com.meetingautomation.document.DocumentConnectionGate;
+import com.meetingautomation.document.Speaker;
+import com.meetingautomation.document.TranscriptSegment;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -77,9 +79,85 @@ public final class MeetingSessionStore {
         MeetingSession current = sessions.get(sessionId);
         if (current == null) throw new IllegalStateException("Session is no longer available.");
         if (!current.status().equals(expectedStatus)) throw new SessionStateConflictException();
-        MeetingSession updated = new MeetingSession(current.sessionId(), Math.addExact(current.version(), 1),
-                newStatus, current.documentConnectionVersion(), current.meeting());
+        MeetingSession updated = copy(current, Math.addExact(current.version(), 1), newStatus,
+                current.processingStage(), current.progressPercent(), current.speakers(), current.transcript(),
+                current.processingFailure());
         sessions.put(sessionId, updated);
         return updated;
+    }
+
+    public synchronized MeetingSession startProcessing(String sessionId) {
+        MeetingSession current = sessions.get(sessionId);
+        if (current == null) throw new IllegalStateException("Session is no longer available.");
+        if (!"UPLOADING".equals(current.status())) throw new SessionStateConflictException();
+        MeetingSession updated = copy(current, Math.addExact(current.version(), 1), "PROCESSING",
+                "AUDIO_ASSEMBLY", 0, current.speakers(), current.transcript(), null);
+        sessions.put(sessionId, updated);
+        return updated;
+    }
+
+    /** Restores the API-009 pre-queue snapshot when enqueue is rejected before the worker is visible. */
+    public synchronized MeetingSession rollbackProcessingStart(
+            String sessionId, int expectedVersion, MeetingSession previous) {
+        MeetingSession current = sessions.get(sessionId);
+        if (current == null) throw new IllegalStateException("Session is no longer available.");
+        if (current.version() != expectedVersion || !"PROCESSING".equals(current.status())
+                || !"AUDIO_ASSEMBLY".equals(current.processingStage()) || current.progressPercent() != 0
+                || current.processingFailure() != null) {
+            throw new SessionStateConflictException();
+        }
+        sessions.put(sessionId, previous);
+        return previous;
+    }
+
+    public synchronized MeetingSession recordProcessingProgress(String sessionId, String stage, int progressPercent) {
+        MeetingSession current = requireProcessing(sessionId);
+        if (stage == null || !stage.matches("[A-Z][A-Z0-9_]*")
+                || progressPercent < 0 || progressPercent > 100) {
+            throw new IllegalArgumentException("Processing progress is invalid.");
+        }
+        MeetingSession updated = copy(current, Math.addExact(current.version(), 1), current.status(), stage,
+                progressPercent, current.speakers(), current.transcript(), current.processingFailure());
+        sessions.put(sessionId, updated);
+        return updated;
+    }
+
+    /** Commits speakers and transcript in one session mutation after diarization has succeeded. */
+    public synchronized MeetingSession saveDiarizationResult(
+            String sessionId, java.util.List<Speaker> speakers, java.util.List<TranscriptSegment> transcript) {
+        MeetingSession current = requireProcessing(sessionId);
+        if (!"DIARIZATION".equals(current.processingStage()) || current.progressPercent() != 67
+                || current.speakers().size() > 0 || current.transcript().size() > 0
+                || speakers == null || transcript == null) {
+            throw new IllegalArgumentException("Diarization result cannot be saved.");
+        }
+        MeetingSession updated = copy(current, Math.addExact(current.version(), 1), current.status(),
+                "DIARIZATION", 100, speakers, transcript, null);
+        sessions.put(sessionId, updated);
+        return updated;
+    }
+
+    public synchronized MeetingSession failProcessing(
+            String sessionId, String stage, int lastCompletedProgress, String errorCode, boolean retryable) {
+        MeetingSession current = requireProcessing(sessionId);
+        ProcessingFailure failure = new ProcessingFailure(stage, errorCode, retryable);
+        MeetingSession updated = copy(current, Math.addExact(current.version(), 1), "PROCESSING_FAILED",
+                stage, lastCompletedProgress, current.speakers(), current.transcript(), failure);
+        sessions.put(sessionId, updated);
+        return updated;
+    }
+
+    private MeetingSession requireProcessing(String sessionId) {
+        MeetingSession current = sessions.get(sessionId);
+        if (current == null) throw new IllegalStateException("Session is no longer available.");
+        if (!"PROCESSING".equals(current.status())) throw new SessionStateConflictException();
+        return current;
+    }
+
+    private static MeetingSession copy(MeetingSession current, int version, String status,
+            String processingStage, int progressPercent, java.util.List<Speaker> speakers,
+            java.util.List<TranscriptSegment> transcript, ProcessingFailure failure) {
+        return new MeetingSession(current.sessionId(), version, status, current.documentConnectionVersion(),
+                current.meeting(), processingStage, progressPercent, speakers, transcript, failure);
     }
 }

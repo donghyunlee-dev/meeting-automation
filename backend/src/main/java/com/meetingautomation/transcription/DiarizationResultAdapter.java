@@ -8,8 +8,10 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import org.springframework.stereotype.Component;
 
 /** Converts provider-neutral diarization labels to the application's stable transcript contract. */
+@Component
 public final class DiarizationResultAdapter {
     private static final String INVALID_RESULT = "Transcription result is invalid.";
 
