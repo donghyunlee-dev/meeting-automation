@@ -14,6 +14,8 @@ import { createMeetingSession, type MeetingSession, type MeetingSessionAttempt }
 import { RecordingPage, type RecordingViewState } from './RecordingPage';
 import { DocumentSetupWizard } from './DocumentSetupWizard';
 import { getSetupSnapshot } from './documentSetupApi';
+import { browserMediaAdapter } from './browserMediaAdapter';
+import { RecordingController, type MediaRecorderAdapter, type RecordingSnapshot } from './recordingController';
 
 type ViewState = 'loading' | 'ready' | 'error';
 type FormState = { mode: 'create' } | { mode: 'edit'; participant: Participant };
@@ -348,10 +350,10 @@ function NewMeetingRoute({ onCreated, onSubmitted }: {
   return <NewMeetingPage onSubmit={submit} />;
 }
 
-function MeetingRecordingRoute({ session, state, setState }: {
+function MeetingRecordingRoute({ session, setState, mediaAdapter }: {
   session: RecordingSession | null;
-  state: RecordingViewState;
   setState: (state: RecordingViewState) => void;
+  mediaAdapter: MediaRecorderAdapter;
 }) {
   const { sessionId } = useParams();
   if (!session || session.sessionId !== sessionId) return (
@@ -361,16 +363,50 @@ function MeetingRecordingRoute({ session, state, setState }: {
       <Link className="button button-primary" to="/meetings/new">새 회의 시작</Link>
     </main>
   );
+  return <ActiveMeetingRecordingRoute session={session} setState={setState} mediaAdapter={mediaAdapter} />;
+}
+
+function ActiveMeetingRecordingRoute({ session, setState, mediaAdapter }: {
+  session: RecordingSession;
+  setState: (state: RecordingViewState) => void;
+  mediaAdapter: MediaRecorderAdapter;
+}) {
+  const [snapshot, setSnapshot] = useState<RecordingSnapshot>({ state: 'Ready', elapsedMs: 0 });
+  const controllerRef = useRef<RecordingController | null>(null);
+
+  useEffect(() => {
+    const current = new RecordingController({
+      uploadPolicy: session.uploadPolicy,
+      adapter: mediaAdapter,
+      onChange: (next) => {
+        setSnapshot(next);
+        setState(next.state);
+      },
+      onChunk: () => undefined,
+      onStopComplete: (elapsedMs) => {
+        setSnapshot((previous) => ({ ...previous, state: 'Ready', elapsedMs, completed: true }));
+        setState('Ready');
+      },
+    });
+    controllerRef.current = current;
+    return () => {
+      current.dispose();
+      if (controllerRef.current === current) controllerRef.current = null;
+    };
+  }, [session, setState, mediaAdapter]);
+
   return <RecordingPage
     sessionId={session.sessionId}
     title={session.title}
-    state={state}
-    elapsedMs={0}
-    onStart={() => setState('Recording')}
-    onPause={() => setState('Paused')}
-    onResume={() => setState('Recording')}
+    state={snapshot.state}
+    elapsedMs={snapshot.elapsedMs}
+    errorMessage={snapshot.errorMessage}
+    completed={snapshot.completed}
+    onStart={() => { if (controllerRef.current) void controllerRef.current.start(); }}
+    onPause={() => controllerRef.current?.pause()}
+    onResume={() => controllerRef.current?.resume()}
     onRequestEnd={() => undefined}
-    onConfirmEnd={() => undefined}
+    onConfirmEnd={() => controllerRef.current?.stop()}
     onCancelEnd={() => undefined}
   />;
 }
@@ -385,7 +421,10 @@ function BottomNavigation() {
   );
 }
 
-export function App({ onNewMeetingSubmit = () => undefined }: { onNewMeetingSubmit?: (payload: NewMeetingPayload) => void } = {}) {
+export function App({ onNewMeetingSubmit = () => undefined, mediaAdapter = browserMediaAdapter }: {
+  onNewMeetingSubmit?: (payload: NewMeetingPayload) => void;
+  mediaAdapter?: MediaRecorderAdapter;
+} = {}) {
   const [createdSession, setCreatedSession] = useState<RecordingSession | null>(null);
   const [recordingState, setRecordingState] = useState<RecordingViewState>('Ready');
   const location = useLocation();
@@ -398,7 +437,7 @@ export function App({ onNewMeetingSubmit = () => undefined }: { onNewMeetingSubm
         <Route path="/settings" element={<DocumentSetupWizard settings />} />
         <Route path="/settings/document" element={<DocumentSetupWizard settings />} />
         <Route path="/meetings/new" element={<SetupGate><NewMeetingRoute onCreated={(session) => { setCreatedSession(session); setRecordingState('Ready'); }} onSubmitted={onNewMeetingSubmit} /></SetupGate>} />
-        <Route path="/meetings/:sessionId/recording" element={<MeetingRecordingRoute session={createdSession} state={recordingState} setState={setRecordingState} />} />
+        <Route path="/meetings/:sessionId/recording" element={<MeetingRecordingRoute session={createdSession} setState={setRecordingState} mediaAdapter={mediaAdapter} />} />
         <Route path="/settings/participants" element={<SetupGate><ParticipantsPage /></SetupGate>} />
         <Route path="*" element={<FutureRouteNotice />} />
       </Routes>

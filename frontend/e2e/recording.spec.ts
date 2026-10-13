@@ -3,6 +3,30 @@ import { expect, test } from '@playwright/test';
 test('keeps the recording screen within 360px, provides touch targets, and respects reduced motion', async ({ page }) => {
   await page.setViewportSize({ width: 360, height: 800 });
   await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.addInitScript(() => {
+    class FakeMediaRecorder {
+      static isTypeSupported() { return true; }
+      mimeType = '';
+      onstart: (() => void) | null = null;
+      onpause: (() => void) | null = null;
+      onresume: (() => void) | null = null;
+      onstop: (() => void) | null = null;
+      onerror: ((event: { error?: Error }) => void) | null = null;
+      ondataavailable: ((event: { data: Blob }) => void) | null = null;
+      constructor(_stream: MediaStream, options: { mimeType: string }) { this.mimeType = options.mimeType; }
+      start() { queueMicrotask(() => this.onstart?.()); }
+      pause() { queueMicrotask(() => this.onpause?.()); }
+      resume() { queueMicrotask(() => this.onresume?.()); }
+      stop() {
+        this.ondataavailable?.({ data: new Blob(['final chunk'], { type: this.mimeType }) });
+        this.onstop?.();
+      }
+    }
+    Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: {
+      getUserMedia: async () => ({ getTracks: () => [{ stop() {} }] }),
+    } });
+    Object.defineProperty(globalThis, 'MediaRecorder', { configurable: true, value: FakeMediaRecorder });
+  });
   await page.route('**/api/v1/document-setup', (route) => route.fulfill({ json: { data: {
     version: 1, status: 'READY', active: { provider: 'NOTION', connectionVersion: 1, rootUrl: 'https://notion.example' },
     draft: null, operation: null, canCreateMeeting: true,
@@ -56,4 +80,8 @@ test('keeps the recording screen within 360px, provides touch targets, and respe
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect(page.getByRole('status')).toHaveText('녹음 중');
   await expect(endButton).toBeFocused();
+  await endButton.click();
+  await page.getByRole('dialog').getByRole('button', { name: '회의 종료' }).click();
+  await expect(page.getByRole('status')).toHaveText('녹음이 종료되었습니다.');
+  await expect(page.getByRole('button', { name: '녹음 시작' })).toHaveCount(0);
 });

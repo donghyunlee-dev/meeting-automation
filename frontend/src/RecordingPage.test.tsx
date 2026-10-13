@@ -38,6 +38,25 @@ describe('RecordingPage', () => {
     expect(formatElapsedTime(-500)).toBe('00:00:00');
   });
 
+  it('preserves the final elapsed time in the completed Ready view without offering another start', () => {
+    render(<RecordingPage
+      sessionId="session-123"
+      title="Planning"
+      state="Ready"
+      elapsedMs={5_250}
+      completed
+      onStart={vi.fn()}
+      onPause={vi.fn()}
+      onResume={vi.fn()}
+      onRequestEnd={vi.fn()}
+      onConfirmEnd={vi.fn()}
+      onCancelEnd={vi.fn()}
+    />);
+    expect(screen.getByRole('status').textContent).toBe('녹음이 종료되었습니다.');
+    expect(screen.getByLabelText('경과 시간').textContent).toBe('00:00:05');
+    expect(screen.queryByRole('button', { name: '녹음 시작' })).toBeNull();
+  });
+
   it('calls only the Ready start callback when recording starts', () => {
     const { callbacks } = renderRecording('Ready');
     fireEvent.click(screen.getByRole('button', { name: '녹음 시작' }));
