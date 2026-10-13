@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import { formatElapsedTime } from './recordingTime';
 
 export type RecordingViewState = 'Ready' | 'Recording' | 'Paused';
@@ -48,8 +48,8 @@ export function RecordingPage({ sessionId, title, state, elapsedMs, onStart, onP
     onCancelEnd();
   }
 
-  function requestEnd() {
-    endTrigger.current = document.activeElement instanceof HTMLButtonElement ? document.activeElement : null;
+  function requestEnd(event: MouseEvent<HTMLButtonElement>) {
+    endTrigger.current = event.currentTarget;
     dialogHandled.current = false;
     onRequestEnd();
     setConfirmOpen(true);

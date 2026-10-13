@@ -82,6 +82,16 @@ describe('RecordingPage', () => {
     expect(callbacks.onConfirmEnd).not.toHaveBeenCalled();
   });
 
+  it('restores focus to the end button after pointer-style click without prior focus', () => {
+    const { callbacks } = renderRecording('Recording', 62018);
+    const trigger = screen.getByRole('button', { name: '회의 종료' });
+    expect(document.activeElement).not.toBe(trigger);
+    fireEvent.click(trigger);
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: '계속 녹음' }));
+    expect(callbacks.onCancelEnd).toHaveBeenCalledTimes(1);
+    expect(document.activeElement).toBe(trigger);
+  });
+
   it('cancels with Escape, keeps the Paused view state and timer, and restores trigger focus', () => {
     const { callbacks } = renderRecording('Paused', 62018);
     const trigger = screen.getByRole('button', { name: '회의 종료' });
