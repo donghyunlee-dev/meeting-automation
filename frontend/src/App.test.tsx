@@ -1,5 +1,5 @@
 import 'fake-indexeddb/auto';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { StrictMode, useLayoutEffect, useRef } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router';
@@ -1207,12 +1207,16 @@ describe('Review speaker selection', () => {
     const sessionCSelect = await screen.findByRole('combobox', { name: 'Speaker C 참가자' });
     expect((sessionCSelect as HTMLSelectElement).value).toBe('p3');
 
-    resolveSessionBRetry?.(response({ data: {
-      sessionId: 'session-b', version: 2, status: 'REVIEW', meeting: { participantIds: ['p1'] },
-      processing: { stage: 'DRAFT_READY', progressPercent: 100 },
-      speakers: [{ speakerId: 'speaker-b', label: 'Speaker B', participantId: 'p1' }],
-    } }));
-    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Speaker C 참가자' })).toBeTruthy());
+    await act(async () => {
+      resolveSessionBRetry?.(response({ data: {
+        sessionId: 'session-b', version: 2, status: 'REVIEW', meeting: { participantIds: ['p1'] },
+        processing: { stage: 'DRAFT_READY', progressPercent: 100 },
+        speakers: [{ speakerId: 'speaker-b', label: 'Speaker B', participantId: 'p1' }],
+      } }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(screen.queryByRole('status', { name: '회의의 화자 정보를 불러오는 중입니다.' })).toBeNull();
+    expect(screen.getByRole('combobox', { name: 'Speaker C 참가자' })).toBeTruthy();
     expect((screen.getByRole('combobox', { name: 'Speaker C 참가자' }) as HTMLSelectElement).value).toBe('p3');
     expect(screen.queryByRole('combobox', { name: 'Speaker B 참가자' })).toBeNull();
     expect(screen.queryByText('회의의 화자 정보를 불러오는 중입니다.')).toBeNull();
