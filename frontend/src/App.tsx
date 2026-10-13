@@ -22,6 +22,7 @@ import { getReceivedAudioStatus, putAudioChunk } from './audioUploadApi';
 import { ChunkUploadCoordinator, type ChunkUploadSnapshot } from './chunkUploadCoordinator';
 import { startProcessing } from './processingStartApi';
 import { ProcessingAttemptStore, RecordingEndCoordinator, type RecordingEndSnapshot } from './recordingEndCoordinator';
+import { ProcessingPage } from './ProcessingPage';
 
 type ViewState = 'loading' | 'ready' | 'error';
 type FormState = { mode: 'create' } | { mode: 'edit'; participant: Participant };
@@ -561,7 +562,7 @@ export function App({ onNewMeetingSubmit = () => undefined, mediaAdapter = brows
   const [createdSession, setCreatedSession] = useState<RecordingSession | null>(restoreRecordingSession);
   const [recordingState, setRecordingState] = useState<RecordingViewState>('Ready');
   const location = useLocation();
-  const isActiveRecording = /^\/meetings\/[^/]+\/recording$/.test(location.pathname) && recordingState !== 'Ready';
+  const isActiveRecording = (/^\/meetings\/[^/]+\/recording$/.test(location.pathname) && recordingState !== 'Ready') || /^\/meetings\/[^/]+\/processing$/.test(location.pathname);
   return (
     <div className="app-shell">
       <Routes>
@@ -571,7 +572,7 @@ export function App({ onNewMeetingSubmit = () => undefined, mediaAdapter = brows
         <Route path="/settings/document" element={<DocumentSetupWizard settings />} />
         <Route path="/meetings/new" element={<SetupGate><NewMeetingRoute onCreated={(session) => { setCreatedSession(session); saveRecordingSession(session); setRecordingState('Ready'); }} onSubmitted={onNewMeetingSubmit} /></SetupGate>} />
         <Route path="/meetings/:sessionId/recording" element={<MeetingRecordingRoute session={createdSession} setState={setRecordingState} mediaAdapter={mediaAdapter} />} />
-        <Route path="/meetings/:sessionId/processing" element={<FutureRouteNotice />} />
+        <Route path="/meetings/:sessionId/processing" element={<ProcessingPage />} />
         <Route path="/settings/participants" element={<SetupGate><ParticipantsPage /></SetupGate>} />
         <Route path="*" element={<FutureRouteNotice />} />
       </Routes>
