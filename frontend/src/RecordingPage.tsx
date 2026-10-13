@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import { formatElapsedTime } from './recordingTime';
+import type { ChunkUploadSnapshot } from './chunkUploadCoordinator';
 
 export type RecordingViewState = 'Ready' | 'Recording' | 'Paused';
 
@@ -22,6 +23,8 @@ type RecordingPageProps = RecordingSessionContext & RecordingCallbacks & {
   elapsedMs: number;
   errorMessage?: string;
   completed?: boolean;
+  uploadSnapshot?: ChunkUploadSnapshot;
+  onRetryUpload?: () => void;
 };
 
 const statusByState: Record<RecordingViewState, string> = {
@@ -30,7 +33,7 @@ const statusByState: Record<RecordingViewState, string> = {
   Paused: '일시정지됨',
 };
 
-export function RecordingPage({ sessionId, title, state, elapsedMs, errorMessage, completed = false, onStart, onPause, onResume, onRequestEnd, onConfirmEnd, onCancelEnd }: RecordingPageProps) {
+export function RecordingPage({ sessionId, title, state, elapsedMs, errorMessage, completed = false, uploadSnapshot, onRetryUpload, onStart, onPause, onResume, onRequestEnd, onConfirmEnd, onCancelEnd }: RecordingPageProps) {
   const [isConfirmOpen, setConfirmOpen] = useState(false);
   const endTrigger = useRef<HTMLButtonElement>(null);
   const cancelButton = useRef<HTMLButtonElement>(null);
@@ -98,6 +101,16 @@ export function RecordingPage({ sessionId, title, state, elapsedMs, errorMessage
         </p>
         <p className="recording-timer" aria-label="경과 시간">{formatElapsedTime(state === 'Ready' && !completed ? 0 : elapsedMs)}</p>
         {errorMessage && <p className="recording-error" role="alert">{errorMessage}</p>}
+        {uploadSnapshot && (uploadSnapshot.totalCount > 0 || uploadSnapshot.message) && <div className="recording-upload" aria-label="오디오 업로드">
+          <div className="recording-upload-heading"><strong>오디오 업로드</strong><span>{uploadSnapshot.confirmedCount}/{uploadSnapshot.totalCount}</span></div>
+          {uploadSnapshot.totalCount > 0 && <progress aria-label="오디오 업로드 진행" value={uploadSnapshot.confirmedCount} max={uploadSnapshot.totalCount} />}
+          {uploadSnapshot.status === 'complete'
+            ? <p>오디오 업로드가 완료되었습니다.</p>
+            : <p role={uploadSnapshot.status === 'uploading' ? undefined : 'alert'} aria-live={uploadSnapshot.status === 'uploading' ? 'polite' : undefined}>
+              {uploadSnapshot.message ?? (uploadSnapshot.status === 'uploading' ? '오디오를 업로드하고 있습니다.' : `${uploadSnapshot.pendingCount}개 조각 업로드 대기 중`)}
+            </p>}
+          {uploadSnapshot.status === 'retryable' && onRetryUpload && <button className="button button-secondary" type="button" onClick={onRetryUpload}>업로드 재시도</button>}
+        </div>}
         <div className="recording-actions">
           {state === 'Ready' && !completed && <button className="button button-primary recording-primary-action" type="button" onClick={onStart}>녹음 시작</button>}
           {state === 'Recording' && <>

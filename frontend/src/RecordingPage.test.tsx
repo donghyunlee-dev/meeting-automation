@@ -38,6 +38,23 @@ describe('RecordingPage', () => {
     expect(formatElapsedTime(-500)).toBe('00:00:00');
   });
 
+  it('shows pending upload progress after recording and lets the user retry failed uploads', () => {
+    const onRetryUpload = vi.fn();
+    const uploadProps = {
+      sessionId: 'session-123', title: 'Planning', state: 'Ready' as const, elapsedMs: 12_000,
+      completed: true,
+      uploadSnapshot: { status: 'retryable' as const, totalCount: 3, confirmedCount: 2, pendingCount: 1 },
+      onRetryUpload,
+      onStart: vi.fn(), onPause: vi.fn(), onResume: vi.fn(), onRequestEnd: vi.fn(), onConfirmEnd: vi.fn(), onCancelEnd: vi.fn(),
+    };
+    render(<RecordingPage {...uploadProps} />);
+
+    expect(screen.getByRole('progressbar', { name: '오디오 업로드 진행' })).toHaveProperty('value', 2);
+    expect(screen.getByText('1개 조각 업로드 대기 중')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '업로드 재시도' }));
+    expect(onRetryUpload).toHaveBeenCalledTimes(1);
+  });
+
   it('preserves the final elapsed time in the completed Ready view without offering another start', () => {
     render(<RecordingPage
       sessionId="session-123"

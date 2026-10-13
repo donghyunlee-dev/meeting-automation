@@ -1,6 +1,6 @@
 import 'fake-indexeddb/auto';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { StrictMode } from 'react';
+import { StrictMode, useLayoutEffect, useRef } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router';
 import { App } from './App';
@@ -28,6 +28,15 @@ function installFetchMock(fetchMock: (input: RequestInfo | URL, init?: RequestIn
     : fetchMock(input, init)));
 }
 
+function deleteChunkDatabase(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const deletion = indexedDB.deleteDatabase('meeting-automation-chunks');
+    deletion.onsuccess = () => resolve();
+    deletion.onerror = () => reject(deletion.error);
+    deletion.onblocked = () => reject(new Error('Chunk test database is still open'));
+  });
+}
+
 function mockList(result: Response | Promise<Response>) {
   const fetchMock = vi.fn().mockResolvedValue(result);
   installFetchMock(fetchMock);
@@ -37,6 +46,7 @@ function mockList(result: Response | Promise<Response>) {
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  sessionStorage.clear();
 });
 
 function DestinationFixture() {
@@ -47,6 +57,16 @@ function DestinationFixture() {
 function NavigateToMismatchedRecordingSession() {
   const navigate = useNavigate();
   return <button type="button" onClick={() => navigate('/meetings/other-session/recording')}>Open another session</button>;
+}
+
+function StartRecordingDuringLayout() {
+  const clicked = useRef(false);
+  useLayoutEffect(() => {
+    if (clicked.current) return;
+    clicked.current = true;
+    document.querySelector<HTMLButtonElement>('.recording-primary-action')?.click();
+  }, []);
+  return null;
 }
 
 function renderHomeWithDestinationFixture() {
@@ -621,6 +641,96 @@ describe('Participants settings', () => {
 });
 
 describe('Recording route', () => {
+  it('accepts an immediate start interaction as soon as the recording route is painted', async () => {
+    sessionStorage.setItem('meeting-automation.recording-session', JSON.stringify({
+      sessionId: 'session-immediate-start', title: 'Immediate start', version: 1, status: 'CREATED',
+      uploadPolicy: { chunkDurationSeconds: 15, maxChunkBytes: 1000000, acceptedMimeTypes: ['audio/webm'] },
+    }));
+    const track = { stop: vi.fn() };
+    const mediaAdapter: MediaRecorderAdapter = {
+      isMediaRecorderSupported: () => true,
+      isTypeSupported: () => true,
+      getUserMedia: vi.fn(async () => ({ getTracks: () => [track] })),
+      createRecorder: vi.fn(() => {
+        const fake: RecorderLike = {
+          mimeType: 'audio/webm', onstart: null, onpause: null, onresume: null, onstop: null, onerror: null, ondataavailable: null,
+          start: () => fake.onstart?.(), pause: () => fake.onpause?.(), resume: () => fake.onresume?.(), stop: () => fake.onstop?.(),
+        };
+        return fake;
+      }),
+      now: () => 0,
+      nowEpoch: () => 1_700_000_000_000,
+      setInterval: () => 1,
+      clearInterval: () => undefined,
+      createChunkId: () => 'immediate-start-chunk',
+    };
+    const fetchMock = vi.fn(async () => response({ data: { receivedSequences: [], receivedChunks: 0, totalBytes: 0 } }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<MemoryRouter initialEntries={['/meetings/session-immediate-start/recording']}><App mediaAdapter={mediaAdapter} /><StartRecordingDuringLayout /></MemoryRouter>);
+
+    expect(mediaAdapter.getUserMedia).toHaveBeenCalledTimes(1);
+    expect(await screen.findByText('녹음 중')).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Immediate start' })).toBeTruthy();
+  });
+
+  it('restores the runtime session on reload and reconciles already received local chunks without resending', async () => {
+    await deleteChunkDatabase();
+    const session = {
+      sessionId: 'session-reload', title: 'Recovered planning', version: 1, status: 'CREATED',
+      uploadPolicy: { chunkDurationSeconds: 15, maxChunkBytes: 1000000, acceptedMimeTypes: ['audio/webm'] },
+    };
+    sessionStorage.setItem('meeting-automation.recording-session', JSON.stringify(session));
+    const repository = new ChunkRepository({ dbName: 'meeting-automation-chunks', maxChunkBytes: 1000000 });
+    await repository.append('session-reload', {
+      chunkId: 'reload-chunk-0', blob: new NodeBlob(['saved audio']) as Blob, mimeType: 'audio/webm', recordedAtMs: 1, recordedElapsedMs: 15_000,
+    });
+    repository.close();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const path = new URL(String(input)).pathname;
+      if (path.endsWith('/audio')) return response({ data: { receivedSequences: [0], receivedChunks: 1, totalBytes: 11 } });
+      throw new Error(`Unexpected request: ${path}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<MemoryRouter initialEntries={['/meetings/session-reload/recording']}><App /></MemoryRouter>);
+
+    expect(await screen.findByRole('heading', { name: 'Recovered planning' })).toBeTruthy();
+    await waitFor(async () => {
+      const check = new ChunkRepository({ dbName: 'meeting-automation-chunks', maxChunkBytes: 1000000 });
+      const pending = await check.getPending('session-reload');
+      check.close();
+      expect(pending.chunks).toHaveLength(0);
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(screen.getByText('오디오 업로드가 완료되었습니다.')).toBeTruthy();
+  });
+
+  it('preserves IndexedDB audio when API-008 reports SESSION_NOT_FOUND', async () => {
+    await deleteChunkDatabase();
+    const session = {
+      sessionId: 'missing-backend-session', title: 'Saved locally', version: 1, status: 'CREATED',
+      uploadPolicy: { chunkDurationSeconds: 15, maxChunkBytes: 1000000, acceptedMimeTypes: ['audio/webm'] },
+    };
+    sessionStorage.setItem('meeting-automation.recording-session', JSON.stringify(session));
+    const repository = new ChunkRepository({ dbName: 'meeting-automation-chunks', maxChunkBytes: 1000000 });
+    await repository.append(session.sessionId, {
+      chunkId: 'preserve-me', blob: new NodeBlob(['unsent audio']) as Blob, mimeType: 'audio/webm', recordedAtMs: 1, recordedElapsedMs: 15_000,
+    });
+    repository.close();
+    const fetchMock = vi.fn().mockResolvedValue(response({ error: { code: 'SESSION_NOT_FOUND' } }, 404));
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<MemoryRouter initialEntries={[`/meetings/${session.sessionId}/recording`]}><App /></MemoryRouter>);
+
+    expect(await screen.findByText(/로컬 오디오는 보존되었습니다/)).toBeTruthy();
+    const check = new ChunkRepository({ dbName: 'meeting-automation-chunks', maxChunkBytes: 1000000 });
+    const pending = await check.getPending(session.sessionId);
+    check.close();
+    expect(pending.chunks.map(({ chunkId, sequence }) => [chunkId, sequence])).toEqual([['preserve-me', 0]]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it('shows the created meeting title, session id, ready status, timer, and start action', async () => {
     const track = { stop: vi.fn() };
     const mediaAdapter: MediaRecorderAdapter = {
@@ -692,13 +802,13 @@ describe('Recording route', () => {
     expect(screen.queryByRole('navigation', { name: '주요 메뉴' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: '회의 종료' }));
     fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: '계속 녹음' }));
-    expect(screen.getByRole('status').textContent).toBe('녹음 중');
+    expect(screen.getByText('녹음 중')).toBeTruthy();
     expect(screen.getByText('00:00:00')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: '일시정지' }));
-    expect(screen.getByRole('status').textContent).toBe('일시정지됨');
+    expect(screen.getByText('일시정지됨')).toBeTruthy();
     expect(screen.queryByRole('navigation', { name: '주요 메뉴' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: '녹음 재개' }));
-    expect(screen.getByRole('status').textContent).toBe('녹음 중');
+    expect(screen.getByText('녹음 중')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: '회의 종료' }));
     fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: '회의 종료' }));
     expect(await screen.findByText('녹음이 종료되었습니다.')).toBeTruthy();
