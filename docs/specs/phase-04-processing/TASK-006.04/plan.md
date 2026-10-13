@@ -27,8 +27,12 @@
 4. stage/progress mutation과 assembly→provider→normalizer 호출을 연결한다. 결과: 각 output만 다음 단계에 전달된다.
 5. normalized transcript/speaker atomic save와 TASK-006.05 handoff를 구현한다. 결과: transcript가 partial하게 저장되지 않고 `PROCESSING`을 유지한다.
 6. failure stage/status/error category/retryability 기록 및 안전 구조화 로그를 구현한다. 결과: API-010 consumers가 실패를 해석할 수 있다.
-7. test/lint/build 및 restart/idempotency/failure integration을 검증한다. 결과: 실행 순서/중복/관측 evidence가 남는다.
+7. 변경된 pipeline, job runner, API 시작/상태 경계의 선택 테스트 및 restart/idempotency/failure integration을 검증한다. 결과: 실행 순서/중복/관측 evidence가 남는다.
 
 ## 검증 명령
 
-Backend root에서 `./gradlew test`, `./gradlew clean build`를 실행한다. API-009 trigger에서 job executor까지와 Session state query까지 통합 검증한다.
+Backend root에서 다음 세 관련 테스트 클래스만 실행한다. API-009 trigger, job runner, Session state query와 직접 연결된 경계를 검증한다. 전체 Backend suite와 `clean build`는 실행하지 않는다.
+
+```powershell
+.\gradlew.bat test --tests com.meetingautomation.api.processing.ProcessingPipelineTests --tests com.meetingautomation.api.processing.ProcessingJobRunnerTests --tests com.meetingautomation.ProcessingStartApiTests
+```

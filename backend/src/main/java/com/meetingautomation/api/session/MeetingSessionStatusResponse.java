@@ -30,9 +30,8 @@ public record MeetingSessionStatusResponse(Data data) {
     }
 
     static MeetingSessionStatusResponse from(MeetingSession session) {
-        Processing processing = "PROCESSING".equals(session.status())
-                ? new Processing("AUDIO_ASSEMBLY", 0)
-                : null;
+        Processing processing = session.processingStage() == null
+                ? null : new Processing(session.processingStage(), session.progressPercent());
         return new MeetingSessionStatusResponse(new Data(session.sessionId(), session.version(), session.status(),
                 new Meeting(session.meeting().participantIds()), processing, List.of(), List.of(), null, List.of()));
     }

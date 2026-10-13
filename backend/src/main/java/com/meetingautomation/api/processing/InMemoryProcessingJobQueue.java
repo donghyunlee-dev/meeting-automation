@@ -1,16 +1,28 @@
 package com.meetingautomation.api.processing;
 
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.Executor;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
-/** Process-local queue. A later processing task consumes accepted jobs. */
+/** Process-local asynchronous handoff to the processing job runner. */
 @Component
 public final class InMemoryProcessingJobQueue implements ProcessingJobQueue {
-    private final BlockingQueue<ProcessingJob> jobs = new LinkedBlockingQueue<>();
+    private final ProcessingJobRunner runner;
+    private final Executor executor;
+
+    public InMemoryProcessingJobQueue(
+            ProcessingJobRunner runner, @Qualifier("processingJobExecutor") Executor executor) {
+        this.runner = runner;
+        this.executor = executor;
+    }
 
     @Override
     public void enqueue(ProcessingJob job) {
-        jobs.add(job);
+        if (job == null) throw new IllegalArgumentException("Processing job is invalid.");
+        try {
+            executor.execute(() -> runner.run(job));
+        } catch (RuntimeException rejected) {
+            throw new IllegalStateException("Processing job could not be queued.");
+        }
     }
 }

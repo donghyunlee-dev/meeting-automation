@@ -144,6 +144,12 @@ class ProcessingStartApiTests {
                 .andExpect(jsonPath("$.data.processing.stage").value("AUDIO_ASSEMBLY"))
                 .andExpect(jsonPath("$.data.processing.progressPercent").value(0));
         assertThat(processingExecutor.acceptedCount()).isEqualTo(1);
+        MeetingSession queued = sessionStore.find(SESSION_ID).orElseThrow();
+        assertThat(queued.status()).isEqualTo("PROCESSING");
+        assertThat(queued.processingStage()).isEqualTo("AUDIO_ASSEMBLY");
+        assertThat(queued.progressPercent()).isZero();
+        assertThat(queued.speakers()).isEmpty();
+        assertThat(queued.transcript()).isEmpty();
         assertThat(processingExecutor.jobs()).containsExactly(
                 new ProcessingJob(SESSION_ID, 1, 15000, "audio/webm"));
     }
@@ -356,6 +362,9 @@ class ProcessingStartApiTests {
         MeetingSession unchanged = sessionStore.find(SESSION_ID).orElseThrow();
         assertThat(unchanged.status()).isEqualTo("UPLOADING");
         assertThat(unchanged.version()).isEqualTo(2);
+        assertThat(unchanged.processingStage()).isNull();
+        assertThat(unchanged.progressPercent()).isZero();
+        assertThat(unchanged.processingFailure()).isNull();
         assertThat(processingExecutor.acceptedCount()).isZero();
 
         mockMvc.perform(process("queue-failure-key", body)).andExpect(status().isAccepted());

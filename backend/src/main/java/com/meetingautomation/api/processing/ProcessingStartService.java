@@ -56,8 +56,13 @@ public final class ProcessingStartService {
                 .orElseThrow(() -> new IllegalStateException("Session upload policy is unavailable."));
         validateCompletedChunks(sessionId, command.expectedChunks(), policy);
 
-        queue.enqueue(new ProcessingJob(sessionId, command.expectedChunks(), command.durationMs(), command.mimeType()));
-        sessionStore.transitionStatus(sessionId, "UPLOADING", "PROCESSING");
+        MeetingSession processing = sessionStore.startProcessing(sessionId);
+        try {
+            queue.enqueue(new ProcessingJob(sessionId, command.expectedChunks(), command.durationMs(), command.mimeType()));
+        } catch (RuntimeException queueFailure) {
+            sessionStore.rollbackProcessingStart(sessionId, processing.version(), session);
+            throw queueFailure;
+        }
         ProcessingStartResponse response = new ProcessingStartResponse(
                 new ProcessingStartResponse.Data(sessionId, "PROCESSING", "AUDIO_ASSEMBLY"));
         requests.put(key, new RequestRecord(command, response));

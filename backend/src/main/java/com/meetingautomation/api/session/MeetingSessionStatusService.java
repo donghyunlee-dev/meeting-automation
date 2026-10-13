@@ -12,7 +12,9 @@ public final class MeetingSessionStatusService {
     }
 
     public MeetingSessionStatusResponse get(String sessionId) {
-        MeetingSession session = sessionStore.find(sessionId).orElseThrow(AudioSessionNotFoundException::new);
-        return MeetingSessionStatusResponse.from(session);
+        return sessionStore.withSessionLock(sessionId, () -> {
+            MeetingSession session = sessionStore.find(sessionId).orElseThrow(AudioSessionNotFoundException::new);
+            return MeetingSessionStatusResponse.from(session);
+        });
     }
 }
