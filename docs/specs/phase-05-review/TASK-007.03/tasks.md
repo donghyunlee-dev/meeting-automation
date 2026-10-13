@@ -8,4 +8,4 @@
 4. 성공 response mapping/version을 committed base와 API-010 cache에 반영하고 Transcript view model을 갱신한다. 완료 증거: 같은 speakerId의 모든 segment label이 함께 바뀌고 text/time은 같다.
 5. 실패에서 base mapping을 유지하고 draft를 보존하며 412 최신 snapshot reconcile을 구현한다. 완료 증거: user draft 자동 삭제/강제 덮어쓰기가 없다.
 6. 네트워크 전송 결과가 불명확하면 API-010 GET 후 비교하고, 확정되지 않은 경우 자동 PUT retry를 하지 않는다. 완료 증거: 저장 결과 일치/불일치/GET 실패가 각각 안전하게 처리된다.
-7. provider-null Settings guard, read-after-write, Frontend/Backend tests, lint/build 및 통합 QA를 수행한다. 완료 증거: 사용 명령과 evidence를 Issue에 남긴다.
+7. provider-null Settings guard, read-after-write, Frontend tests/lint/build 및 통합 QA를 수행한다. API-010/API-011 선행 구현은 소비하되 Backend 코드는 수정하지 않는다. 통합 과정에서 Backend 결함이 확인돼 실제 수정이 필요하면 그 변경에 직접 관련된 Backend 테스트만 선택한다. 완료 증거: 사용 명령과 evidence를 Issue에 남긴다.

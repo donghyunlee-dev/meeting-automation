@@ -581,6 +581,12 @@ export function App({ onNewMeetingSubmit = () => undefined, mediaAdapter = brows
       [sessionId]: { ...(current[sessionId] ?? {}), [speakerId]: participantId },
     }));
   }, []);
+  const commitSpeakerMappings = useCallback((sessionId: string, speakers: ReviewSpeaker[]) => {
+    setSpeakerDrafts((current) => ({
+      ...current,
+      [sessionId]: Object.fromEntries(speakers.map((speaker) => [speaker.speakerId, speaker.participantId])),
+    }));
+  }, []);
   const isActiveRecording = (/^\/meetings\/[^/]+\/recording$/.test(location.pathname) && recordingState !== 'Ready') || /^\/meetings\/[^/]+\/processing$/.test(location.pathname);
   return (
     <div className="app-shell">
@@ -592,7 +598,7 @@ export function App({ onNewMeetingSubmit = () => undefined, mediaAdapter = brows
         <Route path="/meetings/new" element={<SetupGate><NewMeetingRoute onCreated={(session) => { setCreatedSession(session); saveRecordingSession(session); setRecordingState('Ready'); }} onSubmitted={onNewMeetingSubmit} /></SetupGate>} />
         <Route path="/meetings/:sessionId/recording" element={<MeetingRecordingRoute session={createdSession} setState={setRecordingState} mediaAdapter={mediaAdapter} />} />
         <Route path="/meetings/:sessionId/processing" element={<ProcessingPage />} />
-        <Route path="/meetings/:sessionId/review" element={<ReviewSpeakerPage drafts={speakerDrafts} onInitialize={initializeSpeakerDraft} onChange={updateSpeakerDraft} />} />
+        <Route path="/meetings/:sessionId/review" element={<ReviewSpeakerPage drafts={speakerDrafts} onInitialize={initializeSpeakerDraft} onChange={updateSpeakerDraft} onCommit={commitSpeakerMappings} />} />
         <Route path="/settings/participants" element={<SetupGate><ParticipantsPage /></SetupGate>} />
         <Route path="*" element={<FutureRouteNotice />} />
       </Routes>

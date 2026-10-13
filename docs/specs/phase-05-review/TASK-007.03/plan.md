@@ -28,4 +28,4 @@
 
 ## 검증 명령
 
-Frontend `npm run test`, `npm run lint`, `npm run build`; Backend `./gradlew test`, `./gradlew clean build`를 사용한다. Integration evidence에는 API-011 request/response, API-010 latest snapshot, 여러 Transcript segment가 동일 Speaker ID로 resolve되는 결과를 포함한다.
+Frontend 변경 검증은 `npm run test`, `npm run lint`, `npm run build`로 한다. 이 Task는 선행 작업에서 구현된 API-011/API-010 계약을 소비하므로 Backend 코드 변경이나 Backend 테스트 실행은 기본 범위가 아니다. 계약 불일치 때문에 Backend 수정이 실제로 필요해지면, 변경된 코드와 직접 관련된 테스트 클래스만 `& .\gradlew.bat test --tests <fully.qualified.TestClass>` 형식으로 선택한다. 전체 Backend `test`와 `clean build`는 개발자/QA 검증에서 실행하지 않으며 GitHub Actions CI 설정은 바꾸지 않는다. Integration evidence에는 API-011 request/response, API-010 latest snapshot, 여러 Transcript segment가 동일 Speaker ID로 resolve되는 결과를 포함한다.
