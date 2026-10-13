@@ -2,8 +2,11 @@ import 'fake-indexeddb/auto';
 import { describe, expect, it, vi } from 'vitest';
 import { ChunkUploadCoordinator } from './chunkUploadCoordinator';
 import { ChunkRepository, type StoredChunk } from './chunkRepository';
+import { AudioUploadApiError, getReceivedAudioStatus, putAudioChunk } from './audioUploadApi';
 // @ts-expect-error Node Blob preserves bytes through fake-indexeddb structured cloning in jsdom.
 import { Blob as NodeBlob } from 'node:buffer';
+// @ts-expect-error Node WebCrypto exercises the production digest path in jsdom.
+import { webcrypto } from 'node:crypto';
 
 function stored(sequence: number, chunkId = `chunk-${sequence}`): StoredChunk {
   const blob = new Blob([`audio-${sequence}`], { type: 'audio/webm' });
@@ -84,6 +87,25 @@ describe('ChunkUploadCoordinator', () => {
     expect(h.putChunk).toHaveBeenCalledTimes(1);
     expect(h.getReceivedSequences).toHaveBeenCalledTimes(2);
     expect(h.acknowledge.mock.calls.map((call) => call[1])).toEqual([0]);
+  });
+
+  it('reconciles an API timeout before resending the same chunk', async () => {
+    const h = harness([stored(0)]);
+    const events: string[] = [];
+    h.getReceivedSequences.mockImplementation(async () => { events.push('API-008'); return []; });
+    h.putChunk.mockImplementationOnce(async () => {
+      events.push('API-007');
+      throw new AudioUploadApiError('REQUEST_TIMEOUT', undefined, true);
+    }).mockImplementationOnce(async (_id, item) => {
+      events.push('API-007');
+      return { sequence: item.sequence, received: true };
+    });
+
+    const result = await h.coordinator.uploadPending('session-1');
+
+    expect(events).toEqual(['API-008', 'API-007', 'API-008', 'API-007']);
+    expect(h.putChunk.mock.calls.map((call) => call[1].chunkId)).toEqual(['chunk-0', 'chunk-0']);
+    expect(result.status).toBe('complete');
   });
 
   it.each([408, 429, 503])('uses at most five attempts with bounded backoff for HTTP %i then leaves data for manual retry', async (status) => {
@@ -193,6 +215,64 @@ describe('ChunkUploadCoordinator', () => {
 
       expect(result.status).toBe('failed');
       expect(pending.chunks.map(({ sequence, chunkId }) => [sequence, chunkId])).toEqual([[0, 'chunk-0']]);
+    } finally {
+      repository.close();
+    }
+  });
+
+  it('with IndexedDB, preserves the pending Blob when an API timeout cannot be reconciled', async () => {
+    const repository = new ChunkRepository({ dbName: `upload-timeout-${crypto.randomUUID()}`, maxChunkBytes: 1024 });
+    try {
+      await repository.append('session-1', { ...stored(0), blob: new NodeBlob(['audio-timeout']) as Blob, recordedAtMs: 1 });
+      let statusReads = 0;
+      const coordinator = new ChunkUploadCoordinator({
+        repository,
+        api: {
+          getReceivedSequences: async () => {
+            statusReads += 1;
+            if (statusReads === 1) return [];
+            throw new AudioUploadApiError('REQUEST_TIMEOUT', undefined, true);
+          },
+          putChunk: async () => { throw new AudioUploadApiError('REQUEST_TIMEOUT', undefined, true); },
+        },
+        sleep: async () => undefined,
+      });
+
+      const result = await coordinator.uploadPending('session-1');
+      const pending = await repository.getPending('session-1');
+
+      expect(result.status).toBe('retryable');
+      expect(statusReads).toBe(6);
+      expect(pending.chunks.map(({ sequence, chunkId, blob }) => [sequence, chunkId, blob.size])).toEqual([[0, 'chunk-0', new Blob(['audio-timeout']).size]]);
+    } finally {
+      repository.close();
+    }
+  });
+
+  it('with IndexedDB, treats a timed-out 422 body as terminal and retains its local Blob', async () => {
+    const repository = new ChunkRepository({ dbName: `upload-422-timeout-${crypto.randomUUID()}`, maxChunkBytes: 1024 });
+    try {
+      await repository.append('session-1', { ...stored(0), blob: new NodeBlob(['audio-422']) as Blob, recordedAtMs: 1 });
+      const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+        if (String(input).endsWith('/audio')) return new Response(JSON.stringify({ data: { receivedSequences: [], receivedChunks: 0, totalBytes: 0 } }), { status: 200 });
+        return { ok: false, status: 422, json: () => new Promise<unknown>(() => undefined) } as Response;
+      });
+      vi.stubGlobal('crypto', webcrypto);
+      const coordinator = new ChunkUploadCoordinator({
+        repository,
+        api: {
+          getReceivedSequences: async (sessionId) => (await getReceivedAudioStatus(sessionId, fetchMock as typeof fetch, { timeoutMs: 5 })).receivedSequences,
+          putChunk: async (_sessionId, chunk) => putAudioChunk(chunk, fetchMock as typeof fetch, { timeoutMs: 5 }),
+        },
+        sleep: async () => undefined,
+      });
+
+      const result = await coordinator.uploadPending('session-1');
+      const pending = await repository.getPending('session-1');
+
+      expect(result.status).toBe('failed');
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(pending.chunks.map(({ sequence, chunkId, blob }) => [sequence, chunkId, blob.size])).toEqual([[0, 'chunk-0', new Blob(['audio-422']).size]]);
     } finally {
       repository.close();
     }

@@ -16,6 +16,13 @@ function chunk(blob: Blob): StoredChunk {
   };
 }
 
+async function settleWithin<T>(promise: Promise<T>, timeoutMs = 100): Promise<{ kind: 'value'; value: T } | { kind: 'error'; error: unknown } | { kind: 'pending' }> {
+  return Promise.race([
+    promise.then((value) => ({ kind: 'value' as const, value }), (error: unknown) => ({ kind: 'error' as const, error })),
+    new Promise<{ kind: 'pending' }>((resolve) => setTimeout(() => resolve({ kind: 'pending' }), timeoutMs)),
+  ]);
+}
+
 describe('API-007 audio chunk upload', () => {
   it('sends the raw stored Blob with its MIME, actual byte length, SHA-256 and stable chunk id', async () => {
     const audio = new NodeBlob(['real audio bytes'], { type: 'audio/webm' }) as Blob;
@@ -51,5 +58,46 @@ describe('API-008 received audio reconciliation', () => {
 
     await expect(getReceivedAudioStatus('session-1')).resolves.toEqual({ receivedSequences: [1, 3], receivedChunks: 2, totalBytes: 99 });
     expect(fetchMock.mock.calls[0][1]).toMatchObject({ headers: { Accept: 'application/json' } });
+  });
+
+  it('aborts a fetch that does not return response headers and classifies the timeout as uncertain', async () => {
+    let signal: AbortSignal | undefined;
+    const fetchMock = vi.fn((_input: RequestInfo | URL, init?: RequestInit) => {
+      signal = init?.signal as AbortSignal;
+      return new Promise<Response>(() => undefined);
+    });
+
+    const outcome = await settleWithin(getReceivedAudioStatus('session-1', fetchMock as typeof fetch, { timeoutMs: 5 }));
+
+    expect(outcome.kind).toBe('error');
+    if (outcome.kind === 'error') expect(outcome.error).toMatchObject({ code: 'REQUEST_TIMEOUT', responseUncertain: true });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(signal?.aborted).toBe(true);
+  });
+
+  it('bounds response.json() after PUT headers arrive and aborts the request with an uncertain result', async () => {
+    let signal: AbortSignal | undefined;
+    const fetchMock = vi.fn((_input: RequestInfo | URL, init?: RequestInit) => {
+      signal = init?.signal as AbortSignal;
+      return Promise.resolve({ ok: true, status: 200, json: () => new Promise<unknown>(() => undefined) } as Response);
+    });
+    vi.stubGlobal('crypto', webcrypto);
+
+    const outcome = await settleWithin(putAudioChunk(chunk(new NodeBlob(['audio']) as Blob), fetchMock as typeof fetch, { timeoutMs: 5 }));
+
+    expect(outcome.kind).toBe('error');
+    if (outcome.kind === 'error') expect(outcome.error).toMatchObject({ code: 'REQUEST_TIMEOUT', responseUncertain: true });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(signal?.aborted).toBe(true);
+  });
+
+  it('preserves terminal HTTP 4xx status when its response body stalls', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 422, json: () => new Promise<unknown>(() => undefined) } as Response);
+    vi.stubGlobal('crypto', webcrypto);
+
+    const outcome = await settleWithin(putAudioChunk(chunk(new NodeBlob(['audio']) as Blob), fetchMock as typeof fetch, { timeoutMs: 5 }));
+
+    expect(outcome.kind).toBe('error');
+    if (outcome.kind === 'error') expect(outcome.error).toMatchObject({ code: 'REQUEST_TIMEOUT', status: 422, responseUncertain: true });
   });
 });
