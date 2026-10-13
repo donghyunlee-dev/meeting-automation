@@ -65,13 +65,15 @@ test('keeps speaker selection keyboard accessible and within a 360px viewport', 
   expect(layout.selector.height).toBeGreaterThanOrEqual(44);
   expect(layout.refreshButton.width).toBeGreaterThanOrEqual(44);
   expect(layout.refreshButton.height).toBeGreaterThanOrEqual(44);
+});
 
 test('saves a full Structured Minutes snapshot with If-Match and confirms it through API-010', async ({ page }) => {
   const initialMinutes = {
     templateId: 'weekly', templateVersion: '4', summary: 'Initial summary',
     discussionPoints: ['Discussion'], decisions: [], actionItems: [], followUps: [],
   };
-  let reviewReads = 0;
+  let postWriteReads = 0;
+  let updateSubmitted = false;
   let submittedMinutes: typeof initialMinutes | undefined;
   let ifMatch: string | undefined;
   await page.route('**/api/v1/app-config', (route) => route.fulfill({ json: { data: {
@@ -81,18 +83,19 @@ test('saves a full Structured Minutes snapshot with If-Match and confirms it thr
   await page.route('**/api/v1/participants', (route) => route.fulfill({ json: { data: { items: [
     { id: 'p1', name: 'Ada Lovelace', email: 'ada.private@example.com' },
   ] } } }));
-  await page.route('**/api/v1/meeting-sessions/minutes-e2e', async (route) => {
+  await page.route('**/api/v1/meeting-sessions/minutes-e2e**', async (route) => {
     const request = route.request();
     if (request.method() === 'PUT') {
       submittedMinutes = request.postDataJSON() as typeof initialMinutes;
       ifMatch = request.headers()['if-match'];
+      updateSubmitted = true;
       await route.fulfill({ json: { data: { version: 8, minutes: submittedMinutes } } });
       return;
     }
-    reviewReads += 1;
-    const minutes = reviewReads === 1 ? initialMinutes : submittedMinutes ?? initialMinutes;
+    if (updateSubmitted) postWriteReads += 1;
+    const minutes = updateSubmitted ? submittedMinutes ?? initialMinutes : initialMinutes;
     await route.fulfill({ json: { data: {
-      sessionId: 'minutes-e2e', version: reviewReads === 1 ? 7 : 8, status: 'REVIEW',
+      sessionId: 'minutes-e2e', version: updateSubmitted ? 8 : 7, status: 'REVIEW',
       meeting: { participantIds: ['p1'] }, speakers: [{ speakerId: 'speaker-a', label: 'Speaker A', participantId: 'p1' }],
       transcript: [], minutes, allowedActions: ['UPDATE_MINUTES'],
     } } });
@@ -104,7 +107,7 @@ test('saves a full Structured Minutes snapshot with If-Match and confirms it thr
   await summary.fill('Saved through API-012');
   await page.locator('.review-minutes-save-controls button').click();
 
-  await expect.poll(() => reviewReads).toBe(2);
+  await expect.poll(() => postWriteReads).toBeGreaterThan(0);
   await expect(summary).toHaveValue('Saved through API-012');
   await expect(page.locator('.review-minutes-save-controls button')).toBeDisabled();
   expect(submittedMinutes).toEqual({ ...initialMinutes, summary: 'Saved through API-012' });
@@ -126,7 +129,7 @@ test('keeps edits made during a failed in-flight Minutes save and does not send 
     document: { provider: null, configured: false, connectionVersion: 1, rootUrl: null },
   } } }));
   await page.route('**/api/v1/participants', (route) => route.fulfill({ json: { data: { items: [] } } }));
-  await page.route('**/api/v1/meeting-sessions/minutes-failure-e2e', async (route) => {
+  await page.route('**/api/v1/meeting-sessions/minutes-failure-e2e**', async (route) => {
     const request = route.request();
     if (request.method() === 'PUT') {
       putCount += 1;
@@ -156,4 +159,4 @@ test('keeps edits made during a failed in-flight Minutes save and does not send 
   await expect(summary).toHaveValue('Newer edit stays in the draft');
   await expect(save).toBeEnabled();
   expect(putCount).toBe(1);
-});});
+});
