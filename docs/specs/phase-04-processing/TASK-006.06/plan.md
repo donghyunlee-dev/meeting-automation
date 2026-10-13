@@ -21,11 +21,15 @@
 
 1. API-010 existing DTO/common envelope, Session Store concurrency/version, 006.04/006.05 mutation contracts를 확인한다. 결과: GET이 기대하는 저장 atomicity가 정해진다.
 2. processing/review/failed/missing/read-only/concurrent update tests를 먼저 작성한다. 결과: 모든 status-dependent response shape가 고정된다.
-3. Session Store snapshot query와 404 mapping을 구현한다. 결과: API가 정확한 version을 가진 한 시점의 state를 읽는다.
-4. status별 response mapper를 구현한다. 결과: Review 이전 partial data는 숨기고 완료 후에만 full payload가 보인다.
-5. `allowedActions`를 API-011~014 현재 허용 동작에서 매핑하고 version consistency/privacy를 확인한다. 결과: UI는 stale action을 추측하지 않는다.
-6. common error/logging regression 및 Backend 전체 test/build를 검증한다. 결과: GET read-only와 secret boundary가 남는다.
+3. Session Store snapshot query와 404 mapping을 구현한다. 결과: API가 정확한 version을 가진 한 시점의 state를 읽는다. 처리 시작 전에도 `processing` object를 유지하고 stage를 null로 표현한다.
+4. status별 response mapper를 구현한다. 결과: Review 이전 partial data는 숨기고 완료 후에만 full payload가 보인다. Speaker mapping 전 `participantId`는 null이다.
+5. `allowedActions`를 API-011~014 현재 허용 동작에서 매핑하고 version consistency/privacy를 확인한다. 실패 action은 TASK-017.02/#61에서 정한 후속 계약에 맡긴다.
+6. API-010 응답/동시 snapshot regression을 검증한다. Developer/QA는 다음 focused selectors만 실행하고, Backend 전체 suite 및 `clean build`를 반복하지 않는다. GitHub Actions CI 설정은 그대로 둔다.
 
 ## 검증 명령
 
-Backend root에서 `./gradlew test`, `./gradlew clean build`를 실행한다. Mock Session Store version 변화와 API response snapshots로 consistency를 확인한다.
+Windows Backend root에서 다음 selectors를 실행한다. Session response, API-009 status boundary, worker 중 status read의 직접 영향 범위를 검증한다.
+
+```powershell
+& .\gradlew.bat test --tests com.meetingautomation.MeetingSessionStatusApiTests --tests com.meetingautomation.ProcessingStartApiTests --tests com.meetingautomation.api.processing.ProcessingJobRunnerTests
+```
