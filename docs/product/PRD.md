@@ -2336,11 +2336,11 @@ Meeting UI
 
 구현 상태는 이 표와 GitHub Issue/PR, `docs/evidence/`의 head별 검증 기록으로 관리한다. 기존 세부 TASK 표의 `설계 상태 / 문서`와 설계 커서는 설계 상태만 나타내며 개발 상태를 대신하지 않는다.
 
-**다음 개발 대상 커서: `TASK-006.06` (TASK-006.05 Issue #31 / PR #124 병합 및 검증 기록 완료)**
+**다음 개발 대상 커서: `TASK-006.07` (TASK-006.06 Issue #32 / PR #125 병합 및 검증 기록 완료)**
 
-**실행 우선순위:** TASK-022.01 → TASK-022.02 → TASK-022.03 → TASK-022.04 → TASK-022.05 → TASK-022.06 → TASK-004.04 재검증 완료 → 기존 커서 순서(TASK-004.05, TASK-005.01, TASK-005.02, TASK-005.03, TASK-005.04, TASK-005.05, TASK-005.06, TASK-005.07, TASK-005.08, TASK-006.01, TASK-006.02, TASK-006.03, TASK-006.04, TASK-006.05 완료; 다음 TASK-006.06). GitHub Issue 번호나 생성일 정렬을 실행 순서로 해석하지 않는다.
+**실행 우선순위:** TASK-022.01 → TASK-022.02 → TASK-022.03 → TASK-022.04 → TASK-022.05 → TASK-022.06 → TASK-004.04 재검증 완료 → 기존 커서 순서(TASK-004.05, TASK-005.01, TASK-005.02, TASK-005.03, TASK-005.04, TASK-005.05, TASK-005.06, TASK-005.07, TASK-005.08, TASK-006.01, TASK-006.02, TASK-006.03, TASK-006.04, TASK-006.05, TASK-006.06 완료; 다음 TASK-006.07). GitHub Issue 번호나 생성일 정렬을 실행 순서로 해석하지 않는다.
 
-**재개 선택 규칙:** 새 세션과 기존 세션 모두 최신 master의 개발 커서·실행 우선순위와 GitHub 선행 관계를 로컬 checkpoint보다 먼저 적용한다. `Resume existing work`는 기존 작업이 여전히 실행 가능한 경우에만 적용한다. TASK-004.04(PR #95), TASK-004.05(PR #111), TASK-005.01(PR #112), TASK-005.02(PR #113), TASK-005.03(PR #114), TASK-005.04(PR #115), TASK-005.05(PR #116), TASK-005.06(PR #117), TASK-005.07(PR #118), TASK-005.08(PR #119), TASK-006.01(PR #120), TASK-006.02(PR #121), TASK-006.03(PR #122), TASK-006.04(PR #123), TASK-006.05(PR #124)는 병합 및 검증 기록까지 완료했으며, 다음 실행 가능한 TASK-006.06부터 이어간다. 과거의 `Provider 수동 설정 대기`는 재개 조건으로 사용하지 않는다. TASK-022.01의 첫 개발·mock 검증을 시작하기 위해 사용자가 먼저 문서 서비스나 키를 준비할 필요는 없으며, 실제 연동 QA에서 필요한 환경만 별도로 확인한다.
+**재개 선택 규칙:** 새 세션과 기존 세션 모두 최신 master의 개발 커서·실행 우선순위와 GitHub 선행 관계를 로컬 checkpoint보다 먼저 적용한다. `Resume existing work`는 기존 작업이 여전히 실행 가능한 경우에만 적용한다. TASK-004.04(PR #95), TASK-004.05(PR #111), TASK-005.01(PR #112), TASK-005.02(PR #113), TASK-005.03(PR #114), TASK-005.04(PR #115), TASK-005.05(PR #116), TASK-005.06(PR #117), TASK-005.07(PR #118), TASK-005.08(PR #119), TASK-006.01(PR #120), TASK-006.02(PR #121), TASK-006.03(PR #122), TASK-006.04(PR #123), TASK-006.05(PR #124), TASK-006.06(PR #125)는 병합 및 검증 기록까지 완료했으며, 다음 실행 가능한 TASK-006.07부터 이어간다. 과거의 `Provider 수동 설정 대기`는 재개 조건으로 사용하지 않는다. TASK-022.01의 첫 개발·mock 검증을 시작하기 위해 사용자가 먼저 문서 서비스나 키를 준비할 필요는 없으며, 실제 연동 QA에서 필요한 환경만 별도로 확인한다.
 
 | TASK | 개발 상태 | 단계 | Issue / PR | 검증 증거 | 병합 commit | 완료 일시 (Asia/Seoul) |
 |---|---|---|---|---|---|---|
@@ -2381,7 +2381,7 @@ Meeting UI
 | `TASK-006.03` | DONE | DONE | [Issue #29](https://github.com/donghyunlee-dev/meeting-automation/issues/29) / [PR #122](https://github.com/donghyunlee-dev/meeting-automation/pull/122) | [검증 증거](../evidence/TASK-006.03/verification.md), focused 9 tests / review·QA PASS at `b3b6a53` | `dcccbb64c103c8fcaedf5db16974fb22e156ada1` | 2026-10-13 23:27 KST |
 | `TASK-006.04` | DONE | DONE | [Issue #30](https://github.com/donghyunlee-dev/meeting-automation/issues/30) / [PR #123](https://github.com/donghyunlee-dev/meeting-automation/pull/123) | [검증 증거](../evidence/TASK-006.04/verification.md), focused 26 tests / review PASS / QA PASS with live-processing configuration limitation at `aade8f5` | `bb6cecff488836548c77206f1630160746e5d163` | 2026-10-14 00:33 KST |
 | `TASK-006.05` | DONE | DONE | [Issue #31](https://github.com/donghyunlee-dev/meeting-automation/issues/31) / [PR #124](https://github.com/donghyunlee-dev/meeting-automation/pull/124) | [검증 증거](../evidence/TASK-006.05/verification.md), focused 40 tests / review PASS / QA PASS with live-provider configuration limitation at `77a8644` | `d61cc2e381bca30b1b35168d34971309d1d92c74` | 2026-10-14 01:42 KST |
-| `TASK-006.06` | TODO | DESIGN | [Issue #32](https://github.com/donghyunlee-dev/meeting-automation/issues/32) / — | — | — | — |
+| `TASK-006.06` | DONE | DONE | [Issue #32](https://github.com/donghyunlee-dev/meeting-automation/issues/32) / [PR #125](https://github.com/donghyunlee-dev/meeting-automation/pull/125) | [검증 증거](../evidence/TASK-006.06/verification.md), focused 26 tests / review PASS / QA PASS with CREATED runtime seeding limitation at `80020d3` | `fe1d84d0730f020a3c9aa88612cd21c565c90460` | 2026-10-14 02:18 KST |
 | `TASK-006.07` | TODO | DESIGN | [Issue #33](https://github.com/donghyunlee-dev/meeting-automation/issues/33) / — | — | — | — |
 | `TASK-007.01` | TODO | DESIGN | [Issue #34](https://github.com/donghyunlee-dev/meeting-automation/issues/34) / — | — | — | — |
 | `TASK-007.02` | TODO | DESIGN | [Issue #35](https://github.com/donghyunlee-dev/meeting-automation/issues/35) / — | — | — | — |
