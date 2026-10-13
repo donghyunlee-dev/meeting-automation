@@ -31,7 +31,7 @@ Processing API/Backend pipeline, Review 화면 구현, 처리 재시작 API 또�
 
 ## polling 정책
 
-첫 API-010 조회는 API-009 `202` 응답 뒤 즉시 수행한다. 아직 처리 중이면 다음 조회를 1초 후 시작하고, 오류가 연속될 경우 2초, 4초, 8초로 늘려 최대 10초로 제한한다. 유효한 응답을 받으면 오류 backoff를 초기화한다. stage/progress 변경 시 화면을 갱신하되 polling 주기는 1초보다 짧아지지 않는다. 동시에 하나의 조회만 실행한다. `PROCESSING_FAILED`에서는 잦은 polling을 멈춘다. 현재 응답의 `audioExpiresAt`은 null이고 action이 없으므로 이 Task는 실패 상태용 만료 timer나 recovery action을 제공하지 않는다. `REVIEW`, `COMPLETED_WITH_WARNINGS`, `SESSION_NOT_FOUND`, route 이탈/컴포넌트 unmount에서 모든 timer와 in-flight 요청을 취소한다. 탭 복귀 시 상태를 즉시 재조회한다. Audio 만료와 사용자 recovery lifecycle은 TASK-017.03에서 연결한다.
+첫 API-010 조회는 API-009 `202` 응답 뒤 즉시 수행한다. 아직 처리 중이면 다음 조회를 1초 후 시작하고, 조회 오류가 연속되면 1, 2, 4, 8초로 늘린 뒤 최대 10초 간격을 유지한다. 유효한 응답을 받으면 오류 backoff를 초기화한다. stage/progress 변경 시 화면을 갱신하되 polling 주기는 1초보다 짧아지지 않는다. 동시에 하나의 조회만 실행한다. `PROCESSING_FAILED`에서는 잦은 polling을 멈춘다. 현재 응답의 `audioExpiresAt`은 null이고 action이 없으므로 이 Task는 실패 상태용 만료 timer나 recovery action을 제공하지 않는다. `REVIEW`, `COMPLETED_WITH_WARNINGS`, `SESSION_NOT_FOUND`, route 이탈/컴포넌트 unmount에서 모든 timer와 in-flight 요청을 취소한다. 탭 복귀 시 상태를 즉시 재조회한다. Audio 만료와 사용자 recovery lifecycle은 TASK-017.03에서 연결한다.
 
 ## 수용 기준
 
