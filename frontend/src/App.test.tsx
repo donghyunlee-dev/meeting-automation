@@ -1007,6 +1007,8 @@ describe('Recording route', () => {
       recorder.onerror?.({ error: { name: 'UnknownError' } });
 
       await waitFor(() => expect(screen.getByLabelText('처리 시작 상태').textContent).toContain('처리를 시작하지 못했습니다.'), { timeout: 1_000 });
+      expect(screen.queryByRole('button', { name: '녹음 시작' })).toBeNull();
+      expect(screen.getByRole('link', { name: '새 회의 시작' }).getAttribute('href')).toBe('/meetings/new');
       expect(fetchMock.mock.calls.filter(([url]) => new URL(String(url)).pathname.endsWith('/process'))).toHaveLength(0);
       const recoverable = await repository.getRecoverable(session.sessionId);
       expect(recoverable.chunks.map(({ chunkId, uploadState, blob }) => [chunkId, uploadState, blob.size])).toEqual([

@@ -526,6 +526,7 @@ function ActiveMeetingRecordingRoute({ session, setState, mediaAdapter }: {
     elapsedMs={snapshot.elapsedMs}
     errorMessage={storageError || snapshot.errorMessage}
     completed={snapshot.completed}
+    endFlowFailed={endSnapshot.status === 'failed'}
     uploadSnapshot={uploadSnapshot}
     endSnapshot={endSnapshot}
     onRetryUpload={() => {
