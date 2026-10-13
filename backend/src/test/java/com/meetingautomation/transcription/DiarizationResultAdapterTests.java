@@ -145,7 +145,8 @@ class DiarizationResultAdapterTests {
         assertThat(Arrays.stream(TranscriptResult.class.getRecordComponents())
                 .map(component -> component.getName())).containsExactly("speakers", "segments");
         assertThat(Arrays.stream(first.speakers().getFirst().getClass().getRecordComponents())
-                .map(component -> component.getName())).containsExactly("speakerId", "label");
+                .map(component -> component.getName())).containsExactly("speakerId", "label", "participantId");
+        assertThat(first.speakers().getFirst().participantId()).isNull();
         assertThat(Arrays.stream(first.segments().getFirst().getClass().getRecordComponents())
                 .map(component -> component.getName()))
                 .containsExactly("segmentId", "speakerId", "startMs", "endMs", "text");

@@ -69,7 +69,7 @@ public record MeetingSessionStatusResponse(Data data) {
         boolean reviewReady = "REVIEW".equals(session.status());
         List<SpeakerView> speakers = reviewReady
                 ? session.speakers().stream()
-                        .map(speaker -> new SpeakerView(speaker.speakerId(), speaker.label(), null))
+                        .map(speaker -> new SpeakerView(speaker.speakerId(), speaker.label(), speaker.participantId()))
                         .toList()
                 : List.of();
         List<TranscriptView> transcript = reviewReady

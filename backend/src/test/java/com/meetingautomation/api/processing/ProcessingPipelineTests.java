@@ -92,6 +92,7 @@ class ProcessingPipelineTests {
         assertThat(saved.processingStage()).isEqualTo("DRAFT_READY");
         assertThat(saved.progressPercent()).isEqualTo(100);
         assertThat(saved.speakers()).containsExactlyElementsOf(normalized.speakers());
+        assertThat(saved.speakers()).allSatisfy(speaker -> assertThat(speaker.participantId()).isNull());
         assertThat(saved.transcript()).containsExactlyElementsOf(normalized.segments());
         assertThat(saved.minutes()).isEqualTo(new StructuredMinutes(
                 "default.md", "1.0.0", "Grounded summary", List.of(), List.of(), List.of(), List.of()));

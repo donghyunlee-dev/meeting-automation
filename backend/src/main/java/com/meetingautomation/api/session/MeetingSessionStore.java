@@ -88,6 +88,31 @@ public final class MeetingSessionStore {
         return updated;
     }
 
+    /** Replaces the complete speaker mapping set with optimistic concurrency control. */
+    public synchronized MeetingSession replaceSpeakerMappings(
+            String sessionId, int expectedVersion, java.util.List<Speaker> replacementSpeakers) {
+        MeetingSession current = sessions.get(sessionId);
+        if (current == null) throw new IllegalStateException("Session is no longer available.");
+        if (!"REVIEW".equals(current.status())) throw new SessionStateConflictException();
+        if (current.version() != expectedVersion) throw new SessionVersionConflictException();
+        if (replacementSpeakers == null || replacementSpeakers.size() != current.speakers().size()) {
+            throw new IllegalArgumentException("Speaker mapping set is invalid.");
+        }
+        for (int index = 0; index < current.speakers().size(); index++) {
+            Speaker before = current.speakers().get(index);
+            Speaker replacement = replacementSpeakers.get(index);
+            if (replacement == null || !before.speakerId().equals(replacement.speakerId())
+                    || !before.label().equals(replacement.label())) {
+                throw new IllegalArgumentException("Speaker mapping set is invalid.");
+            }
+        }
+        MeetingSession updated = copy(current, Math.addExact(current.version(), 1), current.status(),
+                current.processingStage(), current.progressPercent(), replacementSpeakers, current.transcript(),
+                current.processingFailure());
+        sessions.put(sessionId, updated);
+        return updated;
+    }
+
     public synchronized MeetingSession startProcessing(String sessionId) {
         MeetingSession current = sessions.get(sessionId);
         if (current == null) throw new IllegalStateException("Session is no longer available.");
