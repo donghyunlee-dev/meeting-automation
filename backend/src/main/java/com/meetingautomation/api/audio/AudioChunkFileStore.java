@@ -53,6 +53,10 @@ public final class AudioChunkFileStore {
         lockEntry.lock.lock();
         Path temporaryDirectory = null;
         try {
+            Files.createDirectories(root);
+            if (Files.isSymbolicLink(root) || !Files.isDirectory(root, LinkOption.NOFOLLOW_LINKS)) {
+                throw new IOException("Audio storage root is invalid.");
+            }
             Files.createDirectories(sessionDirectory);
             if (Files.isSymbolicLink(sessionDirectory)) throw new IOException("Storage directory is not usable.");
             temporaryDirectory = Files.createTempDirectory(sessionDirectory, ".upload-");
@@ -84,6 +88,13 @@ public final class AudioChunkFileStore {
     }
 
     public List<CompletedChunk> completedChunks(String sessionId) {
+        return assemblyChunks(sessionId).stream()
+                .map(chunk -> new CompletedChunk(chunk.sequence(), chunk.bytes()))
+                .toList();
+    }
+
+    /** Returns trusted stored metadata for the assembly boundary; content digests are checked while streaming. */
+    public List<StoredChunk> assemblyChunks(String sessionId) {
         Path sessionDirectory = root.resolve(sha256(sessionId.getBytes(StandardCharsets.UTF_8)));
         try {
             if (!existsOrThrowIfMissing(root)) return List.of();
@@ -96,18 +107,65 @@ public final class AudioChunkFileStore {
                 throw new IOException("Audio session storage is invalid.");
             }
 
-            TreeMap<Integer, CompletedChunk> chunksBySequence = new TreeMap<>();
+            TreeMap<Integer, StoredChunk> chunksBySequence = new TreeMap<>();
             try (var entries = Files.newDirectoryStream(sessionDirectory)) {
                 for (Path entry : entries) {
                     Integer sequence = canonicalSequence(entry.getFileName().toString());
                     if (sequence == null) continue;
-                    CompletedChunk chunk = readCompletedChunk(entry, sequence);
+                    StoredChunk chunk = readCompletedChunk(entry, sequence);
                     if (chunksBySequence.putIfAbsent(sequence, chunk) != null) {
                         throw new IOException("Duplicate audio sequence metadata.");
                     }
                 }
             }
             return List.copyOf(chunksBySequence.values());
+        } catch (IOException | SecurityException failure) {
+            throw new AudioStorageException();
+        }
+    }
+
+    /** Opens one validated chunk at a time. The caller must close the returned stream before deleting sources. */
+    public InputStream openChunk(String sessionId, int sequence) {
+        Path sessionDirectory = root.resolve(sha256(sessionId.getBytes(StandardCharsets.UTF_8)));
+        Path chunkDirectory = sessionDirectory.resolve(Integer.toString(sequence));
+        Path audioFile = chunkDirectory.resolve("chunk.bin");
+        try {
+            if (sequence < 0 || !existsOrThrowIfMissing(root)
+                    || Files.isSymbolicLink(root) || !Files.isDirectory(root, LinkOption.NOFOLLOW_LINKS)
+                    || !existsOrThrowIfMissing(sessionDirectory)
+                    || !Files.isDirectory(sessionDirectory, LinkOption.NOFOLLOW_LINKS)
+                    || Files.isSymbolicLink(sessionDirectory)
+                    || !Files.isDirectory(chunkDirectory, LinkOption.NOFOLLOW_LINKS)
+                    || Files.isSymbolicLink(chunkDirectory)) {
+                throw new IOException("Completed chunk directory is invalid.");
+            }
+            readCompletedChunk(chunkDirectory, sequence);
+            return Files.newInputStream(audioFile, LinkOption.NOFOLLOW_LINKS);
+        } catch (IOException | SecurityException failure) {
+            throw new AudioStorageException();
+        }
+    }
+
+    /** Removes only canonical sequence directories and preserves non-chunk data such as assembled output. */
+    public void deleteAssemblySources(String sessionId) {
+        Path sessionDirectory = root.resolve(sha256(sessionId.getBytes(StandardCharsets.UTF_8)));
+        try {
+            if (!existsOrThrowIfMissing(root)) return;
+            if (Files.isSymbolicLink(root) || !Files.isDirectory(root, LinkOption.NOFOLLOW_LINKS)) {
+                throw new IOException("Audio storage root is invalid.");
+            }
+            if (!existsOrThrowIfMissing(sessionDirectory)) return;
+            if (Files.isSymbolicLink(sessionDirectory)
+                    || !Files.isDirectory(sessionDirectory, LinkOption.NOFOLLOW_LINKS)) {
+                throw new IOException("Audio session storage is invalid.");
+            }
+            try (var entries = Files.newDirectoryStream(sessionDirectory)) {
+                for (Path entry : entries) {
+                    if (canonicalSequence(entry.getFileName().toString()) != null) {
+                        deleteTree(entry);
+                    }
+                }
+            }
         } catch (IOException | SecurityException failure) {
             throw new AudioStorageException();
         }
@@ -141,7 +199,7 @@ public final class AudioChunkFileStore {
         }
     }
 
-    private static CompletedChunk readCompletedChunk(Path directory, int sequence) throws IOException {
+    private static StoredChunk readCompletedChunk(Path directory, int sequence) throws IOException {
         if (Files.isSymbolicLink(directory) || !Files.isDirectory(directory, LinkOption.NOFOLLOW_LINKS)) {
             throw new IOException("Completed chunk directory is invalid.");
         }
@@ -158,7 +216,15 @@ public final class AudioChunkFileStore {
         if (actualLength < 1 || actualLength != metadata.length()) {
             throw new IOException("Completed chunk length does not match its metadata.");
         }
-        return new CompletedChunk(sequence, actualLength);
+        return new StoredChunk(sequence, metadata.mimeType(), actualLength, metadata.sha256());
+    }
+
+    private static void deleteTree(Path directory) throws IOException {
+        try (var paths = Files.walk(directory)) {
+            for (Path path : paths.sorted(java.util.Comparator.reverseOrder()).toList()) {
+                Files.deleteIfExists(path);
+            }
+        }
     }
 
     private static Integer canonicalSequence(String name) {
@@ -311,6 +377,9 @@ public final class AudioChunkFileStore {
     }
 
     public record CompletedChunk(int sequence, long bytes) {
+    }
+
+    public record StoredChunk(int sequence, String mimeType, long bytes, String sha256) {
     }
 
     private static final class LockEntry {

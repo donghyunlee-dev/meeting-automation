@@ -7,4 +7,4 @@
 5. `.part` 생성, 성공 검증 뒤 atomic publish, 같은 job output 재사용을 구현한다. 완료 증거: partial file은 consumer에 보이지 않는다.
 6. 실패 시 partial output 제거/Chunk 보존, 성공 시 source Chunk 제거를 구현한다. 완료 증거: 재시도 가능한 실패 입력과 STT가 사용할 output이 각각 보존된다.
 7. NFR-014 구조화 trace/session logging과 민감 경로/Audio 비노출을 확인한다. 완료 증거: 로그 assertion이 통과한다.
-8. 후속 STT/cleanup handoff contract 및 `./gradlew test`, `./gradlew clean build`를 검증한다. 완료 증거: API/integration test evidence가 리뷰에 있다.
+8. 후속 STT/cleanup handoff contract를 확인하고 문서화된 관련 Backend 테스트만 실행한다. Windows PowerShell에서 `backend/`를 기준으로 `.\gradlew.bat test --tests com.meetingautomation.api.processing.AudioAssemblyUseCaseTests --tests com.meetingautomation.api.audio.AudioAssemblyFileStoreTests --tests com.meetingautomation.api.audio.AudioChunkFileStoreTests`를 실행하며 전체 Backend suite와 `clean build`는 반복하지 않는다. 완료 증거: 정확한 선택 테스트와 결과가 리뷰에 있다.

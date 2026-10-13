@@ -43,3 +43,5 @@ STT/diarization/Minutes 호출, API-009의 요청 검증 및 job 생성, 임시 
 ## 결정 및 전제
 
 조립 성공은 처리 완료가 아니다. 따라서 성공 뒤 STT 입력인 assembled Audio를 지우지 않으며 `TASK-017.02`가 terminal pipeline success/failure/interruption cleanup을 담당한다. 조립 실패 때만 partial output을 지우고 입력 Chunk를 보존한다.
+
+현재 API-009는 Session당 처리 job 하나만 접수하고, 같은 Idempotency-Key 재요청은 그 job을 재사용한다. 따라서 이 task에서는 `sessionId`를 안정적인 job identity로 사용하고, filesystem path를 만들기 전 SHA-256으로 변환한다. API 요청/응답이나 `ProcessingJob` 계약에 별도 job ID를 추가하지 않는다.
