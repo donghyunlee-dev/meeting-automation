@@ -40,6 +40,28 @@ describe('ProcessingPoller', () => {
     poller.stop();
   });
 
+  it.each([
+    ['REVIEW', 'snapshot'] as const,
+    ['SESSION_NOT_FOUND', 'error'] as const,
+  ])('discards a queued visibility refresh after terminal %s', async (terminalResult, resultKind) => {
+    void terminalResult;
+    let resolve!: (value: ProcessingSnapshot) => void;
+    let reject!: (reason: unknown) => void;
+    const firstRequest = new Promise<ProcessingSnapshot>((done, fail) => { resolve = done; reject = fail; });
+    const terminalSnapshot = snapshot('REVIEW');
+    const getStatus = vi.fn().mockReturnValueOnce(firstRequest).mockResolvedValue(snapshot());
+    const poller = new ProcessingPoller({ sessionId: 's1', getStatus, onSnapshot: vi.fn(), onError: vi.fn() });
+    poller.start();
+    poller.refreshNow();
+    if (resultKind === 'snapshot') resolve(terminalSnapshot);
+    else reject(new ProcessingApiError('SESSION_NOT_FOUND', 404));
+    await Promise.resolve();
+    await Promise.resolve();
+    await new Promise((done) => setTimeout(done, 0));
+    expect(getStatus).toHaveBeenCalledTimes(1);
+    poller.stop();
+  });
+
   it('backs off network errors and stops after SESSION_NOT_FOUND', async () => {
     vi.useFakeTimers();
     const getStatus = vi.fn()

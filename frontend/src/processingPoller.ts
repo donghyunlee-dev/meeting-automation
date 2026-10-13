@@ -56,29 +56,34 @@ export class ProcessingPoller {
     if (this.stopped || this.controller) return;
     const controller = new AbortController();
     this.controller = controller;
+    let queuedRefreshAllowed = false;
     try {
       const snapshot = await this.options.getStatus(this.options.sessionId, controller.signal);
       if (this.stopped || controller.signal.aborted) return;
       this.failures = 0;
       this.options.onSnapshot(snapshot);
-      if (!terminal.has(snapshot.status)) this.scheduleNext(1_000);
+      queuedRefreshAllowed = snapshot.sessionId === this.options.sessionId && !terminal.has(snapshot.status);
+      if (queuedRefreshAllowed) this.scheduleNext(1_000);
     } catch (error) {
       if (this.stopped || controller.signal.aborted) return;
       const mapped = error instanceof ProcessingApiError ? error : new ProcessingApiError('NETWORK_ERROR');
       this.options.onError(mapped);
       const retryable = mapped.code === 'NETWORK_ERROR' || mapped.status === 408 || mapped.status === 429 || (mapped.status !== undefined && mapped.status >= 500);
       if (mapped.code === 'SESSION_NOT_FOUND' || !retryable) return;
+      queuedRefreshAllowed = true;
       const delays = [1_000, 2_000, 4_000, 8_000, 10_000];
       const delay = delays[Math.min(this.failures, delays.length - 1)];
       this.failures += 1;
       this.scheduleNext(delay);
     } finally {
       if (this.controller === controller) this.controller = null;
-      if (this.refreshPending && !this.stopped) {
+      if (this.refreshPending) {
         this.refreshPending = false;
-        if (this.timer !== null) this.cancel(this.timer);
-        this.timer = null;
-        void this.poll();
+        if (queuedRefreshAllowed && !this.stopped) {
+          if (this.timer !== null) this.cancel(this.timer);
+          this.timer = null;
+          void this.poll();
+        }
       }
     }
   }
