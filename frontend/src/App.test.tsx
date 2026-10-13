@@ -1028,3 +1028,126 @@ describe('Recording route', () => {
     expect(screen.queryByRole('button', { name: '회의 종료' })).toBeNull();
   });
 });
+
+describe('Processing route', () => {
+  it('loads API-010 immediately and shows only the processing stage while hiding bottom navigation', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => { void input; return response({ data: {
+      sessionId: 'processing-session', version: 2, status: 'PROCESSING',
+      processing: { stage: 'AUDIO_ASSEMBLY', progressPercent: 25 },
+      transcript: { text: 'partial transcript must stay hidden' },
+      minutes: { text: 'partial minutes must stay hidden' },
+      allowedActions: [],
+    } }); });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<MemoryRouter initialEntries={['/meetings/processing-session/processing']}><App /></MemoryRouter>);
+
+    expect(await screen.findByRole('heading', { name: '회의 처리' })).toBeTruthy();
+    expect(screen.getByText('오디오 준비')).toBeTruthy();
+    expect(screen.getByRole('progressbar', { name: '처리 진행률' })).toHaveProperty('value', 25);
+    expect(screen.queryByRole('navigation', { name: '주요 메뉴' })).toBeNull();
+    expect(screen.queryByText('partial transcript must stay hidden')).toBeNull();
+    expect(screen.queryByText('partial minutes must stay hidden')).toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(String(fetchMock.mock.calls[0][0])).toContain('/api/v1/meeting-sessions/processing-session');
+  });
+
+  it('moves to review only after a REVIEW snapshot for the route Session', async () => {
+    const fetchMock = vi.fn(async () => response({ data: {
+      sessionId: 'review-session', version: 4, status: 'REVIEW',
+      processing: { stage: 'DRAFT_READY', progressPercent: 100 }, allowedActions: [],
+    } }));
+    vi.stubGlobal('fetch', fetchMock);
+    render(<MemoryRouter initialEntries={['/meetings/review-session/processing']}><App /><CurrentPath /></MemoryRouter>);
+    await waitFor(() => expect(screen.getByTestId('current-path').textContent).toBe('/meetings/review-session/review'));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('blocks review navigation when API-010 returns a different Session ID', async () => {
+    const fetchMock = vi.fn(async () => response({ data: {
+      sessionId: 'different-session', version: 1, status: 'REVIEW',
+      processing: { stage: 'DRAFT_READY', progressPercent: 100 }, allowedActions: [],
+    } }));
+    vi.stubGlobal('fetch', fetchMock);
+    render(<MemoryRouter initialEntries={['/meetings/expected-session/processing']}><App /><CurrentPath /></MemoryRouter>);
+    expect((await screen.findByRole('alert')).textContent).toContain('회의 처리 정보를 확인할 수 없습니다');
+    expect(screen.getByTestId('current-path').textContent).toBe('/meetings/expected-session/processing');
+  });
+
+  it('shows stage-safe failure without recovery actions, expiry, or raw provider details', async () => {
+    const fetchMock = vi.fn(async () => response({ data: {
+      sessionId: 'failed-session', version: 2, status: 'PROCESSING_FAILED',
+      processing: { stage: 'TRANSCRIPTION', errorCode: 'PRIVATE_PROVIDER_SECRET' }, allowedActions: [], audioExpiresAt: null,
+    } }));
+    vi.stubGlobal('fetch', fetchMock);
+    render(<MemoryRouter initialEntries={['/meetings/failed-session/processing']}><App /></MemoryRouter>);
+    expect((await screen.findByRole('alert')).textContent).toContain('음성을 변환하는 중 문제가 발생했습니다.');
+    expect(screen.queryByText('PRIVATE_PROVIDER_SECRET')).toBeNull();
+    expect(screen.queryByRole('button')).toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows a safe new-meeting path for SESSION_NOT_FOUND without creating a session', async () => {
+    const fetchMock = vi.fn(async () => response({ error: { code: 'SESSION_NOT_FOUND' } }, 404));
+    vi.stubGlobal('fetch', fetchMock);
+    render(<MemoryRouter initialEntries={['/meetings/gone-session/processing']}><App /></MemoryRouter>);
+    expect((await screen.findByRole('alert')).textContent).toContain('회의를 찾을 수 없습니다');
+    expect(screen.getByRole('link', { name: '새 회의 시작' }).getAttribute('href')).toBe('/meetings/new');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('treats DIARIZATION at 100 percent as the current minutes-generation stage', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => response({ data: {
+      sessionId: 'minutes-session', version: 2, status: 'PROCESSING',
+      processing: { stage: 'DIARIZATION', progressPercent: 100 }, allowedActions: [],
+    } })));
+    render(<MemoryRouter initialEntries={['/meetings/minutes-session/processing']}><App /></MemoryRouter>);
+    const minutesStep = await screen.findByText('회의록 생성');
+    expect(minutesStep.closest('li')?.getAttribute('aria-current')).toBe('step');
+    expect(screen.getByText('회의록 생성 단계 처리 중입니다.')).toBeTruthy();
+  });
+
+  it('does not invent progress for an out-of-range percentage', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => response({ data: {
+      sessionId: 'invalid-progress', version: 2, status: 'PROCESSING',
+      processing: { stage: 'TRANSCRIPTION', progressPercent: 140 }, allowedActions: [],
+    } })));
+    render(<MemoryRouter initialEntries={['/meetings/invalid-progress/processing']}><App /></MemoryRouter>);
+    expect(await screen.findByText('음성 인식 단계 처리 중입니다.')).toBeTruthy();
+    expect(screen.queryByRole('progressbar', { name: '처리 진행률' })).toBeNull();
+  });
+
+  it('does not invent progress when the API-010 percentage is absent', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => response({ data: {
+      sessionId: 'missing-progress', version: 2, status: 'PROCESSING',
+      processing: { stage: 'TRANSCRIPTION' }, allowedActions: [],
+    } })));
+    render(<MemoryRouter initialEntries={['/meetings/missing-progress/processing']}><App /></MemoryRouter>);
+    expect(await screen.findByText('음성 인식 단계 처리 중입니다.')).toBeTruthy();
+    expect(screen.queryByRole('progressbar', { name: '처리 진행률' })).toBeNull();
+  });
+
+  it('treats REVIEW with a DRAFT_READY stage as completed and navigates to review', async () => {
+    const fetchMock = vi.fn(async () => response({ data: {
+      sessionId: 'draft-ready', version: 2, status: 'REVIEW',
+      processing: { stage: 'DRAFT_READY', progressPercent: 100 }, allowedActions: [],
+    } }));
+    vi.stubGlobal('fetch', fetchMock);
+    render(<MemoryRouter initialEntries={['/meetings/draft-ready/processing']}><App /><CurrentPath /></MemoryRouter>);
+    await waitFor(() => expect(screen.getByTestId('current-path').textContent).toBe('/meetings/draft-ready/review'));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('aborts the active API-010 request when leaving the route', async () => {
+    let requestSignal: AbortSignal | undefined;
+    const fetchMock = vi.fn((_input: RequestInfo | URL, init?: RequestInit) => {
+      requestSignal = init?.signal ?? undefined;
+      return new Promise<Response>(() => undefined);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const view = render(<MemoryRouter initialEntries={['/meetings/leaving-session/processing']}><App /></MemoryRouter>);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    view.unmount();
+    expect(requestSignal?.aborted).toBe(true);
+  });
+});
