@@ -24,7 +24,8 @@ import { startProcessing } from './processingStartApi';
 import { ProcessingAttemptStore, RecordingEndCoordinator, type RecordingEndSnapshot } from './recordingEndCoordinator';
 import { ProcessingPage } from './ProcessingPage';
 import { ReviewSpeakerPage } from './ReviewSpeakerPage';
-import type { ReviewSpeaker } from './reviewApi';
+import type { ReviewSpeaker, StructuredMinutes } from './reviewApi';
+import type { MinutesSaveState } from './ReviewMinutesEditor';
 
 type ViewState = 'loading' | 'ready' | 'error';
 type FormState = { mode: 'create' } | { mode: 'edit'; participant: Participant };
@@ -557,8 +558,10 @@ function BottomNavigation() {
   );
 }
 
-export function App({ onNewMeetingSubmit = () => undefined, mediaAdapter = browserMediaAdapter }: {
+export function App({ onNewMeetingSubmit = () => undefined, onMinutesSave, minutesSaveState, mediaAdapter = browserMediaAdapter }: {
   onNewMeetingSubmit?: (payload: NewMeetingPayload) => void;
+  onMinutesSave?: (sessionId: string, minutes: StructuredMinutes) => void;
+  minutesSaveState?: MinutesSaveState;
   mediaAdapter?: MediaRecorderAdapter;
 } = {}) {
   const [createdSession, setCreatedSession] = useState<RecordingSession | null>(restoreRecordingSession);
@@ -598,7 +601,7 @@ export function App({ onNewMeetingSubmit = () => undefined, mediaAdapter = brows
         <Route path="/meetings/new" element={<SetupGate><NewMeetingRoute onCreated={(session) => { setCreatedSession(session); saveRecordingSession(session); setRecordingState('Ready'); }} onSubmitted={onNewMeetingSubmit} /></SetupGate>} />
         <Route path="/meetings/:sessionId/recording" element={<MeetingRecordingRoute session={createdSession} setState={setRecordingState} mediaAdapter={mediaAdapter} />} />
         <Route path="/meetings/:sessionId/processing" element={<ProcessingPage />} />
-        <Route path="/meetings/:sessionId/review" element={<ReviewSpeakerPage drafts={speakerDrafts} onInitialize={initializeSpeakerDraft} onChange={updateSpeakerDraft} onCommit={commitSpeakerMappings} />} />
+        <Route path="/meetings/:sessionId/review" element={<ReviewSpeakerPage drafts={speakerDrafts} onInitialize={initializeSpeakerDraft} onChange={updateSpeakerDraft} onCommit={commitSpeakerMappings} onMinutesSave={onMinutesSave} minutesSaveState={minutesSaveState} />} />
         <Route path="/settings/participants" element={<SetupGate><ParticipantsPage /></SetupGate>} />
         <Route path="*" element={<FutureRouteNotice />} />
       </Routes>

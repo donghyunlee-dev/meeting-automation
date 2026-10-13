@@ -2,7 +2,9 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { Link, useLocation, useParams } from 'react-router';
 import { getDocumentAppConfig, listMeetingParticipants, type DocumentAppConfig } from './newMeetingApi';
 import type { Participant } from './participantsApi';
-import { getReviewSession, updateSpeakerMappings, type ReviewSession, type ReviewSpeaker, type SpeakerMappingInput } from './reviewApi';
+import { getReviewSession, updateSpeakerMappings, type ReviewSession, type ReviewSpeaker, type SpeakerMappingInput, type StructuredMinutes } from './reviewApi';
+import { ReviewMinutesEditor, type MinutesSaveState } from './ReviewMinutesEditor';
+import { ReviewTranscriptDrawer } from './ReviewTranscriptDrawer';
 
 type Resource<T> = { status: 'loading' | 'ready' | 'error'; data?: T };
 type ReviewResource = Resource<Awaited<ReturnType<typeof getReviewSession>>> & { requestSessionId: string };
@@ -11,15 +13,19 @@ type Props = {
   onInitialize: (sessionId: string, speakers: ReviewSpeaker[]) => void;
   onChange: (sessionId: string, speakerId: string, participantId: string | null) => void;
   onCommit: (sessionId: string, speakers: ReviewSpeaker[]) => void;
+  onMinutesSave?: (sessionId: string, minutes: StructuredMinutes) => void;
+  minutesSaveState?: MinutesSaveState;
 };
 
-export function ReviewSpeakerPage({ drafts, onInitialize, onChange, onCommit }: Props) {
+export function ReviewSpeakerPage({ drafts, onInitialize, onChange, onCommit, onMinutesSave, minutesSaveState }: Props) {
   const { sessionId = '' } = useParams();
   const location = useLocation();
   const [review, setReview] = useState<ReviewResource>(() => ({ status: 'loading', requestSessionId: sessionId }));
   const [participants, setParticipants] = useState<Resource<Participant[]>>({ status: 'loading' });
   const [config, setConfig] = useState<Resource<DocumentAppConfig>>({ status: 'loading' });
   const [retryingRoster, setRetryingRoster] = useState(false);
+  const [minutesDrafts, setMinutesDrafts] = useState<Record<string, StructuredMinutes | null>>({});
+  const [transcriptOpen, setTranscriptOpen] = useState(false);
   const [saveState, setSaveState] = useState<{ sessionId: string; saving: boolean; message: string; recoveryAttempt: SpeakerMappingInput[] | null }>({
     sessionId: '', saving: false, message: '', recoveryAttempt: null,
   });
@@ -116,6 +122,17 @@ export function ReviewSpeakerPage({ drafts, onInitialize, onChange, onCommit }: 
   const availableParticipants = (participants.data ?? []).filter(({ id }) => currentReview?.participantIds.includes(id));
   const providerReady = config.status === 'ready' && Boolean(config.data?.document?.provider) && config.data?.document?.configured === true;
   const needsSettings = config.status === 'ready' && (!config.data?.document?.provider || config.data.document.configured !== true);
+  const hasMinutesDraft = Object.prototype.hasOwnProperty.call(minutesDrafts, sessionId);
+  const currentMinutes = hasMinutesDraft ? minutesDrafts[sessionId] : currentReview?.minutes ?? null;
+  const minutesOwnerState = !providerReady
+    ? config.status === 'loading' ? 'loading' : config.status === 'error' ? 'error' : 'unavailable'
+    : participants.status;
+  const sessionMinutesSaveState = minutesSaveState?.sessionId === sessionId
+    ? minutesSaveState : { sessionId, status: 'idle' as const };
+
+  const updateMinutesDraft = useCallback((draft: StructuredMinutes) => {
+    setMinutesDrafts((current) => ({ ...current, [sessionId]: draft }));
+  }, [sessionId]);
 
   function speakerValue(speaker: ReviewSpeaker): string {
     if (Object.prototype.hasOwnProperty.call(currentDraft, speaker.speakerId)) return currentDraft[speaker.speakerId] ?? '';
@@ -214,7 +231,7 @@ export function ReviewSpeakerPage({ drafts, onInitialize, onChange, onCommit }: 
       <header className="review-speaker-heading">
         <p className="eyebrow">MEETING REVIEW</p>
         <h1>회의록 검토</h1>
-        <p>선택한 화자 매핑은 해당 화자의 모든 발화에 적용됩니다.</p>
+        <p>회의록과 화자 정보를 확인하고 수정할 수 있습니다.</p>
       </header>
 
       {reviewIsLoading && <p role="status">회의의 화자 정보를 불러오는 중입니다.</p>}
@@ -223,10 +240,24 @@ export function ReviewSpeakerPage({ drafts, onInitialize, onChange, onCommit }: 
         <button className="button button-secondary" type="button" onClick={() => void loadReview()}>회의 정보 다시 불러오기</button>
       </section>}
 
-      {currentReview && <section className="review-speaker-card" aria-labelledby="speaker-mapping-heading">
+      {currentReview && <>
+        <ReviewMinutesEditor
+          key={sessionId}
+          sessionId={sessionId}
+          minutes={currentMinutes}
+          participants={availableParticipants}
+          ownerState={minutesOwnerState}
+          saveState={sessionMinutesSaveState}
+          onSave={onMinutesSave}
+          onChange={updateMinutesDraft}
+        />
+        <section className="review-speaker-card" aria-labelledby="speaker-mapping-heading">
         <div className="review-speaker-card-heading">
           <div><h2 id="speaker-mapping-heading">화자 매핑</h2><p>매핑한 참석자 이름은 모든 해당 발화에 적용됩니다.</p></div>
-          {providerReady && <button className="button button-secondary" type="button" disabled={retryingRoster || participants.status === 'loading'} onClick={() => void loadRoster()}>참석자 목록 새로고침</button>}
+          <div className="review-speaker-actions">
+            <button className="button button-secondary" type="button" onClick={() => setTranscriptOpen(true)}>Transcript 원문 보기</button>
+            {providerReady && <button className="button button-secondary" type="button" disabled={retryingRoster || participants.status === 'loading'} onClick={() => void loadRoster()}>참석자 목록 새로고침</button>}
+          </div>
         </div>
         {participants.status === 'loading' && <p role="status">참석자 목록을 불러오는 중입니다.</p>}
         {participants.status === 'error' && <div className="review-speaker-message" role="alert">
@@ -279,7 +310,16 @@ export function ReviewSpeakerPage({ drafts, onInitialize, onChange, onCommit }: 
           {saveMessage && <p role="status">{saveMessage}</p>}
           {recoveryAttempt && <button className="button button-secondary" type="button" disabled={saving} onClick={() => void reconcile(recoveryAttempt, true)}>저장 상태 다시 확인</button>}
         </div>}
-      </section>}
+        </section>
+        <ReviewTranscriptDrawer
+          open={transcriptOpen}
+          segments={currentReview.transcript}
+          speakers={currentReview.speakers}
+          participants={participants.data ?? []}
+          selectedParticipantId={(speaker) => speakerValue(speaker) || null}
+          onClose={() => setTranscriptOpen(false)}
+        />
+      </>}
     </main>
   );
 }

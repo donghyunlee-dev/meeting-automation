@@ -1,11 +1,22 @@
 export type ReviewSpeaker = { speakerId: string; label: string; participantId: string | null; participantName?: string | null };
 export type TranscriptSegment = { segmentId: string; speakerId: string; startMs: number; endMs: number; text: string };
+export type StructuredMinutesActionItem = { ownerParticipantId: string | null; task: string; dueDate: string | null };
+export type StructuredMinutes = {
+  templateId: string;
+  templateVersion: string;
+  summary: string;
+  discussionPoints: string[];
+  decisions: string[];
+  actionItems: StructuredMinutesActionItem[];
+  followUps: string[];
+};
 export type ReviewSession = {
   sessionId: string;
   version: number;
   participantIds: string[];
   speakers: ReviewSpeaker[];
   transcript: TranscriptSegment[];
+  minutes: StructuredMinutes | null;
   allowedActions: string[];
 };
 export type SpeakerMappingInput = { speakerId: string; participantId: string | null };
@@ -27,6 +38,35 @@ function parseData(body: unknown): Record<string, unknown> {
   const data = typeof body === 'object' && body !== null && 'data' in body ? (body as { data: unknown }).data : undefined;
   if (typeof data !== 'object' || data === null) throw new Error('invalid');
   return data as Record<string, unknown>;
+}
+
+function parseMinutes(raw: unknown): StructuredMinutes | null {
+  if (raw === null || raw === undefined) return null;
+  if (typeof raw !== 'object' || Array.isArray(raw)) throw new Error('invalid');
+  const minutes = raw as Record<string, unknown>;
+  const textList = (value: unknown) => {
+    if (!Array.isArray(value) || !value.every((item) => typeof item === 'string')) throw new Error('invalid');
+    return value as string[];
+  };
+  if (typeof minutes.templateId !== 'string' || typeof minutes.templateVersion !== 'string'
+    || typeof minutes.summary !== 'string' || !Array.isArray(minutes.actionItems)) throw new Error('invalid');
+  const actionItems = minutes.actionItems.map((rawItem): StructuredMinutesActionItem => {
+    if (typeof rawItem !== 'object' || rawItem === null || Array.isArray(rawItem)) throw new Error('invalid');
+    const item = rawItem as Record<string, unknown>;
+    if ((item.ownerParticipantId !== null && typeof item.ownerParticipantId !== 'string')
+      || typeof item.task !== 'string'
+      || (item.dueDate !== null && typeof item.dueDate !== 'string')) throw new Error('invalid');
+    return { ownerParticipantId: item.ownerParticipantId, task: item.task, dueDate: item.dueDate };
+  });
+  return {
+    templateId: minutes.templateId,
+    templateVersion: minutes.templateVersion,
+    summary: minutes.summary,
+    discussionPoints: textList(minutes.discussionPoints),
+    decisions: textList(minutes.decisions),
+    actionItems,
+    followUps: textList(minutes.followUps),
+  };
 }
 
 export async function getReviewSession(sessionId: string): Promise<ReviewSession> {
@@ -61,6 +101,7 @@ export async function getReviewSession(sessionId: string): Promise<ReviewSession
     return {
       sessionId, version: typeof raw.version === 'number' ? raw.version : 0,
       participantIds: meeting.participantIds as string[], speakers, transcript,
+      minutes: parseMinutes(raw.minutes),
       allowedActions: Array.isArray(raw.allowedActions) ? raw.allowedActions.filter((action): action is string => typeof action === 'string') : [],
     };
   } catch {
