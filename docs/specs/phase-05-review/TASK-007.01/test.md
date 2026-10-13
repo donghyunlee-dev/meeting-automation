@@ -22,7 +22,13 @@
 | API-011-14 | Provider/Transcript/Email/Secret sentinel 입력 또는 오류 | response/error/log에 민감 sentinel 없음 | privacy/log redaction test |
 | API-011-15 | 서로 다른 speakerId가 같은 유효 participantId로 mapping | 두 mapping 모두 유효하게 저장되고 반환 | mapping cardinality test |
 
-Backend root에서 `./gradlew test`, `./gradlew clean build`를 실행하고 결과를 기록한다. 설계 단계에서는 테스트를 실행하지 않는다.
+Backend root에서 변경 코드와 직접 관련된 아래 test classes만 실행하고 결과를 기록한다. Developer/QA는 전체 Backend suite 또는 `clean build`를 반복하지 않는다. GitHub Actions CI 설정은 변경하지 않는다.
+
+```powershell
+& .\gradlew.bat test --tests com.meetingautomation.SpeakerMappingApiTests --tests com.meetingautomation.api.session.SpeakerMappingServiceTests --tests com.meetingautomation.api.session.MeetingSessionStoreTests --tests com.meetingautomation.MeetingSessionStatusApiTests --tests com.meetingautomation.transcription.DiarizationResultAdapterTests --tests com.meetingautomation.api.processing.ProcessingPipelineTests
+```
+
+테스트 대상은 API 요청·header/error 경계, roster 검증, Session mutation과 version CAS, API-010 read-after-write snapshot, 초기 diarization speaker 및 processing 저장 회귀다.
 
 ## 통합/수동 QA
 

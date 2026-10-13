@@ -36,9 +36,9 @@ Content-Type: application/json
 
 - `mappings`는 Review snapshot의 전체 감지 Speaker 집합을 대체하는 mapping set이다. 모든 감지 Speaker ID를 정확히 한 번 포함한다. 화자 수가 0인 Session은 빈 배열을 허용한다.
 - 각 `speakerId`는 현재 Session에서 감지된 ID여야 한다. 중복·미지정·알 수 없는 Speaker ID 또는 배열 누락/중복은 HTTP 400 `VALIDATION_FAILED`다.
-- `participantId`는 명시적으로 `null`이거나, Session 생성자가 선택한 `meeting.participantIds` 중 하나여야 한다. Session 선택 roster 바깥 ID 또는 provider roster에서 찾을 수 없는 ID는 HTTP 404 `PARTICIPANT_NOT_FOUND`다. Participant 이름은 TASK-003.01의 `DocumentProvider.listParticipants()`가 반환한 표준 roster에서 확인한다. provider 목록 오류/구조 오류는 기존 `PARTICIPANT_LIST_FAILED` 또는 `DOCUMENT_STRUCTURE_NOT_FOUND` 계약으로 변환한다. 이 검증은 roster 참조 무결성만 확인한다.
+- `participantId`는 명시적으로 `null`이거나, Session 생성자가 선택한 `meeting.participantIds` 중 하나여야 한다. Session 선택 roster 바깥 ID 또는 provider roster에서 찾을 수 없는 ID는 HTTP 404 `PARTICIPANT_NOT_FOUND`다. Participant 이름과 존재 여부는 `DocumentProviderResolver`가 선택한 active `ParticipantListingProvider`에서 Participants 구조를 찾고 roster를 조회해 검증한다. Provider lookup 오류/구조 오류는 기존 `PARTICIPANT_LIST_FAILED` 또는 `DOCUMENT_STRUCTURE_NOT_FOUND` 계약으로 변환한다. null/blank/중복 ID 등 잘못된 provider roster는 `PARTICIPANT_LIST_FAILED`로 안전하게 거부한다. 이 검증은 roster 참조 무결성만 확인한다.
 - Session이 없으면 404 `SESSION_NOT_FOUND`. 현재 상태가 `REVIEW`가 아니거나 `UPDATE_SPEAKER_MAPPING`을 허용하지 않으면 409 `SESSION_STATE_CONFLICT`.
-- `If-Match`가 없거나 형식이 잘못되면 400 `VALIDATION_FAILED`. 요청 version이 현재 Session version과 다르면 412 `SESSION_VERSION_CONFLICT`; 저장 변경은 없다.
+- `If-Match`가 없거나 형식이 잘못되면 400 `VALIDATION_FAILED`. Mutation commit 시 state/action을 먼저 확인하고, Session이 여전히 mapping을 허용할 때 요청 version이 현재 version과 다르면 412 `SESSION_VERSION_CONFLICT`를 반환한다. 어느 실패도 저장 변경을 만들지 않는다.
 - 전체 입력과 roster 참조 검증에 성공하고 version compare-and-set가 일치할 때만 mapping 전체를 한 번에 저장하고 version을 1 증가시킨다. provider/validation/version 저장 오류가 나면 이전 mapping set 및 version을 보존한다.
 - 응답은 `{data:{version,mappings:[{speakerId,participantId,participantName}]}}`를 사용한다. `participantId:null`인 항목의 `participantName`은 `null`이다. 목록은 Transcript의 Speaker 순서를 따른다.
 - API-010은 동일한 새 Session version에서 Speaker의 `participantId`와 Transcript segment의 `speakerId` 참조를 반환한다. Frontend는 Speaker ID join으로 매핑 이름을 모든 segment에 표시한다. Transcript 원문을 복제하거나 수정하지 않는다.
