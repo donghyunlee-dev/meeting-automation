@@ -231,6 +231,28 @@ describe('Review minutes and transcript', () => {
     expect((screen.getByRole('button', { name: '회의록 저장' }) as HTMLButtonElement).disabled).toBe(false);
   });
 
+  it('uses a successful draft as the new baseline and marks later edits dirty', async () => {
+    const onMinutesSave = vi.fn();
+    const rendered = renderReview(mockApiFetch(), {
+      onMinutesSave,
+      minutesSaveState: { sessionId: 'review-minutes', status: 'idle' },
+    });
+
+    const summary = await screen.findByLabelText('회의 요약');
+    fireEvent.change(summary, { target: { value: '첫 번째 수정' } });
+    rendered.rerenderWithProps({ minutesSaveState: { sessionId: 'review-minutes', status: 'saved', message: '저장 완료' } });
+    const save = screen.getByRole('button', { name: '회의록 저장' }) as HTMLButtonElement;
+    expect(save.disabled).toBe(true);
+    const editor = within(screen.getByRole('region', { name: '회의록 편집' }));
+    expect(editor.getByText('저장 완료')).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText('회의 요약'), { target: { value: '저장 후 새 수정' } });
+    expect(save.disabled).toBe(false);
+    expect(editor.queryByText('저장 완료')).toBeNull();
+    fireEvent.click(save);
+    expect(onMinutesSave).toHaveBeenCalledTimes(1);
+  });
+
   it.each([
     ['provider가 선택되지 않음', { provider: null, configured: false }],
     ['provider가 설정되지 않음', { provider: 'NOTION', configured: false }],

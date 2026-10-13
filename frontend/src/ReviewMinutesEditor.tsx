@@ -44,6 +44,12 @@ export function ReviewMinutesEditor({ sessionId, minutes, participants, ownerSta
   const saving = saveState.sessionId === sessionId && saveState.status === 'saving';
   const saved = saveState.sessionId === sessionId && saveState.status === 'saved';
   const failed = saveState.sessionId === sessionId && saveState.status === 'error';
+  const [savedSnapshot, setSavedSnapshot] = useState<{ isSaved: boolean; minutes: StructuredMinutes | null }>({ isSaved: false, minutes: null });
+  if (saved && !savedSnapshot.isSaved) {
+    setSavedSnapshot({ isSaved: true, minutes });
+  } else if (!saved && savedSnapshot.isSaved) {
+    setSavedSnapshot({ ...savedSnapshot, isSaved: false });
+  }
 
   if (!minutes) {
     return <section className="review-speaker-card" aria-labelledby="minutes-heading">
@@ -53,7 +59,7 @@ export function ReviewMinutesEditor({ sessionId, minutes, participants, ownerSta
   }
 
   const valid = isValid(minutes);
-  const dirty = !sameMinutes(minutes, saved ? minutes : initialMinutes);
+  const dirty = !sameMinutes(minutes, savedSnapshot.minutes ?? initialMinutes);
   const canSave = Boolean(onSave && dirty && valid && !saving);
   const canChooseOwner = ownerState === 'ready';
   const handleSave = () => {
@@ -161,7 +167,7 @@ export function ReviewMinutesEditor({ sessionId, minutes, participants, ownerSta
       {!valid && <p role="status">비어 있는 항목을 확인해 주세요.</p>}
       {!dirty && <p role="status">변경된 내용이 없습니다.</p>}
       {dirty && valid && !onSave && <p role="status">저장 연결을 기다리는 동안 수정 내용은 이 화면에 보관됩니다.</p>}
-      {saved && <p role="status">{saveState.message || '저장 완료'}</p>}
+      {saved && !dirty && <p role="status">{saveState.message || '저장 완료'}</p>}
       {failed && <p role="alert">{saveState.message || '회의록을 저장하지 못했습니다. 수정 내용은 유지됩니다.'}</p>}
     </div>
   </section>;
