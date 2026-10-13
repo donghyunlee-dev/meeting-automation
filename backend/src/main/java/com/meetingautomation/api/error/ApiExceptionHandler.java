@@ -10,6 +10,8 @@ import com.meetingautomation.api.audio.AudioChunkConflictException;
 import com.meetingautomation.api.audio.AudioChunkInvalidException;
 import com.meetingautomation.api.audio.AudioSessionNotFoundException;
 import com.meetingautomation.api.audio.AudioStorageException;
+import com.meetingautomation.api.processing.AudioChunksIncompleteException;
+import com.meetingautomation.api.session.SessionStateConflictException;
 import com.meetingautomation.document.DocumentProviderException;
 import com.meetingautomation.api.idempotency.IdempotencyKeyConflictException;
 import com.meetingautomation.api.participant.ParticipantNotFoundException;
@@ -168,6 +170,22 @@ public class ApiExceptionHandler {
                 false,
                 request,
                 Map.of());
+    }
+
+    @ExceptionHandler(AudioChunksIncompleteException.class)
+    public ResponseEntity<ApiErrorResponse> handleIncompleteAudioChunks(
+            AudioChunksIncompleteException exception,
+            HttpServletRequest request) {
+        return errorResponse(HttpStatus.CONFLICT, "AUDIO_CHUNKS_INCOMPLETE",
+                "모든 오디오 청크를 순서대로 업로드한 뒤 처리해 주세요.", "CONFLICT", false, request, Map.of());
+    }
+
+    @ExceptionHandler(SessionStateConflictException.class)
+    public ResponseEntity<ApiErrorResponse> handleSessionStateConflict(
+            SessionStateConflictException exception,
+            HttpServletRequest request) {
+        return errorResponse(HttpStatus.CONFLICT, "SESSION_STATE_CONFLICT",
+                "현재 회의 세션 상태에서는 요청을 처리할 수 없습니다.", "CONFLICT", false, request, Map.of());
     }
 
     @ExceptionHandler(ParticipantNotFoundException.class)

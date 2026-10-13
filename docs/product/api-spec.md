@@ -189,7 +189,7 @@ Backend는 trim한 title, `default.md`/`project.md` Template, 1개 이상인 중
 
 `PUT /api/v1/meeting-sessions/{sessionId}/audio/chunks/{sequence}` → `200`
 
-Raw bytes body. `sequence`는 0 이상의 정수. Header에 `Content-Type`, `X-Audio-SHA256`, `X-Audio-Byte-Length`, `Idempotency-Key`를 보낸다. Backend는 검증 후 private Audio object storage에 저장하고, 저장이 durable하게 확인된 뒤에만 ACK `{sequence,received:true}`를 반환한다. 동일 bytes 재전송은 멱등 ACK한다. 같은 sequence에 다른 bytes, 잘못된 MIME/길이, 허용 크기 초과는 명시 오류다. 저장소 오류는 `AUDIO_STORAGE_FAILED`로 반환하고 성공 ACK를 하지 않는다.
+Raw bytes body. `sequence`는 0 이상의 정수. Header에 `Content-Type`, `X-Audio-SHA256`, `X-Audio-Byte-Length`, `Idempotency-Key`를 보낸다. `CREATED`/`UPLOADING` Session에서만 받는다. Backend는 검증 후 private Audio object storage에 저장하고, 저장이 durable하게 확인된 뒤에만 ACK `{sequence,received:true}`를 반환한다. 첫 Chunk의 저장 성공 뒤 Session을 `CREATED → UPLOADING`으로 전이하고 version을 증가시킨다. 이후 업로드는 상태와 version을 유지한다. 잘못된 요청 또는 저장 오류는 Session 상태를 바꾸지 않는다. 동일 bytes 재전송은 멱등 ACK한다. 같은 sequence에 다른 bytes, 잘못된 MIME/길이, 허용 크기 초과는 명시 오류다. 처리 시작 후 업로드는 409 `SESSION_STATE_CONFLICT`다. 저장소 오류는 `AUDIO_STORAGE_FAILED`로 반환하고 성공 ACK를 하지 않는다.
 
 ### API-008 Audio Upload Status
 
@@ -201,7 +201,7 @@ Raw bytes body. `sequence`는 0 이상의 정수. Header에 `Content-Type`, `X-A
 
 `POST /api/v1/meeting-sessions/{sessionId}/process` (`Idempotency-Key`) → `202`
 
-Request: `{expectedChunks:number,durationMs:number,mimeType:string}`. Backend는 chunk 연속성 및 duration 상한 검증 후 비동기 처리 상태를 만들고 `{sessionId,status:"PROCESSING",stage:"AUDIO_ASSEMBLY"}` 반환. 누락은 `AUDIO_CHUNKS_INCOMPLETE`; 같은 요청의 재실행은 동일 processing 작업을 반환한다.
+Request: `{expectedChunks:number,durationMs:number,mimeType:string}`. 새 작업은 `UPLOADING` Session에서만 시작한다. Backend는 Session별로 upload와 처리를 직렬화하고, chunk 연속성 및 duration 상한 검증 후 비동기 처리 상태를 만들고 `{sessionId,status:"PROCESSING",stage:"AUDIO_ASSEMBLY"}` 반환. 누락은 `AUDIO_CHUNKS_INCOMPLETE`; 같은 key/payload 재실행은 Session이 `PROCESSING` 상태여도 동일 processing 작업을 반환한다. `CREATED` 상태의 새 요청 또는 처리 시작 뒤 새 upload는 409 `SESSION_STATE_CONFLICT`다. Idempotency-Key payload 비교는 lifecycle state 검사보다 먼저 수행한다.
 
 ### API-010 Session Status / Review Data
 
