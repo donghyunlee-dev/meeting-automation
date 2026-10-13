@@ -7,12 +7,17 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
+import java.nio.file.NoSuchFileException;
+import java.nio.file.NotDirectoryException;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
+import java.util.List;
+import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.locks.ReentrantLock;
@@ -75,6 +80,94 @@ final class AudioChunkFileStore {
             } finally {
                 release(key, lockEntry);
             }
+        }
+    }
+
+    List<CompletedChunk> completedChunks(String sessionId) {
+        Path sessionDirectory = root.resolve(sha256(sessionId.getBytes(StandardCharsets.UTF_8)));
+        try {
+            if (!existsOrThrowIfMissing(root)) return List.of();
+            if (Files.isSymbolicLink(root) || !Files.isDirectory(root, LinkOption.NOFOLLOW_LINKS)) {
+                throw new IOException("Audio storage root is invalid.");
+            }
+            if (!existsOrThrowIfMissing(sessionDirectory)) return List.of();
+            if (Files.isSymbolicLink(sessionDirectory)
+                    || !Files.isDirectory(sessionDirectory, LinkOption.NOFOLLOW_LINKS)) {
+                throw new IOException("Audio session storage is invalid.");
+            }
+
+            TreeMap<Integer, CompletedChunk> chunksBySequence = new TreeMap<>();
+            try (var entries = Files.newDirectoryStream(sessionDirectory)) {
+                for (Path entry : entries) {
+                    Integer sequence = canonicalSequence(entry.getFileName().toString());
+                    if (sequence == null) continue;
+                    CompletedChunk chunk = readCompletedChunk(entry, sequence);
+                    if (chunksBySequence.putIfAbsent(sequence, chunk) != null) {
+                        throw new IOException("Duplicate audio sequence metadata.");
+                    }
+                }
+            }
+            return List.copyOf(chunksBySequence.values());
+        } catch (IOException | SecurityException failure) {
+            throw new AudioStorageException();
+        }
+    }
+
+    private static boolean existsOrThrowIfMissing(Path path) throws IOException {
+        try {
+            Files.readAttributes(path, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
+            return true;
+        } catch (NoSuchFileException missing) {
+            Path ancestor = path.getParent();
+            while (ancestor != null) {
+                BasicFileAttributes attributes;
+                try {
+                    attributes = Files.readAttributes(ancestor, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
+                } catch (NoSuchFileException missingAncestor) {
+                    ancestor = ancestor.getParent();
+                    continue;
+                }
+                if (attributes.isSymbolicLink()) {
+                    try {
+                        attributes = Files.readAttributes(ancestor, BasicFileAttributes.class);
+                    } catch (NoSuchFileException brokenLink) {
+                        throw new IOException("Audio storage path has a broken symbolic link.");
+                    }
+                }
+                if (!attributes.isDirectory()) throw new NotDirectoryException(ancestor.toString());
+                return false;
+            }
+            return false;
+        }
+    }
+
+    private static CompletedChunk readCompletedChunk(Path directory, int sequence) throws IOException {
+        if (Files.isSymbolicLink(directory) || !Files.isDirectory(directory, LinkOption.NOFOLLOW_LINKS)) {
+            throw new IOException("Completed chunk directory is invalid.");
+        }
+        Path audioFile = directory.resolve("chunk.bin");
+        Path metadataFile = directory.resolve("metadata");
+        if (Files.isSymbolicLink(audioFile) || Files.isSymbolicLink(metadataFile)
+                || !Files.isRegularFile(audioFile, LinkOption.NOFOLLOW_LINKS)
+                || !Files.isRegularFile(metadataFile, LinkOption.NOFOLLOW_LINKS)) {
+            throw new IOException("Completed chunk files are invalid.");
+        }
+
+        ChunkMetadata metadata = ChunkMetadata.parse(Files.readString(metadataFile, StandardCharsets.UTF_8));
+        long actualLength = Files.size(audioFile);
+        if (actualLength < 1 || actualLength != metadata.length()) {
+            throw new IOException("Completed chunk length does not match its metadata.");
+        }
+        return new CompletedChunk(sequence, actualLength);
+    }
+
+    private static Integer canonicalSequence(String name) {
+        if (!name.matches("0|[1-9][0-9]*")) return null;
+        try {
+            int sequence = Integer.parseInt(name);
+            return sequence >= 0 ? sequence : null;
+        } catch (NumberFormatException outsideRange) {
+            return null;
         }
     }
 
@@ -201,7 +294,9 @@ final class AudioChunkFileStore {
 
         static ChunkMetadata parse(String value) throws IOException {
             String[] lines = value.split("\\n", -1);
-            if (lines.length != 4 || !lines[3].isEmpty()) throw new IOException("Stored metadata is invalid.");
+            if (lines.length != 4 || !lines[3].isEmpty() || lines[0].isBlank() || lines[0].contains("\r")) {
+                throw new IOException("Stored metadata is invalid.");
+            }
             try {
                 long length = Long.parseLong(lines[1]);
                 if (length < 1 || !lines[2].matches("[0-9a-f]{64}")) throw new NumberFormatException();
@@ -213,6 +308,9 @@ final class AudioChunkFileStore {
     }
 
     private record ChunkKey(String sessionHash, int sequence) {
+    }
+
+    record CompletedChunk(int sequence, long bytes) {
     }
 
     private static final class LockEntry {

@@ -32,6 +32,25 @@ class AudioChunkFileStoreTests {
     }
 
     @Test
+    void storageRootBelowRegularFileFailsInsteadOfReturningEmptyStatus() throws Exception {
+        Path fileComponent = audioRoot.resolve("not-a-directory");
+        Files.writeString(fileComponent, "this path component is a regular file");
+        AudioChunkFileStore store = new AudioChunkFileStore(fileComponent.resolve("audio"));
+
+        assertThatThrownBy(() -> store.completedChunks("ms_status-storage-error"))
+                .isInstanceOf(AudioStorageException.class);
+    }
+
+    @Test
+    void missingRootOrSessionDirectoryReturnsEmptyStatus() throws Exception {
+        AudioChunkFileStore store = new AudioChunkFileStore(audioRoot);
+        assertThat(store.completedChunks("ms_missing-status")).isEmpty();
+
+        Files.delete(audioRoot);
+        assertThat(store.completedChunks("ms_missing-status")).isEmpty();
+    }
+
+    @Test
     void sessionIdIsHashedBeforeBuildingChunkPaths() throws Exception {
         AudioChunkFileStore store = new AudioChunkFileStore(audioRoot.toString());
         byte[] audio = new byte[] {3, 8, 13};
