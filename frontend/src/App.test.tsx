@@ -1516,6 +1516,92 @@ describe('Review speaker selection', () => {
     expect(calls.filter(({ method }) => method === 'PUT')).toHaveLength(1);
   });
 
+  it('disables speaker edits while a mapping save is in flight', async () => {
+    let resolvePut: ((value: Response) => void) | undefined;
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(String(input));
+      if (init?.method === 'PUT') return new Promise<Response>((resolve) => { resolvePut = resolve; });
+      if (url.pathname.endsWith('/meeting-sessions/locked-draft')) return Promise.resolve(response({ data: {
+        sessionId: 'locked-draft', version: 3, status: 'REVIEW', meeting: { participantIds: ['p1', 'p2'] },
+        speakers: [{ speakerId: 'speaker-a', label: 'Speaker A', participantId: 'p2' }], transcript: [], allowedActions: ['UPDATE_SPEAKER_MAPPING'],
+      } }));
+      if (url.pathname.endsWith('/participants')) return Promise.resolve(response({ data: { items: participants } }));
+      if (url.pathname.endsWith('/app-config')) return Promise.resolve(response({ data: { company: { id: 'c1', name: 'Example', timezone: 'Asia/Seoul' }, document: { provider: 'NOTION', configured: true, connectionVersion: 1, rootUrl: 'https://notion.example' } } }));
+      return Promise.reject(new Error(`Unexpected request: ${url.pathname}`));
+    });
+    installFetchMock(fetchMock);
+    render(<MemoryRouter initialEntries={['/meetings/locked-draft/review']}><App /></MemoryRouter>);
+    const select = await screen.findByRole('combobox', { name: 'Speaker A 참가자' }) as HTMLSelectElement;
+    fireEvent.change(select, { target: { value: 'p1' } });
+    fireEvent.click(screen.getByRole('button', { name: '매핑 저장' }));
+    await waitFor(() => expect(resolvePut).toBeDefined());
+    expect(select.disabled).toBe(true);
+    resolvePut?.(response({ data: { version: 4, mappings: [{ speakerId: 'speaker-a', participantId: 'p1', participantName: 'Ada Lovelace' }] } }));
+    expect(await screen.findByText('매핑이 저장되었습니다.')).toBeTruthy();
+    expect(select.value).toBe('p1');
+  });
+
+  it('ignores a pending Session A mapping response after navigating to Session B', async () => {
+    let resolveAPut: ((value: Response) => void) | undefined;
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = new URL(String(input));
+      if (url.pathname.endsWith('/speaker-mappings') && url.pathname.includes('/session-a/')) return new Promise<Response>((resolve) => { resolveAPut = resolve; });
+      const sessionId = url.pathname.endsWith('/session-a') ? 'session-a' : url.pathname.endsWith('/session-b') ? 'session-b' : null;
+      if (sessionId) return Promise.resolve(response({ data: {
+        sessionId, version: 5, status: 'REVIEW', meeting: { participantIds: ['p1', 'p2'] },
+        speakers: [{ speakerId: `speaker-${sessionId}`, label: sessionId === 'session-a' ? 'Speaker A' : 'Speaker B', participantId: 'p2' }],
+        transcript: [], allowedActions: ['UPDATE_SPEAKER_MAPPING'],
+      } }));
+      if (url.pathname.endsWith('/participants')) return Promise.resolve(response({ data: { items: participants } }));
+      if (url.pathname.endsWith('/app-config')) return Promise.resolve(response({ data: { company: { id: 'c1', name: 'Example', timezone: 'Asia/Seoul' }, document: { provider: 'NOTION', configured: true, connectionVersion: 1, rootUrl: 'https://notion.example' } } }));
+      return Promise.reject(new Error(`Unexpected request: ${url.pathname}`));
+    });
+    installFetchMock(fetchMock);
+    render(<MemoryRouter initialEntries={['/meetings/session-a/review']}><App /><NavigateToReviewSession sessionId="session-b" /></MemoryRouter>);
+    const aSelect = await screen.findByRole('combobox', { name: 'Speaker A 참가자' }) as HTMLSelectElement;
+    fireEvent.change(aSelect, { target: { value: 'p1' } });
+    fireEvent.click(screen.getByRole('button', { name: '매핑 저장' }));
+    await waitFor(() => expect(resolveAPut).toBeDefined());
+    fireEvent.click(screen.getByRole('button', { name: 'Open another Review session' }));
+    await waitFor(() => expect(fetchMock.mock.calls.some(([input]) => String(input).endsWith('/meeting-sessions/session-b'))).toBe(true));
+    const bSelect = await screen.findByRole('combobox', { name: 'Speaker B 참가자' }) as HTMLSelectElement;
+    await act(async () => {
+      resolveAPut?.(response({ data: { version: 6, mappings: [{ speakerId: 'speaker-session-a', participantId: 'p1', participantName: 'Ada Lovelace' }] } }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(screen.getByRole('combobox', { name: 'Speaker B 참가자' })).toBe(bSelect);
+    expect(screen.queryByRole('combobox', { name: 'Speaker A 참가자' })).toBeNull();
+  });
+
+  it('reloads API-010 after success and uses its refreshed allowedActions without reverting the saved mapping', async () => {
+    let sessionReads = 0;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(String(input));
+      if (init?.method === 'PUT') return response({ data: { version: 4, mappings: [{ speakerId: 'speaker-a', participantId: 'p1', participantName: 'Ada Lovelace' }] } });
+      if (url.pathname.endsWith('/meeting-sessions/post-save-refresh')) {
+        sessionReads += 1;
+        const updated = sessionReads > 1;
+        return response({ data: {
+          sessionId: 'post-save-refresh', version: updated ? 4 : 3, status: 'REVIEW', meeting: { participantIds: ['p1', 'p2'] },
+          speakers: [{ speakerId: 'speaker-a', label: 'Speaker A', participantId: updated ? 'p1' : 'p2' }],
+          transcript: [], allowedActions: updated ? [] : ['UPDATE_SPEAKER_MAPPING'],
+        } });
+      }
+      if (url.pathname.endsWith('/participants')) return response({ data: { items: participants } });
+      if (url.pathname.endsWith('/app-config')) return response({ data: { company: { id: 'c1', name: 'Example', timezone: 'Asia/Seoul' }, document: { provider: 'NOTION', configured: true, connectionVersion: 1, rootUrl: 'https://notion.example' } } });
+      return Promise.reject(new Error(`Unexpected request: ${url.pathname}`));
+    });
+    installFetchMock(fetchMock);
+    render(<MemoryRouter initialEntries={['/meetings/post-save-refresh/review']}><App /></MemoryRouter>);
+    const select = await screen.findByRole('combobox', { name: 'Speaker A 참가자' }) as HTMLSelectElement;
+    fireEvent.change(select, { target: { value: 'p1' } });
+    fireEvent.click(screen.getByRole('button', { name: '매핑 저장' }));
+    expect(await screen.findByText('매핑이 저장되었습니다.')).toBeTruthy();
+    await waitFor(() => expect(sessionReads).toBe(2));
+    expect(screen.queryByRole('button', { name: '매핑 저장' })).toBeNull();
+    expect(select.value).toBe('p1');
+  });
+
   it.each([400, 502])('keeps the committed mapping and unsaved draft after known HTTP %i', async (status) => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = new URL(String(input));

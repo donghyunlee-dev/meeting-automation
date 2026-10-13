@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router';
 import { getDocumentAppConfig, listMeetingParticipants, type DocumentAppConfig } from './newMeetingApi';
 import type { Participant } from './participantsApi';
@@ -20,15 +20,38 @@ export function ReviewSpeakerPage({ drafts, onInitialize, onChange, onCommit }: 
   const [participants, setParticipants] = useState<Resource<Participant[]>>({ status: 'loading' });
   const [config, setConfig] = useState<Resource<DocumentAppConfig>>({ status: 'loading' });
   const [retryingRoster, setRetryingRoster] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [saveMessage, setSaveMessage] = useState('');
-  const [recoveryAttempt, setRecoveryAttempt] = useState<SpeakerMappingInput[] | null>(null);
+  const [saveState, setSaveState] = useState<{ sessionId: string; saving: boolean; message: string; recoveryAttempt: SpeakerMappingInput[] | null }>({
+    sessionId: '', saving: false, message: '', recoveryAttempt: null,
+  });
   const reviewRequestGeneration = useRef(0);
   const saveInFlight = useRef(false);
+  const activeSessionId = useRef(sessionId);
   const latestReview = useRef<{ sessionId: string; version: number } | null>(null);
   const currentDraft = drafts[sessionId] ?? {};
+  const sessionSaveState = saveState.sessionId === sessionId ? saveState : { sessionId, saving: false, message: '', recoveryAttempt: null };
+  const saving = sessionSaveState.saving;
+  const saveMessage = sessionSaveState.message;
+  const recoveryAttempt = sessionSaveState.recoveryAttempt;
+
+  function setSaving(value: boolean) {
+    setSaveState((current) => ({ ...(current.sessionId === sessionId ? current : sessionSaveState), sessionId, saving: value }));
+  }
+  function setSaveMessage(message: string) {
+    setSaveState((current) => ({ ...(current.sessionId === sessionId ? current : sessionSaveState), sessionId, message }));
+  }
+  function setRecoveryAttempt(attempt: SpeakerMappingInput[] | null) {
+    setSaveState((current) => ({ ...(current.sessionId === sessionId ? current : sessionSaveState), sessionId, recoveryAttempt: attempt }));
+  }
+
+  useLayoutEffect(() => {
+    activeSessionId.current = sessionId;
+    reviewRequestGeneration.current += 1;
+    saveInFlight.current = false;
+    latestReview.current = null;
+  }, [sessionId]);
 
   const applySnapshot = useCallback((data: ReviewSession) => {
+    if (activeSessionId.current !== data.sessionId) return false;
     const latest = latestReview.current;
     if (latest?.sessionId === data.sessionId && data.version < latest.version) return false;
     latestReview.current = { sessionId: data.sessionId, version: data.version };
@@ -65,6 +88,8 @@ export function ReviewSpeakerPage({ drafts, onInitialize, onChange, onCommit }: 
 
   useEffect(() => {
     const generation = ++reviewRequestGeneration.current;
+    saveInFlight.current = false;
+    latestReview.current = null;
     let active = true;
     void getReviewSession(sessionId).then((data) => {
       if (!active || generation !== reviewRequestGeneration.current) return;
@@ -103,14 +128,16 @@ export function ReviewSpeakerPage({ drafts, onInitialize, onChange, onCommit }: 
   const canSave = Boolean(currentReview && providerReady && currentReview.allowedActions.includes('UPDATE_SPEAKER_MAPPING')
     && draftIsDirty && !saving && participants.status !== 'loading');
 
-  async function reconcile(attempt: SpeakerMappingInput[], isUncertain: boolean) {
+  async function reconcile(attempt: SpeakerMappingInput[], isUncertain: boolean, generation = reviewRequestGeneration.current, expectedSessionId = sessionId) {
+    const isCurrent = () => generation === reviewRequestGeneration.current && activeSessionId.current === expectedSessionId;
     try {
-      const latest = await getReviewSession(sessionId);
+      const latest = await getReviewSession(expectedSessionId);
+      if (!isCurrent()) return;
       const exact = latest.speakers.length === attempt.length && latest.speakers.every((speaker, index) =>
         speaker.speakerId === attempt[index]?.speakerId && speaker.participantId === attempt[index]?.participantId);
       if (!applySnapshot(latest)) return;
       if (exact && isUncertain) {
-        onCommit(sessionId, latest.speakers);
+        onCommit(expectedSessionId, latest.speakers);
         setSaveMessage('매핑 저장이 확인되었습니다.');
         setRecoveryAttempt(null);
       } else {
@@ -120,19 +147,37 @@ export function ReviewSpeakerPage({ drafts, onInitialize, onChange, onCommit }: 
         setRecoveryAttempt(null);
       }
     } catch {
+      if (!isCurrent()) return;
       setSaveMessage('저장 결과를 확인하지 못했습니다. 변경 내용은 유지됩니다. 최신 상태를 다시 확인해 주세요.');
       setRecoveryAttempt(attempt);
     }
   }
 
+  async function refreshAfterCommit(expectedSessionId: string, committedVersion: number, generation: number) {
+    try {
+      const latest = await getReviewSession(expectedSessionId);
+      if (generation !== reviewRequestGeneration.current || activeSessionId.current !== expectedSessionId) return;
+      if (latest.version < committedVersion) return;
+      applySnapshot(latest);
+    } catch {
+      if (generation === reviewRequestGeneration.current && activeSessionId.current === expectedSessionId) {
+        setSaveMessage('매핑은 저장되었습니다. 최신 회의 권한을 확인하지 못했습니다. 화면을 다시 불러와 확인해 주세요.');
+      }
+    }
+  }
+
   async function saveMappings() {
     if (!currentReview || !canSave || saveInFlight.current) return;
+    const expectedSessionId = sessionId;
+    const generation = reviewRequestGeneration.current;
+    const isCurrent = () => generation === reviewRequestGeneration.current && activeSessionId.current === expectedSessionId;
     saveInFlight.current = true;
     setSaving(true);
     setSaveMessage('매핑을 저장하는 중입니다.');
     const attempt = submittedMappings;
     try {
-      const result = await updateSpeakerMappings(sessionId, currentReview.version, attempt);
+      const result = await updateSpeakerMappings(expectedSessionId, currentReview.version, attempt);
+      if (!isCurrent()) return;
       const byId = new Map(result.mappings.map((mapping) => [mapping.speakerId, mapping]));
       const speakers = currentReview.speakers.map((speaker) => {
         const mapping = byId.get(speaker.speakerId);
@@ -143,20 +188,24 @@ export function ReviewSpeakerPage({ drafts, onInitialize, onChange, onCommit }: 
         setSaveMessage('더 최신 회의 정보가 확인되어 저장 결과를 반영하지 않았습니다. 최신 상태를 확인해 주세요.');
         return;
       }
-      onCommit(sessionId, speakers);
+      onCommit(expectedSessionId, speakers);
       setSaveMessage('매핑이 저장되었습니다.');
       setRecoveryAttempt(null);
+      await refreshAfterCommit(expectedSessionId, result.version, generation);
     } catch (error) {
+      if (!isCurrent()) return;
       if (error instanceof Error && 'status' in error && error.status === 412) {
-        await reconcile(attempt, false);
+        await reconcile(attempt, false, generation, expectedSessionId);
       } else if (error instanceof Error && 'outcomeUnknown' in error && error.outcomeUnknown === true) {
-        await reconcile(attempt, true);
+        await reconcile(attempt, true, generation, expectedSessionId);
       } else {
         setSaveMessage('매핑을 저장하지 못했습니다. 기존 저장 내용과 변경 내용은 유지됩니다. 다시 시도해 주세요.');
       }
     } finally {
-      saveInFlight.current = false;
-      setSaving(false);
+      if (isCurrent()) {
+        saveInFlight.current = false;
+        setSaving(false);
+      }
     }
   }
 
@@ -199,7 +248,7 @@ export function ReviewSpeakerPage({ drafts, onInitialize, onChange, onCommit }: 
                 id={`speaker-${speaker.speakerId}`}
                 aria-label={`${speaker.label} 참가자`}
                 value={value}
-                disabled={participants.status === 'loading' || availableParticipants.length === 0}
+                disabled={saving || participants.status === 'loading' || availableParticipants.length === 0}
                 onChange={(event) => onChange(sessionId, speaker.speakerId, event.target.value || null)}
               >
                 <option value="">참가자 선택</option>
