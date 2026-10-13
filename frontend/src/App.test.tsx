@@ -1175,6 +1175,49 @@ describe('Processing route', () => {
 });
 
 describe('Review speaker selection', () => {
+  it('ignores a late Session B retry after Session C has loaded', async () => {
+    let sessionBCalls = 0;
+    let resolveSessionBRetry: ((result: Response) => void) | undefined;
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const path = new URL(String(input)).pathname;
+      if (path.endsWith('/meeting-sessions/session-b')) {
+        sessionBCalls += 1;
+        if (sessionBCalls === 1) return Promise.resolve(response({ error: { code: 'SESSION_UNAVAILABLE' } }, 503));
+        return new Promise<Response>((resolve) => { resolveSessionBRetry = resolve; });
+      }
+      if (path.endsWith('/meeting-sessions/session-c')) return Promise.resolve(response({ data: {
+        sessionId: 'session-c', version: 1, status: 'REVIEW', meeting: { participantIds: ['p3'] },
+        processing: { stage: 'DRAFT_READY', progressPercent: 100 },
+        speakers: [{ speakerId: 'speaker-c', label: 'Speaker C', participantId: 'p3' }],
+      } }));
+      if (path.endsWith('/participants')) return Promise.resolve(response({ data: { items: [
+        { id: 'p1', name: 'Ada Lovelace', email: 'ada.private@example.com' },
+        { id: 'p3', name: 'Grace Hopper', email: 'grace.private@example.com' },
+      ] } }));
+      if (path.endsWith('/app-config')) return Promise.resolve(response({ data: { company: { id: 'c1', name: 'Example', timezone: 'Asia/Seoul' }, document: { provider: 'NOTION', configured: true, connectionVersion: 1, rootUrl: 'https://notion.example' } } }));
+      return Promise.reject(new Error(`Unexpected request: ${path}`));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<MemoryRouter initialEntries={['/meetings/session-b/review']}><App /><NavigateToReviewSession sessionId="session-c" /></MemoryRouter>);
+
+    expect((await screen.findByRole('alert')).textContent).toContain('회의 화자 정보를 불러오지 못했습니다');
+    fireEvent.click(screen.getByRole('button', { name: '회의 정보 다시 불러오기' }));
+    await waitFor(() => expect(resolveSessionBRetry).toBeDefined());
+    fireEvent.click(screen.getByRole('button', { name: 'Open another Review session' }));
+    const sessionCSelect = await screen.findByRole('combobox', { name: 'Speaker C 참가자' });
+    expect((sessionCSelect as HTMLSelectElement).value).toBe('p3');
+
+    resolveSessionBRetry?.(response({ data: {
+      sessionId: 'session-b', version: 2, status: 'REVIEW', meeting: { participantIds: ['p1'] },
+      processing: { stage: 'DRAFT_READY', progressPercent: 100 },
+      speakers: [{ speakerId: 'speaker-b', label: 'Speaker B', participantId: 'p1' }],
+    } }));
+    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Speaker C 참가자' })).toBeTruthy());
+    expect((screen.getByRole('combobox', { name: 'Speaker C 참가자' }) as HTMLSelectElement).value).toBe('p3');
+    expect(screen.queryByRole('combobox', { name: 'Speaker B 참가자' })).toBeNull();
+    expect(screen.queryByText('회의의 화자 정보를 불러오는 중입니다.')).toBeNull();
+  });
+
   it('hides the prior Session speaker data while a new Session loads and after its request fails', async () => {
     let rejectSessionB: ((error: Error) => void) | undefined;
     const fetchMock = vi.fn((input: RequestInfo | URL) => {

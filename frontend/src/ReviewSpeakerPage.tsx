@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router';
 import { getDocumentAppConfig, listMeetingParticipants, type DocumentAppConfig } from './newMeetingApi';
 import type { Participant } from './participantsApi';
@@ -19,6 +19,7 @@ export function ReviewSpeakerPage({ drafts, onInitialize, onChange }: Props) {
   const [participants, setParticipants] = useState<Resource<Participant[]>>({ status: 'loading' });
   const [config, setConfig] = useState<Resource<DocumentAppConfig>>({ status: 'loading' });
   const [retryingRoster, setRetryingRoster] = useState(false);
+  const reviewRequestGeneration = useRef(0);
   const currentDraft = drafts[sessionId] ?? {};
 
   const loadRoster = useCallback(async () => {
@@ -30,12 +31,16 @@ export function ReviewSpeakerPage({ drafts, onInitialize, onChange }: Props) {
   }, []);
 
   const loadReview = useCallback(async () => {
+    const generation = ++reviewRequestGeneration.current;
     setReview((current) => ({ status: 'loading', data: current.data, requestSessionId: sessionId }));
     try {
       const data = await getReviewSession(sessionId);
+      if (generation !== reviewRequestGeneration.current) return;
       setReview({ status: 'ready', data, requestSessionId: sessionId });
       onInitialize(sessionId, data.speakers);
-    } catch { setReview((current) => ({ status: 'error', data: current.data, requestSessionId: sessionId })); }
+    } catch {
+      if (generation === reviewRequestGeneration.current) setReview((current) => ({ status: 'error', data: current.data, requestSessionId: sessionId }));
+    }
   }, [onInitialize, sessionId]);
 
   const loadConfig = useCallback(async () => {
@@ -45,13 +50,14 @@ export function ReviewSpeakerPage({ drafts, onInitialize, onChange }: Props) {
   }, []);
 
   useEffect(() => {
+    const generation = ++reviewRequestGeneration.current;
     let active = true;
     void getReviewSession(sessionId).then((data) => {
-      if (!active) return;
+      if (!active || generation !== reviewRequestGeneration.current) return;
       setReview({ status: 'ready', data, requestSessionId: sessionId });
       onInitialize(sessionId, data.speakers);
     }).catch(() => {
-      if (active) setReview((current) => ({ status: 'error', data: current.data, requestSessionId: sessionId }));
+      if (active && generation === reviewRequestGeneration.current) setReview((current) => ({ status: 'error', data: current.data, requestSessionId: sessionId }));
     });
     void listMeetingParticipants().then((data) => {
       if (active) setParticipants({ status: 'ready', data });
@@ -63,7 +69,7 @@ export function ReviewSpeakerPage({ drafts, onInitialize, onChange }: Props) {
     }).catch(() => {
       if (active) setConfig((current) => ({ status: 'error', data: current.data }));
     });
-    return () => { active = false; };
+    return () => { active = false; reviewRequestGeneration.current += 1; };
   }, [onInitialize, sessionId]);
 
   const currentReview = review.requestSessionId === sessionId && review.data?.sessionId === sessionId ? review.data : undefined;
