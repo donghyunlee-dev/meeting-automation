@@ -20,6 +20,8 @@ export type RecordingCallbacks = {
 type RecordingPageProps = RecordingSessionContext & RecordingCallbacks & {
   state: RecordingViewState;
   elapsedMs: number;
+  errorMessage?: string;
+  completed?: boolean;
 };
 
 const statusByState: Record<RecordingViewState, string> = {
@@ -28,7 +30,7 @@ const statusByState: Record<RecordingViewState, string> = {
   Paused: '일시정지됨',
 };
 
-export function RecordingPage({ sessionId, title, state, elapsedMs, onStart, onPause, onResume, onRequestEnd, onConfirmEnd, onCancelEnd }: RecordingPageProps) {
+export function RecordingPage({ sessionId, title, state, elapsedMs, errorMessage, completed = false, onStart, onPause, onResume, onRequestEnd, onConfirmEnd, onCancelEnd }: RecordingPageProps) {
   const [isConfirmOpen, setConfirmOpen] = useState(false);
   const endTrigger = useRef<HTMLButtonElement>(null);
   const cancelButton = useRef<HTMLButtonElement>(null);
@@ -92,11 +94,12 @@ export function RecordingPage({ sessionId, title, state, elapsedMs, onStart, onP
       <section className="recording-content" aria-label="녹음 상태">
         <p className="recording-status" role="status" aria-live="polite">
           {state === 'Recording' && <span className="recording-indicator" aria-hidden="true" />}
-          {statusByState[state]}
+          {completed ? '녹음이 종료되었습니다.' : statusByState[state]}
         </p>
-        <p className="recording-timer" aria-label="경과 시간">{formatElapsedTime(state === 'Ready' ? 0 : elapsedMs)}</p>
+        <p className="recording-timer" aria-label="경과 시간">{formatElapsedTime(state === 'Ready' && !completed ? 0 : elapsedMs)}</p>
+        {errorMessage && <p className="recording-error" role="alert">{errorMessage}</p>}
         <div className="recording-actions">
-          {state === 'Ready' && <button className="button button-primary recording-primary-action" type="button" onClick={onStart}>녹음 시작</button>}
+          {state === 'Ready' && !completed && <button className="button button-primary recording-primary-action" type="button" onClick={onStart}>녹음 시작</button>}
           {state === 'Recording' && <>
             <button className="button button-secondary" type="button" onClick={onPause}>일시정지</button>
             <button className="button button-danger recording-primary-action" type="button" ref={endTrigger} onClick={requestEnd}>회의 종료</button>

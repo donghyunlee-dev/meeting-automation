@@ -1,7 +1,9 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { StrictMode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router';
 import { App } from './App';
+import type { MediaRecorderAdapter, RecorderLike } from './recordingController';
 
 const participants = [
   { id: 'p1', name: 'Ada Lovelace', email: 'ada@example.com' },
@@ -616,6 +618,24 @@ describe('Participants settings', () => {
 
 describe('Recording route', () => {
   it('shows the created meeting title, session id, ready status, timer, and start action', async () => {
+    const track = { stop: vi.fn() };
+    const mediaAdapter: MediaRecorderAdapter = {
+      isMediaRecorderSupported: () => true,
+      isTypeSupported: () => true,
+      getUserMedia: vi.fn(async () => ({ getTracks: () => [track] })),
+      createRecorder: vi.fn(() => {
+        const fake: RecorderLike = {
+          mimeType: 'audio/webm', onstart: null, onpause: null, onresume: null, onstop: null, onerror: null, ondataavailable: null,
+          start: () => fake.onstart?.(), pause: () => fake.onpause?.(), resume: () => fake.onresume?.(), stop: () => fake.onstop?.(),
+        };
+        return fake;
+      }),
+      now: () => 0,
+      nowEpoch: () => 1_700_000_000_000,
+      setInterval: () => 1,
+      clearInterval: () => undefined,
+      createChunkId: () => 'chunk-test',
+    };
     const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       const path = new URL(String(input)).pathname;
       if (path.endsWith('/document-setup')) return Promise.resolve(readySetupResponse());
@@ -633,7 +653,7 @@ describe('Recording route', () => {
       return Promise.reject(new Error(`Unexpected request: ${path} ${init?.method ?? 'GET'}`));
     });
     vi.stubGlobal('fetch', fetchMock);
-    render(<MemoryRouter initialEntries={['/meetings/new']}><App /><NavigateToMismatchedRecordingSession /></MemoryRouter>);
+    render(<StrictMode><MemoryRouter initialEntries={['/meetings/new']}><App mediaAdapter={mediaAdapter} /><NavigateToMismatchedRecordingSession /></MemoryRouter></StrictMode>);
 
     await screen.findByText('Asia/Seoul');
     fireEvent.change(screen.getByLabelText('회의 제목'), { target: { value: 'Planning' } });
@@ -649,7 +669,8 @@ describe('Recording route', () => {
     expect(screen.getByRole('navigation', { name: '주요 메뉴' })).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: '녹음 시작' }));
-    expect(screen.getByRole('status').textContent).toBe('녹음 중');
+    expect(mediaAdapter.getUserMedia).toHaveBeenCalledTimes(1);
+    expect(await screen.findByText('녹음 중')).toBeTruthy();
     expect(screen.queryByRole('navigation', { name: '주요 메뉴' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: '회의 종료' }));
     fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: '계속 녹음' }));
@@ -660,6 +681,11 @@ describe('Recording route', () => {
     expect(screen.queryByRole('navigation', { name: '주요 메뉴' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: '녹음 재개' }));
     expect(screen.getByRole('status').textContent).toBe('녹음 중');
+    fireEvent.click(screen.getByRole('button', { name: '회의 종료' }));
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: '회의 종료' }));
+    expect(await screen.findByText('녹음이 종료되었습니다.')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '녹음 시작' })).toBeNull();
+    expect(track.stop).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole('button', { name: 'Open another session' }));
     expect(screen.getByRole('heading', { name: '녹음 세션을 찾을 수 없습니다' })).toBeTruthy();
     expect(screen.getByRole('link', { name: '새 회의 시작' }).getAttribute('href')).toBe('/meetings/new');
