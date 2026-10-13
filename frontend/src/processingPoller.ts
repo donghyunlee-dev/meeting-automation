@@ -15,6 +15,7 @@ export class ProcessingPoller {
   private timer: ReturnType<typeof setTimeout> | null = null;
   private controller: AbortController | null = null;
   private stopped = false;
+  private refreshPending = false;
   private failures = 0;
   private readonly schedule: NonNullable<ProcessingPollerOptions['schedule']>;
   private readonly cancel: NonNullable<ProcessingPollerOptions['cancel']>;
@@ -30,12 +31,17 @@ export class ProcessingPoller {
     this.stopped = true;
     if (this.timer !== null) this.cancel(this.timer);
     this.timer = null;
+    this.refreshPending = false;
     this.controller?.abort();
     this.controller = null;
   }
 
   refreshNow() {
-    if (this.stopped || this.controller) return;
+    if (this.stopped) return;
+    if (this.controller) {
+      this.refreshPending = true;
+      return;
+    }
     if (this.timer !== null) this.cancel(this.timer);
     this.timer = null;
     void this.poll();
@@ -68,6 +74,12 @@ export class ProcessingPoller {
       this.scheduleNext(delay);
     } finally {
       if (this.controller === controller) this.controller = null;
+      if (this.refreshPending && !this.stopped) {
+        this.refreshPending = false;
+        if (this.timer !== null) this.cancel(this.timer);
+        this.timer = null;
+        void this.poll();
+      }
     }
   }
 }

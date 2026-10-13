@@ -26,6 +26,20 @@ describe('ProcessingPoller', () => {
     poller.stop();
   });
 
+  it('runs a visibility-return refresh immediately after the current request settles', async () => {
+    let resolve!: (value: ProcessingSnapshot) => void;
+    const getStatus = vi.fn()
+      .mockImplementationOnce(() => new Promise<ProcessingSnapshot>((done) => { resolve = done; }))
+      .mockResolvedValue(snapshot());
+    const poller = new ProcessingPoller({ sessionId: 's1', getStatus, onSnapshot: vi.fn(), onError: vi.fn() });
+    poller.start();
+    poller.refreshNow();
+    expect(getStatus).toHaveBeenCalledTimes(1);
+    resolve(snapshot());
+    await vi.waitFor(() => expect(getStatus).toHaveBeenCalledTimes(2));
+    poller.stop();
+  });
+
   it('backs off network errors and stops after SESSION_NOT_FOUND', async () => {
     vi.useFakeTimers();
     const getStatus = vi.fn()
