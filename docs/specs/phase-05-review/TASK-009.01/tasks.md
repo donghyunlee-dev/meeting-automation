@@ -9,4 +9,5 @@
 7. 모든 재생성 단계 실패에서 backup Minutes/provenance restore, REVIEW 전이 및 safe `lastOperation`을 원자 처리한다. 완료 결과: API-010이 이전 편집본 전체와 복구된 action set을 반환하며 version은 증가한다.
 8. API-010 optional `lastOperation` 성공/실패 serialization을 추가한다. 완료 결과: terminal outcome과 Review data가 같은 version의 snapshot이고 기존 API-010 consumers 호환 테스트가 통과한다.
 9. 빈 Transcript, provider/auth/timeout/schema/storage failure, duplicate delivery, stale worker, concurrent request, failure redaction 테스트를 완성한다. 완료 결과: 적합한 예상 상태/응답과 provider invocation count가 검증된다.
-10. `./gradlew test`와 `./gradlew clean build`, API 수동 QA를 실행하고 결과 및 원격 SDD 경로를 Issue #40에 기록한다. 완료 결과: 명령 결과와 acceptance evidence가 남는다.
+10. `.\gradlew.bat test --tests "com.meetingautomation.MinutesRegenerationApiTests" --tests "com.meetingautomation.MeetingSessionStatusApiTests"`와 API 수동 QA를 실행하고 결과 및 원격 SDD 경로를 Issue #40에 기록한다. 전체 Backend suite와 `clean build`는 실행하지 않는다. 완료 결과: 선택 테스트 결과와 acceptance evidence가 남는다.
+

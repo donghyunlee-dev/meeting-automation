@@ -5,6 +5,7 @@ import com.meetingautomation.document.TranscriptSegment;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
+import com.fasterxml.jackson.annotation.JsonInclude;
 
 public record MeetingSessionStatusResponse(Data data) {
     private static final List<String> REVIEW_ACTIONS = List.of(
@@ -19,13 +20,17 @@ public record MeetingSessionStatusResponse(Data data) {
             List<SpeakerView> speakers,
             List<TranscriptView> transcript,
             StructuredMinutes minutes,
-            List<String> allowedActions) {
+            List<String> allowedActions,
+            @JsonInclude(JsonInclude.Include.NON_NULL) LastOperation lastOperation) {
         public Data {
             speakers = List.copyOf(speakers);
             transcript = List.copyOf(transcript);
             allowedActions = List.copyOf(allowedActions);
         }
     }
+
+    public record LastOperation(String type, String outcome, String requestedTemplateId,
+            @JsonInclude(JsonInclude.Include.NON_NULL) String errorCode) { }
 
     public record Meeting(List<String> participantIds) {
         public Meeting {
@@ -58,7 +63,7 @@ public record MeetingSessionStatusResponse(Data data) {
         }
     }
 
-    static MeetingSessionStatusResponse from(MeetingSession session) {
+    static MeetingSessionStatusResponse from(MeetingSession session, LastOperation lastOperation) {
         boolean failed = "PROCESSING_FAILED".equals(session.status());
         ProcessingFailure failure = failed ? session.processingFailure() : null;
         Processing processing = new Processing(session.processingStage(), session.progressPercent(),
@@ -84,6 +89,7 @@ public record MeetingSessionStatusResponse(Data data) {
         List<String> allowedActions = reviewReady ? REVIEW_ACTIONS : List.of();
         return new MeetingSessionStatusResponse(new Data(session.sessionId(), session.version(), session.status(),
                 new Meeting(session.meeting().participantIds()), processing, speakers, transcript, minutes,
-                allowedActions));
+                allowedActions, reviewReady ? lastOperation : null));
     }
 }
+

@@ -38,10 +38,30 @@ public final class MinutesGenerationUseCase {
                 || !session.meeting().templateVersion().equals(template.version())) {
             throw failure(MinutesGenerationException.Code.CONFIGURATION_ERROR, false);
         }
+        return generateWithMappings(session, template, java.util.Map.of());
+    }
+
+    /** Generates with a catalog snapshot selected for an explicit regeneration operation. */
+    public StructuredMinutes generate(MeetingSession session, TemplateDefinition template) {
+        if (session == null || session.meeting() == null || template == null
+                || template.id() == null || template.id().isBlank()
+                || template.version() == null || template.version().isBlank()) {
+            throw failure(MinutesGenerationException.Code.PROCESSING_FAILED, false);
+        }
+        java.util.Map<String, String> speakerMappings = session.speakers().stream()
+                .filter(speaker -> speaker.participantId() != null)
+                .collect(java.util.stream.Collectors.toUnmodifiableMap(
+                        com.meetingautomation.document.Speaker::speakerId,
+                        com.meetingautomation.document.Speaker::participantId));
+        return generateWithMappings(session, template, speakerMappings);
+    }
+
+    private StructuredMinutes generateWithMappings(MeetingSession session, TemplateDefinition template,
+            java.util.Map<String, String> speakerMappings) {
         MinutesCommand command;
         try {
-            command = new MinutesCommand(template.id(), session.meeting().templateVersion(), template.content(),
-                    session.meeting().participantReferences(), java.util.Map.of(), session.transcript());
+            command = new MinutesCommand(template.id(), template.version(), template.content(),
+                    session.meeting().participantReferences(), speakerMappings, session.transcript());
         } catch (RuntimeException invalidInput) {
             throw failure(MinutesGenerationException.Code.PROCESSING_FAILED, false);
         }
@@ -69,3 +89,4 @@ public final class MinutesGenerationUseCase {
         return new MinutesGenerationException(code, retryable);
     }
 }
+
