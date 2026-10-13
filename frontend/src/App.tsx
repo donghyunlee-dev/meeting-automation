@@ -11,6 +11,7 @@ import './app.css';
 import { Link, NavLink, Route, Routes, useLocation, useNavigate, useParams } from 'react-router';
 import { NewMeetingPage, type NewMeetingPayload } from './NewMeetingPage';
 import { createMeetingSession, type MeetingSession, type MeetingSessionAttempt } from './newMeetingApi';
+import { RecordingPage, type RecordingViewState } from './RecordingPage';
 import { DocumentSetupWizard } from './DocumentSetupWizard';
 import { getSetupSnapshot } from './documentSetupApi';
 
@@ -325,14 +326,16 @@ function SetupGate({ children }: { children: React.ReactNode }) {
   return allowed ? <>{children}</> : <main className="setup-page"><p role="status">문서 연결 상태를 확인하는 중…</p></main>;
 }
 
+type RecordingSession = MeetingSession & { title: string };
+
 function NewMeetingRoute({ onCreated, onSubmitted }: {
-  onCreated: (session: MeetingSession) => void;
+  onCreated: (session: RecordingSession) => void;
   onSubmitted?: (payload: NewMeetingPayload) => void;
 }) {
   const navigate = useNavigate();
   async function submit(attempt: MeetingSessionAttempt) {
     const session = await createMeetingSession(attempt);
-    onCreated(session);
+    onCreated({ ...session, title: attempt.title });
     onSubmitted?.({
       title: attempt.title,
       templateId: attempt.templateId,
@@ -345,10 +348,31 @@ function NewMeetingRoute({ onCreated, onSubmitted }: {
   return <NewMeetingPage onSubmit={submit} />;
 }
 
-function MeetingRecordingRoute({ session }: { session: MeetingSession | null }) {
+function MeetingRecordingRoute({ session, state, setState }: {
+  session: RecordingSession | null;
+  state: RecordingViewState;
+  setState: (state: RecordingViewState) => void;
+}) {
   const { sessionId } = useParams();
-  if (!session || session.sessionId !== sessionId) return <main className="future-page"><h1>Recording session unavailable</h1><p>Start a new meeting to create a recording session.</p></main>;
-  return <main className="future-page"><h1>Recording {session.sessionId}</h1><p>Status: {session.status}</p><p>Upload policy: {session.uploadPolicy.acceptedMimeTypes.join(', ')}</p></main>;
+  if (!session || session.sessionId !== sessionId) return (
+    <main className="recording-unavailable">
+      <h1>녹음 세션을 찾을 수 없습니다</h1>
+      <p>새 회의를 시작해 녹음 세션을 만들어 주세요.</p>
+      <Link className="button button-primary" to="/meetings/new">새 회의 시작</Link>
+    </main>
+  );
+  return <RecordingPage
+    sessionId={session.sessionId}
+    title={session.title}
+    state={state}
+    elapsedMs={0}
+    onStart={() => setState('Recording')}
+    onPause={() => setState('Paused')}
+    onResume={() => setState('Recording')}
+    onRequestEnd={() => undefined}
+    onConfirmEnd={() => undefined}
+    onCancelEnd={() => undefined}
+  />;
 }
 
 function BottomNavigation() {
@@ -362,7 +386,10 @@ function BottomNavigation() {
 }
 
 export function App({ onNewMeetingSubmit = () => undefined }: { onNewMeetingSubmit?: (payload: NewMeetingPayload) => void } = {}) {
-  const [createdSession, setCreatedSession] = useState<MeetingSession | null>(null);
+  const [createdSession, setCreatedSession] = useState<RecordingSession | null>(null);
+  const [recordingState, setRecordingState] = useState<RecordingViewState>('Ready');
+  const location = useLocation();
+  const isActiveRecording = /^\/meetings\/[^/]+\/recording$/.test(location.pathname) && recordingState !== 'Ready';
   return (
     <div className="app-shell">
       <Routes>
@@ -370,12 +397,12 @@ export function App({ onNewMeetingSubmit = () => undefined }: { onNewMeetingSubm
         <Route path="/setup/document" element={<DocumentSetupWizard />} />
         <Route path="/settings" element={<DocumentSetupWizard settings />} />
         <Route path="/settings/document" element={<DocumentSetupWizard settings />} />
-        <Route path="/meetings/new" element={<SetupGate><NewMeetingRoute onCreated={setCreatedSession} onSubmitted={onNewMeetingSubmit} /></SetupGate>} />
-        <Route path="/meetings/:sessionId/recording" element={<MeetingRecordingRoute session={createdSession} />} />
+        <Route path="/meetings/new" element={<SetupGate><NewMeetingRoute onCreated={(session) => { setCreatedSession(session); setRecordingState('Ready'); }} onSubmitted={onNewMeetingSubmit} /></SetupGate>} />
+        <Route path="/meetings/:sessionId/recording" element={<MeetingRecordingRoute session={createdSession} state={recordingState} setState={setRecordingState} />} />
         <Route path="/settings/participants" element={<SetupGate><ParticipantsPage /></SetupGate>} />
         <Route path="*" element={<FutureRouteNotice />} />
       </Routes>
-      <BottomNavigation />
+      {!isActiveRecording && <BottomNavigation />}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
+import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router';
 import { App } from './App';
 
 const participants = [
@@ -36,6 +36,11 @@ afterEach(() => {
 function DestinationFixture() {
   const location = useLocation();
   return <p>New Meeting fixture: {location.pathname}</p>;
+}
+
+function NavigateToMismatchedRecordingSession() {
+  const navigate = useNavigate();
+  return <button type="button" onClick={() => navigate('/meetings/other-session/recording')}>Open another session</button>;
 }
 
 function renderHomeWithDestinationFixture() {
@@ -80,7 +85,7 @@ describe('Participants settings', () => {
     fireEvent.click(within(screen.getByRole('group', { name: '참석자 선택' })).getByRole('checkbox', { name: 'Ada Lovelace ada@example.com' }));
     fireEvent.click(screen.getByRole('button', { name: '회의 시작' }));
 
-    expect(await screen.findByText('Recording session-123')).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Planning' })).toBeTruthy();
     const post = fetchMock.mock.calls.find(([url]) => new URL(String(url)).pathname.endsWith('/meeting-sessions'));
     expect(post).toBeTruthy();
     const request = post?.[1];
@@ -128,7 +133,7 @@ describe('Participants settings', () => {
     expect(retryBody).toEqual(firstBody);
     expect((posts[1][1]?.headers as Record<string, string>)['Idempotency-Key']).toBe((posts[0][1]?.headers as Record<string, string>)['Idempotency-Key']);
     resolveSecond(response({ data: { sessionId: 'session-retry', version: 1, status: 'CREATED', uploadPolicy: { chunkDurationSeconds: 30, maxChunkBytes: 1000000, acceptedMimeTypes: ['audio/webm'] } } }, 201));
-    expect(await screen.findByText('Recording session-retry')).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Retry safely' })).toBeTruthy();
   });
 
   it('treats a server 502 as uncertain and retries the identical attempt on the same READY connection', async () => {
@@ -162,7 +167,7 @@ describe('Participants settings', () => {
     expect((await screen.findByRole('alert')).textContent).toContain('요청을 완료하지 못했습니다.');
 
     fireEvent.click(screen.getByRole('button', { name: '회의 시작' }));
-    expect(await screen.findByText('Recording session-after-502')).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Retry after gateway response' })).toBeTruthy();
     expect(configReads).toBe(2);
     const posts = fetchMock.mock.calls.filter(([url]) => new URL(String(url)).pathname.endsWith('/meeting-sessions'));
     expect(JSON.parse(String(posts[1][1]?.body))).toEqual(JSON.parse(String(posts[0][1]?.body)));
@@ -208,7 +213,7 @@ describe('Participants settings', () => {
     fireEvent.click(within(screen.getByRole('group', { name: '참석자 선택' })).getByRole('checkbox', { name: 'Ada Lovelace ada@example.com' }));
     fireEvent.click(screen.getByRole('button', { name: '참석자 선택 닫기' }));
     fireEvent.click(screen.getByRole('button', { name: '회의 시작' }));
-    expect(await screen.findByText('Recording session-version-8')).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Connection changes during retry' })).toBeTruthy();
     const posts = fetchMock.mock.calls.filter(([url]) => new URL(String(url)).pathname.endsWith('/meeting-sessions'));
     const firstBody = JSON.parse(String(posts[0][1]?.body));
     const secondBody = JSON.parse(String(posts[1][1]?.body));
@@ -246,7 +251,7 @@ describe('Participants settings', () => {
     expect(screen.queryByText(/private-secret|provider token/)).toBeNull();
     fireEvent.change(screen.getByLabelText('회의 제목'), { target: { value: 'After edit' } });
     fireEvent.click(screen.getByRole('button', { name: '회의 시작' }));
-    expect(await screen.findByText('Recording session-edited')).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'After edit' })).toBeTruthy();
     const posts = fetchMock.mock.calls.filter(([url]) => new URL(String(url)).pathname.endsWith('/meeting-sessions'));
     expect(JSON.parse(String(posts[0][1]?.body)).title).toBe('Before edit');
     expect(JSON.parse(String(posts[1][1]?.body)).title).toBe('After edit');
@@ -296,7 +301,7 @@ describe('Participants settings', () => {
     fireEvent.click(within(screen.getByRole('group', { name: '참석자 선택' })).getByRole('checkbox', { name: 'Grace Hopper grace@new-provider.example' }));
     fireEvent.click(screen.getByRole('button', { name: '참석자 선택 닫기' }));
     fireEvent.click(screen.getByRole('button', { name: '회의 시작' }));
-    expect(await screen.findByText('Recording session-new-connection')).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Current connection' })).toBeTruthy();
     const posts = fetchMock.mock.calls.filter(([url]) => new URL(String(url)).pathname.endsWith('/meeting-sessions'));
     const first = JSON.parse(String(posts[0][1]?.body));
     const second = JSON.parse(String(posts[1][1]?.body));
@@ -606,5 +611,67 @@ describe('Participants settings', () => {
     expect(JSON.parse(String(fetchMock.mock.calls[1][1]?.body))).toEqual({ name: 'Ada Byron' });
     fireEvent.click(screen.getByRole('button', { name: '목록 새로고침' }));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
+  });
+});
+
+describe('Recording route', () => {
+  it('shows the created meeting title, session id, ready status, timer, and start action', async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = new URL(String(input)).pathname;
+      if (path.endsWith('/document-setup')) return Promise.resolve(readySetupResponse());
+      if (path.endsWith('/app-config')) return Promise.resolve(response({ data: {
+        company: { id: 'c1', name: 'Example', timezone: 'Asia/Seoul' },
+        document: { provider: 'NOTION', configured: true, connectionVersion: 7, rootUrl: 'https://notion.example' },
+        setup: { status: 'READY', required: false, canCreateMeeting: true, operationId: null },
+      } }));
+      if (path.endsWith('/templates')) return Promise.resolve(response({ data: { items: [{ id: 'default.md', name: 'Default', version: '1.0.0' }] } }));
+      if (path.endsWith('/participants')) return Promise.resolve(response({ data: { items: participants } }));
+      if (path.endsWith('/meeting-sessions')) return Promise.resolve(response({ data: {
+        sessionId: 'session-ready', version: 1, status: 'CREATED',
+        uploadPolicy: { chunkDurationSeconds: 30, maxChunkBytes: 1000000, acceptedMimeTypes: ['audio/webm'] },
+      } }, 201));
+      return Promise.reject(new Error(`Unexpected request: ${path} ${init?.method ?? 'GET'}`));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<MemoryRouter initialEntries={['/meetings/new']}><App /><NavigateToMismatchedRecordingSession /></MemoryRouter>);
+
+    await screen.findByText('Asia/Seoul');
+    fireEvent.change(screen.getByLabelText('회의 제목'), { target: { value: 'Planning' } });
+    fireEvent.click(screen.getByRole('button', { name: '참석자 추가' }));
+    fireEvent.click(within(screen.getByRole('group', { name: '참석자 선택' })).getByRole('checkbox', { name: 'Ada Lovelace ada@example.com' }));
+    fireEvent.click(screen.getByRole('button', { name: '회의 시작' }));
+
+    expect(await screen.findByRole('heading', { name: 'Planning' })).toBeTruthy();
+    expect(screen.getByText('session-ready')).toBeTruthy();
+    expect(screen.getByText('준비됨')).toBeTruthy();
+    expect(screen.getByText('00:00:00')).toBeTruthy();
+    expect(screen.getByRole('button', { name: '녹음 시작' })).toBeTruthy();
+    expect(screen.getByRole('navigation', { name: '주요 메뉴' })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: '녹음 시작' }));
+    expect(screen.getByRole('status').textContent).toBe('녹음 중');
+    expect(screen.queryByRole('navigation', { name: '주요 메뉴' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: '회의 종료' }));
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: '계속 녹음' }));
+    expect(screen.getByRole('status').textContent).toBe('녹음 중');
+    expect(screen.getByText('00:00:00')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '일시정지' }));
+    expect(screen.getByRole('status').textContent).toBe('일시정지됨');
+    expect(screen.queryByRole('navigation', { name: '주요 메뉴' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: '녹음 재개' }));
+    expect(screen.getByRole('status').textContent).toBe('녹음 중');
+    fireEvent.click(screen.getByRole('button', { name: 'Open another session' }));
+    expect(screen.getByRole('heading', { name: '녹음 세션을 찾을 수 없습니다' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: '새 회의 시작' }).getAttribute('href')).toBe('/meetings/new');
+    expect(screen.queryByRole('button', { name: '회의 종료' })).toBeNull();
+  });
+
+  it('offers a new meeting and no recording controls when runtime session context is missing or mismatched', () => {
+    render(<MemoryRouter initialEntries={['/meetings/missing-session/recording']}><App /></MemoryRouter>);
+
+    expect(screen.getByRole('heading', { name: '녹음 세션을 찾을 수 없습니다' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: '새 회의 시작' }).getAttribute('href')).toBe('/meetings/new');
+    expect(screen.queryByRole('button', { name: '녹음 시작' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '회의 종료' })).toBeNull();
   });
 });
