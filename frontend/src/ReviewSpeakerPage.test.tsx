@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
-import type { ComponentProps, ComponentType } from 'react';
+import { useState, type ComponentProps, type ComponentType } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes, useNavigate } from 'react-router';
 import { ReviewSpeakerPage } from './ReviewSpeakerPage';
@@ -308,7 +308,7 @@ describe('Review minutes and transcript', () => {
     expect(document.activeElement).toBe(openButton);
   });
 
-  it('keeps Minutes drafts isolated by session when the route reuses the Review page', async () => {
+  it('preserves original and saved Minutes baselines per session across route reuse', async () => {
     const otherReview = { ...reviewData, sessionId: 'review-other', minutes: { ...reviewData.minutes, summary: '다른 회의 요약' } };
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = new URL(String(input));
@@ -324,19 +324,28 @@ describe('Review minutes and transcript', () => {
     vi.stubGlobal('fetch', fetchMock);
     function SwitchableReview() {
       const navigate = useNavigate();
+      const [minutesSaveState, setMinutesSaveState] = useState<MinutesSaveState>({ sessionId: '', status: 'idle' });
       return <>
         <button type="button" onClick={() => navigate('/meetings/review-other/review')}>다른 회의 열기</button>
         <button type="button" onClick={() => navigate('/meetings/review-minutes/review')}>첫 번째 회의 열기</button>
         <Routes>
           <Route path="/meetings/:sessionId/review" element={<ReviewPageUnderTest drafts={{}} onInitialize={() => undefined}
-            onChange={() => undefined} onCommit={() => undefined} onMinutesSave={vi.fn()} />} />
+            onChange={() => undefined} onCommit={() => undefined}
+            onMinutesSave={(savedSessionId) => setMinutesSaveState({ sessionId: savedSessionId, status: 'saved', message: '저장 완료' })}
+            minutesSaveState={minutesSaveState} />} />
         </Routes>
       </>;
     }
     render(<MemoryRouter initialEntries={['/meetings/review-minutes/review']}><SwitchableReview /></MemoryRouter>);
 
     const summary = await screen.findByLabelText('회의 요약') as HTMLTextAreaElement;
-    fireEvent.change(summary, { target: { value: '첫 번째 회의의 임시 수정' } });
+    fireEvent.change(summary, { target: { value: '첫 번째 회의의 저장된 기준' } });
+    fireEvent.click(screen.getByRole('button', { name: '회의록 저장' }));
+    expect(await screen.findByText('저장 완료')).toBeTruthy();
+    expect((screen.getByRole('button', { name: '회의록 저장' }) as HTMLButtonElement).disabled).toBe(true);
+
+    fireEvent.change(screen.getByLabelText('회의 요약'), { target: { value: '첫 번째 회의의 임시 수정' } });
+    expect((screen.getByRole('button', { name: '회의록 저장' }) as HTMLButtonElement).disabled).toBe(false);
     fireEvent.click(screen.getByRole('button', { name: '다른 회의 열기' }));
     await screen.findByLabelText('회의 요약');
     expect((screen.getByLabelText('회의 요약') as HTMLTextAreaElement).value).toBe('다른 회의 요약');
@@ -346,8 +355,10 @@ describe('Review minutes and transcript', () => {
     fireEvent.click(screen.getByRole('button', { name: '첫 번째 회의 열기' }));
     await screen.findByLabelText('회의 요약');
     expect((screen.getByLabelText('회의 요약') as HTMLTextAreaElement).value).toBe('첫 번째 회의의 임시 수정');
+    expect((screen.getByRole('button', { name: '회의록 저장' }) as HTMLButtonElement).disabled).toBe(false);
     fireEvent.click(screen.getByRole('button', { name: '다른 회의 열기' }));
     await screen.findByLabelText('회의 요약');
     expect((screen.getByLabelText('회의 요약') as HTMLTextAreaElement).value).toBe('두 번째 회의의 임시 수정');
+    expect((screen.getByRole('button', { name: '회의록 저장' }) as HTMLButtonElement).disabled).toBe(false);
   });
 });

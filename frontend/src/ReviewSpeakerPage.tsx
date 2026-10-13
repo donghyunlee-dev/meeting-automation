@@ -8,6 +8,11 @@ import { ReviewTranscriptDrawer } from './ReviewTranscriptDrawer';
 
 type Resource<T> = { status: 'loading' | 'ready' | 'error'; data?: T };
 type ReviewResource = Resource<Awaited<ReturnType<typeof getReviewSession>>> & { requestSessionId: string };
+type MinutesDraftStore = {
+  drafts: Record<string, StructuredMinutes | null>;
+  baselines: Record<string, StructuredMinutes | null>;
+  saveStatuses: Record<string, MinutesSaveState['status']>;
+};
 type Props = {
   drafts: Record<string, Record<string, string | null>>;
   onInitialize: (sessionId: string, speakers: ReviewSpeaker[]) => void;
@@ -24,7 +29,7 @@ export function ReviewSpeakerPage({ drafts, onInitialize, onChange, onCommit, on
   const [participants, setParticipants] = useState<Resource<Participant[]>>({ status: 'loading' });
   const [config, setConfig] = useState<Resource<DocumentAppConfig>>({ status: 'loading' });
   const [retryingRoster, setRetryingRoster] = useState(false);
-  const [minutesDrafts, setMinutesDrafts] = useState<Record<string, StructuredMinutes | null>>({});
+  const [minutesDraftStore, setMinutesDraftStore] = useState<MinutesDraftStore>(() => ({ drafts: {}, baselines: {}, saveStatuses: {} }));
   const [transcriptOpen, setTranscriptOpen] = useState(false);
   const [saveState, setSaveState] = useState<{ sessionId: string; saving: boolean; message: string; recoveryAttempt: SpeakerMappingInput[] | null }>({
     sessionId: '', saving: false, message: '', recoveryAttempt: null,
@@ -61,6 +66,9 @@ export function ReviewSpeakerPage({ drafts, onInitialize, onChange, onCommit, on
     const latest = latestReview.current;
     if (latest?.sessionId === data.sessionId && data.version < latest.version) return false;
     latestReview.current = { sessionId: data.sessionId, version: data.version };
+    setMinutesDraftStore((current) => Object.prototype.hasOwnProperty.call(current.baselines, data.sessionId)
+      ? current
+      : { ...current, baselines: { ...current.baselines, [data.sessionId]: data.minutes } });
     setReview({ status: 'ready', data, requestSessionId: data.sessionId });
     onInitialize(data.sessionId, data.speakers);
     return true;
@@ -122,16 +130,29 @@ export function ReviewSpeakerPage({ drafts, onInitialize, onChange, onCommit, on
   const availableParticipants = (participants.data ?? []).filter(({ id }) => currentReview?.participantIds.includes(id));
   const providerReady = config.status === 'ready' && Boolean(config.data?.document?.provider) && config.data?.document?.configured === true;
   const needsSettings = config.status === 'ready' && (!config.data?.document?.provider || config.data.document.configured !== true);
-  const hasMinutesDraft = Object.prototype.hasOwnProperty.call(minutesDrafts, sessionId);
-  const currentMinutes = hasMinutesDraft ? minutesDrafts[sessionId] : currentReview?.minutes ?? null;
+  const hasMinutesDraft = Object.prototype.hasOwnProperty.call(minutesDraftStore.drafts, sessionId);
+  const currentMinutes = hasMinutesDraft ? minutesDraftStore.drafts[sessionId] : currentReview?.minutes ?? null;
+  const hasMinutesBaseline = Object.prototype.hasOwnProperty.call(minutesDraftStore.baselines, sessionId);
+  const minutesBaseline = hasMinutesBaseline ? minutesDraftStore.baselines[sessionId] : currentReview?.minutes ?? null;
   const minutesOwnerState = !providerReady
     ? config.status === 'loading' ? 'loading' : config.status === 'error' ? 'error' : 'unavailable'
     : participants.status;
   const sessionMinutesSaveState = minutesSaveState?.sessionId === sessionId
     ? minutesSaveState : { sessionId, status: 'idle' as const };
+  const observedMinutesSaveStatus = minutesSaveState?.sessionId === sessionId ? minutesSaveState.status : undefined;
+  if (currentReview && observedMinutesSaveStatus && minutesDraftStore.saveStatuses[sessionId] !== observedMinutesSaveStatus) {
+    const savedMinutes = hasMinutesDraft ? currentMinutes : currentReview.minutes;
+    setMinutesDraftStore((current) => ({
+      ...current,
+      baselines: observedMinutesSaveStatus === 'saved'
+        ? { ...current.baselines, [sessionId]: savedMinutes }
+        : current.baselines,
+      saveStatuses: { ...current.saveStatuses, [sessionId]: observedMinutesSaveStatus },
+    }));
+  }
 
   const updateMinutesDraft = useCallback((draft: StructuredMinutes) => {
-    setMinutesDrafts((current) => ({ ...current, [sessionId]: draft }));
+    setMinutesDraftStore((current) => ({ ...current, drafts: { ...current.drafts, [sessionId]: draft } }));
   }, [sessionId]);
 
   function speakerValue(speaker: ReviewSpeaker): string {
@@ -245,6 +266,7 @@ export function ReviewSpeakerPage({ drafts, onInitialize, onChange, onCommit, on
           key={sessionId}
           sessionId={sessionId}
           minutes={currentMinutes}
+          baseline={minutesBaseline}
           participants={availableParticipants}
           ownerState={minutesOwnerState}
           saveState={sessionMinutesSaveState}

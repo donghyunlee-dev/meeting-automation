@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { Link } from 'react-router';
 import type { Participant } from './participantsApi';
 import type { StructuredMinutes } from './reviewApi';
@@ -9,6 +8,7 @@ export type MinutesSaveState = { sessionId: string; status: 'idle' | 'saving' | 
 type Props = {
   sessionId: string;
   minutes: StructuredMinutes | null;
+  baseline: StructuredMinutes | null;
   participants: Participant[];
   ownerState: MinutesOwnerState;
   saveState: MinutesSaveState;
@@ -39,17 +39,10 @@ function sameMinutes(left: StructuredMinutes | null, right: StructuredMinutes | 
   return JSON.stringify(left) === JSON.stringify(right);
 }
 
-export function ReviewMinutesEditor({ sessionId, minutes, participants, ownerState, saveState, onSave, onChange }: Props) {
-  const [initialMinutes] = useState(minutes);
+export function ReviewMinutesEditor({ sessionId, minutes, baseline, participants, ownerState, saveState, onSave, onChange }: Props) {
   const saving = saveState.sessionId === sessionId && saveState.status === 'saving';
   const saved = saveState.sessionId === sessionId && saveState.status === 'saved';
   const failed = saveState.sessionId === sessionId && saveState.status === 'error';
-  const [savedSnapshot, setSavedSnapshot] = useState<{ isSaved: boolean; minutes: StructuredMinutes | null }>({ isSaved: false, minutes: null });
-  if (saved && !savedSnapshot.isSaved) {
-    setSavedSnapshot({ isSaved: true, minutes });
-  } else if (!saved && savedSnapshot.isSaved) {
-    setSavedSnapshot({ ...savedSnapshot, isSaved: false });
-  }
 
   if (!minutes) {
     return <section className="review-speaker-card" aria-labelledby="minutes-heading">
@@ -59,7 +52,7 @@ export function ReviewMinutesEditor({ sessionId, minutes, participants, ownerSta
   }
 
   const valid = isValid(minutes);
-  const dirty = !sameMinutes(minutes, savedSnapshot.minutes ?? initialMinutes);
+  const dirty = !sameMinutes(minutes, baseline);
   const canSave = Boolean(onSave && dirty && valid && !saving);
   const canChooseOwner = ownerState === 'ready';
   const handleSave = () => {
