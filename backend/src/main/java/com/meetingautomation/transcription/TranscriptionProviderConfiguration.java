@@ -15,22 +15,23 @@ public class TranscriptionProviderConfiguration {
     TranscriptionSettings transcriptionSettings(
             @Value("${TRANSCRIPTION_MODEL:}") String model,
             @Value("${OPENAI_API_KEY:}") String apiKey,
-            @Value("${TRANSCRIPTION_MAX_AUDIO_BYTES:26214400}") long maxAudioBytes) {
-        if (maxAudioBytes < 1) throw new IllegalArgumentException("Transcription provider configuration is invalid.");
-        return new TranscriptionSettings(model, apiKey, maxAudioBytes);
+            @Value("${TRANSCRIPTION_MAX_AUDIO_BYTES:26214400}") long maxAudioBytes,
+            @Value("${TRANSCRIPTION_CONNECT_TIMEOUT_SECONDS:10}") int connectTimeoutSeconds,
+            @Value("${TRANSCRIPTION_TIMEOUT_SECONDS:600}") int timeoutSeconds) {
+        if (maxAudioBytes < 1 || connectTimeoutSeconds < 1 || timeoutSeconds < 1) {
+            throw new IllegalArgumentException("Transcription provider configuration is invalid.");
+        }
+        return new TranscriptionSettings(model, apiKey, maxAudioBytes, connectTimeoutSeconds, timeoutSeconds);
     }
 
     @Bean
-    TranscriptionProvider transcriptionProvider(
-            TranscriptionSettings settings,
-            @Value("${TRANSCRIPTION_TIMEOUT_SECONDS:600}") int timeoutSeconds) {
-        if (timeoutSeconds < 1) throw new IllegalArgumentException("Transcription timeout configuration is invalid.");
+    TranscriptionProvider transcriptionProvider(TranscriptionSettings settings) {
         HttpClient httpClient = HttpClient.newBuilder()
                 .followRedirects(HttpClient.Redirect.NEVER)
-                .connectTimeout(Duration.ofSeconds(10))
+                .connectTimeout(Duration.ofSeconds(settings.connectTimeoutSeconds()))
                 .build();
         JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(httpClient);
-        requestFactory.setReadTimeout(Duration.ofSeconds(timeoutSeconds));
+        requestFactory.setReadTimeout(Duration.ofSeconds(settings.timeoutSeconds()));
         RestClient.Builder clientBuilder = RestClient.builder().requestFactory(requestFactory);
         return new OpenAiTranscriptionAdapter(clientBuilder, settings);
     }

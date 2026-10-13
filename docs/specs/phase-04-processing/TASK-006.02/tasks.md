@@ -7,4 +7,6 @@
 5. provider-specific speaker/segment를 label 보존 `ProviderTranscriptionResponse`로 변환한다. 완료 증거: 기본 label/time/text validation이 통과하고 internal speakerId 변환은 다음 TASK 경계에 남는다.
 6. retryable/permanent failure mapping과 민감 데이터 로그 redaction을 구현한다. 완료 증거: 외부 원문/오디오/secret은 응답·로그에서 보이지 않는다.
 7. empty no-speech result, 정상 fixture 및 malformed fixture를 검증한다. 완료 증거: downstream pipeline에 표준 DTO만 전달된다.
-8. `backend/`에서 `.\gradlew.bat test --tests com.meetingautomation.transcription.TranscriptionCommandTests --tests com.meetingautomation.transcription.ProviderTranscriptionResponseTests --tests com.meetingautomation.transcription.openai.OpenAiTranscriptionAdapterTests`를 실행한다. 전체 Backend suite 또는 clean build는 실행하지 않는다. 완료 증거: 선택된 테스트의 결과와 adapter contract를 기록한다.
+8. `backend/`에서 `& .\gradlew.bat test --tests com.meetingautomation.transcription.openai.OpenAiTranscriptionAdapterTests`를 실행한다. 전체 Backend suite 또는 clean build는 실행하지 않는다. 완료 증거: 선택된 테스트의 결과와 adapter contract를 기록한다.
+
+9. Distinguish a provider `response_format` rejection from an invalid audio `file` response, bind a configurable connect timeout, and verify both through the focused adapter test.

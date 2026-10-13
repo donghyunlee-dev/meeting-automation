@@ -125,6 +125,29 @@ class OpenAiTranscriptionAdapterTests {
     }
 
     @Test
+    void mapsUnsupportedDiarizedJsonFormatToSafeConfigurationFailure() throws IOException {
+        TestClient testClient = client("non-diarization-model");
+        String providerError = """
+                {"error":{"type":"invalid_request_error","code":"unsupported_value",
+                  "param":"response_format","message":"private provider diagnostic"}}
+                """;
+        testClient.server().expect(requestTo(API_URL))
+                .andRespond(withStatus(org.springframework.http.HttpStatusCode.valueOf(400))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .body(providerError));
+
+        TranscriptionException failure = assertThrows(TranscriptionException.class,
+                () -> testClient.adapter().transcribeWithDiarization(
+                        new TranscriptionCommand(audioFile(), "audio/webm", null, 1000)));
+
+        assertEquals(TranscriptionException.Code.CONFIGURATION_ERROR, failure.code());
+        assertFalse(failure.retryable());
+        assertFalse(failure.getMessage().contains("private provider diagnostic"));
+        assertFalse(failure.toString().contains("private provider diagnostic"));
+        testClient.server().verify();
+    }
+
+    @Test
     void mapsProviderTimeoutToSafeRetryableFailureWithoutRetainingExceptionCause() throws IOException {
         TestClient testClient = client("configured-model");
         testClient.server().expect(requestTo(API_URL))
@@ -208,6 +231,7 @@ class OpenAiTranscriptionAdapterTests {
                         "TRANSCRIPTION_MODEL=deployment-selected-model",
                         "OPENAI_API_KEY=" + SECRET_SENTINEL,
                         "TRANSCRIPTION_MAX_AUDIO_BYTES=24",
+                        "TRANSCRIPTION_CONNECT_TIMEOUT_SECONDS=3",
                         "TRANSCRIPTION_TIMEOUT_SECONDS=1")
                 .run(context -> {
                     TranscriptionSettings settings = context.getBean(TranscriptionSettings.class);
@@ -215,6 +239,8 @@ class OpenAiTranscriptionAdapterTests {
                     assertEquals("deployment-selected-model", settings.model());
                     assertEquals(SECRET_SENTINEL, settings.apiKey());
                     assertEquals(24, settings.maxAudioBytes());
+                    assertEquals(3, settings.connectTimeoutSeconds());
+                    assertEquals(1, settings.timeoutSeconds());
                     assertFalse(settings.toString().contains(SECRET_SENTINEL));
                     assertEquals(OpenAiTranscriptionAdapter.class,
                             context.getBean(TranscriptionProvider.class).getClass());
@@ -224,9 +250,12 @@ class OpenAiTranscriptionAdapterTests {
     private void assertProviderFailure(int status, TranscriptionException.Code code, boolean retryable)
             throws IOException {
         TestClient testClient = client("configured-model");
+        String providerBody = status == 400
+                ? "{\"error\":{\"param\":\"file\",\"code\":\"invalid_audio\",\"message\":\"provider response body secret\"}}"
+                : "provider response body secret";
         testClient.server().expect(requestTo(API_URL))
                 .andRespond(withStatus(org.springframework.http.HttpStatusCode.valueOf(status))
-                        .body("provider response body secret"));
+                        .body(providerBody));
 
         TranscriptionException failure = assertThrows(TranscriptionException.class,
                 () -> testClient.adapter().transcribeWithDiarization(

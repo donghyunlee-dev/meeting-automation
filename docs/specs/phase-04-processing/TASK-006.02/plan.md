@@ -32,6 +32,10 @@
 Backend root에서 다음 focused tests를 실행한다. 무관한 Backend 테스트를 포함한 전체 suite, clean build는 실행하지 않는다.
 
 backend/에서 실행:
-`.\gradlew.bat test --tests com.meetingautomation.transcription.TranscriptionCommandTests --tests com.meetingautomation.transcription.ProviderTranscriptionResponseTests --tests com.meetingautomation.transcription.openai.OpenAiTranscriptionAdapterTests`
+`& .\gradlew.bat test --tests com.meetingautomation.transcription.openai.OpenAiTranscriptionAdapterTests`
 
 별도 컴파일 확인이 필요하면 `compileJava` 또는 `compileTestJava`를 사용한다.
+
+## Review follow-up
+- A 400 is classified as configuration only when the provider error identifies `response_format`; bad-audio `file` errors remain `INVALID_AUDIO`.
+- `TRANSCRIPTION_CONNECT_TIMEOUT_SECONDS` controls connection establishment (default 10 seconds); `TRANSCRIPTION_TIMEOUT_SECONDS` independently controls the read timeout (default 600 seconds).

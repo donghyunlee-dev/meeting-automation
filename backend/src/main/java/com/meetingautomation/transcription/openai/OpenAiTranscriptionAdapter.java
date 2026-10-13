@@ -22,18 +22,21 @@ import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
+import org.springframework.http.client.ClientHttpResponse;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
 
 /** Sends assembled audio to OpenAI while keeping provider JSON outside the application contract. */
 public final class OpenAiTranscriptionAdapter implements TranscriptionProvider {
     private static final URI TRANSCRIPTION_URI = URI.create("https://api.openai.com/v1/audio/transcriptions");
     private static final String RESPONSE_FORMAT = "diarized_json";
     private static final long CHUNKING_REQUIRED_AFTER_MS = 30_000;
+    private static final JsonMapper JSON_MAPPER = JsonMapper.builder().build();
 
     private final RestClient restClient;
     private final TranscriptionSettings settings;
@@ -61,12 +64,14 @@ public final class OpenAiTranscriptionAdapter implements TranscriptionProvider {
                     .body(requestBody(command, audioMediaType))
                     .retrieve()
                     .onStatus(HttpStatusCode::isError, (request, clientResponse) -> {
-                        throw new ProviderStatusException(clientResponse.getStatusCode().value());
+                        int statusCode = clientResponse.getStatusCode().value();
+                        throw new ProviderStatusException(statusCode,
+                                statusCode == 400 && isResponseFormatError(clientResponse));
                     })
                     .body(JsonNode.class);
             return mapResponse(response, command.meetingDurationMs());
         } catch (ProviderStatusException providerFailure) {
-            throw mapStatus(providerFailure.statusCode());
+            throw mapStatus(providerFailure.statusCode(), providerFailure.responseFormatRejected());
         } catch (ResourceAccessException transportFailure) {
             throw failure(TranscriptionException.Code.PROCESSING_FAILED, true);
         } catch (TranscriptionException safeFailure) {
@@ -80,7 +85,8 @@ public final class OpenAiTranscriptionAdapter implements TranscriptionProvider {
 
     private void validateSettings() {
         if (settings.model() == null || settings.model().isBlank()
-                || settings.apiKey() == null || settings.apiKey().isBlank() || settings.maxAudioBytes() < 1) {
+                || settings.apiKey() == null || settings.apiKey().isBlank() || settings.maxAudioBytes() < 1
+                || settings.connectTimeoutSeconds() < 1 || settings.timeoutSeconds() < 1) {
             throw failure(TranscriptionException.Code.CONFIGURATION_ERROR, false);
         }
     }
@@ -188,9 +194,21 @@ public final class OpenAiTranscriptionAdapter implements TranscriptionProvider {
         }
     }
 
-    private static TranscriptionException mapStatus(int statusCode) {
+    private static boolean isResponseFormatError(ClientHttpResponse response) {
+        try {
+            JsonNode errorParameter = JSON_MAPPER.readTree(response.getBody()).path("error").path("param");
+            return errorParameter.isTextual() && "response_format".equals(errorParameter.textValue());
+        } catch (IOException | RuntimeException unreadableErrorBody) {
+            return false;
+        }
+    }
+
+    private static TranscriptionException mapStatus(int statusCode, boolean responseFormatRejected) {
         if (statusCode == 401 || statusCode == 403) {
             return failure(TranscriptionException.Code.AUTHENTICATION_FAILED, false);
+        }
+        if (statusCode == 400 && responseFormatRejected) {
+            return failure(TranscriptionException.Code.CONFIGURATION_ERROR, false);
         }
         if (statusCode == 400 || statusCode == 413 || statusCode == 415) {
             return failure(TranscriptionException.Code.INVALID_AUDIO, false);
@@ -207,14 +225,20 @@ public final class OpenAiTranscriptionAdapter implements TranscriptionProvider {
 
     private static final class ProviderStatusException extends RuntimeException {
         private final int statusCode;
+        private final boolean responseFormatRejected;
 
-        private ProviderStatusException(int statusCode) {
+        private ProviderStatusException(int statusCode, boolean responseFormatRejected) {
             super("Provider request failed.");
             this.statusCode = statusCode;
+            this.responseFormatRejected = responseFormatRejected;
         }
 
         private int statusCode() {
             return statusCode;
+        }
+
+        private boolean responseFormatRejected() {
+            return responseFormatRejected;
         }
     }
 }

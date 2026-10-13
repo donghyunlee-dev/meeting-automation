@@ -15,11 +15,13 @@
 | STT-09 | malformed provider payload | invalid response failure, transcript 저장 없음 | adapter contract test |
 | STT-10 | sentinel Audio, transcript, Secret로 로그 capture | 모든 sentinel이 log/error response에 없음 | security/log assertion |
 | STT-11 | 서로 다른 `TRANSCRIPTION_MODEL` 설정 | 같은 provider-neutral port 결과 타입 사용 | configuration wiring test |
+| STT-12 | Provider HTTP 400 with `error.param=response_format` vs `file` | Safe `CONFIGURATION_ERROR` vs `INVALID_AUDIO`; no provider details in error | Adapter tests |
+| STT-13 | Override `TRANSCRIPTION_CONNECT_TIMEOUT_SECONDS` | The configured connect timeout is bound and used; read timeout stays separate | Adapter configuration binding test |
 
 Backend root에서 다음 focused tests를 실행한다. 무관한 Backend 테스트를 포함한 전체 suite, clean build는 실행하지 않는다.
 
 backend/에서 실행:
-`.\gradlew.bat test --tests com.meetingautomation.transcription.TranscriptionCommandTests --tests com.meetingautomation.transcription.ProviderTranscriptionResponseTests --tests com.meetingautomation.transcription.openai.OpenAiTranscriptionAdapterTests`
+`& .\gradlew.bat test --tests com.meetingautomation.transcription.openai.OpenAiTranscriptionAdapterTests`
 
 별도 컴파일 확인이 필요하면 `compileJava` 또는 `compileTestJava`를 사용한다.
 
@@ -29,3 +31,5 @@ backend/에서 실행:
 - provider timeout/error를 주입해 UI/API 노출용 safe failure와 retryable 분류를 확인한다.
 - 일반 로그, trace 및 예외에 audio/transcript/secret/provider raw body가 없는지 검색한다.
 - model 설정 변경 시 Domain/API 응답 DTO 수정 없이 adapter configuration만 교체되는지 확인한다.
+
+The response-format error test inspects only the safe `error.param` field; it does not expose or retain the provider message or body.
