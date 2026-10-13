@@ -1,4 +1,6 @@
 package com.meetingautomation.api.processing;
 
-public record ProcessingStartRequest(Integer expectedChunks, Long durationMs, String mimeType) {
+import java.math.BigDecimal;
+
+public record ProcessingStartRequest(BigDecimal expectedChunks, BigDecimal durationMs, String mimeType) {
 }

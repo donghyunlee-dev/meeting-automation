@@ -206,6 +206,32 @@ class ProcessingStartApiTests {
     }
 
     @Test
+    void fractionalExpectedChunkCountIsRejectedBeforeQueueing() throws Exception {
+        upload("0", new byte[] {11}, "fractional-count-upload").andExpect(status().isOk());
+
+        mockMvc.perform(process("fractional-count-key", "{\"expectedChunks\":1.9,\"durationMs\":15000,"
+                        + "\"mimeType\":\"audio/webm\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("VALIDATION_FAILED"));
+
+        assertThat(processingExecutor.acceptedCount()).isZero();
+        assertThat(sessionStore.find(SESSION_ID).orElseThrow().status()).isEqualTo("UPLOADING");
+    }
+
+    @Test
+    void fractionalDurationIsRejectedBeforeQueueing() throws Exception {
+        upload("0", new byte[] {11}, "fractional-duration-upload").andExpect(status().isOk());
+
+        mockMvc.perform(process("fractional-duration-key", "{\"expectedChunks\":1,\"durationMs\":15000.9,"
+                        + "\"mimeType\":\"audio/webm\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("VALIDATION_FAILED"));
+
+        assertThat(processingExecutor.acceptedCount()).isZero();
+        assertThat(sessionStore.find(SESSION_ID).orElseThrow().status()).isEqualTo("UPLOADING");
+    }
+
+    @Test
     void durationMimeAndIdempotencyKeyAreValidatedBeforeQueueing() throws Exception {
         upload("0", new byte[] {11}, "valid-upload").andExpect(status().isOk());
 

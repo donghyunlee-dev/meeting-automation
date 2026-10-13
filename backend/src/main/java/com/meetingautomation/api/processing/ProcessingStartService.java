@@ -8,6 +8,7 @@ import com.meetingautomation.api.session.MeetingSession;
 import com.meetingautomation.api.session.MeetingSessionStore;
 import com.meetingautomation.api.session.SessionStateConflictException;
 import com.meetingautomation.api.session.UploadPolicy;
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.ConcurrentHashMap;
@@ -68,11 +69,13 @@ public final class ProcessingStartService {
             throw new ApiValidationException("Idempotency-Key");
         }
         if (request == null) throw new ApiValidationException("request");
-        if (request.expectedChunks() == null || request.expectedChunks() < 1) {
+        int expectedChunks = exactInteger(request.expectedChunks(), "expectedChunks");
+        if (expectedChunks < 1) {
             throw new ApiValidationException("expectedChunks");
         }
+        long durationMs = exactLong(request.durationMs(), "durationMs");
         long maxDurationMs = (long) maxMeetingDurationMinutes * 60_000L;
-        if (request.durationMs() == null || request.durationMs() < 1 || request.durationMs() > maxDurationMs) {
+        if (durationMs < 1 || durationMs > maxDurationMs) {
             throw new ApiValidationException("durationMs");
         }
         if (request.mimeType() == null || request.mimeType().isBlank()) {
@@ -85,7 +88,25 @@ public final class ProcessingStartService {
                 .map(value -> value.toLowerCase(Locale.ROOT))
                 .anyMatch(mimeType::equals);
         if (!acceptedMime) throw new ApiValidationException("mimeType");
-        return new Command(idempotencyKey.trim(), request.expectedChunks(), request.durationMs(), mimeType);
+        return new Command(idempotencyKey.trim(), expectedChunks, durationMs, mimeType);
+    }
+
+    private static int exactInteger(BigDecimal value, String field) {
+        if (value == null) throw new ApiValidationException(field);
+        try {
+            return value.intValueExact();
+        } catch (ArithmeticException invalidInteger) {
+            throw new ApiValidationException(field);
+        }
+    }
+
+    private static long exactLong(BigDecimal value, String field) {
+        if (value == null) throw new ApiValidationException(field);
+        try {
+            return value.longValueExact();
+        } catch (ArithmeticException invalidInteger) {
+            throw new ApiValidationException(field);
+        }
     }
 
     private void validateCompletedChunks(String sessionId, int expectedChunks, UploadPolicy policy) {
