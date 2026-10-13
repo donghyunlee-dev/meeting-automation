@@ -306,6 +306,7 @@ export function ReviewSpeakerPage({ drafts, onInitialize, onChange, onCommit, on
             : error instanceof ReviewApiError && error.code === 'SESSION_NOT_IN_REVIEW'
               ? '회의록은 저장되었지만 세션이 Review 상태가 아닙니다. 처리 상태를 확인해 주세요.'
               : '저장 완료. 최신 회의 정보를 확인하지 못했습니다. 화면에서 다시 확인해 주세요.',
+          ...(!missingOrInactive ? { recoverySnapshot: snapshotMinutes(submittedSnapshot) } : {}),
         });
       }
     } catch (error) {
