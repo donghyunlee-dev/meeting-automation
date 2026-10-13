@@ -20,7 +20,7 @@
 | MAP-INT-12 | API-010 새 `allowedActions`에서 mapping action 제거 | 저장 차단, latest snapshot 안내, backend에 mutation 보내지 않음 | action gate test |
 | MAP-INT-13 | 여러 speaker를 한 번에 바꾸고 저장 | 한 API request로 전부 저장, 부분 response merge 없음 | batch integration test |
 
-Frontend `npm run test`, `npm run lint`, `npm run build`; Backend `./gradlew test`, `./gradlew clean build`를 구현 후 실행하고 결과를 기록한다. 설계 단계에서는 테스트를 실행하지 않는다.
+Frontend 변경은 `npm run test`, `npm run lint`, `npm run build`로 검증하고 결과를 기록한다. API-010/API-011 Backend 구현은 선행 Task에서 완료됐으므로 이번 Task에서 Backend 코드를 바꾸지 않으면 Backend 테스트 실행은 N/A다. Backend 수정이 필요한 계약 결함을 발견한 경우 변경 경로를 덮는 관련 테스트 클래스만 Windows Gradle Wrapper의 `& .\gradlew.bat test --tests <fully.qualified.TestClass>` 선택자로 실행한다. 개발자/QA 검증에서 전체 Backend suite와 `clean build`를 실행하지 않는다. 기존 CI suite는 변경하지 않는다. 설계 단계에서는 테스트를 실행하지 않는다.
 
 ## 통합/수동 QA
 
