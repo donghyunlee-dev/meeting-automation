@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { Link, useLocation, useParams } from 'react-router';
 import { getDocumentAppConfig, listMeetingParticipants, type DocumentAppConfig } from './newMeetingApi';
 import type { Participant } from './participantsApi';
-import { getReviewSession, updateSpeakerMappings, type ReviewSession, type ReviewSpeaker, type SpeakerMappingInput, type StructuredMinutes } from './reviewApi';
+import { getReviewSession, ReviewApiError, updateReviewMinutes, updateSpeakerMappings, type ReviewSession, type ReviewSpeaker, type SpeakerMappingInput, type StructuredMinutes } from './reviewApi';
 import { ReviewMinutesEditor, type MinutesSaveState } from './ReviewMinutesEditor';
 import { ReviewTranscriptDrawer } from './ReviewTranscriptDrawer';
 
@@ -11,8 +11,11 @@ type ReviewResource = Resource<Awaited<ReturnType<typeof getReviewSession>>> & {
 type MinutesDraftStore = {
   drafts: Record<string, StructuredMinutes | null>;
   baselines: Record<string, StructuredMinutes | null>;
+  baseVersions: Record<string, number>;
   saveStatuses: Record<string, MinutesSaveState['status']>;
 };
+type MinutesMutationState = MinutesSaveState & { recoverySnapshot?: StructuredMinutes };
+type ReviewFailureCode = 'SESSION_NOT_FOUND' | 'SESSION_NOT_IN_REVIEW' | 'OTHER';
 type Props = {
   drafts: Record<string, Record<string, string | null>>;
   onInitialize: (sessionId: string, speakers: ReviewSpeaker[]) => void;
@@ -29,20 +32,57 @@ export function ReviewSpeakerPage({ drafts, onInitialize, onChange, onCommit, on
   const [participants, setParticipants] = useState<Resource<Participant[]>>({ status: 'loading' });
   const [config, setConfig] = useState<Resource<DocumentAppConfig>>({ status: 'loading' });
   const [retryingRoster, setRetryingRoster] = useState(false);
-  const [minutesDraftStore, setMinutesDraftStore] = useState<MinutesDraftStore>(() => ({ drafts: {}, baselines: {}, saveStatuses: {} }));
+  const [minutesDraftStore, setMinutesDraftStore] = useState<MinutesDraftStore>(() => ({ drafts: {}, baselines: {}, baseVersions: {}, saveStatuses: {} }));
+  const [minutesMutationStates, setMinutesMutationStates] = useState<Record<string, MinutesMutationState>>({});
+  const [reviewFailure, setReviewFailure] = useState<{ sessionId: string; code: ReviewFailureCode } | null>(null);
   const [transcriptOpen, setTranscriptOpen] = useState(false);
   const [saveState, setSaveState] = useState<{ sessionId: string; saving: boolean; message: string; recoveryAttempt: SpeakerMappingInput[] | null }>({
     sessionId: '', saving: false, message: '', recoveryAttempt: null,
   });
   const reviewRequestGeneration = useRef(0);
   const saveInFlight = useRef(false);
+  const minutesSaveInFlight = useRef(new Set<string>());
   const activeSessionId = useRef(sessionId);
   const latestReview = useRef<{ sessionId: string; version: number } | null>(null);
+  const serverBaseBySession = useRef(new Map<string, { version: number; minutes: StructuredMinutes | null }>());
+  const minutesDraftBySession = useRef(new Map<string, StructuredMinutes | null>());
   const currentDraft = drafts[sessionId] ?? {};
   const sessionSaveState = saveState.sessionId === sessionId ? saveState : { sessionId, saving: false, message: '', recoveryAttempt: null };
   const saving = sessionSaveState.saving;
   const saveMessage = sessionSaveState.message;
   const recoveryAttempt = sessionSaveState.recoveryAttempt;
+
+  function setMinutesMutationState(expectedSessionId: string, state: MinutesMutationState) {
+    setMinutesMutationStates((current) => ({ ...current, [expectedSessionId]: state }));
+  }
+
+  function rememberMinutesBase(expectedSessionId: string, version: number, minutes: StructuredMinutes | null): boolean {
+    const previous = serverBaseBySession.current.get(expectedSessionId);
+    if (previous && version < previous.version) return false;
+    serverBaseBySession.current.set(expectedSessionId, { version, minutes });
+    setMinutesDraftStore((current) => {
+      const existingVersion = current.baseVersions[expectedSessionId];
+      if (existingVersion !== undefined && version < existingVersion) return current;
+      return {
+        ...current,
+        baselines: { ...current.baselines, [expectedSessionId]: minutes },
+        baseVersions: { ...current.baseVersions, [expectedSessionId]: version },
+      };
+    });
+    return true;
+  }
+
+  function recordReviewFailure(expectedSessionId: string, error: unknown) {
+    if (activeSessionId.current !== expectedSessionId) return;
+    const code = error instanceof ReviewApiError && (error.code === 'SESSION_NOT_FOUND' || error.apiCode === 'SESSION_NOT_FOUND')
+      ? 'SESSION_NOT_FOUND'
+      : error instanceof ReviewApiError && error.code === 'SESSION_NOT_IN_REVIEW'
+        ? 'SESSION_NOT_IN_REVIEW' : 'OTHER';
+    setReviewFailure({ sessionId: expectedSessionId, code });
+    setReview((current) => code === 'OTHER' && current.data?.sessionId === expectedSessionId
+      ? { status: 'ready', data: current.data, requestSessionId: expectedSessionId }
+      : { status: 'error', requestSessionId: expectedSessionId });
+  }
 
   function setSaving(value: boolean) {
     setSaveState((current) => ({ ...(current.sessionId === sessionId ? current : sessionSaveState), sessionId, saving: value }));
@@ -65,10 +105,11 @@ export function ReviewSpeakerPage({ drafts, onInitialize, onChange, onCommit, on
     if (activeSessionId.current !== data.sessionId) return false;
     const latest = latestReview.current;
     if (latest?.sessionId === data.sessionId && data.version < latest.version) return false;
+    const rememberedBase = serverBaseBySession.current.get(data.sessionId);
+    if (rememberedBase && data.version < rememberedBase.version) return false;
     latestReview.current = { sessionId: data.sessionId, version: data.version };
-    setMinutesDraftStore((current) => Object.prototype.hasOwnProperty.call(current.baselines, data.sessionId)
-      ? current
-      : { ...current, baselines: { ...current.baselines, [data.sessionId]: data.minutes } });
+    rememberMinutesBase(data.sessionId, data.version, data.minutes);
+    setReviewFailure(null);
     setReview({ status: 'ready', data, requestSessionId: data.sessionId });
     onInitialize(data.sessionId, data.speakers);
     return true;
@@ -89,8 +130,8 @@ export function ReviewSpeakerPage({ drafts, onInitialize, onChange, onCommit, on
       const data = await getReviewSession(sessionId);
       if (generation !== reviewRequestGeneration.current) return;
       applySnapshot(data);
-    } catch {
-      if (generation === reviewRequestGeneration.current) setReview((current) => ({ status: 'error', data: current.data, requestSessionId: sessionId }));
+    } catch (error) {
+      if (generation === reviewRequestGeneration.current) recordReviewFailure(sessionId, error);
     }
   }, [applySnapshot, sessionId]);
 
@@ -108,8 +149,8 @@ export function ReviewSpeakerPage({ drafts, onInitialize, onChange, onCommit, on
     void getReviewSession(sessionId).then((data) => {
       if (!active || generation !== reviewRequestGeneration.current) return;
       applySnapshot(data);
-    }).catch(() => {
-      if (active && generation === reviewRequestGeneration.current) setReview((current) => ({ status: 'error', data: current.data, requestSessionId: sessionId }));
+    }).catch((error: unknown) => {
+      if (active && generation === reviewRequestGeneration.current) recordReviewFailure(sessionId, error);
     });
     void listMeetingParticipants().then((data) => {
       if (active) setParticipants({ status: 'ready', data });
@@ -137,8 +178,10 @@ export function ReviewSpeakerPage({ drafts, onInitialize, onChange, onCommit, on
   const minutesOwnerState = !providerReady
     ? config.status === 'loading' ? 'loading' : config.status === 'error' ? 'error' : 'unavailable'
     : participants.status;
-  const sessionMinutesSaveState = minutesSaveState?.sessionId === sessionId
-    ? minutesSaveState : { sessionId, status: 'idle' as const };
+  const sessionMinutesMutationState = minutesMutationStates[sessionId] ?? { sessionId, status: 'idle' as const };
+  const sessionMinutesSaveState = minutesSaveState?.sessionId === sessionId ? minutesSaveState : sessionMinutesMutationState;
+  const minutesSaveBlockedMessage = currentReview && !currentReview.allowedActions.includes('UPDATE_MINUTES')
+    ? '최신 Review 정보를 확인한 뒤 다시 시도해 주세요.' : undefined;
   const observedMinutesSaveStatus = minutesSaveState?.sessionId === sessionId ? minutesSaveState.status : undefined;
   if (currentReview && observedMinutesSaveStatus && minutesDraftStore.saveStatuses[sessionId] !== observedMinutesSaveStatus) {
     const savedMinutes = hasMinutesDraft ? currentMinutes : currentReview.minutes;
@@ -147,13 +190,176 @@ export function ReviewSpeakerPage({ drafts, onInitialize, onChange, onCommit, on
       baselines: observedMinutesSaveStatus === 'saved'
         ? { ...current.baselines, [sessionId]: savedMinutes }
         : current.baselines,
+      baseVersions: observedMinutesSaveStatus === 'saved'
+        ? { ...current.baseVersions, [sessionId]: currentReview.version }
+        : current.baseVersions,
       saveStatuses: { ...current.saveStatuses, [sessionId]: observedMinutesSaveStatus },
     }));
   }
-
   const updateMinutesDraft = useCallback((draft: StructuredMinutes) => {
+    minutesDraftBySession.current.set(sessionId, draft);
     setMinutesDraftStore((current) => ({ ...current, drafts: { ...current.drafts, [sessionId]: draft } }));
   }, [sessionId]);
+
+  function sameMinutes(left: StructuredMinutes | null | undefined, right: StructuredMinutes | null | undefined): boolean {
+    return JSON.stringify(left) === JSON.stringify(right);
+  }
+
+  function snapshotMinutes(minutes: StructuredMinutes): StructuredMinutes {
+    return {
+      ...minutes,
+      discussionPoints: [...minutes.discussionPoints],
+      decisions: [...minutes.decisions],
+      actionItems: minutes.actionItems.map((item) => ({ ...item })),
+      followUps: [...minutes.followUps],
+    };
+  }
+
+  async function reconcileMinutes(submittedSnapshot: StructuredMinutes, expectedSessionId: string, conflict: boolean) {
+    try {
+      const latest = await getReviewSession(expectedSessionId);
+      const accepted = rememberMinutesBase(expectedSessionId, latest.version, latest.minutes);
+      if (activeSessionId.current === expectedSessionId && accepted) applySnapshot(latest);
+      const latestBase = serverBaseBySession.current.get(expectedSessionId);
+      const currentDraft = minutesDraftBySession.current.has(expectedSessionId)
+        ? minutesDraftBySession.current.get(expectedSessionId) : latestBase?.minutes ?? latest.minutes;
+      const draftMatchesLatest = sameMinutes(currentDraft, latestBase?.minutes ?? latest.minutes);
+      const submittedMatchesLatest = sameMinutes(submittedSnapshot, latestBase?.minutes ?? latest.minutes);
+      if (submittedMatchesLatest || draftMatchesLatest) {
+        setMinutesMutationState(expectedSessionId, {
+          sessionId: expectedSessionId,
+          status: 'saved',
+          message: submittedMatchesLatest ? '저장 결과가 확인되었습니다.' : '최신 회의록과 일치합니다.',
+        });
+      } else {
+        setMinutesMutationState(expectedSessionId, {
+          sessionId: expectedSessionId,
+          status: 'error',
+          message: conflict
+            ? '최신 회의 정보를 불러왔습니다. 수정 내용은 유지했으며 자동 저장하지 않았습니다. 확인 후 다시 저장해 주세요.'
+            : '저장 결과가 서버 회의록과 다릅니다. 수정 내용은 유지했으며 확인 후 다시 저장해 주세요.',
+        });
+      }
+    } catch (error) {
+      recordReviewFailure(expectedSessionId, error);
+      setMinutesMutationState(expectedSessionId, {
+        sessionId: expectedSessionId,
+        status: 'error',
+        message: error instanceof ReviewApiError && error.code === 'SESSION_NOT_FOUND'
+          ? '회의를 찾을 수 없습니다. 새 회의를 시작해 주세요.'
+          : error instanceof ReviewApiError && error.code === 'SESSION_NOT_IN_REVIEW'
+            ? '이 회의는 더 이상 Review 상태가 아닙니다. 처리 상태를 확인해 주세요.'
+            : '저장 결과를 확인하지 못했습니다. 수정 내용은 유지됩니다. 최신 상태를 다시 확인해 주세요.',
+        recoverySnapshot: snapshotMinutes(submittedSnapshot),
+      });
+    }
+  }
+
+  async function saveMinutes(expectedSessionId: string, draft: StructuredMinutes) {
+    if (expectedSessionId !== sessionId || !currentReview || currentReview.sessionId !== expectedSessionId
+      || !currentReview.allowedActions.includes('UPDATE_MINUTES') || minutesSaveInFlight.current.has(expectedSessionId)) return;
+    const base = serverBaseBySession.current.get(expectedSessionId) ?? {
+      version: currentReview.version,
+      minutes: currentReview.minutes,
+    };
+    if (!base.minutes) return;
+    const submittedSnapshot = snapshotMinutes({
+      ...draft,
+      templateId: base.minutes.templateId,
+      templateVersion: base.minutes.templateVersion,
+    });
+    if (sameMinutes(submittedSnapshot, base.minutes)) return;
+
+    minutesSaveInFlight.current.add(expectedSessionId);
+    setMinutesMutationState(expectedSessionId, { sessionId: expectedSessionId, status: 'saving', message: '저장 중…' });
+    try {
+      const result = await updateReviewMinutes(expectedSessionId, base.version, submittedSnapshot);
+      const accepted = rememberMinutesBase(expectedSessionId, result.version, result.minutes);
+      if (accepted && activeSessionId.current === expectedSessionId) {
+        applySnapshot({ ...currentReview, version: result.version, minutes: result.minutes });
+      }
+      try {
+        const latest = await getReviewSession(expectedSessionId);
+        const applied = activeSessionId.current === expectedSessionId && applySnapshot(latest);
+        if (!applied && latest.version >= result.version) rememberMinutesBase(expectedSessionId, latest.version, latest.minutes);
+        const latestBase = serverBaseBySession.current.get(expectedSessionId);
+        const currentDraft = minutesDraftBySession.current.has(expectedSessionId)
+          ? minutesDraftBySession.current.get(expectedSessionId) : latestBase?.minutes;
+        if (sameMinutes(currentDraft, latestBase?.minutes)) {
+          setMinutesMutationState(expectedSessionId, {
+            sessionId: expectedSessionId,
+            status: 'saved',
+            message: '저장 완료',
+          });
+        } else {
+          setMinutesMutationState(expectedSessionId, {
+            sessionId: expectedSessionId,
+            status: 'error',
+            message: '최신 회의록이 반영되었습니다. 수정 내용은 유지했으며 확인 후 다시 저장해 주세요.',
+          });
+        }
+      } catch (error) {
+        recordReviewFailure(expectedSessionId, error);
+        const missingOrInactive = error instanceof ReviewApiError && (error.code === 'SESSION_NOT_FOUND' || error.code === 'SESSION_NOT_IN_REVIEW');
+        setMinutesMutationState(expectedSessionId, {
+          sessionId: expectedSessionId,
+          status: missingOrInactive ? 'error' : 'saved',
+          message: error instanceof ReviewApiError && error.code === 'SESSION_NOT_FOUND'
+            ? '회의를 찾을 수 없습니다. 새 회의를 시작해 주세요.'
+            : error instanceof ReviewApiError && error.code === 'SESSION_NOT_IN_REVIEW'
+              ? '회의록은 저장되었지만 세션이 Review 상태가 아닙니다. 처리 상태를 확인해 주세요.'
+              : '저장 완료. 최신 회의 정보를 확인하지 못했습니다. 화면에서 다시 확인해 주세요.',
+        });
+      }
+    } catch (error) {
+      if (error instanceof ReviewApiError && (error.code === 'SESSION_NOT_FOUND' || error.apiCode === 'SESSION_NOT_FOUND')) {
+        recordReviewFailure(expectedSessionId, error);
+        setMinutesMutationState(expectedSessionId, {
+          sessionId: expectedSessionId,
+          status: 'error',
+          message: '회의를 찾을 수 없습니다. 새 회의를 시작해 주세요.',
+        });
+      } else if (error instanceof ReviewApiError && error.code === 'SESSION_NOT_IN_REVIEW') {
+        recordReviewFailure(expectedSessionId, error);
+        setMinutesMutationState(expectedSessionId, {
+          sessionId: expectedSessionId,
+          status: 'error',
+          message: '이 회의는 더 이상 Review 상태가 아닙니다. 처리 상태를 확인해 주세요.',
+        });
+      } else if (error instanceof ReviewApiError
+        && (error.status === 412 || error.apiCode === 'SESSION_STATE_CONFLICT' || error.outcomeUnknown)) {
+        await reconcileMinutes(submittedSnapshot, expectedSessionId, error.status === 412 || error.apiCode === 'SESSION_STATE_CONFLICT');
+      } else {
+        const fieldLabels: Record<string, string> = {
+          summary: '회의 요약', discussionPoints: '논의 내용', decisions: '결정 사항',
+          actionItems: 'Action Items', followUps: '후속 조치', templateId: '템플릿', templateVersion: '템플릿 버전',
+        };
+        const invalidFields = error instanceof ReviewApiError
+          ? [...new Set(error.fieldErrors.map((field) => fieldLabels[field]).filter((label): label is string => Boolean(label)))] : [];
+        setMinutesMutationState(expectedSessionId, {
+          sessionId: expectedSessionId,
+          status: 'error',
+          message: invalidFields.length > 0
+            ? `저장하지 못했습니다. 다음 항목을 확인해 주세요: ${invalidFields.join(', ')}. 수정 내용은 유지됩니다.`
+            : '저장하지 못했습니다. 기존 저장 내용과 수정 내용은 유지됩니다. 다시 시도해 주세요.',
+        });
+      }
+    } finally {
+      minutesSaveInFlight.current.delete(expectedSessionId);
+    }
+  }
+
+  async function checkMinutesResult(expectedSessionId: string) {
+    const submittedSnapshot = minutesMutationStates[expectedSessionId]?.recoverySnapshot;
+    if (!submittedSnapshot || minutesSaveInFlight.current.has(expectedSessionId)) return;
+    minutesSaveInFlight.current.add(expectedSessionId);
+    setMinutesMutationState(expectedSessionId, { sessionId: expectedSessionId, status: 'saving', message: '저장 결과를 확인하는 중…' });
+    try {
+      await reconcileMinutes(submittedSnapshot, expectedSessionId, false);
+    } finally {
+      minutesSaveInFlight.current.delete(expectedSessionId);
+    }
+  }
 
   function speakerValue(speaker: ReviewSpeaker): string {
     if (Object.prototype.hasOwnProperty.call(currentDraft, speaker.speakerId)) return currentDraft[speaker.speakerId] ?? '';
@@ -256,7 +462,17 @@ export function ReviewSpeakerPage({ drafts, onInitialize, onChange, onCommit, on
       </header>
 
       {reviewIsLoading && <p role="status">회의의 화자 정보를 불러오는 중입니다.</p>}
-      {reviewHasError && <section className="review-speaker-message" role="alert">
+      {reviewHasError && reviewFailure?.sessionId === sessionId && reviewFailure.code === 'SESSION_NOT_FOUND' && <section className="review-speaker-message" role="alert">
+        <h2>회의를 찾을 수 없습니다</h2>
+        <p>회의 처리 정보를 사용할 수 없습니다. 새 회의를 시작해 주세요.</p>
+        <Link className="button button-primary" to="/meetings/new">새 회의 시작</Link>
+      </section>}
+      {reviewHasError && reviewFailure?.sessionId === sessionId && reviewFailure.code === 'SESSION_NOT_IN_REVIEW' && <section className="review-speaker-message" role="alert">
+        <h2>Review 상태가 아닙니다</h2>
+        <p>최신 회의 상태를 확인해 주세요.</p>
+        <Link className="button button-primary" to={`/meetings/${encodeURIComponent(sessionId)}/processing`}>처리 상태 확인</Link>
+      </section>}
+      {reviewHasError && (!reviewFailure || reviewFailure.sessionId !== sessionId || reviewFailure.code === 'OTHER') && <section className="review-speaker-message" role="alert">
         <p>회의 화자 정보를 불러오지 못했습니다. 다시 시도해 주세요.</p>
         <button className="button button-secondary" type="button" onClick={() => void loadReview()}>회의 정보 다시 불러오기</button>
       </section>}
@@ -270,9 +486,14 @@ export function ReviewSpeakerPage({ drafts, onInitialize, onChange, onCommit, on
           participants={availableParticipants}
           ownerState={minutesOwnerState}
           saveState={sessionMinutesSaveState}
-          onSave={onMinutesSave}
+          saveBlockedMessage={minutesSaveBlockedMessage}
+          onSave={onMinutesSave ?? saveMinutes}
           onChange={updateMinutesDraft}
         />
+        {sessionMinutesMutationState.recoverySnapshot && <button className="button button-secondary" type="button"
+          disabled={sessionMinutesMutationState.status === 'saving'} onClick={() => void checkMinutesResult(sessionId)}>
+          저장 결과 다시 확인
+        </button>}
         <section className="review-speaker-card" aria-labelledby="speaker-mapping-heading">
         <div className="review-speaker-card-heading">
           <div><h2 id="speaker-mapping-heading">화자 매핑</h2><p>매핑한 참석자 이름은 모든 해당 발화에 적용됩니다.</p></div>

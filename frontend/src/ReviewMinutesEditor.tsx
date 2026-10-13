@@ -12,6 +12,7 @@ type Props = {
   participants: Participant[];
   ownerState: MinutesOwnerState;
   saveState: MinutesSaveState;
+  saveBlockedMessage?: string;
   onSave?: (sessionId: string, minutes: StructuredMinutes) => void;
   onChange: (minutes: StructuredMinutes) => void;
 };
@@ -39,7 +40,7 @@ function sameMinutes(left: StructuredMinutes | null, right: StructuredMinutes | 
   return JSON.stringify(left) === JSON.stringify(right);
 }
 
-export function ReviewMinutesEditor({ sessionId, minutes, baseline, participants, ownerState, saveState, onSave, onChange }: Props) {
+export function ReviewMinutesEditor({ sessionId, minutes, baseline, participants, ownerState, saveState, saveBlockedMessage, onSave, onChange }: Props) {
   const saving = saveState.sessionId === sessionId && saveState.status === 'saving';
   const saved = saveState.sessionId === sessionId && saveState.status === 'saved';
   const failed = saveState.sessionId === sessionId && saveState.status === 'error';
@@ -53,7 +54,7 @@ export function ReviewMinutesEditor({ sessionId, minutes, baseline, participants
 
   const valid = isValid(minutes);
   const dirty = !sameMinutes(minutes, baseline);
-  const canSave = Boolean(onSave && dirty && valid && !saving);
+  const canSave = Boolean(onSave && dirty && valid && !saving && !saveBlockedMessage);
   const canChooseOwner = ownerState === 'ready';
   const handleSave = () => {
     if (!onSave || !canSave) return;
@@ -79,11 +80,11 @@ export function ReviewMinutesEditor({ sessionId, minutes, baseline, participants
     <div className="review-minutes-fields">
       <div className="review-minutes-field">
         <label htmlFor="minutes-summary">회의 요약</label>
-        <textarea id="minutes-summary" rows={5} value={minutes.summary} disabled={saving}
+        <textarea id="minutes-summary" rows={5} value={minutes.summary}
           onChange={(event) => onChange({ ...minutes, summary: event.target.value })} />
       </div>
 
-      {LIST_FIELDS.map(({ key, title }) => <fieldset className="review-minutes-section" key={key} disabled={saving}>
+      {LIST_FIELDS.map(({ key, title }) => <fieldset className="review-minutes-section" key={key}>
         <legend>{title}</legend>
         {minutes[key].map((value, index) => {
           const invalid = value.trim().length === 0;
@@ -102,7 +103,7 @@ export function ReviewMinutesEditor({ sessionId, minutes, baseline, participants
         </button>
       </fieldset>)}
 
-      <fieldset className="review-minutes-section review-action-items" disabled={saving}>
+      <fieldset className="review-minutes-section review-action-items">
         <legend>Action Items</legend>
         {minutes.actionItems.map((item, index) => {
           const taskId = `minutes-action-task-${index}`;
@@ -159,7 +160,8 @@ export function ReviewMinutesEditor({ sessionId, minutes, baseline, participants
       </button>
       {!valid && <p role="status">비어 있는 항목을 확인해 주세요.</p>}
       {!dirty && <p role="status">변경된 내용이 없습니다.</p>}
-      {dirty && valid && !onSave && <p role="status">저장 연결을 기다리는 동안 수정 내용은 이 화면에 보관됩니다.</p>}
+      {saveBlockedMessage && <p role="status">{saveBlockedMessage}</p>}
+      {dirty && valid && !onSave && !saveBlockedMessage && <p role="status">저장 연결을 기다리는 동안 수정 내용은 이 화면에 보관됩니다.</p>}
       {saved && !dirty && <p role="status">{saveState.message || '저장 완료'}</p>}
       {failed && <p role="alert">{saveState.message || '회의록을 저장하지 못했습니다. 수정 내용은 유지됩니다.'}</p>}
     </div>

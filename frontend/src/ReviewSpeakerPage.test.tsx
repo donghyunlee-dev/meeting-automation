@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { useState, type ComponentProps, type ComponentType } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes, useNavigate } from 'react-router';
@@ -32,9 +32,16 @@ type ReviewTestProps = ComponentProps<typeof ReviewSpeakerPage> & {
   minutesSaveState?: MinutesSaveState;
 };
 const ReviewPageUnderTest = ReviewSpeakerPage as ComponentType<ReviewTestProps>;
+const noopInitialize: ComponentProps<typeof ReviewSpeakerPage>['onInitialize'] = () => undefined;
+const noopChange: ComponentProps<typeof ReviewSpeakerPage>['onChange'] = () => undefined;
+const noopCommit: ComponentProps<typeof ReviewSpeakerPage>['onCommit'] = () => undefined;
 
 function apiResponse(body: unknown): Response {
   return new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
+}
+
+function httpResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 }
 
 function renderReview(fetchMock: ReturnType<typeof vi.fn>, props: Partial<ReviewTestProps> = {}) {
@@ -67,6 +74,34 @@ function mockApiFetch(overrides: { config?: unknown; participants?: unknown; rev
         { id: 'p1', name: 'Ada Lovelace', email: 'private@example.com' },
       ] } });
     }
+    throw new Error(`Unexpected request: ${url.pathname}`);
+  });
+}
+
+function minutesIntegrationFetch(options: {
+  reviews?: Array<unknown | Error | Response>;
+  updateMinutes?: (init?: RequestInit) => Promise<Response> | Response;
+  config?: unknown;
+} = {}) {
+  let reviewIndex = 0;
+  return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = new URL(String(input));
+    if (url.pathname === '/api/v1/meeting-sessions/review-minutes' && init?.method !== 'PUT') {
+      const reviews = options.reviews ?? [reviewData];
+      const next = reviews[Math.min(reviewIndex++, reviews.length - 1)] ?? reviewData;
+      if (next instanceof Error) throw next;
+      return next instanceof Response ? next : apiResponse({ data: next });
+    }
+    if (url.pathname === '/api/v1/meeting-sessions/review-minutes/minutes' && init?.method === 'PUT') {
+      return options.updateMinutes ? options.updateMinutes(init) : apiResponse({ data: { version: 8, minutes: reviewData.minutes } });
+    }
+    if (url.pathname.endsWith('/app-config')) return apiResponse(options.config ?? { data: {
+      company: { id: 'company-1', name: 'Example', timezone: 'Asia/Seoul' },
+      document: { provider: 'NOTION', configured: true, connectionVersion: 2, rootUrl: 'https://notion.example' },
+    } });
+    if (url.pathname.endsWith('/participants')) return apiResponse({ data: { items: [
+      { id: 'p1', name: 'Ada Lovelace', email: 'private@example.com' },
+    ] } });
     throw new Error(`Unexpected request: ${url.pathname}`);
   });
 }
@@ -240,11 +275,10 @@ describe('Review minutes and transcript', () => {
 
     const summary = await screen.findByLabelText('회의 요약');
     fireEvent.change(summary, { target: { value: '첫 번째 수정' } });
-    rendered.rerenderWithProps({ minutesSaveState: { sessionId: 'review-minutes', status: 'saved', message: '저장 완료' } });
+    rendered.rerenderWithProps({ minutesSaveState: { sessionId: 'review-minutes', status: 'saved', message: 'Saved' } });
     const save = screen.getByRole('button', { name: '회의록 저장' }) as HTMLButtonElement;
-    expect(save.disabled).toBe(true);
+    await waitFor(() => expect(save.disabled).toBe(true));
     const editor = within(screen.getByRole('region', { name: '회의록 편집' }));
-    expect(editor.getByText('저장 완료')).toBeTruthy();
 
     fireEvent.change(screen.getByLabelText('회의 요약'), { target: { value: '저장 후 새 수정' } });
     expect(save.disabled).toBe(false);
@@ -329,8 +363,8 @@ describe('Review minutes and transcript', () => {
         <button type="button" onClick={() => navigate('/meetings/review-other/review')}>다른 회의 열기</button>
         <button type="button" onClick={() => navigate('/meetings/review-minutes/review')}>첫 번째 회의 열기</button>
         <Routes>
-          <Route path="/meetings/:sessionId/review" element={<ReviewPageUnderTest drafts={{}} onInitialize={() => undefined}
-            onChange={() => undefined} onCommit={() => undefined}
+          <Route path="/meetings/:sessionId/review" element={<ReviewPageUnderTest drafts={{}} onInitialize={noopInitialize}
+            onChange={noopChange} onCommit={noopCommit}
             onMinutesSave={(savedSessionId) => setMinutesSaveState({ sessionId: savedSessionId, status: 'saved', message: '저장 완료' })}
             minutesSaveState={minutesSaveState} />} />
         </Routes>
@@ -360,5 +394,250 @@ describe('Review minutes and transcript', () => {
     await screen.findByLabelText('회의 요약');
     expect((screen.getByLabelText('회의 요약') as HTMLTextAreaElement).value).toBe('두 번째 회의의 임시 수정');
     expect((screen.getByRole('button', { name: '회의록 저장' }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('saves one complete draft with the current version and reconciles the API-010 snapshot', async () => {
+    const submitted = { ...reviewData.minutes, summary: 'API-012에 저장할 전체 회의록' };
+    const readAfterWrite = {
+      ...reviewData,
+      version: 8,
+      minutes: submitted,
+      speakers: [{ ...reviewData.speakers[0]!, participantId: 'p2', participantName: 'Grace Hopper' }],
+      transcript: [{ segmentId: 'after-write', speakerId: 'speaker-a', startMs: 300, endMs: 900, text: 'API-010 authoritative transcript snapshot' }],
+      allowedActions: ['UPDATE_SPEAKER_MAPPING'],
+    };
+    const fetchMock = minutesIntegrationFetch({
+      reviews: [reviewData, readAfterWrite],
+      updateMinutes: () => httpResponse({ data: { version: 8, minutes: submitted } }),
+    });
+    renderReview(fetchMock);
+
+    fireEvent.change(await screen.findByLabelText('회의 요약'), { target: { value: submitted.summary } });
+    fireEvent.click(screen.getByRole('button', { name: '회의록 저장' }));
+
+    expect(await screen.findByText('저장 완료')).toBeTruthy();
+    const putCall = fetchMock.mock.calls.find(([input, init]) => String(input).endsWith('/minutes') && init?.method === 'PUT');
+    expect(putCall).toBeTruthy();
+    expect(new Headers(putCall?.[1]?.headers).get('If-Match')).toBe('"7"');
+    expect(JSON.parse(String(putCall?.[1]?.body))).toEqual(submitted);
+    expect(fetchMock.mock.calls.filter(([input]) => new URL(String(input)).pathname === '/api/v1/meeting-sessions/review-minutes')).toHaveLength(2);
+    expect(fetchMock.mock.calls.some(([input, init]) => String(input).endsWith('/speaker-mappings') && init?.method === 'PUT')).toBe(false);
+    expect((screen.getByRole('button', { name: '회의록 저장' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByLabelText('Speaker A 참가자') as HTMLSelectElement).value).toBe('p2');
+    expect(within(screen.getByRole('region', { name: '회의록 편집' })).getByText('최신 Review 정보를 확인한 뒤 다시 시도해 주세요.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Transcript 원문 보기' }));
+    const drawer = await screen.findByRole('dialog');
+    expect(within(drawer).getByText('API-010 authoritative transcript snapshot')).toBeTruthy();
+  });
+
+  it('keeps edits made during a single in-flight save as a new dirty draft', async () => {
+    let finishUpdate!: (response: Response) => void;
+    const updateResponse = new Promise<Response>((resolve) => { finishUpdate = resolve; });
+    const submitted = { ...reviewData.minutes, summary: '제출한 회의록' };
+    const fetchMock = minutesIntegrationFetch({
+      reviews: [reviewData, { ...reviewData, version: 8, minutes: submitted }],
+      updateMinutes: () => updateResponse,
+    });
+    renderReview(fetchMock);
+
+    const summary = await screen.findByLabelText('회의 요약') as HTMLTextAreaElement;
+    fireEvent.change(summary, { target: { value: submitted.summary } });
+    fireEvent.click(screen.getByRole('button', { name: '회의록 저장' }));
+    await waitFor(() => expect(fetchMock.mock.calls.filter(([input, init]) => String(input).endsWith('/minutes') && init?.method === 'PUT')).toHaveLength(1));
+    expect(summary.disabled).toBe(false);
+    fireEvent.change(summary, { target: { value: '요청 중 추가로 수정한 회의록' } });
+    expect((screen.getByRole('button', { name: '저장 중…' }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: '저장 중…' }));
+    expect(fetchMock.mock.calls.filter(([input, init]) => String(input).endsWith('/minutes') && init?.method === 'PUT')).toHaveLength(1);
+
+    finishUpdate(httpResponse({ data: { version: 8, minutes: submitted } }));
+
+    await waitFor(() => expect(summary.value).toBe('요청 중 추가로 수정한 회의록'));
+    expect((screen.getByRole('button', { name: '회의록 저장' }) as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.queryByText('저장 완료')).toBeNull();
+  });
+
+  it('blocks clean and action-disallowed drafts without calling API-012', async () => {
+    const cleanFetch = minutesIntegrationFetch();
+    renderReview(cleanFetch);
+    const cleanSave = await screen.findByRole('button', { name: '회의록 저장' });
+    expect((cleanSave as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(cleanSave);
+    expect(cleanFetch.mock.calls.some(([input, init]) => String(input).endsWith('/minutes') && init?.method === 'PUT')).toBe(false);
+    cleanup();
+
+    const fetchMock = minutesIntegrationFetch({ reviews: [{ ...reviewData, allowedActions: ['UPDATE_SPEAKER_MAPPING'] }] });
+    renderReview(fetchMock);
+
+    const summary = await screen.findByLabelText('회의 요약');
+    fireEvent.change(summary, { target: { value: '수정했지만 action이 허용되지 않음' } });
+    const editor = within(screen.getByRole('region', { name: '회의록 편집' }));
+    const save = editor.getByRole('button', { name: '회의록 저장' }) as HTMLButtonElement;
+    expect(save.disabled).toBe(true);
+    expect(editor.getByText('최신 Review 정보를 확인한 뒤 다시 시도해 주세요.')).toBeTruthy();
+    fireEvent.click(save);
+    expect(fetchMock.mock.calls.some(([input, init]) => String(input).endsWith('/minutes') && init?.method === 'PUT')).toBe(false);
+  });
+
+  it('retains the user draft and shows safe feedback for API-012 validation errors', async () => {
+    const fetchMock = minutesIntegrationFetch({
+      updateMinutes: () => httpResponse({ error: {
+        code: 'VALIDATION_FAILED', message: 'private server error detail',
+        details: { fieldErrors: [{ field: 'summary', code: 'INVALID' }] },
+      } }, 400),
+    });
+    renderReview(fetchMock);
+
+    const summary = await screen.findByLabelText('회의 요약') as HTMLTextAreaElement;
+    fireEvent.change(summary, { target: { value: '서버 검증 실패 뒤 보존할 내용' } });
+    fireEvent.click(screen.getByRole('button', { name: '회의록 저장' }));
+
+    const alert = await screen.findByRole('alert');
+    expect(summary.value).toBe('서버 검증 실패 뒤 보존할 내용');
+    expect(alert.textContent).toContain('저장하지 못했습니다');
+    expect(alert.textContent).not.toContain('private server error detail');
+    expect((screen.getByRole('button', { name: '회의록 저장' }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('refreshes the server base after a 412 and never automatically replays the PUT', async () => {
+    const latest = { ...reviewData, version: 8, minutes: { ...reviewData.minutes, summary: '다른 사용자가 저장한 내용' } };
+    const fetchMock = minutesIntegrationFetch({
+      reviews: [reviewData, latest],
+      updateMinutes: () => httpResponse({ error: { code: 'SESSION_VERSION_CONFLICT' } }, 412),
+    });
+    renderReview(fetchMock);
+
+    const summary = await screen.findByLabelText('회의 요약') as HTMLTextAreaElement;
+    fireEvent.change(summary, { target: { value: '내가 보존해야 하는 편집' } });
+    fireEvent.click(screen.getByRole('button', { name: '회의록 저장' }));
+
+    expect(await screen.findByText(/최신 회의 정보를 불러왔습니다/)).toBeTruthy();
+    expect(summary.value).toBe('내가 보존해야 하는 편집');
+    expect((screen.getByRole('button', { name: '회의록 저장' }) as HTMLButtonElement).disabled).toBe(false);
+    expect(fetchMock.mock.calls.filter(([input, init]) => String(input).endsWith('/minutes') && init?.method === 'PUT')).toHaveLength(1);
+  });
+
+  it('reconciles a lost response as saved when API-010 contains the submitted snapshot', async () => {
+    const submitted = { ...reviewData.minutes, summary: '응답은 유실됐지만 서버에 반영된 내용' };
+    const fetchMock = minutesIntegrationFetch({
+      reviews: [reviewData, { ...reviewData, version: 8, minutes: submitted }],
+      updateMinutes: async () => { throw new TypeError('private network detail'); },
+    });
+    renderReview(fetchMock);
+
+    fireEvent.change(await screen.findByLabelText('회의 요약'), { target: { value: submitted.summary } });
+    fireEvent.click(screen.getByRole('button', { name: '회의록 저장' }));
+
+    expect(await screen.findByText(/저장 결과가 확인되었습니다/)).toBeTruthy();
+    expect((screen.getByRole('button', { name: '회의록 저장' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(fetchMock.mock.calls.filter(([input, init]) => String(input).endsWith('/minutes') && init?.method === 'PUT')).toHaveLength(1);
+  });
+
+  it('preserves an uncertain draft and offers a status check when the reconciliation GET also fails', async () => {
+    const fetchMock = minutesIntegrationFetch({
+      reviews: [reviewData, new Error('private API-010 detail')],
+      updateMinutes: async () => { throw new TypeError('private network detail'); },
+    });
+    renderReview(fetchMock);
+
+    const summary = await screen.findByLabelText('회의 요약') as HTMLTextAreaElement;
+    fireEvent.change(summary, { target: { value: '결과 확인 전 유지할 내용' } });
+    fireEvent.click(screen.getByRole('button', { name: '회의록 저장' }));
+
+    expect(await screen.findByText(/저장 결과를 확인하지 못했습니다/)).toBeTruthy();
+    expect(summary.value).toBe('결과 확인 전 유지할 내용');
+    fireEvent.click(screen.getByRole('button', { name: '저장 결과 다시 확인' }));
+    await waitFor(() => expect(fetchMock.mock.calls.filter(([input]) => new URL(String(input)).pathname === '/api/v1/meeting-sessions/review-minutes')).toHaveLength(3));
+    expect(fetchMock.mock.calls.filter(([input, init]) => String(input).endsWith('/minutes') && init?.method === 'PUT')).toHaveLength(1);
+  });
+
+  it('allows Minutes saving without a document provider and preserves an existing owner', async () => {
+    const submitted = { ...reviewData.minutes, summary: 'provider 없이 저장' };
+    let sentBody: unknown;
+    const fetchMock = minutesIntegrationFetch({
+      config: { data: { company: { id: 'company-1', name: 'Example', timezone: 'Asia/Seoul' }, document: { provider: null, configured: false, connectionVersion: 2, rootUrl: '' } } },
+      updateMinutes: (init) => {
+        sentBody = JSON.parse(String(init?.body));
+        return httpResponse({ data: { version: 8, minutes: submitted } });
+      },
+    });
+    renderReview(fetchMock);
+
+    fireEvent.change(await screen.findByLabelText('회의 요약'), { target: { value: submitted.summary } });
+    expect((screen.getByLabelText('담당자 1') as HTMLSelectElement).value).toBe('p1');
+    fireEvent.click(screen.getByRole('button', { name: '회의록 저장' }));
+
+    expect(await screen.findByText('저장 완료')).toBeTruthy();
+    expect(sentBody).toEqual(submitted);
+    expect(screen.queryByText('private@example.com')).toBeNull();
+  });
+
+  it('does not let a lower-version read-after-write response replace the mutation result', async () => {
+    const saved = { ...reviewData.minutes, summary: 'version 8에 저장된 내용' };
+    const fetchMock = minutesIntegrationFetch({
+      reviews: [reviewData, reviewData],
+      updateMinutes: (() => {
+        let saves = 0;
+        return () => {
+          saves += 1;
+          return httpResponse({ data: { version: saves === 1 ? 8 : 9, minutes: saves === 1 ? saved : { ...saved, summary: 'version 9' } } });
+        };
+      })(),
+    });
+    renderReview(fetchMock);
+
+    const summary = await screen.findByLabelText('회의 요약') as HTMLTextAreaElement;
+    fireEvent.change(summary, { target: { value: saved.summary } });
+    fireEvent.click(screen.getByRole('button', { name: '회의록 저장' }));
+    expect(await screen.findByText('저장 완료')).toBeTruthy();
+
+    fireEvent.change(summary, { target: { value: 'version 8을 기준으로 한 새 편집' } });
+    fireEvent.click(screen.getByRole('button', { name: '회의록 저장' }));
+    await waitFor(() => expect(fetchMock.mock.calls.filter(([input, init]) => String(input).endsWith('/minutes') && init?.method === 'PUT')).toHaveLength(2));
+    const putCalls = fetchMock.mock.calls.filter(([input, init]) => String(input).endsWith('/minutes') && init?.method === 'PUT');
+    expect(new Headers(putCalls[1]?.[1]?.headers).get('If-Match')).toBe('"8"');
+  });
+
+  it('routes an API-012 SESSION_NOT_FOUND response to the safe new-meeting recovery path', async () => {
+    const fetchMock = minutesIntegrationFetch({
+      updateMinutes: () => httpResponse({ error: { code: 'SESSION_NOT_FOUND', message: 'internal diagnostic' } }, 404),
+    });
+    renderReview(fetchMock);
+
+    await waitFor(() => expect(document.querySelector('#minutes-summary')).not.toBeNull());
+    const summary = document.querySelector('#minutes-summary') as HTMLTextAreaElement;
+    fireEvent.change(summary, { target: { value: 'Draft submitted for a missing session' } });
+    fireEvent.click(document.querySelector('.review-minutes-save-controls button')!);
+
+    await waitFor(() => expect(document.querySelector('a[href="/meetings/new"]')).not.toBeNull());
+    expect(screen.getByRole('alert')).not.toBeNull();
+    expect(document.querySelector('#minutes-summary')).toBeNull();
+    const putCall = fetchMock.mock.calls.find(([input, init]) => String(input).endsWith('/minutes') && init?.method === 'PUT');
+    expect(JSON.parse(String(putCall?.[1]?.body)).summary).toBe('Draft submitted for a missing session');
+  });
+  it('retains the full draft when API-012 reports a missing action-item owner', async () => {
+    const fetchMock = minutesIntegrationFetch({
+      updateMinutes: () => httpResponse({ error: { code: 'PARTICIPANT_NOT_FOUND' } }, 404),
+    });
+    renderReview(fetchMock);
+
+    await waitFor(() => expect(document.querySelector('#minutes-summary')).not.toBeNull());
+    const summary = document.querySelector('#minutes-summary') as HTMLTextAreaElement;
+    fireEvent.change(summary, { target: { value: 'Keep this draft for recovery' } });
+    fireEvent.click(document.querySelector('.review-minutes-save-controls button')!);
+
+    await waitFor(() => expect(screen.getByRole('alert')).not.toBeNull());
+    expect((document.querySelector('#minutes-summary') as HTMLTextAreaElement).value).toBe('Keep this draft for recovery');
+    const putCall = fetchMock.mock.calls.find(([input, init]) => String(input).endsWith('/minutes') && init?.method === 'PUT');
+    expect(JSON.parse(String(putCall?.[1]?.body)).summary).toBe('Keep this draft for recovery');
+  });
+  it('routes an API-010 missing session to the safe new-meeting recovery path', async () => {
+    const fetchMock = minutesIntegrationFetch({ reviews: [httpResponse({ error: { code: 'SESSION_NOT_FOUND' } }, 404)] });
+    renderReview(fetchMock);
+
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toContain('회의를 찾을 수 없습니다');
+    expect(within(alert).getByRole('link', { name: '새 회의 시작' }).getAttribute('href')).toBe('/meetings/new');
+    expect(screen.queryByLabelText('회의 요약')).toBeNull();
   });
 });
