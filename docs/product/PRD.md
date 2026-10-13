@@ -832,7 +832,7 @@ transcribeWithDiarization(audio)
 LLM은 가능하면 Markdown 문자열이 아니라 구조화 Minutes DTO를 반환하고
 Backend가 Template에 렌더링한다.
 
-근거 없는 결정, 담당자, 날짜를 생성하지 않는다.
+각 생성 claim은 근거가 되는 Transcript segment를 가리켜야 한다. Backend는 인용 segment ID의 입력 존재를 검증하며 의미적 함의까지 독립 입증하지 않는다. 근거가 확인되지 않는 summary/list claim은 해당 claim만 제거하고, Action task가 지원되지 않으면 그 Action item을 제거한다. 지원되는 task의 날짜는 canonical ISO literal이 인용 segment 본문에 있을 때만 유지하며 담당자와 나머지 날짜 근거가 없으면 각각 null로 둔다. 구조/schema 오류는 별도의 처리 실패로 보존한다.
 
 ------------------------------------------------------------------------
 
@@ -2160,7 +2160,7 @@ Provider segment → TranscriptSegment
 }
 ```
 
-출력은 Template별 Structured Minutes DTO다.
+Provider 내부 출력은 Template별 Structured Minutes claim과 claim별 Transcript segment ID 근거를 포함한다. Backend는 인용 ID의 입력 존재를 확인하지만 claim의 의미적 함의는 별도 검증하지 않는다. 입력 Transcript에서 찾을 수 없는 근거에 해당하는 텍스트 claim만 제거하고, Action task의 canonical ISO date literal이 인용 segment에 없으면 날짜를 null로 정규화한다. 저장 및 API에 노출되는 결과는 [Data Specification](./data-spec.md)의 표준 Structured Minutes DTO이며 evidence ID를 포함하지 않는다.
 
 ## EXT-003 Document
 

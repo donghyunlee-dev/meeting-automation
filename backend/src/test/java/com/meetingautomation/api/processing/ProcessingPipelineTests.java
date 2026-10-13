@@ -1,6 +1,7 @@
 package com.meetingautomation.api.processing;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.inOrder;
@@ -15,10 +16,18 @@ import ch.qos.logback.core.read.ListAppender;
 import com.meetingautomation.api.audio.AudioAssemblyStorage;
 import com.meetingautomation.api.session.MeetingSession;
 import com.meetingautomation.api.session.MeetingSessionStore;
+import com.meetingautomation.api.template.TemplateCatalog;
 import com.meetingautomation.api.session.UploadPolicy;
 import com.meetingautomation.document.Speaker;
+import com.meetingautomation.document.StructuredMinutes;
 import com.meetingautomation.document.TranscriptResult;
 import com.meetingautomation.document.TranscriptSegment;
+import com.meetingautomation.minutes.GroundedMinutesResult;
+import com.meetingautomation.minutes.GroundedMinutesResultNormalizer;
+import com.meetingautomation.minutes.MinutesCommand;
+import com.meetingautomation.minutes.MinutesGenerationException;
+import com.meetingautomation.minutes.MinutesGenerationProvider;
+import com.meetingautomation.minutes.MinutesGenerationUseCase;
 import com.meetingautomation.transcription.DiarizationResultAdapter;
 import com.meetingautomation.transcription.ProviderTranscriptionResponse;
 import com.meetingautomation.transcription.TranscriptionCommand;
@@ -42,8 +51,12 @@ class ProcessingPipelineTests {
     private final AudioAssemblyUseCase audioAssembly = mock(AudioAssemblyUseCase.class);
     private final TranscriptionProvider transcriptionProvider = mock(TranscriptionProvider.class);
     private final DiarizationResultAdapter normalizer = mock(DiarizationResultAdapter.class);
+    private final MinutesGenerationProvider minutesProvider = mock(MinutesGenerationProvider.class);
+    private final MinutesGenerationUseCase minutesUseCase = new MinutesGenerationUseCase(
+            new TemplateCatalog(new org.springframework.core.io.DefaultResourceLoader()),
+            minutesProvider, new GroundedMinutesResultNormalizer());
     private final ProcessingPipeline pipeline = new ProcessingPipeline(
-            sessionStore, audioAssembly, transcriptionProvider, normalizer);
+            sessionStore, audioAssembly, transcriptionProvider, normalizer, minutesUseCase);
 
     @BeforeEach
     void createProcessingSession() {
@@ -62,25 +75,42 @@ class ProcessingPipelineTests {
         when(audioAssembly.assemble(JOB, POLICY, TRACE_ID)).thenReturn(assembly);
         when(transcriptionProvider.transcribeWithDiarization(any(TranscriptionCommand.class))).thenReturn(response);
         when(normalizer.normalize(response, JOB.durationMs())).thenReturn(normalized);
+        when(minutesProvider.generateMinutes(any(MinutesCommand.class))).thenReturn(new GroundedMinutesResult(
+                "default.md", "1.0.0",
+                List.of(new GroundedMinutesResult.TextClaim("Grounded summary", List.of("seg_001"))),
+                List.of(), List.of(), List.of(), List.of()));
 
         pipeline.process(JOB, TRACE_ID);
 
-        InOrder order = inOrder(audioAssembly, transcriptionProvider, normalizer);
+        InOrder order = inOrder(audioAssembly, transcriptionProvider, normalizer, minutesProvider);
         order.verify(audioAssembly).assemble(JOB, POLICY, TRACE_ID);
         order.verify(transcriptionProvider).transcribeWithDiarization(any(TranscriptionCommand.class));
         order.verify(normalizer).normalize(response, JOB.durationMs());
+        order.verify(minutesProvider).generateMinutes(any(MinutesCommand.class));
         MeetingSession saved = sessionStore.find(SESSION_ID).orElseThrow();
-        assertThat(saved.status()).isEqualTo("PROCESSING");
-        assertThat(saved.processingStage()).isEqualTo("DIARIZATION");
+        assertThat(saved.status()).isEqualTo("REVIEW");
+        assertThat(saved.processingStage()).isEqualTo("DRAFT_READY");
         assertThat(saved.progressPercent()).isEqualTo(100);
         assertThat(saved.speakers()).containsExactlyElementsOf(normalized.speakers());
         assertThat(saved.transcript()).containsExactlyElementsOf(normalized.segments());
+        assertThat(saved.minutes()).isEqualTo(new StructuredMinutes(
+                "default.md", "1.0.0", "Grounded summary", List.of(), List.of(), List.of(), List.of()));
+        assertThat(saved.minutes().toString()).doesNotContain("Grounded summary");
+        assertThat(saved.toString()).doesNotContain("Grounded summary");
         assertThat(saved.processingFailure()).isNull();
         verify(transcriptionProvider).transcribeWithDiarization(org.mockito.ArgumentMatchers.argThat(command ->
                 command.audioReference().equals(AUDIO_REFERENCE)
                         && command.mimeType().equals("audio/webm")
                         && command.languageHint() == null
                         && command.meetingDurationMs() == JOB.durationMs()));
+        verify(minutesProvider).generateMinutes(org.mockito.ArgumentMatchers.argThat(command ->
+                command.templateId().equals("default.md")
+                        && command.templateVersion().equals("1.0.0")
+                        && command.participants().stream().anyMatch(participant ->
+                                participant.id().equals("participant-1")
+                                        && participant.name().equals("Ada Lovelace"))
+                        && command.transcript().contains(normalized.segments().getFirst())
+                        && command.speakerParticipantMappings().isEmpty()));
     }
 
     @Test
@@ -120,6 +150,7 @@ class ProcessingPipelineTests {
         assertThat(failed.transcript()).isEmpty();
         verify(transcriptionProvider, never()).transcribeWithDiarization(any());
         verify(normalizer, never()).normalize(any(), org.mockito.ArgumentMatchers.anyLong());
+        verify(minutesProvider, never()).generateMinutes(any());
     }
 
     @Test
@@ -137,6 +168,7 @@ class ProcessingPipelineTests {
         assertThat(failed.processingFailure().errorCode()).isEqualTo("TRANSCRIPTION_PROCESSING_FAILED");
         assertThat(failed.processingFailure().retryable()).isTrue();
         verify(normalizer, never()).normalize(any(), org.mockito.ArgumentMatchers.anyLong());
+        verify(minutesProvider, never()).generateMinutes(any());
     }
 
     @Test
@@ -161,6 +193,93 @@ class ProcessingPipelineTests {
         String logs = loggedContent(appender);
         assertThat(logs).contains(SESSION_ID, TRACE_ID, "DIARIZATION", "DIARIZATION_INVALID_RESULT");
         assertThat(logs).doesNotContain("private provider transcript response", "provider-speaker", "secret-key");
+        verify(minutesProvider, never()).generateMinutes(any());
+    }
+
+    @Test
+    void minutesProviderFailureStopsReviewAndPreservesSuccessfulTranscript() {
+        ProviderTranscriptionResponse response = providerResponse();
+        TranscriptResult normalized = new TranscriptResult(
+                List.of(new Speaker("speaker_a", "Speaker A")),
+                List.of(new TranscriptSegment("seg_001", "speaker_a", 10, 200, "normalized text")));
+        when(audioAssembly.assemble(JOB, POLICY, TRACE_ID)).thenReturn(assembly());
+        when(transcriptionProvider.transcribeWithDiarization(any(TranscriptionCommand.class))).thenReturn(response);
+        when(normalizer.normalize(response, JOB.durationMs())).thenReturn(normalized);
+        when(minutesProvider.generateMinutes(any(MinutesCommand.class)))
+                .thenThrow(new MinutesGenerationException(MinutesGenerationException.Code.PROCESSING_FAILED, true));
+        ListAppender<ILoggingEvent> appender = capturePipelineLogs();
+
+        pipeline.process(JOB, TRACE_ID);
+
+        MeetingSession failed = sessionStore.find(SESSION_ID).orElseThrow();
+        assertThat(failed.status()).isEqualTo("PROCESSING_FAILED");
+        assertThat(failed.processingStage()).isEqualTo("MINUTES_GENERATION");
+        assertThat(failed.progressPercent()).isEqualTo(100);
+        assertThat(failed.processingFailure().errorCode()).isEqualTo("MINUTES_PROCESSING_FAILED");
+        assertThat(failed.processingFailure().retryable()).isTrue();
+        assertThat(failed.speakers()).containsExactlyElementsOf(normalized.speakers());
+        assertThat(failed.transcript()).containsExactlyElementsOf(normalized.segments());
+        assertThat(failed.minutes()).isNull();
+        String logs = loggedContent(appender);
+        assertThat(logs).contains(SESSION_ID, TRACE_ID, "MINUTES_GENERATION", "MINUTES_PROCESSING_FAILED")
+                .doesNotContain("normalized text", "private provider transcript", "Ada Lovelace", "secret-key");
+    }
+
+    @Test
+    void emptyTranscriptCreatesAnEmptyDraftWithoutCallingMinutesProvider() {
+        ProviderTranscriptionResponse response = new ProviderTranscriptionResponse(List.of(), List.of());
+        when(audioAssembly.assemble(JOB, POLICY, TRACE_ID)).thenReturn(assembly());
+        when(transcriptionProvider.transcribeWithDiarization(any(TranscriptionCommand.class))).thenReturn(response);
+        when(normalizer.normalize(response, JOB.durationMs())).thenReturn(new TranscriptResult(List.of(), List.of()));
+
+        pipeline.process(JOB, TRACE_ID);
+
+        MeetingSession saved = sessionStore.find(SESSION_ID).orElseThrow();
+        assertThat(saved.status()).isEqualTo("REVIEW");
+        assertThat(saved.processingStage()).isEqualTo("DRAFT_READY");
+        assertThat(saved.minutes()).isEqualTo(new StructuredMinutes(
+                "default.md", "1.0.0", "", List.of(), List.of(), List.of(), List.of()));
+        verify(minutesProvider, never()).generateMinutes(any());
+    }
+
+    @Test
+    void invalidMinutesCannotPartiallyTransitionSessionToReview() {
+        sessionStore.recordProcessingProgress(SESSION_ID, "MINUTES_GENERATION", 100);
+        MeetingSession beforeSave = sessionStore.find(SESSION_ID).orElseThrow();
+
+        assertThatThrownBy(() -> sessionStore.saveMinutesAndComplete(SESSION_ID,
+                        new StructuredMinutes("default.md", "0.9.0", "stale template",
+                                List.of(), List.of(), List.of(), List.of())))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThat(sessionStore.find(SESSION_ID).orElseThrow()).isEqualTo(beforeSave);
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(
+                        () -> sessionStore.saveMinutesAndComplete(SESSION_ID, null))
+                .isInstanceOf(IllegalArgumentException.class);
+
+        MeetingSession afterFailure = sessionStore.find(SESSION_ID).orElseThrow();
+        assertThat(afterFailure).isEqualTo(beforeSave);
+        assertThat(afterFailure.status()).isEqualTo("PROCESSING");
+        assertThat(afterFailure.processingStage()).isEqualTo("MINUTES_GENERATION");
+        assertThat(afterFailure.minutes()).isNull();
+    }
+
+    @Test
+    void changedCatalogTemplateVersionFailsSafelyBeforeCallingProvider() {
+        MeetingSession createdWithOlderTemplate = new MeetingSession(
+                SESSION_ID, 1, "PROCESSING", 1,
+                new MeetingSession.Meeting("Planning", "default.md", "0.9.0",
+                        List.of("participant-1"), "Asia/Seoul",
+                        List.of(new MeetingSession.ParticipantReference("participant-1", "Ada Lovelace"))),
+                "DIARIZATION", 66,
+                List.of(new Speaker("speaker_a", "Speaker A")),
+                List.of(new TranscriptSegment("seg_001", "speaker_a", 10, 200, "normalized text")),
+                null, null);
+
+        assertThatThrownBy(() -> minutesUseCase.generate(createdWithOlderTemplate))
+                .isInstanceOf(MinutesGenerationException.class)
+                .extracting("code").isEqualTo(MinutesGenerationException.Code.CONFIGURATION_ERROR);
+        verify(minutesProvider, never()).generateMinutes(any());
     }
 
     private ListAppender<ILoggingEvent> capturePipelineLogs() {
@@ -182,7 +301,9 @@ class ProcessingPipelineTests {
 
     private static MeetingSession uploadingSession() {
         return new MeetingSession(SESSION_ID, 1, "UPLOADING", 1,
-                new MeetingSession.Meeting("Planning", "default.md", List.of("participant-1"), "Asia/Seoul"));
+                new MeetingSession.Meeting("Planning", "default.md", "1.0.0",
+                        List.of("participant-1"), "Asia/Seoul",
+                        List.of(new MeetingSession.ParticipantReference("participant-1", "Ada Lovelace"))));
     }
 
     private static AudioAssemblyStorage.Assembly assembly() {

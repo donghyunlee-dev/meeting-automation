@@ -10,6 +10,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 
+import com.meetingautomation.api.session.MeetingSession;
+import com.meetingautomation.api.session.MeetingSessionStore;
+import com.meetingautomation.document.DocumentConnectionGate;
+import com.meetingautomation.document.settings.GlobalDocumentSettings;
+import com.meetingautomation.document.settings.GlobalSettingsStore;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -21,10 +26,6 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.test.web.servlet.MockMvc;
-import com.meetingautomation.api.session.MeetingSessionStore;
-import com.meetingautomation.document.DocumentConnectionGate;
-import com.meetingautomation.document.settings.GlobalDocumentSettings;
-import com.meetingautomation.document.settings.GlobalSettingsStore;
 
 @SpringBootTest(properties = {
         "DOCUMENT_PROVIDER=NOTION",
@@ -87,8 +88,19 @@ class MeetingSessionCreationApiTests {
                 .andExpect(jsonPath("$.data.uploadPolicy.acceptedMimeTypes[1]").value("audio/mp4"))
                 .andReturn().getResponse().getContentAsString();
         String sessionId = com.jayway.jsonpath.JsonPath.read(body, "$.data.sessionId");
-        org.assertj.core.api.Assertions.assertThat(sessionStore.find(sessionId))
-                .get().extracting("documentConnectionVersion").isEqualTo(1L);
+        MeetingSession saved = sessionStore.find(sessionId).orElseThrow();
+        org.assertj.core.api.Assertions.assertThat(saved.documentConnectionVersion()).isEqualTo(1L);
+        org.assertj.core.api.Assertions.assertThat(saved.meeting().templateVersion()).isEqualTo("1.0.0");
+        org.assertj.core.api.Assertions.assertThat(saved.meeting().participantReferences())
+                .containsExactly(new MeetingSession.ParticipantReference("participant-1", "Ada Lovelace"));
+        org.assertj.core.api.Assertions.assertThat(saved.toString())
+                .doesNotContain("Ada Lovelace", "ada@example.test");
+        org.assertj.core.api.Assertions.assertThat(saved.meeting().toString())
+                .doesNotContain("Ada Lovelace", "ada@example.test");
+        org.assertj.core.api.Assertions.assertThat(saved.meeting().participantReferences().getFirst().toString())
+                .doesNotContain("Ada Lovelace", "ada@example.test");
+        org.assertj.core.api.Assertions.assertThat(body)
+                .doesNotContain("Ada Lovelace", "ada@example.test", "templateVersion");
         org.assertj.core.api.Assertions.assertThatThrownBy(() -> connectionGate.beginSwitch(settingsStore.read().version()))
                 .isInstanceOf(com.meetingautomation.document.settings.SettingsException.class)
                 .extracting("code").isEqualTo("DOCUMENT_CHANGE_BUSY");

@@ -8,6 +8,9 @@ import com.meetingautomation.api.session.UploadPolicy;
 import com.meetingautomation.document.Speaker;
 import com.meetingautomation.document.TranscriptResult;
 import com.meetingautomation.document.TranscriptSegment;
+import com.meetingautomation.document.StructuredMinutes;
+import com.meetingautomation.minutes.MinutesGenerationException;
+import com.meetingautomation.minutes.MinutesGenerationUseCase;
 import com.meetingautomation.transcription.DiarizationResultAdapter;
 import com.meetingautomation.transcription.ProviderTranscriptionResponse;
 import com.meetingautomation.transcription.TranscriptionCommand;
@@ -28,18 +31,22 @@ public class ProcessingPipeline {
     private static final String AUDIO_ASSEMBLY = "AUDIO_ASSEMBLY";
     private static final String TRANSCRIPTION = "TRANSCRIPTION";
     private static final String DIARIZATION = "DIARIZATION";
+    private static final String MINUTES_GENERATION = "MINUTES_GENERATION";
 
     private final MeetingSessionStore sessionStore;
     private final AudioAssemblyUseCase audioAssembly;
     private final TranscriptionProvider transcriptionProvider;
     private final DiarizationResultAdapter diarizationAdapter;
+    private final MinutesGenerationUseCase minutesGeneration;
 
     public ProcessingPipeline(MeetingSessionStore sessionStore, AudioAssemblyUseCase audioAssembly,
-            TranscriptionProvider transcriptionProvider, DiarizationResultAdapter diarizationAdapter) {
+            TranscriptionProvider transcriptionProvider, DiarizationResultAdapter diarizationAdapter,
+            MinutesGenerationUseCase minutesGeneration) {
         this.sessionStore = sessionStore;
         this.audioAssembly = audioAssembly;
         this.transcriptionProvider = transcriptionProvider;
         this.diarizationAdapter = diarizationAdapter;
+        this.minutesGeneration = minutesGeneration;
     }
 
     public void process(ProcessingJob job, String traceId) {
@@ -123,6 +130,32 @@ public class ProcessingPipeline {
             return;
         }
         logStageSucceeded(sessionId, effectiveTraceId, DIARIZATION, stageStartedAt);
+
+        sessionStore.recordProcessingProgress(sessionId, MINUTES_GENERATION, 100);
+        stageStartedAt = System.nanoTime();
+        logStageStarted(sessionId, effectiveTraceId, MINUTES_GENERATION);
+        StructuredMinutes minutes;
+        try {
+            MeetingSession current = sessionStore.find(sessionId).orElseThrow();
+            minutes = minutesGeneration.generate(current);
+        } catch (MinutesGenerationException failure) {
+            String code = failure.code() == null ? "MINUTES_PROCESSING_FAILED" : "MINUTES_" + failure.code().name();
+            fail(sessionId, effectiveTraceId, MINUTES_GENERATION, 100,
+                    safeCode(code, "MINUTES_PROCESSING_FAILED"), failure.retryable(), stageStartedAt);
+            return;
+        } catch (RuntimeException failure) {
+            fail(sessionId, effectiveTraceId, MINUTES_GENERATION, 100,
+                    "MINUTES_PROCESSING_FAILED", false, stageStartedAt);
+            return;
+        }
+        try {
+            sessionStore.saveMinutesAndComplete(sessionId, minutes);
+        } catch (RuntimeException saveFailure) {
+            fail(sessionId, effectiveTraceId, MINUTES_GENERATION, 100,
+                    "MINUTES_RESULT_SAVE_FAILED", false, stageStartedAt);
+            return;
+        }
+        logStageSucceeded(sessionId, effectiveTraceId, MINUTES_GENERATION, stageStartedAt);
     }
 
     private void fail(String sessionId, String traceId, String stage, int lastCompletedProgress,

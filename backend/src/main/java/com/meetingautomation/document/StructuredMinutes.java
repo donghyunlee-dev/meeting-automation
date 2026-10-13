@@ -19,6 +19,19 @@ public record StructuredMinutes(
         followUps = List.copyOf(followUps);
     }
 
+    @Override
+    public String toString() {
+        return "StructuredMinutes[templateId=" + templateId + ", templateVersion=" + templateVersion
+                + ", summary=<redacted>, discussionPointCount=" + discussionPoints.size()
+                + ", decisionCount=" + decisions.size() + ", actionItemCount=" + actionItems.size()
+                + ", followUpCount=" + followUps.size() + "]";
+    }
+
     public record ActionItem(String ownerParticipantId, String task, LocalDate dueDate) {
+        @Override
+        public String toString() {
+            return "ActionItem[ownerParticipantId=" + ownerParticipantId
+                    + ", task=<redacted>, dueDate=" + dueDate + "]";
+        }
     }
 }

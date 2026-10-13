@@ -1,6 +1,7 @@
 package com.meetingautomation.api.template;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.ResourceLoader;
@@ -24,6 +25,21 @@ public final class TemplateCatalog {
             requireReadableResource(template.id());
         }
         return new TemplateListResponse(new TemplateListResponse.Data(REQUIRED_TEMPLATES));
+    }
+
+    public TemplateDefinition loadTemplate(String id) {
+        TemplateMetadata metadata = REQUIRED_TEMPLATES.stream()
+                .filter(template -> template.id().equals(id))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Template is not supported."));
+        Resource resource = resourceLoader.getResource("classpath:templates/" + metadata.id());
+        try (var input = resource.getInputStream()) {
+            return new TemplateDefinition(metadata.id(), metadata.version(),
+                    new String(input.readAllBytes(), StandardCharsets.UTF_8));
+        } catch (IOException | RuntimeException failure) {
+            // Keep resource paths and filesystem details out of the common error response.
+            throw new IllegalStateException("Required template resources are unavailable.");
+        }
     }
 
     private void requireReadableResource(String id) {
