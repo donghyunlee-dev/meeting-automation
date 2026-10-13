@@ -4,12 +4,13 @@ import { getProcessingStatus, type ProcessingSnapshot, type ProcessingStage } fr
 import { ProcessingPoller } from './processingPoller';
 
 const stageNames = ['오디오 준비', '음성 인식', '화자 분석', '회의록 생성'] as const;
-const stageIndex: Record<ProcessingStage, number> = { AUDIO_ASSEMBLY: 0, TRANSCRIPTION: 1, DIARIZATION: 2, MINUTES_GENERATION: 3 };
+const stageIndex: Record<ProcessingStage, number> = { AUDIO_ASSEMBLY: 0, TRANSCRIPTION: 1, DIARIZATION: 2, MINUTES_GENERATION: 3, DRAFT_READY: 3 };
 const failureMessages: Record<ProcessingStage, string> = {
   AUDIO_ASSEMBLY: '오디오를 준비하는 중 문제가 발생했습니다.',
   TRANSCRIPTION: '음성을 변환하는 중 문제가 발생했습니다.',
   DIARIZATION: '화자를 분석하는 중 문제가 발생했습니다.',
   MINUTES_GENERATION: '회의록을 생성하는 중 문제가 발생했습니다.',
+  DRAFT_READY: '회의록을 생성하는 중 문제가 발생했습니다.',
 };
 
 export function ProcessingPage() {
@@ -66,13 +67,12 @@ export function ProcessingPage() {
       {failure === 'network' && <p role="status" className="processing-message">처리 상태를 불러오지 못했습니다. 연결을 확인하고 다시 확인하는 중입니다.</p>}
       {snapshot?.status === 'PROCESSING_FAILED' && <section className="processing-message" role="alert"><h2>처리를 완료하지 못했습니다</h2><p>{stageForFailure ? failureMessages[stageForFailure] : '회의를 처리하는 중 문제가 발생했습니다.'}</p></section>}
       {snapshot?.status === 'COMPLETED_WITH_WARNINGS' && <p className="processing-message" role="status">회의 처리가 완료되었습니다. 일부 항목을 확인해 주세요.</p>}
-      {snapshot?.status === 'DRAFT_READY' && <p className="processing-message" role="status">회의록 초안이 준비되었습니다.</p>}
       {(failure === null || failure === 'network') && snapshot?.status !== 'PROCESSING_FAILED' && snapshot?.status !== 'COMPLETED_WITH_WARNINGS' && (
         <section className="processing-card" aria-label="처리 단계">
           <ol className="processing-steps">
             {stageNames.map((name, index) => {
               const current = isProcessing && activeStage === index;
-              const complete = snapshot?.status === 'REVIEW' || snapshot?.status === 'DRAFT_READY' || (isProcessing && activeStage > index);
+              const complete = snapshot?.status === 'REVIEW' || (isProcessing && activeStage > index);
               return <li key={name} className={current ? 'is-current' : complete ? 'is-complete' : ''} aria-current={current ? 'step' : undefined}>
                 <span className="processing-step-icon" aria-hidden="true">{complete ? '✓' : current ? '●' : '○'}</span><span>{name}</span>
               </li>;

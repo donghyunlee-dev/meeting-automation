@@ -1055,7 +1055,7 @@ describe('Processing route', () => {
   it('moves to review only after a REVIEW snapshot for the route Session', async () => {
     const fetchMock = vi.fn(async () => response({ data: {
       sessionId: 'review-session', version: 4, status: 'REVIEW',
-      processing: { stage: 'MINUTES_GENERATION', progressPercent: 100 }, allowedActions: [],
+      processing: { stage: 'DRAFT_READY', progressPercent: 100 }, allowedActions: [],
     } }));
     vi.stubGlobal('fetch', fetchMock);
     render(<MemoryRouter initialEntries={['/meetings/review-session/processing']}><App /><CurrentPath /></MemoryRouter>);
@@ -1066,7 +1066,7 @@ describe('Processing route', () => {
   it('blocks review navigation when API-010 returns a different Session ID', async () => {
     const fetchMock = vi.fn(async () => response({ data: {
       sessionId: 'different-session', version: 1, status: 'REVIEW',
-      processing: { stage: 'MINUTES_GENERATION', progressPercent: 100 }, allowedActions: [],
+      processing: { stage: 'DRAFT_READY', progressPercent: 100 }, allowedActions: [],
     } }));
     vi.stubGlobal('fetch', fetchMock);
     render(<MemoryRouter initialEntries={['/meetings/expected-session/processing']}><App /><CurrentPath /></MemoryRouter>);
@@ -1127,15 +1127,14 @@ describe('Processing route', () => {
     expect(screen.queryByRole('progressbar', { name: '처리 진행률' })).toBeNull();
   });
 
-  it('renders DRAFT_READY as a completed snapshot without starting more polling', async () => {
+  it('treats REVIEW with a DRAFT_READY stage as completed and navigates to review', async () => {
     const fetchMock = vi.fn(async () => response({ data: {
-      sessionId: 'draft-ready', version: 2, status: 'DRAFT_READY',
-      processing: { stage: 'MINUTES_GENERATION', progressPercent: 100 }, allowedActions: [],
+      sessionId: 'draft-ready', version: 2, status: 'REVIEW',
+      processing: { stage: 'DRAFT_READY', progressPercent: 100 }, allowedActions: [],
     } }));
     vi.stubGlobal('fetch', fetchMock);
-    render(<MemoryRouter initialEntries={['/meetings/draft-ready/processing']}><App /></MemoryRouter>);
-    expect(await screen.findByText('회의록 초안이 준비되었습니다.')).toBeTruthy();
-    expect(screen.getByText('회의록 생성').closest('li')?.className).toContain('is-complete');
+    render(<MemoryRouter initialEntries={['/meetings/draft-ready/processing']}><App /><CurrentPath /></MemoryRouter>);
+    await waitFor(() => expect(screen.getByTestId('current-path').textContent).toBe('/meetings/draft-ready/review'));
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 

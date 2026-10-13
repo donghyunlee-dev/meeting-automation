@@ -9,7 +9,7 @@ export type ProcessingPollerOptions = {
   cancel?: (timer: ReturnType<typeof setTimeout>) => void;
 };
 
-const terminal = new Set(['REVIEW', 'DRAFT_READY', 'COMPLETED_WITH_WARNINGS', 'PROCESSING_FAILED']);
+const terminal = new Set(['REVIEW', 'COMPLETED_WITH_WARNINGS', 'PROCESSING_FAILED']);
 
 export class ProcessingPoller {
   private timer: ReturnType<typeof setTimeout> | null = null;

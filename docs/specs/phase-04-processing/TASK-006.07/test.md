@@ -5,10 +5,11 @@
 | ID | 입력/조건 | 기대 결과 | 증거 |
 |---|---|---|---|
 | SCR-005-01 | API-009 `202`, 첫 API-010 응답은 `AUDIO_ASSEMBLY` | 즉시 조회 후 업로드 단계가 현재 단계로 보임 | Processing page test |
-| SCR-005-02 | `TRANSCRIPTION`, `DIARIZATION` 진행, `DIARIZATION` 100%이면서 `PROCESSING`, terminal `REVIEW`/`DRAFT_READY` | 완료/현재/대기 단계와 Minutes 생성/완료 문구가 API-010 snapshot과 일치 | stage mapper test |
+| SCR-005-02 | `TRANSCRIPTION`, `DIARIZATION` 진행, `DIARIZATION` 100%이면서 `PROCESSING`, 완료 `status=REVIEW` 및 `processing.stage=DRAFT_READY` | 완료/현재/대기 단계와 Minutes 생성/완료 문구가 API-010 snapshot과 일치 | stage mapper test |
 | SCR-005-03 | 처리 응답의 progress 값 0/중간/100, 누락 또는 범위 밖 값 | 유효 값만 progress로 표시하고 잘못된 수치는 꾸며내지 않음 | progress accessibility test |
 | SCR-005-04 | PROCESSING 응답에 fixture partial Transcript/Minutes 포함 | Review 데이터 미렌더링, Review route 미호출 | data gating test |
 | SCR-005-05 | `status=REVIEW`, response `sessionId`가 route ID와 같음 | 같은 Session Review로 정확히 한 번 이동 | navigation integration test |
+| SCR-005-05a | top-level `status=DRAFT_READY` | API-010 응답을 invalid로 처리하고 Review로 이동하지 않음 | API mapper test |
 | SCR-005-06 | `status=REVIEW`이나 response `sessionId`가 route ID와 다름 | 이동하지 않고 안전 오류를 표시 | navigation guard test |
 | SCR-005-07 | `PROCESSING_FAILED` 각 stage와 현재 API-010 snapshot (`allowedActions:[]`, `audioExpiresAt:null`) | 안전한 실패 stage 안내만 표시; recovery action/expiry timer 없음, provider/error 원문 미표시, API-009 재호출 없음 | failure view test; recovery action flow in TASK-017.03 |
 | SCR-005-08 | API-010 일시적 네트워크 오류 연속 발생 | 1/2/4/8초, 최대 10초 backoff로 조회하고 응답 성공 시 초기화 | polling scheduler test |

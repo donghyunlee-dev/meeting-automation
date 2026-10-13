@@ -35,4 +35,17 @@ describe('getProcessingStatus', () => {
       sessionId: 'missing-processing', version: 1, status: 'PROCESSING', allowedActions: [],
     } }), { status: 200 })))).rejects.toMatchObject({ code: 'INVALID_RESPONSE' });
   });
+
+  it('rejects DRAFT_READY as a top-level status', async () => {
+    await expect(getProcessingStatus('invalid-status', undefined, vi.fn(async () => new Response(JSON.stringify({ data: {
+      sessionId: 'invalid-status', version: 1, status: 'DRAFT_READY', processing: { stage: 'MINUTES_GENERATION', progressPercent: 100 }, allowedActions: [],
+    } }), { status: 200 })))).rejects.toMatchObject({ code: 'INVALID_RESPONSE' });
+  });
+
+  it('maps completion as REVIEW with processing.stage DRAFT_READY', async () => {
+    const snapshot = await getProcessingStatus('review-ready', undefined, vi.fn(async () => new Response(JSON.stringify({ data: {
+      sessionId: 'review-ready', version: 5, status: 'REVIEW', processing: { stage: 'DRAFT_READY', progressPercent: 100 }, allowedActions: [],
+    } }), { status: 200 })));
+    expect(snapshot).toMatchObject({ sessionId: 'review-ready', status: 'REVIEW', processing: { stage: 'DRAFT_READY', progressPercent: 100 } });
+  });
 });
