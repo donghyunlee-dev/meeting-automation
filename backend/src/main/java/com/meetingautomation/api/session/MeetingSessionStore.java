@@ -1,5 +1,6 @@
 package com.meetingautomation.api.session;
 
+import com.meetingautomation.api.error.ApiValidationException;
 import com.meetingautomation.document.DocumentConnectionGate;
 import com.meetingautomation.document.Speaker;
 import com.meetingautomation.document.StructuredMinutes;
@@ -117,6 +118,27 @@ public final class MeetingSessionStore {
         MeetingSession updated = copy(current, Math.addExact(current.version(), 1), current.status(),
                 current.processingStage(), current.progressPercent(), replacementSpeakers, current.transcript(),
                 current.processingFailure());
+        sessions.put(sessionId, updated);
+        return updated;
+    }
+
+    /** Atomically replaces the complete Minutes snapshot using the caller's expected version. */
+    public synchronized MeetingSession replaceMinutes(
+            String sessionId, int expectedVersion, StructuredMinutes replacementMinutes) {
+        MeetingSession current = sessions.get(sessionId);
+        if (current == null) throw new IllegalStateException("Session is no longer available.");
+        if (!"REVIEW".equals(current.status())) throw new SessionStateConflictException();
+        if (current.version() != expectedVersion) throw new SessionVersionConflictException();
+        if (replacementMinutes == null
+                || !Objects.equals(current.meeting().templateId(), replacementMinutes.templateId())
+                || !Objects.equals(current.meeting().templateVersion(), replacementMinutes.templateVersion())) {
+            throw new ApiValidationException("templateId");
+        }
+        if (Objects.equals(current.minutes(), replacementMinutes)) return current;
+
+        MeetingSession updated = copy(current, Math.addExact(current.version(), 1), current.status(),
+                current.processingStage(), current.progressPercent(), current.speakers(), current.transcript(),
+                current.processingFailure(), replacementMinutes);
         sessions.put(sessionId, updated);
         return updated;
     }

@@ -29,4 +29,4 @@
 
 ## 검증 명령
 
-Windows Backend root에서 `& .\gradlew.bat test --tests com.meetingautomation.MeetingSessionMinutesApiTests --tests com.meetingautomation.api.session.MeetingSessionMinutesStoreTests`를 실행한다. API-012 mutation 후 API-010 GET으로 version, Minutes 필드, Transcript/Speaker immutability를 통합 확인한다. 개발자/QA 검증에서는 전체 Backend suite, `clean build`, 또는 무관한 테스트를 다시 실행하는 명령을 사용하지 않는다. 기존 GitHub Actions CI는 바꾸지 않는다. 별도 compile check가 필요하면 `compileJava` 또는 `compileTestJava`를 선택적으로 실행한다.
+Windows Backend root에서 `& .\gradlew.bat test --tests com.meetingautomation.MeetingSessionMinutesApiTests`를 실행한다. API-012 mutation 후 API-010 GET으로 version, Minutes 필드, Transcript/Speaker immutability와 같은 version의 동시 요청 CAS를 통합 확인한다. 개발자/QA 검증에서는 전체 Backend suite, `clean build`, 또는 무관한 테스트를 다시 실행하는 명령을 사용하지 않는다. 기존 GitHub Actions CI는 바꾸지 않는다. 별도 compile check가 필요하면 `compileJava` 또는 `compileTestJava`를 선택적으로 실행한다.

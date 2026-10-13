@@ -8,4 +8,4 @@
 4. Session 존재/Review/allowed action/If-Match를 검증한다. 완료 증거: 지정된 404/409/412 envelope가 반환되고 state/version 변경이 없다.
 5. Minutes full replacement와 no-op 비교를 CAS Session mutation으로 저장한다. 완료 증거: 실질 변경만 version +1이며 동시 stale 요청은 412다.
 6. `{data:{version,minutes}}` response와 API-010 read-after-write 경로를 연결한다. 완료 증거: 재조회가 같은 saved Minutes/version을 반환한다.
-7. `& .\gradlew.bat test --tests com.meetingautomation.MeetingSessionMinutesApiTests --tests com.meetingautomation.api.session.MeetingSessionMinutesStoreTests`로 API-012/CAS focused tests와 privacy/concurrency 회귀를 확인한다. 개발자/QA 검증에서 전체 Backend suite와 `clean build`는 실행하지 않고 GitHub Actions CI 설정은 바꾸지 않는다. 완료 증거: 정확한 selector와 결과를 Issue에 남긴다.
+7. `& .\gradlew.bat test --tests com.meetingautomation.MeetingSessionMinutesApiTests`로 API-012/CAS focused tests와 privacy/concurrency 회귀를 확인한다. 개발자/QA 검증에서 전체 Backend suite와 `clean build`는 실행하지 않고 GitHub Actions CI 설정은 바꾸지 않는다. 완료 증거: 정확한 selector와 결과를 Issue에 남긴다.
