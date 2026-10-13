@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router';
 import { getDocumentAppConfig, listMeetingParticipants, type DocumentAppConfig } from './newMeetingApi';
 import type { Participant } from './participantsApi';
-import { getReviewSession, type ReviewSpeaker } from './reviewApi';
+import { getReviewSession, updateSpeakerMappings, type ReviewSession, type ReviewSpeaker, type SpeakerMappingInput } from './reviewApi';
 
 type Resource<T> = { status: 'loading' | 'ready' | 'error'; data?: T };
 type ReviewResource = Resource<Awaited<ReturnType<typeof getReviewSession>>> & { requestSessionId: string };
@@ -10,17 +10,32 @@ type Props = {
   drafts: Record<string, Record<string, string | null>>;
   onInitialize: (sessionId: string, speakers: ReviewSpeaker[]) => void;
   onChange: (sessionId: string, speakerId: string, participantId: string | null) => void;
+  onCommit: (sessionId: string, speakers: ReviewSpeaker[]) => void;
 };
 
-export function ReviewSpeakerPage({ drafts, onInitialize, onChange }: Props) {
+export function ReviewSpeakerPage({ drafts, onInitialize, onChange, onCommit }: Props) {
   const { sessionId = '' } = useParams();
   const location = useLocation();
   const [review, setReview] = useState<ReviewResource>(() => ({ status: 'loading', requestSessionId: sessionId }));
   const [participants, setParticipants] = useState<Resource<Participant[]>>({ status: 'loading' });
   const [config, setConfig] = useState<Resource<DocumentAppConfig>>({ status: 'loading' });
   const [retryingRoster, setRetryingRoster] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveMessage, setSaveMessage] = useState('');
+  const [recoveryAttempt, setRecoveryAttempt] = useState<SpeakerMappingInput[] | null>(null);
   const reviewRequestGeneration = useRef(0);
+  const saveInFlight = useRef(false);
+  const latestReview = useRef<{ sessionId: string; version: number } | null>(null);
   const currentDraft = drafts[sessionId] ?? {};
+
+  const applySnapshot = useCallback((data: ReviewSession) => {
+    const latest = latestReview.current;
+    if (latest?.sessionId === data.sessionId && data.version < latest.version) return false;
+    latestReview.current = { sessionId: data.sessionId, version: data.version };
+    setReview({ status: 'ready', data, requestSessionId: data.sessionId });
+    onInitialize(data.sessionId, data.speakers);
+    return true;
+  }, [onInitialize]);
 
   const loadRoster = useCallback(async () => {
     setRetryingRoster(true);
@@ -36,12 +51,11 @@ export function ReviewSpeakerPage({ drafts, onInitialize, onChange }: Props) {
     try {
       const data = await getReviewSession(sessionId);
       if (generation !== reviewRequestGeneration.current) return;
-      setReview({ status: 'ready', data, requestSessionId: sessionId });
-      onInitialize(sessionId, data.speakers);
+      applySnapshot(data);
     } catch {
       if (generation === reviewRequestGeneration.current) setReview((current) => ({ status: 'error', data: current.data, requestSessionId: sessionId }));
     }
-  }, [onInitialize, sessionId]);
+  }, [applySnapshot, sessionId]);
 
   const loadConfig = useCallback(async () => {
     setConfig((current) => ({ status: 'loading', data: current.data }));
@@ -54,8 +68,7 @@ export function ReviewSpeakerPage({ drafts, onInitialize, onChange }: Props) {
     let active = true;
     void getReviewSession(sessionId).then((data) => {
       if (!active || generation !== reviewRequestGeneration.current) return;
-      setReview({ status: 'ready', data, requestSessionId: sessionId });
-      onInitialize(sessionId, data.speakers);
+      applySnapshot(data);
     }).catch(() => {
       if (active && generation === reviewRequestGeneration.current) setReview((current) => ({ status: 'error', data: current.data, requestSessionId: sessionId }));
     });
@@ -70,7 +83,7 @@ export function ReviewSpeakerPage({ drafts, onInitialize, onChange }: Props) {
       if (active) setConfig((current) => ({ status: 'error', data: current.data }));
     });
     return () => { active = false; reviewRequestGeneration.current += 1; };
-  }, [onInitialize, sessionId]);
+  }, [applySnapshot, onInitialize, sessionId]);
 
   const currentReview = review.requestSessionId === sessionId && review.data?.sessionId === sessionId ? review.data : undefined;
   const reviewIsLoading = review.requestSessionId !== sessionId || review.status === 'loading';
@@ -82,6 +95,69 @@ export function ReviewSpeakerPage({ drafts, onInitialize, onChange }: Props) {
   function speakerValue(speaker: ReviewSpeaker): string {
     if (Object.prototype.hasOwnProperty.call(currentDraft, speaker.speakerId)) return currentDraft[speaker.speakerId] ?? '';
     return speaker.participantId ?? '';
+  }
+
+  const submittedMappings = currentReview?.speakers.map((speaker) => ({ speakerId: speaker.speakerId, participantId: speakerValue(speaker) || null })) ?? [];
+  const committedMappings = currentReview?.speakers.map((speaker) => ({ speakerId: speaker.speakerId, participantId: speaker.participantId })) ?? [];
+  const draftIsDirty = submittedMappings.length > 0 && submittedMappings.some((mapping, index) => mapping.participantId !== committedMappings[index]?.participantId);
+  const canSave = Boolean(currentReview && providerReady && currentReview.allowedActions.includes('UPDATE_SPEAKER_MAPPING')
+    && draftIsDirty && !saving && participants.status !== 'loading');
+
+  async function reconcile(attempt: SpeakerMappingInput[], isUncertain: boolean) {
+    try {
+      const latest = await getReviewSession(sessionId);
+      const exact = latest.speakers.length === attempt.length && latest.speakers.every((speaker, index) =>
+        speaker.speakerId === attempt[index]?.speakerId && speaker.participantId === attempt[index]?.participantId);
+      if (!applySnapshot(latest)) return;
+      if (exact && isUncertain) {
+        onCommit(sessionId, latest.speakers);
+        setSaveMessage('매핑 저장이 확인되었습니다.');
+        setRecoveryAttempt(null);
+      } else {
+        setSaveMessage(isUncertain
+          ? '서버의 최신 매핑을 불러왔습니다. 변경 내용은 유지했습니다. 확인 후 다시 저장해 주세요.'
+          : '최신 회의 정보를 불러왔습니다. 변경 내용은 유지했으며 자동 저장하지 않았습니다. 확인 후 다시 저장해 주세요.');
+        setRecoveryAttempt(null);
+      }
+    } catch {
+      setSaveMessage('저장 결과를 확인하지 못했습니다. 변경 내용은 유지됩니다. 최신 상태를 다시 확인해 주세요.');
+      setRecoveryAttempt(attempt);
+    }
+  }
+
+  async function saveMappings() {
+    if (!currentReview || !canSave || saveInFlight.current) return;
+    saveInFlight.current = true;
+    setSaving(true);
+    setSaveMessage('매핑을 저장하는 중입니다.');
+    const attempt = submittedMappings;
+    try {
+      const result = await updateSpeakerMappings(sessionId, currentReview.version, attempt);
+      const byId = new Map(result.mappings.map((mapping) => [mapping.speakerId, mapping]));
+      const speakers = currentReview.speakers.map((speaker) => {
+        const mapping = byId.get(speaker.speakerId);
+        return mapping ? { ...speaker, participantId: mapping.participantId, participantName: mapping.participantName } : speaker;
+      });
+      const committed = { ...currentReview, version: result.version, speakers };
+      if (!applySnapshot(committed)) {
+        setSaveMessage('더 최신 회의 정보가 확인되어 저장 결과를 반영하지 않았습니다. 최신 상태를 확인해 주세요.');
+        return;
+      }
+      onCommit(sessionId, speakers);
+      setSaveMessage('매핑이 저장되었습니다.');
+      setRecoveryAttempt(null);
+    } catch (error) {
+      if (error instanceof Error && 'status' in error && error.status === 412) {
+        await reconcile(attempt, false);
+      } else if (error instanceof Error && 'outcomeUnknown' in error && error.outcomeUnknown === true) {
+        await reconcile(attempt, true);
+      } else {
+        setSaveMessage('매핑을 저장하지 못했습니다. 기존 저장 내용과 변경 내용은 유지됩니다. 다시 시도해 주세요.');
+      }
+    } finally {
+      saveInFlight.current = false;
+      setSaving(false);
+    }
   }
 
   return (
@@ -133,6 +209,27 @@ export function ReviewSpeakerPage({ drafts, onInitialize, onChange }: Props) {
             </div>;
           })}
         </div>
+        {currentReview.transcript.length > 0 && <section className="review-transcript" aria-label="화자 매핑 미리보기">
+          <h3>발화 미리보기</h3>
+          {currentReview.transcript.map((segment) => {
+            const speaker = currentReview.speakers.find((item) => item.speakerId === segment.speakerId);
+            const participantId = speaker ? speakerValue(speaker) : null;
+            const participant = availableParticipants.find((item) => item.id === participantId);
+            const participantName = participant?.name ?? (participantId === speaker?.participantId ? speaker?.participantName : null) ?? null;
+            return <p key={segment.segmentId} data-segment-id={segment.segmentId} data-start-ms={segment.startMs} data-end-ms={segment.endMs}
+              data-speaker-name={participantName ?? ''}>
+              <span>{speaker?.label ?? segment.speakerId}</span>{participantName && <span> · {participantName}</span>}{' '}
+              <time>{segment.startMs}–{segment.endMs}ms</time>{' '}{segment.text}
+            </p>;
+          })}
+        </section>}
+        {(currentReview.allowedActions.includes('UPDATE_SPEAKER_MAPPING') || saveMessage) && <div className="review-save-controls">
+          {currentReview.allowedActions.includes('UPDATE_SPEAKER_MAPPING') && <button className="button button-primary" type="button" disabled={!canSave} onClick={() => void saveMappings()}>
+            {saving ? '저장 중…' : '매핑 저장'}
+          </button>}
+          {saveMessage && <p role="status">{saveMessage}</p>}
+          {recoveryAttempt && <button className="button button-secondary" type="button" disabled={saving} onClick={() => void reconcile(recoveryAttempt, true)}>저장 상태 다시 확인</button>}
+        </div>}
       </section>}
     </main>
   );
