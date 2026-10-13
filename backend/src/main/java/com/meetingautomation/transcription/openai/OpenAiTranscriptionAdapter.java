@@ -35,7 +35,6 @@ import tools.jackson.databind.json.JsonMapper;
 public final class OpenAiTranscriptionAdapter implements TranscriptionProvider {
     private static final URI TRANSCRIPTION_URI = URI.create("https://api.openai.com/v1/audio/transcriptions");
     private static final String RESPONSE_FORMAT = "diarized_json";
-    private static final long CHUNKING_REQUIRED_AFTER_MS = 30_000;
     private static final JsonMapper JSON_MAPPER = JsonMapper.builder().build();
 
     private final RestClient restClient;
@@ -127,7 +126,7 @@ public final class OpenAiTranscriptionAdapter implements TranscriptionProvider {
         body.add("file", audioPart);
         body.add("model", settings.model().strip());
         body.add("response_format", RESPONSE_FORMAT);
-        if (command.meetingDurationMs() > CHUNKING_REQUIRED_AFTER_MS) body.add("chunking_strategy", "auto");
+        body.add("chunking_strategy", "auto");
         if (command.languageHint() != null) body.add("language", command.languageHint());
         return body;
     }

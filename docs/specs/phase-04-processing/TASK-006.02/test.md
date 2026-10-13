@@ -17,11 +17,12 @@
 | STT-11 | 서로 다른 `TRANSCRIPTION_MODEL` 설정 | 같은 provider-neutral port 결과 타입 사용 | configuration wiring test |
 | STT-12 | Provider HTTP 400 with `error.param=response_format` vs `file` | Safe `CONFIGURATION_ERROR` vs `INVALID_AUDIO`; no provider details in error | Adapter tests |
 | STT-13 | Override `TRANSCRIPTION_CONNECT_TIMEOUT_SECONDS` | The configured connect timeout is bound and used; read timeout stays separate | Adapter configuration binding test |
+| STT-14 | Caller-declared duration is at or below 30 seconds | `chunking_strategy=auto` is still sent for every diarized request | Adapter test |
 
 Backend root에서 다음 focused tests를 실행한다. 무관한 Backend 테스트를 포함한 전체 suite, clean build는 실행하지 않는다.
 
 backend/에서 실행:
-`& .\gradlew.bat test --tests com.meetingautomation.transcription.openai.OpenAiTranscriptionAdapterTests`
+`& .\gradlew.bat test --tests com.meetingautomation.transcription.TranscriptionCommandTests --tests com.meetingautomation.transcription.ProviderTranscriptionResponseTests --tests com.meetingautomation.transcription.openai.OpenAiTranscriptionAdapterTests`
 
 별도 컴파일 확인이 필요하면 `compileJava` 또는 `compileTestJava`를 사용한다.
 
@@ -33,3 +34,5 @@ backend/에서 실행:
 - model 설정 변경 시 Domain/API 응답 DTO 수정 없이 adapter configuration만 교체되는지 확인한다.
 
 The response-format error test inspects only the safe `error.param` field; it does not expose or retain the provider message or body.
+
+OpenAI's [Create transcription API reference](https://developers.openai.com/api/reference/resources/audio/subresources/transcriptions/methods/create) lists `chunking_strategy` as optional overall, required for diarized inputs over 30 seconds, and includes an `auto` example whose output duration is 27.4 seconds. Always sending it avoids relying on caller-reported duration.

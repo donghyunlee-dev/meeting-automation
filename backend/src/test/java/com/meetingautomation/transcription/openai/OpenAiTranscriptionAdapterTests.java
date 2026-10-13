@@ -84,8 +84,9 @@ class OpenAiTranscriptionAdapterTests {
     void mapsNoSpeechResponseToAnEmptyProviderNeutralResult() throws IOException {
         TestClient testClient = client("configured-model");
         testClient.server().expect(requestTo(API_URL))
-                .andExpect(content().string(org.hamcrest.Matchers.not(
-                        org.hamcrest.Matchers.containsString("name=\"chunking_strategy\""))))
+                .andExpect(content().string(org.hamcrest.Matchers.allOf(
+                        org.hamcrest.Matchers.containsString("name=\"chunking_strategy\""),
+                        org.hamcrest.Matchers.containsString("auto"))))
                 .andRespond(withSuccess("{\"segments\":[]}", MediaType.APPLICATION_JSON));
 
         ProviderTranscriptionResponse response = testClient.adapter().transcribeWithDiarization(
