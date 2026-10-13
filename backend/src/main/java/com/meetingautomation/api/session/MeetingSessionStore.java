@@ -142,7 +142,7 @@ public final class MeetingSessionStore {
         MeetingSession current = requireProcessing(sessionId);
         ProcessingFailure failure = new ProcessingFailure(stage, errorCode, retryable);
         MeetingSession updated = copy(current, Math.addExact(current.version(), 1), "PROCESSING_FAILED",
-                stage, lastCompletedProgress, java.util.List.of(), java.util.List.of(), failure);
+                stage, lastCompletedProgress, current.speakers(), current.transcript(), failure);
         sessions.put(sessionId, updated);
         return updated;
     }

@@ -84,6 +84,26 @@ class ProcessingPipelineTests {
     }
 
     @Test
+    void laterStageFailurePreservesSuccessfullySavedDiarizationResult() {
+        List<Speaker> speakers = List.of(new Speaker("speaker_a", "Speaker A"));
+        List<TranscriptSegment> transcript = List.of(
+                new TranscriptSegment("seg_001", "speaker_a", 10, 200, "normalized text"));
+        sessionStore.recordProcessingProgress(SESSION_ID, "DIARIZATION", 67);
+        sessionStore.saveDiarizationResult(SESSION_ID, speakers, transcript);
+
+        MeetingSession failed = sessionStore.failProcessing(
+                SESSION_ID, "MINUTES", 100, "MINUTES_GENERATION_FAILED", true);
+
+        assertThat(failed.status()).isEqualTo("PROCESSING_FAILED");
+        assertThat(failed.processingStage()).isEqualTo("MINUTES");
+        assertThat(failed.progressPercent()).isEqualTo(100);
+        assertThat(failed.processingFailure().errorCode()).isEqualTo("MINUTES_GENERATION_FAILED");
+        assertThat(failed.processingFailure().retryable()).isTrue();
+        assertThat(failed.speakers()).containsExactlyElementsOf(speakers);
+        assertThat(failed.transcript()).containsExactlyElementsOf(transcript);
+    }
+
+    @Test
     void assemblyFailureStopsLaterStagesAndStoresSafeFailureAtZeroProgress() {
         when(audioAssembly.assemble(JOB, POLICY, TRACE_ID))
                 .thenThrow(new AudioAssemblyException("AUDIO_ASSEMBLY_CHUNKS_INCOMPLETE"));
