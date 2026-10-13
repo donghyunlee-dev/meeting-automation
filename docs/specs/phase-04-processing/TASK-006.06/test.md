@@ -6,7 +6,7 @@
 |---|---|---|---|
 | API-010-01 | CREATED/UPLOADING Session | `{data}` envelope와 non-null `processing`; stage는 null, progress는 0 | status API test |
 | API-010-02 | PROCESSING 직후 API-009 snapshot 및 worker stage 진행 | Session/version/status와 현재 processing stage/progress 일치, partial review fields 숨김 | status API and worker tests |
-| API-010-03 | PROCESSING_FAILED at TRANSCRIPTION | 실패 status/stage/last completed progress, 빈 Review fields/actions, 내부 오류 원문 없음 | status API test; retry action details in TASK-017.02 |
+| API-010-03 | PROCESSING_FAILED at TRANSCRIPTION | 실패 status/stage/progress와 safe `errorCode`/`retryable`/`audioAvailable:false`; 빈 Review fields/actions, provider 원문 없음 | status API test; Audio expiry/actions in TASK-017.02 |
 | API-010-04 | REVIEW 완료, Speakers/Transcript/Minutes 저장 | 같은 version snapshot의 전체 review data 및 allowedActions; 아직 매핑되지 않은 participantId는 null | response contract test |
 | API-010-05 | API-011~014 action별 허용/불허 상태 | REVIEW allowedActions에 현재 유효 action만 포함하고 비-Review 상태에서는 비어 있음 | status API test |
 | API-010-06 | 없는 Session 조회 | HTTP 404 `SESSION_NOT_FOUND` common error envelope | status API test |

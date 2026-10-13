@@ -23,7 +23,7 @@
 2. processing/review/failed/missing/read-only/concurrent update tests를 먼저 작성한다. 결과: 모든 status-dependent response shape가 고정된다.
 3. Session Store snapshot query와 404 mapping을 구현한다. 결과: API가 정확한 version을 가진 한 시점의 state를 읽는다. 처리 시작 전에도 `processing` object를 유지하고 stage를 null로 표현한다.
 4. status별 response mapper를 구현한다. 결과: Review 이전 partial data는 숨기고 완료 후에만 full payload가 보인다. Speaker mapping 전 `participantId`는 null이다.
-5. `allowedActions`를 API-011~014 현재 허용 동작에서 매핑하고 version consistency/privacy를 확인한다. 실패 action은 TASK-017.02/#61에서 정한 후속 계약에 맡긴다.
+5. `allowedActions`를 API-011~014 현재 허용 동작에서 매핑하고 version consistency/privacy를 확인한다. `PROCESSING_FAILED`는 저장된 safe error code/retryability와 `audioAvailable:false`를 제공하되 action/expiry는 Audio lifecycle TASK-017.02/#61까지 비워 둔다.
 6. API-010 응답/동시 snapshot regression을 검증한다. Developer/QA는 다음 focused selectors만 실행하고, Backend 전체 suite 및 `clean build`를 반복하지 않는다. GitHub Actions CI 설정은 그대로 둔다.
 
 ## 검증 명령
