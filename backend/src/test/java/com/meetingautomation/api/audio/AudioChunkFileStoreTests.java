@@ -9,6 +9,7 @@ import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.util.HexFormat;
 import java.util.List;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -48,6 +49,37 @@ class AudioChunkFileStoreTests {
 
         Files.delete(audioRoot);
         assertThat(store.completedChunks("ms_missing-status")).isEmpty();
+    }
+
+    @Test
+    void openChunkRejectsMissingAndRegularFileBlockedRoots() throws Exception {
+        AudioChunkFileStore missingRootStore = new AudioChunkFileStore(audioRoot.resolve("missing"));
+        assertThatThrownBy(() -> missingRootStore.openChunk("ms_missing-open", 0))
+                .isInstanceOf(AudioStorageException.class);
+
+        Path blocker = audioRoot.resolve("regular-file");
+        Files.writeString(blocker, "not a directory");
+        AudioChunkFileStore blockedRootStore = new AudioChunkFileStore(blocker.resolve("audio"));
+        assertThatThrownBy(() -> blockedRootStore.openChunk("ms_blocked-open", 0))
+                .isInstanceOf(AudioStorageException.class);
+    }
+
+    @Test
+    void openChunkRejectsSymbolicLinkAsStorageRoot() throws Exception {
+        Path target = audioRoot.resolve("real-root");
+        Path link = audioRoot.resolve("root-link");
+        Files.createDirectories(target);
+        byte[] audio = new byte[] {7, 11, 13};
+        new AudioChunkFileStore(target).store("ms_linked-open", 0, "audio/webm", audio.length,
+                sha256(audio), 64, new ByteArrayInputStream(audio));
+        try {
+            Files.createSymbolicLink(link, target);
+        } catch (java.io.IOException | UnsupportedOperationException | SecurityException unsupported) {
+            Assumptions.abort("The current Windows account does not allow creating symbolic links.");
+        }
+        AudioChunkFileStore linkedRootStore = new AudioChunkFileStore(link);
+        assertThatThrownBy(() -> linkedRootStore.openChunk("ms_linked-open", 0))
+                .isInstanceOf(AudioStorageException.class);
     }
 
     @Test
