@@ -12,10 +12,21 @@ import org.springframework.stereotype.Component;
 public final class MeetingSessionStore {
     private final Map<String, MeetingSession> sessions = new ConcurrentHashMap<>();
     private final Map<String, DocumentConnectionGate.SessionLease> registrations = new ConcurrentHashMap<>();
+    private final Map<String, UploadPolicy> uploadPolicies = new ConcurrentHashMap<>();
 
     public synchronized MeetingSession save(MeetingSession session, DocumentConnectionGate.SessionLease registration) {
+        return save(session, registration, null);
+    }
+
+    public synchronized MeetingSession save(
+            MeetingSession session,
+            DocumentConnectionGate.SessionLease registration,
+            UploadPolicy uploadPolicy) {
         sessions.put(session.sessionId(), session);
-        registrations.put(session.sessionId(), registration);
+        if (registration != null) registrations.put(session.sessionId(), registration);
+        else registrations.remove(session.sessionId());
+        if (uploadPolicy != null) uploadPolicies.put(session.sessionId(), uploadPolicy);
+        else uploadPolicies.remove(session.sessionId());
         return session;
     }
 
@@ -23,6 +34,7 @@ public final class MeetingSessionStore {
     public synchronized boolean remove(String sessionId) {
         MeetingSession removed = sessions.remove(sessionId);
         DocumentConnectionGate.SessionLease registration = registrations.remove(sessionId);
+        uploadPolicies.remove(sessionId);
         if (registration != null) registration.close();
         return removed != null;
     }
@@ -35,5 +47,9 @@ public final class MeetingSessionStore {
 
     public Optional<MeetingSession> find(String sessionId) {
         return Optional.ofNullable(sessions.get(sessionId));
+    }
+
+    public Optional<UploadPolicy> findUploadPolicy(String sessionId) {
+        return Optional.ofNullable(uploadPolicies.get(sessionId));
     }
 }

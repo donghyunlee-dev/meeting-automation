@@ -6,6 +6,10 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import com.meetingautomation.api.audio.AudioChunkConflictException;
+import com.meetingautomation.api.audio.AudioChunkInvalidException;
+import com.meetingautomation.api.audio.AudioSessionNotFoundException;
+import com.meetingautomation.api.audio.AudioStorageException;
 import com.meetingautomation.document.DocumentProviderException;
 import com.meetingautomation.api.idempotency.IdempotencyKeyConflictException;
 import com.meetingautomation.api.participant.ParticipantNotFoundException;
@@ -178,6 +182,37 @@ public class ApiExceptionHandler {
                 false,
                 request,
                 Map.of());
+    }
+
+    @ExceptionHandler(AudioChunkInvalidException.class)
+    public ResponseEntity<ApiErrorResponse> handleAudioChunkInvalid(
+            AudioChunkInvalidException exception,
+            HttpServletRequest request) {
+        return errorResponse(HttpStatus.BAD_REQUEST, "AUDIO_CHUNK_INVALID",
+                "오디오 청크 요청을 확인해 주세요.", "VALIDATION", false, request, Map.of());
+    }
+
+    @ExceptionHandler(AudioChunkConflictException.class)
+    public ResponseEntity<ApiErrorResponse> handleAudioChunkConflict(
+            AudioChunkConflictException exception,
+            HttpServletRequest request) {
+        return errorResponse(HttpStatus.CONFLICT, "AUDIO_CHUNK_CONFLICT",
+                "같은 순서에 다른 오디오 청크가 이미 저장되어 있습니다.", "CONFLICT", false, request, Map.of());
+    }
+
+    @ExceptionHandler(AudioSessionNotFoundException.class)
+    public ResponseEntity<ApiErrorResponse> handleAudioSessionNotFound(
+            AudioSessionNotFoundException exception,
+            HttpServletRequest request) {
+        return errorResponse(HttpStatus.NOT_FOUND, "SESSION_NOT_FOUND",
+                "회의 세션을 찾을 수 없습니다.", "NOT_FOUND", false, request, Map.of());
+    }
+
+    @ExceptionHandler(AudioStorageException.class)
+    public ResponseEntity<ApiErrorResponse> handleAudioStorageFailure(
+            AudioStorageException exception,
+            HttpServletRequest request) {
+        return internalError(request);
     }
 
     @ExceptionHandler(Exception.class)
