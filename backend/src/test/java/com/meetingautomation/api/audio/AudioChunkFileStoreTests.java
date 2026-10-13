@@ -83,6 +83,31 @@ class AudioChunkFileStoreTests {
     }
 
     @Test
+    void storeRejectsSymbolicLinkRootBeforeCreatingSessionOrConsumingBody() throws Exception {
+        Path target = audioRoot.resolve("empty-real-root");
+        Path link = audioRoot.resolve("store-root-link");
+        Files.createDirectories(target);
+        try {
+            Files.createSymbolicLink(link, target);
+        } catch (java.io.IOException | UnsupportedOperationException | SecurityException unsupported) {
+            Assumptions.abort("The current Windows account does not allow creating symbolic links.");
+        }
+
+        AudioChunkFileStore linkedRootStore = new AudioChunkFileStore(link);
+        byte[] audio = new byte[] {2, 5, 9};
+        CountingInputStream requestBody = new CountingInputStream(audio);
+
+        assertThatThrownBy(() -> linkedRootStore.store("ms_linked-store", 0, "audio/webm", audio.length,
+                sha256(audio), 64, requestBody))
+                .isInstanceOf(AudioStorageException.class);
+
+        assertThat(requestBody.bytesRead()).isZero();
+        try (var entries = Files.list(target)) {
+            assertThat(entries).isEmpty();
+        }
+    }
+
+    @Test
     void sessionIdIsHashedBeforeBuildingChunkPaths() throws Exception {
         AudioChunkFileStore store = new AudioChunkFileStore(audioRoot.toString());
         byte[] audio = new byte[] {3, 8, 13};

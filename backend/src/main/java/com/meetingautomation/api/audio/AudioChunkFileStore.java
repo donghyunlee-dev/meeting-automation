@@ -53,6 +53,10 @@ public final class AudioChunkFileStore {
         lockEntry.lock.lock();
         Path temporaryDirectory = null;
         try {
+            Files.createDirectories(root);
+            if (Files.isSymbolicLink(root) || !Files.isDirectory(root, LinkOption.NOFOLLOW_LINKS)) {
+                throw new IOException("Audio storage root is invalid.");
+            }
             Files.createDirectories(sessionDirectory);
             if (Files.isSymbolicLink(sessionDirectory)) throw new IOException("Storage directory is not usable.");
             temporaryDirectory = Files.createTempDirectory(sessionDirectory, ".upload-");
