@@ -5,13 +5,32 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.meetingautomation.document.Speaker;
 import com.meetingautomation.document.TranscriptSegment;
+import java.lang.reflect.Field;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.ReentrantLock;
 import org.junit.jupiter.api.Test;
 
 class MeetingSessionStoreTests {
+    @Test
+    void distinctMissingSessionsReuseAFixedBoundedLockTable() throws Exception {
+        MeetingSessionStore store = new MeetingSessionStore();
+        Field locksField = MeetingSessionStore.class.getDeclaredField("sessionLockStripes");
+        locksField.setAccessible(true);
+        ReentrantLock[] stripes = (ReentrantLock[]) locksField.get(store);
+        assertThat(stripes).hasSizeBetween(1, 256);
+
+        for (int index = 0; index < 10_000; index++) {
+            String missingSessionId = "missing-session-" + index;
+            store.withSessionLock(missingSessionId, () -> null);
+        }
+
+        assertThat(locksField.get(store)).isSameAs(stripes);
+        assertThat(((ReentrantLock[]) locksField.get(store))).hasSize(stripes.length);
+    }
+
     @Test
     void concurrentUpdatesUsingOneVersionAllowExactlyOneCompleteMappingSetToCommit() throws Exception {
         MeetingSessionStore store = new MeetingSessionStore();

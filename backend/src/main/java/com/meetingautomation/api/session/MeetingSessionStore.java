@@ -9,7 +9,6 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Supplier;
 import org.springframework.stereotype.Component;
@@ -17,19 +16,28 @@ import org.springframework.stereotype.Component;
 /** Process-local session storage. This implementation intentionally has no persistence. */
 @Component
 public final class MeetingSessionStore {
+    private static final int SESSION_LOCK_STRIPE_COUNT = 64;
     private final Map<String, MeetingSession> sessions = new ConcurrentHashMap<>();
     private final Map<String, DocumentConnectionGate.SessionLease> registrations = new ConcurrentHashMap<>();
     private final Map<String, UploadPolicy> uploadPolicies = new ConcurrentHashMap<>();
-    private final ConcurrentMap<String, ReentrantLock> sessionLocks = new ConcurrentHashMap<>();
+    private final ReentrantLock[] sessionLockStripes = createSessionLockStripes();
 
     public <T> T withSessionLock(String sessionId, Supplier<T> operation) {
-        ReentrantLock lock = sessionLocks.computeIfAbsent(sessionId, ignored -> new ReentrantLock());
+        Objects.requireNonNull(sessionId, "sessionId");
+        int stripe = Math.floorMod(sessionId.hashCode(), SESSION_LOCK_STRIPE_COUNT);
+        ReentrantLock lock = sessionLockStripes[stripe];
         lock.lock();
         try {
             return operation.get();
         } finally {
             lock.unlock();
         }
+    }
+
+    private static ReentrantLock[] createSessionLockStripes() {
+        ReentrantLock[] stripes = new ReentrantLock[SESSION_LOCK_STRIPE_COUNT];
+        for (int index = 0; index < stripes.length; index++) stripes[index] = new ReentrantLock();
+        return stripes;
     }
 
     public synchronized MeetingSession save(MeetingSession session, DocumentConnectionGate.SessionLease registration) {
