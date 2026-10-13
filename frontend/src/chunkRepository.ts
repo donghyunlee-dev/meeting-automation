@@ -38,9 +38,10 @@ export class ChunkStoreError extends Error {
   }
 }
 
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const CHUNKS = 'chunks';
 const SESSIONS = 'sessions';
+const SEQUENCES = 'sequences';
 const SESSION_INDEX = 'sessionId';
 const CHUNK_ID_INDEX = 'sessionId_chunkId';
 
@@ -72,12 +73,22 @@ export class ChunkRepository {
       let blocked = false;
       request.onupgradeneeded = () => {
         const db = request.result;
+        const hadSequenceStore = db.objectStoreNames.contains(SEQUENCES);
         const chunkStore = db.objectStoreNames.contains(CHUNKS)
           ? request.transaction!.objectStore(CHUNKS)
           : db.createObjectStore(CHUNKS, { keyPath: ['sessionId', 'sequence'] });
         if (!chunkStore.indexNames.contains(SESSION_INDEX)) chunkStore.createIndex(SESSION_INDEX, 'sessionId', { unique: false });
         if (!chunkStore.indexNames.contains(CHUNK_ID_INDEX)) chunkStore.createIndex(CHUNK_ID_INDEX, ['sessionId', 'chunkId'], { unique: true });
         if (!db.objectStoreNames.contains(SESSIONS)) db.createObjectStore(SESSIONS, { keyPath: 'sessionId' });
+        if (!hadSequenceStore) {
+          const sequenceStore = db.createObjectStore(SEQUENCES, { keyPath: 'sessionId' });
+          const legacySessions = request.transaction!.objectStore(SESSIONS).getAll() as IDBRequest<ChunkSessionMetadata[]>;
+          legacySessions.onsuccess = () => {
+            for (const session of legacySessions.result) {
+              sequenceStore.put({ sessionId: session.sessionId, nextSequence: session.nextSequence });
+            }
+          };
+        }
       };
       request.onblocked = () => { blocked = true; reject(new ChunkStoreError('OPEN_FAILED')); };
       request.onerror = () => reject(new ChunkStoreError('OPEN_FAILED'));
@@ -131,9 +142,10 @@ export class ChunkRepository {
       let result: AppendResult | undefined;
       let failure: unknown;
       try {
-        tx = db.transaction([CHUNKS, SESSIONS], 'readwrite');
+        tx = db.transaction([CHUNKS, SESSIONS, SEQUENCES], 'readwrite');
         const chunks = tx.objectStore(CHUNKS);
         const sessions = tx.objectStore(SESSIONS);
+        const sequences = tx.objectStore(SEQUENCES);
         const duplicateRequest = chunks.index(CHUNK_ID_INDEX).get([sessionId, chunk.chunkId]) as IDBRequest<StoredChunk | undefined>;
         duplicateRequest.onsuccess = () => {
           const duplicate = duplicateRequest.result;
@@ -141,25 +153,30 @@ export class ChunkRepository {
           const sessionRequest = sessions.get(sessionId) as IDBRequest<ChunkSessionMetadata | undefined>;
           sessionRequest.onsuccess = () => {
             const previous = sessionRequest.result;
-            const sequence = previous?.nextSequence ?? 0;
-            const metadata: ChunkSessionMetadata = {
-              sessionId,
-              mimeType: chunk.mimeType,
-              nextSequence: sequence + 1,
-              pendingCount: (previous?.pendingCount ?? 0) + 1,
-              totalRecordingDurationMs: Math.max(previous?.totalRecordingDurationMs ?? 0, chunk.recordedElapsedMs),
-              createdAtMs: previous?.createdAtMs ?? chunk.recordedAtMs,
-              updatedAtMs: chunk.recordedAtMs,
+            const sequenceRequest = sequences.get(sessionId) as IDBRequest<{ sessionId: string; nextSequence: number } | undefined>;
+            sequenceRequest.onsuccess = () => {
+              const nextSequence = sequenceRequest.result?.nextSequence ?? previous?.nextSequence ?? 0;
+              const metadata: ChunkSessionMetadata = {
+                sessionId,
+                mimeType: chunk.mimeType,
+                nextSequence: nextSequence + 1,
+                pendingCount: (previous?.pendingCount ?? 0) + 1,
+                totalRecordingDurationMs: Math.max(previous?.totalRecordingDurationMs ?? 0, chunk.recordedElapsedMs),
+                createdAtMs: previous?.createdAtMs ?? chunk.recordedAtMs,
+                updatedAtMs: chunk.recordedAtMs,
+              };
+              const stored: StoredChunk = { ...chunk, sessionId, sequence: nextSequence, sizeBytes: chunk.blob.size, uploadState: 'PENDING' };
+              try {
+                chunks.add(stored);
+                sessions.put(metadata);
+                sequences.put({ sessionId, nextSequence: nextSequence + 1 });
+                result = { sequence: nextSequence, duplicate: false };
+              } catch (error) {
+                failure = error;
+                try { tx.abort(); } catch { /* transaction already inactive */ }
+              }
             };
-            const stored: StoredChunk = { ...chunk, sessionId, sequence, sizeBytes: chunk.blob.size, uploadState: 'PENDING' };
-            try {
-              chunks.add(stored);
-              sessions.put(metadata);
-              result = { sequence, duplicate: false };
-            } catch (error) {
-              failure = error;
-              try { tx.abort(); } catch { /* transaction already inactive */ }
-            }
+            sequenceRequest.onerror = () => { failure = sequenceRequest.error; try { tx.abort(); } catch { /* inactive */ } };
           };
           sessionRequest.onerror = () => { failure = sessionRequest.error; try { tx.abort(); } catch { /* inactive */ } };
         };
@@ -174,19 +191,24 @@ export class ChunkRepository {
   }
 
   async getPending(sessionId: string): Promise<PendingChunks> {
-    return this.transaction([CHUNKS, SESSIONS], 'readonly', (tx, setResult, setFailure) => {
+    return this.transaction([CHUNKS, SESSIONS, SEQUENCES], 'readonly', (tx, setResult, setFailure) => {
       const chunksRequest = tx.objectStore(CHUNKS).index(SESSION_INDEX).getAll(sessionId) as IDBRequest<StoredChunk[]>;
       const sessionRequest = tx.objectStore(SESSIONS).get(sessionId) as IDBRequest<ChunkSessionMetadata | undefined>;
+      const sequenceRequest = tx.objectStore(SEQUENCES).get(sessionId) as IDBRequest<{ sessionId: string; nextSequence: number } | undefined>;
       let chunks: StoredChunk[] | undefined;
       let session: ChunkSessionMetadata | undefined;
       let sessionLoaded = false;
+      let sequence: { sessionId: string; nextSequence: number } | undefined;
+      let sequenceLoaded = false;
       const finish = () => {
-        if (chunks && sessionLoaded) setResult({ session: session ?? null, chunks: chunks.sort((a, b) => a.sequence - b.sequence), nextSequence: session?.nextSequence ?? chunks.reduce((next, item) => Math.max(next, item.sequence + 1), 0) });
+        if (chunks && sessionLoaded && sequenceLoaded) setResult({ session: session ?? null, chunks: chunks.sort((a, b) => a.sequence - b.sequence), nextSequence: sequence?.nextSequence ?? session?.nextSequence ?? chunks.reduce((next, item) => Math.max(next, item.sequence + 1), 0) });
       };
       chunksRequest.onsuccess = () => { chunks = chunksRequest.result; finish(); };
       sessionRequest.onsuccess = () => { session = sessionRequest.result; sessionLoaded = true; finish(); };
+      sequenceRequest.onsuccess = () => { sequence = sequenceRequest.result; sequenceLoaded = true; finish(); };
       chunksRequest.onerror = () => setFailure(chunksRequest.error);
       sessionRequest.onerror = () => setFailure(sessionRequest.error);
+      sequenceRequest.onerror = () => setFailure(sequenceRequest.error);
     });
   }
 

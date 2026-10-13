@@ -42,3 +42,7 @@ HTTP 업로드·재시도·서버 ACK 대조는 `TASK-005.06`, API 수신 검증
 ## 결정
 
 브라우저 재시작을 견디는 저장 방식은 IndexedDB로 정한다. Session별 데이터는 ACK 전까지 보존하고 ACK 후 즉시 제거한다. 실제 브라우저의 강제 종료 및 저장공간 quota 동작은 자동화 저장소 테스트와 별도 브라우저 QA로 나눈다.
+
+## TASK-005.03 sequence ledger 결정
+
+마지막 pending Chunk가 ACK되면 `sessions`의 복구 metadata는 요구사항대로 삭제한다. 다만 sequence를 재사용하면 같은 Backend Session으로 이어지는 추가 Chunk가 기존 sequence와 충돌할 수 있으므로, 별도의 `sequences` object store에 Session별 `nextSequence`를 유지한다. Chunk append는 Blob, pending metadata, sequence ledger를 단일 read-write transaction으로 갱신한다. ACK는 ledger를 변경하거나 삭제하지 않으며, database reopen 뒤에도 다음 sequence를 이어 쓴다. 이 변경으로 IndexedDB schema version은 2가 된다.

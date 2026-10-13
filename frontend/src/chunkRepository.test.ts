@@ -101,6 +101,51 @@ describe('ChunkRepository', () => {
     await expect(store.acknowledge('session-a', 0)).resolves.toBeUndefined();
   });
 
+  it('keeps the next sequence after final ACK cleanup and database reopen', async () => {
+    const store = createRepository();
+    await store.append('session-a', makeChunk('first'));
+    const dbName = store.dbName;
+    await store.acknowledge('session-a', 0);
+    expect(await store.getPending('session-a')).toMatchObject({ session: null, chunks: [], nextSequence: 1 });
+    store.close();
+    repository = new ChunkRepository({ dbName, maxChunkBytes: 1_024 });
+
+    expect(await repository.append('session-a', makeChunk('second'))).toEqual({ sequence: 1, duplicate: false });
+    expect(await repository.getPending('session-a')).toMatchObject({ nextSequence: 2, chunks: [{ sequence: 1, chunkId: 'second' }] });
+  });
+
+  it('migrates a v1 session sequence before ACK cleanup can remove its metadata', async () => {
+    const dbName = `chunk-store-v1-${crypto.randomUUID()}`;
+    await new Promise<void>((resolve, reject) => {
+      const open = indexedDB.open(dbName, 1);
+      open.onupgradeneeded = () => {
+        const db = open.result;
+        const chunks = db.createObjectStore('chunks', { keyPath: ['sessionId', 'sequence'] });
+        chunks.createIndex('sessionId', 'sessionId');
+        chunks.createIndex('sessionId_chunkId', ['sessionId', 'chunkId'], { unique: true });
+        db.createObjectStore('sessions', { keyPath: 'sessionId' });
+      };
+      open.onerror = () => reject(open.error);
+      open.onsuccess = () => {
+        const db = open.result;
+        const tx = db.transaction(['chunks', 'sessions'], 'readwrite');
+        tx.objectStore('chunks').put({ ...makeChunk('legacy-first'), sessionId: 'session-legacy', sequence: 0, sizeBytes: 12, uploadState: 'PENDING' });
+        tx.objectStore('sessions').put({
+          sessionId: 'session-legacy', mimeType: 'audio/webm', nextSequence: 1, pendingCount: 1,
+          totalRecordingDurationMs: 1_000, createdAtMs: 1_700_000_000_000, updatedAtMs: 1_700_000_000_000,
+        });
+        tx.oncomplete = () => { db.close(); resolve(); };
+        tx.onabort = () => { db.close(); reject(tx.error); };
+      };
+    });
+    repository = new ChunkRepository({ dbName, maxChunkBytes: 1_024 });
+
+    await expect(repository.getPending('session-legacy')).resolves.toMatchObject({ nextSequence: 1, chunks: [{ sequence: 0 }] });
+    await repository.acknowledge('session-legacy', 0);
+    expect(await repository.getPending('session-legacy')).toMatchObject({ session: null, nextSequence: 1 });
+    expect(await repository.append('session-legacy', makeChunk('legacy-second'))).toEqual({ sequence: 1, duplicate: false });
+  });
+
   it.each([
     ['empty', new NodeBlob([]), 1_024, 'EMPTY_CHUNK'],
     ['oversize', new NodeBlob(['x'.repeat(1_025)]), 1_024, 'CHUNK_TOO_LARGE'],
