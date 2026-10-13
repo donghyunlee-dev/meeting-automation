@@ -95,7 +95,7 @@ public final class MeetingSessionService {
             Set<String> availableIds = participants.stream().map(Participant::id).collect(Collectors.toSet());
             if (!availableIds.containsAll(command.participantIds())) throw validationFailure("participantIds");
 
-            sessionStore.save(candidate, registration);
+            sessionStore.save(candidate, registration, uploadPolicy);
             saved = true;
             return candidate;
         } finally {
