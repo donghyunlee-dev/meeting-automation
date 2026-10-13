@@ -7,9 +7,12 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
+import java.nio.file.NoSuchFileException;
+import java.nio.file.NotDirectoryException;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
@@ -83,11 +86,11 @@ final class AudioChunkFileStore {
     List<CompletedChunk> completedChunks(String sessionId) {
         Path sessionDirectory = root.resolve(sha256(sessionId.getBytes(StandardCharsets.UTF_8)));
         try {
-            if (!Files.exists(root, LinkOption.NOFOLLOW_LINKS)) return List.of();
+            if (!existsOrThrowIfMissing(root)) return List.of();
             if (Files.isSymbolicLink(root) || !Files.isDirectory(root, LinkOption.NOFOLLOW_LINKS)) {
                 throw new IOException("Audio storage root is invalid.");
             }
-            if (!Files.exists(sessionDirectory, LinkOption.NOFOLLOW_LINKS)) return List.of();
+            if (!existsOrThrowIfMissing(sessionDirectory)) return List.of();
             if (Files.isSymbolicLink(sessionDirectory)
                     || !Files.isDirectory(sessionDirectory, LinkOption.NOFOLLOW_LINKS)) {
                 throw new IOException("Audio session storage is invalid.");
@@ -107,6 +110,34 @@ final class AudioChunkFileStore {
             return List.copyOf(chunksBySequence.values());
         } catch (IOException | SecurityException failure) {
             throw new AudioStorageException();
+        }
+    }
+
+    private static boolean existsOrThrowIfMissing(Path path) throws IOException {
+        try {
+            Files.readAttributes(path, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
+            return true;
+        } catch (NoSuchFileException missing) {
+            Path ancestor = path.getParent();
+            while (ancestor != null) {
+                BasicFileAttributes attributes;
+                try {
+                    attributes = Files.readAttributes(ancestor, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
+                } catch (NoSuchFileException missingAncestor) {
+                    ancestor = ancestor.getParent();
+                    continue;
+                }
+                if (attributes.isSymbolicLink()) {
+                    try {
+                        attributes = Files.readAttributes(ancestor, BasicFileAttributes.class);
+                    } catch (NoSuchFileException brokenLink) {
+                        throw new IOException("Audio storage path has a broken symbolic link.");
+                    }
+                }
+                if (!attributes.isDirectory()) throw new NotDirectoryException(ancestor.toString());
+                return false;
+            }
+            return false;
         }
     }
 
