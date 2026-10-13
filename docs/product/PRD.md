@@ -2336,11 +2336,11 @@ Meeting UI
 
 구현 상태는 이 표와 GitHub Issue/PR, `docs/evidence/`의 head별 검증 기록으로 관리한다. 기존 세부 TASK 표의 `설계 상태 / 문서`와 설계 커서는 설계 상태만 나타내며 개발 상태를 대신하지 않는다.
 
-**다음 개발 대상 커서: `TASK-005.06` (TASK-005.05 Issue #23 / PR #116 병합 및 검증 기록 완료)**
+**다음 개발 대상 커서: `TASK-005.07` (TASK-005.06 Issue #24 / PR #117 병합 및 검증 기록 완료)**
 
-**실행 우선순위:** TASK-022.01 → TASK-022.02 → TASK-022.03 → TASK-022.04 → TASK-022.05 → TASK-022.06 → TASK-004.04 재검증 완료 → 기존 커서 순서(TASK-004.05, TASK-005.01, TASK-005.02, TASK-005.03, TASK-005.04, TASK-005.05 완료; 다음 TASK-005.06). GitHub Issue 번호나 생성일 정렬을 실행 순서로 해석하지 않는다.
+**실행 우선순위:** TASK-022.01 → TASK-022.02 → TASK-022.03 → TASK-022.04 → TASK-022.05 → TASK-022.06 → TASK-004.04 재검증 완료 → 기존 커서 순서(TASK-004.05, TASK-005.01, TASK-005.02, TASK-005.03, TASK-005.04, TASK-005.05, TASK-005.06 완료; 다음 TASK-005.07). GitHub Issue 번호나 생성일 정렬을 실행 순서로 해석하지 않는다.
 
-**재개 선택 규칙:** 새 세션과 기존 세션 모두 최신 master의 개발 커서·실행 우선순위와 GitHub 선행 관계를 로컬 checkpoint보다 먼저 적용한다. `Resume existing work`는 기존 작업이 여전히 실행 가능한 경우에만 적용한다. TASK-004.04(PR #95), TASK-004.05(PR #111), TASK-005.01(PR #112), TASK-005.02(PR #113), TASK-005.03(PR #114), TASK-005.04(PR #115), TASK-005.05(PR #116)는 병합 및 검증 기록까지 완료했으며, 다음 실행 가능한 TASK-005.06부터 이어간다. 과거의 `Provider 수동 설정 대기`는 재개 조건으로 사용하지 않는다. TASK-022.01의 첫 개발·mock 검증을 시작하기 위해 사용자가 먼저 문서 서비스나 키를 준비할 필요는 없으며, 실제 연동 QA에서 필요한 환경만 별도로 확인한다.
+**재개 선택 규칙:** 새 세션과 기존 세션 모두 최신 master의 개발 커서·실행 우선순위와 GitHub 선행 관계를 로컬 checkpoint보다 먼저 적용한다. `Resume existing work`는 기존 작업이 여전히 실행 가능한 경우에만 적용한다. TASK-004.04(PR #95), TASK-004.05(PR #111), TASK-005.01(PR #112), TASK-005.02(PR #113), TASK-005.03(PR #114), TASK-005.04(PR #115), TASK-005.05(PR #116), TASK-005.06(PR #117)는 병합 및 검증 기록까지 완료했으며, 다음 실행 가능한 TASK-005.07부터 이어간다. 과거의 `Provider 수동 설정 대기`는 재개 조건으로 사용하지 않는다. TASK-022.01의 첫 개발·mock 검증을 시작하기 위해 사용자가 먼저 문서 서비스나 키를 준비할 필요는 없으며, 실제 연동 QA에서 필요한 환경만 별도로 확인한다.
 
 | TASK | 개발 상태 | 단계 | Issue / PR | 검증 증거 | 병합 commit | 완료 일시 (Asia/Seoul) |
 |---|---|---|---|---|---|---|
@@ -2373,7 +2373,7 @@ Meeting UI
 | `TASK-005.03` | DONE | DONE | [Issue #21](https://github.com/donghyunlee-dev/meeting-automation/issues/21) / [PR #114](https://github.com/donghyunlee-dev/meeting-automation/pull/114) | [검증 증거](../evidence/TASK-005.03/verification.md), 109 frontend tests/lint/build PASS, Chromium IndexedDB QA 및 exact-head review PASS at `7fbbd86` | `7e5ab82453961b1604c89f0669b645311ae786ec` | 2026-10-13 13:30 KST |
 | `TASK-005.04` | DONE | DONE | [Issue #22](https://github.com/donghyunlee-dev/meeting-automation/issues/22) / [PR #115](https://github.com/donghyunlee-dev/meeting-automation/pull/115) | [검증 증거](../evidence/TASK-005.04/verification.md), Java 25 clean build 335 tests PASS, Backend CI PASS, exact-head QA/review PASS at `191d846` | `7761a324c2cd470948bbaf0df02626c10b24588b` | 2026-10-13 14:18 KST |
 | `TASK-005.05` | DONE | DONE | [Issue #23](https://github.com/donghyunlee-dev/meeting-automation/issues/23) / [PR #116](https://github.com/donghyunlee-dev/meeting-automation/pull/116) | [검증 증거](../evidence/TASK-005.05/verification.md), Java 25 clean build 342 tests PASS, Backend CI PASS, exact-head QA/review PASS at `8e47535` | `473047ad50d3cf666578d7af2dc36daa9d3dbb8d` | 2026-10-13 14:56 KST |
-| `TASK-005.06` | TODO | DESIGN | [Issue #24](https://github.com/donghyunlee-dev/meeting-automation/issues/24) / — | — | — | — |
+| `TASK-005.06` | DONE | DONE | [Issue #24](https://github.com/donghyunlee-dev/meeting-automation/issues/24) / [PR #117](https://github.com/donghyunlee-dev/meeting-automation/pull/117) | [검증 증거](../evidence/TASK-005.06/verification.md), frontend 136 tests/lint/build PASS, Chromium Playwright 1/1, exact-head review/QA PASS at `aee36ee` | `d4d0779a617941a3ea47eb301078e56ca91cfbd3` | 2026-10-13 16:07 KST |
 | `TASK-005.07` | TODO | DESIGN | [Issue #25](https://github.com/donghyunlee-dev/meeting-automation/issues/25) / — | — | — | — |
 | `TASK-005.08` | TODO | DESIGN | [Issue #26](https://github.com/donghyunlee-dev/meeting-automation/issues/26) / — | — | — | — |
 | `TASK-006.01` | TODO | DESIGN | [Issue #27](https://github.com/donghyunlee-dev/meeting-automation/issues/27) / — | — | — | — |
