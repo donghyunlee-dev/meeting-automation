@@ -5,6 +5,7 @@ import type { Participant } from './participantsApi';
 import { getReviewSession, type ReviewSpeaker } from './reviewApi';
 
 type Resource<T> = { status: 'loading' | 'ready' | 'error'; data?: T };
+type ReviewResource = Resource<Awaited<ReturnType<typeof getReviewSession>>> & { requestSessionId: string };
 type Props = {
   drafts: Record<string, Record<string, string | null>>;
   onInitialize: (sessionId: string, speakers: ReviewSpeaker[]) => void;
@@ -14,7 +15,7 @@ type Props = {
 export function ReviewSpeakerPage({ drafts, onInitialize, onChange }: Props) {
   const { sessionId = '' } = useParams();
   const location = useLocation();
-  const [review, setReview] = useState<Resource<Awaited<ReturnType<typeof getReviewSession>>>>({ status: 'loading' });
+  const [review, setReview] = useState<ReviewResource>(() => ({ status: 'loading', requestSessionId: sessionId }));
   const [participants, setParticipants] = useState<Resource<Participant[]>>({ status: 'loading' });
   const [config, setConfig] = useState<Resource<DocumentAppConfig>>({ status: 'loading' });
   const [retryingRoster, setRetryingRoster] = useState(false);
@@ -29,12 +30,12 @@ export function ReviewSpeakerPage({ drafts, onInitialize, onChange }: Props) {
   }, []);
 
   const loadReview = useCallback(async () => {
-    setReview((current) => ({ status: 'loading', data: current.data }));
+    setReview((current) => ({ status: 'loading', data: current.data, requestSessionId: sessionId }));
     try {
       const data = await getReviewSession(sessionId);
-      setReview({ status: 'ready', data });
+      setReview({ status: 'ready', data, requestSessionId: sessionId });
       onInitialize(sessionId, data.speakers);
-    } catch { setReview((current) => ({ status: 'error', data: current.data })); }
+    } catch { setReview((current) => ({ status: 'error', data: current.data, requestSessionId: sessionId })); }
   }, [onInitialize, sessionId]);
 
   const loadConfig = useCallback(async () => {
@@ -47,10 +48,10 @@ export function ReviewSpeakerPage({ drafts, onInitialize, onChange }: Props) {
     let active = true;
     void getReviewSession(sessionId).then((data) => {
       if (!active) return;
-      setReview({ status: 'ready', data });
+      setReview({ status: 'ready', data, requestSessionId: sessionId });
       onInitialize(sessionId, data.speakers);
     }).catch(() => {
-      if (active) setReview((current) => ({ status: 'error', data: current.data }));
+      if (active) setReview((current) => ({ status: 'error', data: current.data, requestSessionId: sessionId }));
     });
     void listMeetingParticipants().then((data) => {
       if (active) setParticipants({ status: 'ready', data });
@@ -65,7 +66,10 @@ export function ReviewSpeakerPage({ drafts, onInitialize, onChange }: Props) {
     return () => { active = false; };
   }, [onInitialize, sessionId]);
 
-  const availableParticipants = (participants.data ?? []).filter(({ id }) => review.data?.participantIds.includes(id));
+  const currentReview = review.requestSessionId === sessionId && review.data?.sessionId === sessionId ? review.data : undefined;
+  const reviewIsLoading = review.requestSessionId !== sessionId || review.status === 'loading';
+  const reviewHasError = review.requestSessionId === sessionId && review.status === 'error';
+  const availableParticipants = (participants.data ?? []).filter(({ id }) => currentReview?.participantIds.includes(id));
   const providerReady = config.status === 'ready' && Boolean(config.data?.document?.provider) && config.data?.document?.configured === true;
   const needsSettings = config.status === 'ready' && (!config.data?.document?.provider || config.data.document.configured !== true);
 
@@ -82,13 +86,13 @@ export function ReviewSpeakerPage({ drafts, onInitialize, onChange }: Props) {
         <p>선택한 화자 매핑은 해당 화자의 모든 발화에 적용됩니다.</p>
       </header>
 
-      {review.status === 'loading' && <p role="status">회의의 화자 정보를 불러오는 중입니다.</p>}
-      {review.status === 'error' && <section className="review-speaker-message" role="alert">
+      {reviewIsLoading && <p role="status">회의의 화자 정보를 불러오는 중입니다.</p>}
+      {reviewHasError && <section className="review-speaker-message" role="alert">
         <p>회의 화자 정보를 불러오지 못했습니다. 다시 시도해 주세요.</p>
         <button className="button button-secondary" type="button" onClick={() => void loadReview()}>회의 정보 다시 불러오기</button>
       </section>}
 
-      {review.data && <section className="review-speaker-card" aria-labelledby="speaker-mapping-heading">
+      {currentReview && <section className="review-speaker-card" aria-labelledby="speaker-mapping-heading">
         <div className="review-speaker-card-heading">
           <div><h2 id="speaker-mapping-heading">화자 매핑</h2><p>매핑한 참석자 이름은 모든 해당 발화에 적용됩니다.</p></div>
           {providerReady && <button className="button button-secondary" type="button" disabled={retryingRoster || participants.status === 'loading'} onClick={() => void loadRoster()}>참석자 목록 새로고침</button>}
@@ -101,9 +105,9 @@ export function ReviewSpeakerPage({ drafts, onInitialize, onChange }: Props) {
         {needsSettings && <div className="review-speaker-message" role="status"><p>문서 서비스를 연결하면 화자를 참석자와 연결할 수 있습니다.</p><Link className="button button-primary" to="/settings" state={{ from: location.pathname }}>문서 설정 열기</Link></div>}
         {config.status === 'error' && <div className="review-speaker-message" role="alert"><p>문서 연결 상태를 확인할 수 없습니다. 기존 선택은 유지됩니다.</p><button className="button button-secondary" type="button" onClick={() => void loadConfig()}>설정 상태 다시 확인</button></div>}
         {participants.status === 'ready' && participants.data?.length === 0 && <div className="review-speaker-message" role="status"><p>선택할 참석자가 없습니다. 참석자를 먼저 추가해 주세요.</p><Link className="button button-secondary" to="/settings/participants" state={{ from: location.pathname }}>참석자 관리</Link></div>}
-        {review.data.speakers.length === 0 && <p role="status">감지된 화자가 없습니다.</p>}
+        {currentReview.speakers.length === 0 && <p role="status">감지된 화자가 없습니다.</p>}
         <div className="review-speaker-list">
-          {review.data.speakers.map((speaker) => {
+          {currentReview.speakers.map((speaker) => {
             const value = speakerValue(speaker);
             const selectedIsInList = availableParticipants.some(({ id }) => id === value);
             const fallbackLabel = participants.status === 'loading' ? '참석자 목록 확인 중' : '기존 매핑 유지';

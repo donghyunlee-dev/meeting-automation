@@ -66,6 +66,11 @@ function ReturnToReview({ sessionId }: { sessionId: string }) {
   return <button type="button" onClick={() => navigate(`/meetings/${sessionId}/review`)}>Review로 돌아가기</button>;
 }
 
+function NavigateToReviewSession({ sessionId }: { sessionId: string }) {
+  const navigate = useNavigate();
+  return <button type="button" onClick={() => navigate(`/meetings/${sessionId}/review`)}>Open another Review session</button>;
+}
+
 function NavigateToMismatchedRecordingSession() {
   const navigate = useNavigate();
   return <button type="button" onClick={() => navigate('/meetings/other-session/recording')}>Open another session</button>;
@@ -1170,6 +1175,35 @@ describe('Processing route', () => {
 });
 
 describe('Review speaker selection', () => {
+  it('hides the prior Session speaker data while a new Session loads and after its request fails', async () => {
+    let rejectSessionB: ((error: Error) => void) | undefined;
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const path = new URL(String(input)).pathname;
+      if (path.endsWith('/meeting-sessions/session-a')) return Promise.resolve(response({ data: {
+        sessionId: 'session-a', version: 1, status: 'REVIEW', meeting: { participantIds: ['p1'] },
+        processing: { stage: 'DRAFT_READY', progressPercent: 100 },
+        speakers: [{ speakerId: 'speaker-a', label: 'Speaker A', participantId: 'p1' }],
+      } }));
+      if (path.endsWith('/meeting-sessions/session-b')) return new Promise<Response>((_resolve, reject) => { rejectSessionB = reject; });
+      if (path.endsWith('/participants')) return Promise.resolve(response({ data: { items: [{ id: 'p1', name: 'Ada Lovelace', email: 'ada.private@example.com' }] } }));
+      if (path.endsWith('/app-config')) return Promise.resolve(response({ data: { company: { id: 'c1', name: 'Example', timezone: 'Asia/Seoul' }, document: { provider: 'NOTION', configured: true, connectionVersion: 1, rootUrl: 'https://notion.example' } } }));
+      return Promise.reject(new Error(`Unexpected request: ${path}`));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<MemoryRouter initialEntries={['/meetings/session-a/review']}><App /><NavigateToReviewSession sessionId="session-b" /></MemoryRouter>);
+
+    expect(await screen.findByRole('combobox', { name: 'Speaker A 참가자' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Open another Review session' }));
+    await waitFor(() => expect(rejectSessionB).toBeDefined());
+    expect(await screen.findByText('회의의 화자 정보를 불러오는 중입니다.')).toBeTruthy();
+    expect(screen.queryByRole('combobox', { name: 'Speaker A 참가자' })).toBeNull();
+
+    rejectSessionB?.(new TypeError('network details must stay hidden'));
+    expect((await screen.findByRole('alert')).textContent).toContain('회의 화자 정보를 불러오지 못했습니다');
+    expect(screen.queryByRole('combobox', { name: 'Speaker A 참가자' })).toBeNull();
+    expect(screen.queryByText('Ada Lovelace')).toBeNull();
+  });
+
   it('renders one name-only Participant dropdown per API-010 Speaker and keeps mappings speaker-scoped', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const path = new URL(String(input)).pathname;
