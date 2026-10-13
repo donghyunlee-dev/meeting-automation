@@ -274,10 +274,7 @@ export function ReviewSpeakerPage({ drafts, onInitialize, onChange, onCommit, on
     setMinutesMutationState(expectedSessionId, { sessionId: expectedSessionId, status: 'saving', message: '저장 중…' });
     try {
       const result = await updateReviewMinutes(expectedSessionId, base.version, submittedSnapshot);
-      const accepted = rememberMinutesBase(expectedSessionId, result.version, result.minutes);
-      if (accepted && activeSessionId.current === expectedSessionId) {
-        applySnapshot({ ...currentReview, version: result.version, minutes: result.minutes });
-      }
+      rememberMinutesBase(expectedSessionId, result.version, result.minutes);
       try {
         const latest = await getReviewSession(expectedSessionId);
         const applied = activeSessionId.current === expectedSessionId && applySnapshot(latest);

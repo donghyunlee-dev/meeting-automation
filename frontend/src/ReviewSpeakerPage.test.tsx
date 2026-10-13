@@ -533,6 +533,27 @@ describe('Review minutes and transcript', () => {
     expect(fetchMock.mock.calls.filter(([input, init]) => String(input).endsWith('/minutes') && init?.method === 'PUT')).toHaveLength(1);
   });
 
+  it('does not promote the partial API-012 response when the API-010 read-after-write fails', async () => {
+    const submitted = { ...reviewData.minutes, summary: 'API-012 partial response only' };
+    const onInitialize = vi.fn();
+    const fetchMock = minutesIntegrationFetch({
+      reviews: [reviewData, new Error('API-010 temporarily unavailable')],
+      updateMinutes: () => httpResponse({ data: { version: 8, minutes: submitted } }),
+    });
+    renderReview(fetchMock, { onInitialize });
+
+    fireEvent.change(await screen.findByLabelText('회의 요약'), { target: { value: submitted.summary } });
+    fireEvent.click(screen.getByRole('button', { name: '회의록 저장' }));
+
+    expect(await screen.findByText(/최신 회의 정보를 확인하지 못했습니다/)).toBeTruthy();
+    expect((screen.getByLabelText('회의 요약') as HTMLTextAreaElement).value).toBe(submitted.summary);
+    expect((screen.getByRole('button', { name: '회의록 저장' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(onInitialize).toHaveBeenCalledOnce();
+    expect(onInitialize).toHaveBeenCalledWith('review-minutes', reviewData.speakers);
+    expect(screen.getByLabelText('Speaker A 참가자')).toBeTruthy();
+    expect(screen.getByText('두 번째 발언')).toBeTruthy();
+  });
+
   it('preserves an uncertain draft and offers a status check when the reconciliation GET also fails', async () => {
     const fetchMock = minutesIntegrationFetch({
       reviews: [reviewData, new Error('private API-010 detail')],
