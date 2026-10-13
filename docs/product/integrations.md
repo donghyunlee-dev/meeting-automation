@@ -71,10 +71,10 @@ TranscriptResult = {
 ### Port 계약
 
 ```text
-generateMinutes(MinutesCommand) -> StructuredMinutes
+generateMinutes(MinutesCommand) -> GroundedMinutesResult -> StructuredMinutes
 ```
 
-입력에는 `templateId`, `templateVersion`, Template prompt/content, 최소 Participant 참조 목록, Speaker mapping, 표준 Transcript가 들어간다. 출력은 `data-spec.md`의 Structured Minutes와 일치해야 한다.
+입력에는 `templateId`, `templateVersion`, Template prompt/content, 최소 Participant 참조 목록, Speaker mapping, 표준 Transcript가 들어간다. Provider 내부 결과는 `StructuredMinutes`의 텍스트 claim과 claim별 Transcript `segmentId` 근거 목록을 함께 반환한다. Application은 ID가 입력 Transcript에 존재하는지 검증하고, 근거가 없거나 참조할 수 없는 텍스트 claim만 제거한 뒤 `data-spec.md`의 canonical `StructuredMinutes`로 변환한다. Evidence ID는 저장 schema에 추가하지 않는다.
 
 ### 생성 원칙
 
@@ -82,7 +82,7 @@ generateMinutes(MinutesCommand) -> StructuredMinutes
 - 가능한 경우 Markdown 대신 schema-constrained 구조화 출력을 사용한다.
 - `default.md`와 `project.md`는 Backend static resources로 관리한다.
 - 재생성 요청에는 Transcript와 Speaker mapping만 사용하며 Audio/STT Port를 호출하지 않는다.
-- 근거 없는 결정/담당자/날짜를 만들지 않도록 prompt와 출력 검증에서 제약한다.
+- 각 summary/list/action claim의 transcript 근거를 제공하도록 prompt와 schema에서 요구한다. 구현은 citation segment ID의 입력 존재를 검증하지만 의미적 함의까지 독립 입증하지는 않는다. 미지원 텍스트 claim은 개별 제거하고, date는 인용된 segment에 canonical ISO literal이 있을 때만 유지하며, 지원되는 task의 나머지 미지원 owner/date는 각각 null로 둔다. 참조 구조·필수 필드·roster/date 자체의 schema 오류는 전체 처리 실패다.
 - 모델 출력 parsing 실패, 필수 필드 누락, schema 위반은 `PROCESSING_FAILURE`로 분류한다.
 
 ## EXT-003 Document Provider
