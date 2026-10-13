@@ -1,4 +1,4 @@
-﻿# Processing Start API 검증 계획
+# Processing Start API 검증 계획
 
 ## 자동화 테스트
 

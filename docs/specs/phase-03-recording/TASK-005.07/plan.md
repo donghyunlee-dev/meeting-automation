@@ -1,4 +1,4 @@
-﻿# Processing Start API 구현 계획
+# Processing Start API 구현 계획
 
 ## 문서 기준 및 의존성
 
