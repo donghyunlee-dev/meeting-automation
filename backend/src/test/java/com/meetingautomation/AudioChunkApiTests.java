@@ -1,5 +1,6 @@
 package com.meetingautomation;
 
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -16,6 +17,8 @@ import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -148,6 +151,95 @@ class AudioChunkApiTests {
                 .andExpect(jsonPath("$.error.code").value("SESSION_NOT_FOUND"));
 
         org.assertj.core.api.Assertions.assertThat(chunkContentFiles(audio)).isEmpty();
+    }
+
+    @Test
+    void uploadStatusForExistingSessionWithoutChunksReturnsEmptyAggregate() throws Exception {
+        mockMvc.perform(get(statusPath(SESSION_ID)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.receivedSequences").isArray())
+                .andExpect(jsonPath("$.data.receivedSequences").isEmpty())
+                .andExpect(jsonPath("$.data.receivedChunks").value(0))
+                .andExpect(jsonPath("$.data.totalBytes").value(0));
+    }
+
+    @Test
+    void uploadStatusReportsUniqueNumericSequencesAndExactBytesWithoutChangingStorage() throws Exception {
+        byte[] sequenceTen = new byte[] {10, 11, 12, 13, 14, 15, 16};
+        byte[] sequenceTwo = new byte[] {2, 3, 4, 5, 6};
+        byte[] sequenceZero = new byte[] {0, 1, 2};
+        mockMvc.perform(upload(SESSION_ID, "10", sequenceTen, "audio/webm", "status-sequence-10"))
+                .andExpect(status().isOk());
+        mockMvc.perform(upload(SESSION_ID, "2", sequenceTwo, "audio/webm", "status-sequence-2"))
+                .andExpect(status().isOk());
+        mockMvc.perform(upload(SESSION_ID, "0", sequenceZero, "audio/webm", "status-sequence-0"))
+                .andExpect(status().isOk());
+
+        Path partial = sessionStorageDirectory().resolve(".upload-interrupted");
+        Files.createDirectories(partial);
+        Files.write(partial.resolve("chunk.bin"), new byte[] {99, 98, 97, 96});
+
+        Map<String, String> storageBeforeQuery = storageSnapshot();
+        mockMvc.perform(get(statusPath(SESSION_ID)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.receivedSequences").isArray())
+                .andExpect(jsonPath("$.data.receivedSequences.length()").value(3))
+                .andExpect(jsonPath("$.data.receivedSequences[0]").value(0))
+                .andExpect(jsonPath("$.data.receivedSequences[1]").value(2))
+                .andExpect(jsonPath("$.data.receivedSequences[2]").value(10))
+                .andExpect(jsonPath("$.data.receivedChunks").value(3))
+                .andExpect(jsonPath("$.data.totalBytes").value(15));
+        mockMvc.perform(get(statusPath(SESSION_ID)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.receivedSequences").isArray())
+                .andExpect(jsonPath("$.data.receivedSequences.length()").value(3))
+                .andExpect(jsonPath("$.data.receivedSequences[0]").value(0))
+                .andExpect(jsonPath("$.data.receivedSequences[1]").value(2))
+                .andExpect(jsonPath("$.data.receivedSequences[2]").value(10))
+                .andExpect(jsonPath("$.data.receivedChunks").value(3))
+                .andExpect(jsonPath("$.data.totalBytes").value(15));
+
+        org.assertj.core.api.Assertions.assertThat(storageSnapshot()).isEqualTo(storageBeforeQuery);
+    }
+
+    @Test
+    void uploadStatusForMissingSessionReturnsSessionNotFound() throws Exception {
+        mockMvc.perform(get(statusPath("ms_missing-upload-status")))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error.code").value("SESSION_NOT_FOUND"));
+    }
+
+    @Test
+    void incompleteUploadPublishIsExcludedFromEmptyStatus() throws Exception {
+        Path partial = sessionStorageDirectory().resolve(".upload-interrupted");
+        Files.createDirectories(partial);
+        Files.writeString(partial.resolve("chunk.bin"), "partial-private-audio");
+
+        mockMvc.perform(get(statusPath(SESSION_ID)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.receivedSequences").isEmpty())
+                .andExpect(jsonPath("$.data.receivedChunks").value(0))
+                .andExpect(jsonPath("$.data.totalBytes").value(0));
+    }
+
+    @Test
+    void uploadStatusStorageFailureUsesSafeInternalErrorWithoutLeakingPathOrAudio() throws Exception {
+        byte[] audio = "status-private-audio-marker".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        mockMvc.perform(upload(SESSION_ID, "0", audio, "audio/webm", "status-storage-failure"))
+                .andExpect(status().isOk());
+        deleteRecursively(AUDIO_ROOT);
+        Files.writeString(AUDIO_ROOT, "file prevents directory listing");
+
+        mockMvc.perform(get(statusPath(SESSION_ID)))
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.error.code").value("INTERNAL_ERROR"))
+                .andExpect(result -> {
+                    String response = result.getResponse().getContentAsString();
+                    org.assertj.core.api.Assertions.assertThat(response)
+                            .doesNotContain(AUDIO_ROOT.toString())
+                            .doesNotContain("status-private-audio-marker")
+                            .doesNotContain(sha256(audio));
+                });
     }
 
     @Test
@@ -341,6 +433,27 @@ class AudioChunkApiTests {
 
     private static String path(String sessionId, String sequence) {
         return "/api/v1/meeting-sessions/" + sessionId + "/audio/chunks/" + sequence;
+    }
+
+    private static String statusPath(String sessionId) {
+        return "/api/v1/meeting-sessions/" + sessionId + "/audio";
+    }
+
+    private static Path sessionStorageDirectory() throws Exception {
+        String hash = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                .digest(SESSION_ID.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+        return AUDIO_ROOT.resolve(hash);
+    }
+
+    private Map<String, String> storageSnapshot() throws IOException {
+        try (var paths = Files.walk(AUDIO_ROOT)) {
+            Map<String, String> snapshot = new TreeMap<>();
+            for (Path path : paths.toList()) {
+                String relative = AUDIO_ROOT.relativize(path).toString();
+                snapshot.put(relative, Files.size(path) + ":" + Files.getLastModifiedTime(path).toMillis());
+            }
+            return snapshot;
+        }
     }
 
     private List<Path> chunkContentFiles(byte[] expectedBytes) throws IOException {
