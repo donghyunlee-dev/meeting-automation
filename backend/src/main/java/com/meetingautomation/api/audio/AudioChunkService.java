@@ -28,7 +28,17 @@ public final class AudioChunkService {
     public AudioChunkUploadResponse upload(String sessionId, String rawSequence, String contentType,
             String rawSha256, String rawByteLength, String idempotencyKey,
             long contentLength, InputStream body) {
-        sessionStore.find(sessionId).orElseThrow(AudioSessionNotFoundException::new);
+        return sessionStore.withSessionLock(sessionId, () -> uploadWhileSessionLocked(sessionId, rawSequence,
+                contentType, rawSha256, rawByteLength, idempotencyKey, contentLength, body));
+    }
+
+    private AudioChunkUploadResponse uploadWhileSessionLocked(String sessionId, String rawSequence, String contentType,
+            String rawSha256, String rawByteLength, String idempotencyKey,
+            long contentLength, InputStream body) {
+        var session = sessionStore.find(sessionId).orElseThrow(AudioSessionNotFoundException::new);
+        if (!"CREATED".equals(session.status()) && !"UPLOADING".equals(session.status())) {
+            throw new com.meetingautomation.api.session.SessionStateConflictException();
+        }
         UploadPolicy policy = sessionStore.findUploadPolicy(sessionId).orElseGet(meetingSessionService::uploadPolicy);
         int sequence = parseSequence(rawSequence);
         String mimeType = validateMimeType(contentType, policy);
@@ -44,6 +54,9 @@ public final class AudioChunkService {
 
         fileStore.store(sessionId, sequence, mimeType, byteLength, sha256,
                 policy.maxChunkBytes(), body);
+        if ("CREATED".equals(session.status())) {
+            sessionStore.transitionStatus(sessionId, "CREATED", "UPLOADING");
+        }
         return new AudioChunkUploadResponse(new AudioChunkUploadResponse.Data(sequence, true));
     }
 

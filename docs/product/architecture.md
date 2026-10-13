@@ -112,7 +112,7 @@ configuration/
 
 ## 세션 상태 및 동시성
 
-허용 상태는 PRD의 상태도를 따른다: `CREATED → RECORDING → UPLOADING → PROCESSING → REVIEW → CONFIRMED → PUBLISHING → DOCUMENT_SAVED → DELIVERING → COMPLETED | COMPLETED_WITH_WARNINGS`. 실패 상태는 `PROCESSING_FAILED`, `DOCUMENT_FAILED`이며 해당 단계 재시도로 진행 상태로 돌아간다.
+Backend는 녹음 중 상태를 별도 API로 저장하지 않는다. 첫 Chunk가 durable하게 저장되면 `CREATED → UPLOADING`으로 전이한다. 이후 허용 상태는 `UPLOADING → PROCESSING → REVIEW → CONFIRMED → PUBLISHING → DOCUMENT_SAVED → DELIVERING → COMPLETED | COMPLETED_WITH_WARNINGS`다. `RECORDING`은 Frontend의 로컬 녹음 상태다. 실패 상태는 `PROCESSING_FAILED`, `DOCUMENT_FAILED`이며 해당 단계 재시도로 진행 상태로 돌아간다.
 
 - 상태 변경은 유스케이스 경계에서만 수행한다.
 - 클라이언트가 전달한 `If-Match` Session version이 현재 값과 다르면 변경을 거절한다.

@@ -27,7 +27,7 @@ import org.springframework.stereotype.Component;
 
 /** Stores each complete sequence as an atomically published directory beneath TEMP_AUDIO_DIR. */
 @Component
-final class AudioChunkFileStore {
+public final class AudioChunkFileStore {
     private static final int BUFFER_SIZE = 8192;
 
     private final Path root;
@@ -83,7 +83,7 @@ final class AudioChunkFileStore {
         }
     }
 
-    List<CompletedChunk> completedChunks(String sessionId) {
+    public List<CompletedChunk> completedChunks(String sessionId) {
         Path sessionDirectory = root.resolve(sha256(sessionId.getBytes(StandardCharsets.UTF_8)));
         try {
             if (!existsOrThrowIfMissing(root)) return List.of();
@@ -310,7 +310,7 @@ final class AudioChunkFileStore {
     private record ChunkKey(String sessionHash, int sequence) {
     }
 
-    record CompletedChunk(int sequence, long bytes) {
+    public record CompletedChunk(int sequence, long bytes) {
     }
 
     private static final class LockEntry {
