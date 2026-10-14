@@ -11,7 +11,8 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "test": "vitest run",
-    "test:viewport": "playwright test --config playwright.viewport.config.ts"
+    "test:viewport": "playwright test --config playwright.viewport.config.ts",
+    "test:a11y": "playwright test --config playwright.a11y.config.ts"
   },
   "dependencies": {
     "react": "^19.3.0",
@@ -19,6 +20,7 @@
     "react-router": "^8.4.0"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.13.0",
     "@eslint/js": "^9.39.0",
     "@playwright/test": "^1.64.0",
     "@testing-library/react": "^16.3.0",

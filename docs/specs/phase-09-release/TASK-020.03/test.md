@@ -33,3 +33,14 @@
 - 금지: 실제 participant/email/meeting/audio/transcript/Secret/provider response
 - 성공: 모든 자동 사례가 통과하고 keyboard-only QA에서 차단 결함이 없으며, 실제 device assistive-tech 범위는 별도 후속으로 식별됨.
 - 실패: 핵심 action keyboard 불가, 보이지 않는 focus, 이름 없는 control, form error 인지 불가, color-only state, input data loss, target policy 위반 또는 modal에서 빠져나갈 수 없음.
+
+
+## TASK-020.03 implementation run record
+
+The frontend implementation is pinned at `@axe-core/playwright` 4.13.0. Developer checks ran with Node 22.22.0 and npm 11.6.2, satisfying the resolved `react-router@8.4.0` Node engine (`>=22.22.0`).
+
+- Focused Vitest: `npm exec -- vitest run src/NewMeetingPage.test.tsx src/ProcessingPage.test.tsx src/RecordingPage.test.tsx` - 3 files, 33 passed.
+- Frontend app type check: `npm exec -- tsc --project tsconfig.app.json --noEmit --pretty false` - passed.
+- Accessibility test TypeScript check and changed-file ESLint - passed; exact commands and case scope are in `docs/evidence/TASK-020.03.md`.
+- `npm run test:a11y -- --list` - 19 cases discovered. This lists tests and does not execute them.
+- The a11y Playwright config starts a local Vite server. Per repository instructions, browser/axe execution and manual keyboard/device checks are deferred to the user's direct service test. No axe violation-free result is claimed.
