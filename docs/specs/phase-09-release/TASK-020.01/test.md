@@ -23,7 +23,8 @@
 | 명령 | 결과 |
 |---|---|
 | `npm run test:viewport -- --grep SCR-012` | 참석자 화면 모바일 회귀 12/12 통과 |
-| `npm run test:viewport` | 전체 140/140 통과 (Chromium 70, WebKit 70) |
+| interaction 시나리오 (SCR-002/005/006/007/008/009/012) | 14/14 통과 (Chromium/WebKit) |
+| `npm run test:viewport` | 전체 154/154 통과 (Chromium 77, WebKit 77) |
 | `npm exec eslint -- e2e/responsive-viewports.spec.ts playwright.viewport.config.ts` | 통과 |
 | `git diff --check` | 통과 |
 
