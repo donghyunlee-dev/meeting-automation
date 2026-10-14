@@ -2,7 +2,7 @@
 
 ## 자동화 테스트
 
-실행 위치는 `frontend/`이며 현재 package 명령은 `npm run test`, `npm run lint`, `npm run build`다. Vitest/jsdom + Testing Library로 state component 및 화면/API fixture 연결을 검사한다. TASK-020.01의 `npm run test:viewport`는 구현된 route의 대표 상태 copy를 viewport에서 확인하는 smoke에만 사용한다. 계획 단계에서는 명령을 실행하지 않는다.
+실행 위치는 `frontend/`다. Vitest/jsdom + Testing Library로 state component 및 화면/API fixture 연결을 검사한다. TASK-020.01의 `npm run test:viewport`는 구현된 route의 대표 상태 copy를 viewport에서 확인하는 smoke에만 사용한다. Task-local verification은 변경/직접 영향 테스트만 선택한다. 이번 실행에서는 전체 frontend suite, 전역 lint, build는 실행하지 않았다.
 
 | ID | 조건/절차 | 기대 결과 | 증거 |
 |---|---|---|---|
@@ -23,6 +23,25 @@
 | FORM-DRAFT-PRESERVE | New Meeting/Review dirty form 중 query 재요청/에러 | 사용자 입력과 Review draft 유지 | controlled form assertion |
 | SETTINGS-HEALTH | API-019 일부 미구성/미연결 contributor fixture | 영역별 미설정·연결 오류·정상 상태 구분, Secret 미표시 | Settings test |
 | VIEWPORT-STATE-SMOKE | 대표 mobile Loading/Empty/Error/Ready route를 Playwright에서 검사 | 360px에서 copy/action 접근 가능, page horizontal overflow 없음 | Playwright report/screenshots |
+
+## 실행 결과
+
+Commit `9749f3ab12c460f0b1fcd7c1fa2b2990652abd59`에서 아래 focused 검증을 실행했다.
+
+| 명령 | 결과 |
+|---|---|
+| `npm exec -- vitest run src/components/async-state/AsyncState.test.tsx src/lib/api/normalizeApiError.test.ts src/MeetingHistory.test.tsx src/MeetingDetailPage.test.tsx src/meetingDetailApi.test.ts` | 5 files, 24 passed |
+| `npm exec -- vitest run src/CompletePage.test.tsx src/ProcessingPage.test.tsx -t "does not offer API-016 retry|shows retry only on retryable failed rows|shows safe Korean stage copy and only actions allowed|keeps actions hidden when API-010 metadata says retry or assembled audio is unavailable|downloads audio and finalizes with DOWNLOADED"` | 2 files, 7 passed / 16 skipped |
+| Issue-focused 12-file selector run (명령 아래 참조) | 9 files passed, 3 skipped; 25 passed / 152 skipped |
+| `npm exec -- eslint -- src/components/async-state/AsyncState.tsx src/components/async-state/AsyncState.test.tsx src/lib/api/normalizeApiError.ts src/lib/api/normalizeApiError.test.ts src/MeetingHistory.tsx src/MeetingHistory.test.tsx src/MeetingDetailPage.tsx src/meetingDetailApi.ts src/meetingListApi.ts` | Passed |
+| `npm exec -- tsc --project tsconfig.app.json --noEmit --pretty false` | Passed |
+| `git diff --check` | Passed |
+
+Issue-focused run's exact command:
+
+```sh
+npm exec -- vitest run src/components/async-state/AsyncState.test.tsx src/lib/api/normalizeApiError.test.ts src/MeetingHistory.test.tsx src/MeetingDetailPage.test.tsx src/meetingDetailApi.test.ts src/NewMeetingPage.test.tsx src/SettingsPage.test.tsx src/App.test.tsx src/ProcessingPage.test.tsx src/ReviewSpeakerPage.test.tsx src/SharePage.test.tsx src/CompletePage.test.tsx -t "ASYNC-|ERROR-404|shows independent query errors and retries|shows empty and search-empty recovery|retries safely after list failure|labels stale health after refresh failure|shows Settings without selecting a provider|shows stage-safe failure|keeps actions hidden when API-010 metadata says retry or assembled audio is unavailable|preserves the speaker draft during roster reload|refreshes API-010 once after 412|checks API-010 after an uncertain API-013|blocks confirmation when the Document provider is unconfigured|reconciles an uncertain API-015 result|shows retry only when API-010 explicitly allows PUBLISH|shows retry only on retryable failed rows|does not offer API-016 retry|preserves loaded meetings|shows safe Korean stage copy and only actions allowed"
+```
 
 ## 수동 QA
 
