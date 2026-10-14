@@ -69,6 +69,12 @@ Provider `Meetings` child page의 모든 cursor/page를 따라가며 Meeting 요
 - metadata 오류나 Provider 페이지 실패는 기존 표준 오류로 정규화하고 부분 결과를 노출하지 않는다.
 - 모든 완료 기준이 [검증 계획](./test.md)의 사례에 연결된다.
 
+## 구현 검증 기록
+
+- 구현: API-017 Controller/Service/DTO를 추가하고 활성 resolver의 TASK-022.04 transfer codec을 사용한다. 전체 manifest pagination 이후 meeting ID를 dedupe하고 meeting metadata/roster를 검증한다.
+- 결과: Java 25 focused tests 39개 통과. 명령은 `./gradlew.bat test --tests com.meetingautomation.MeetingListApiTests --tests com.meetingautomation.document.DocumentTransferAdapterTests`이며, `MeetingListApiTests` 6개와 `DocumentTransferAdapterTests` 33개를 실행했다.
+- 제한: 저장소 정책에 따라 전체 Backend suite, 로컬 서비스 및 별도 실제 Provider acceptance/QA는 실행하지 않았다.
+
 ## 연결 문서
 
 - [구현 계획](./plan.md)

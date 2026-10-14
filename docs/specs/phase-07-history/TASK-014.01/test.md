@@ -4,33 +4,38 @@
 
 ## 자동화 테스트
 
-구현 단계에서 Backend 표준 JUnit/Gradle 테스트를 실행한다. 정확한 명령은 Backend 프로젝트 설정에 따른다. Provider 호출은 fake HTTP/client fixture를 사용하며 실계정 Provider에 연결하지 않는다.
+Java 25 및 Gradle Wrapper로 변경 API와 직접 영향받는 provider codec 계약 테스트만 실행한다. Provider 경계는 fake provider 또는 mock HTTP fixture를 사용한다. 저장소 정책에 따라 전체 Backend suite, `clean build`, 로컬 서비스, 실제 계정 Provider 호출 및 별도 수동 acceptance/QA를 실행하지 않는다.
 
 | ID | 입력/조건 | 기대 결과 | 증거 |
 |---|---|---|---|
-| API017-LIMIT-DEFAULT | `limit` 생략, 100개 미만 fixture | Provider 전체 결과 중 최신순 최대 100개가 `{data:{items}}`로 반환 | Controller/API test report |
-| API017-LIMIT-BOUNDARY | `limit=1`, `limit=100` | 각각 최대 1개/100개, 0 또는 101은 400 `VALIDATION_FAILED` | parameterized API test |
-| API017-LIMIT-FORMAT | 비정수 및 공백 query | 400 `VALIDATION_FAILED`; Provider 호출 0회 | Controller test |
-| API017-EMPTY | Meetings child에 문서 없음 | 200 `{data:{items:[]}}` | service/API test |
-| API017-SORT | 서로 다른 offset 표현의 meetingAt 및 동률 문서 | 실제 시각 내림차순, 동률 documentId 오름차순 | service test |
-| API017-PAGINATION | 여러 Provider cursor/page, 최신 항목이 후속 페이지에 위치 | 모든 페이지를 읽고 전체 기준 최신 limit 선택 | adapter test with page-call assertions |
-| API017-DUPLICATE | 동일 documentId가 두 페이지에 노출 | 한 응답 항목만 존재 | service/adapter test |
-| API017-PARTICIPANTS | participantIds 순서가 roster 순서와 다름 | roster의 id/name만 문서 지정 순서대로 반환; email 없음 | adapter mapping test |
-| API017-DOCUMENT-URL | URL 누락 또는 비 HTTP(S) | 계약상 안전한 `documentUrl=null`; 오류/본문은 반환되지 않음 | DTO mapping/API test |
-| API017-METADATA-FAILURE | 필수 meetingAt/participantIds 누락·파싱 오류 또는 참조 불명 | 502 `DOCUMENT_FAILED`, 부분 items 없음 | adapter/API test |
-| API017-PROVIDER-FAILURE | 첫 페이지 또는 후속 페이지 Provider 오류 | 502 `DOCUMENT_FAILED`, 부분 items 없음, 원문/Secret 로그 없음 | adapter/API test |
+| API017-LIMIT-DEFAULT | `limit` 생략, 105개 fixture | 최신순 최대 100개가 `{data:{items}}`로 반환 | `MeetingListApiTests` |
+| API017-LIMIT-BOUNDARY | `limit=1`, `limit=100`, 0 또는 101 | 각각 최대 1개/100개, 범위 밖은 400 `VALIDATION_FAILED` | `MeetingListApiTests` |
+| API017-LIMIT-FORMAT | 비정수 query | 400 `VALIDATION_FAILED` | `MeetingListApiTests` |
+| API017-EMPTY | Meetings child에 문서 없음 | 200 `{data:{items:[]}}` | `MeetingListApiTests` |
+| API017-SORT | 서로 다른 offset 표현의 meetingAt | 실제 시각 내림차순, 동률 documentId 오름차순 | `MeetingListApiTests` |
+| API017-PAGINATION | 두 Provider의 여러 cursor/page, 여러 회의 문서 | manifest가 양쪽 provider의 모든 child page를 소비 | `DocumentTransferAdapterTests.manifestExhaustsMultipleCursorsForBothRootsAndPreservesRevision` |
+| API017-DUPLICATE | 동일 documentId가 manifest에 두 번 있음 | 한 번만 export하고 한 응답 항목만 반환 | `MeetingListApiTests` |
+| API017-PARTICIPANTS | 문서의 participantIds 순서와 roster 순서가 다름 | `{id,name}`를 문서 지정 순서로 반환 | `MeetingListApiTests` |
+| API017-DOCUMENT-URL | URL 누락 또는 비 HTTP(S) | `documentUrl=null` | `MeetingListApiTests` |
+| API017-METADATA-FAILURE | required participant reference 누락 | 502 `DOCUMENT_FAILED`; 전체 응답 실패 | `MeetingListApiTests` |
+| API017-PROVIDER-FAILURE | manifest 조회 실패 또는 codec page/metadata 오류 | 502 `DOCUMENT_FAILED`; 부분 목록 없음 | `MeetingListApiTests`, `DocumentTransferAdapterTests.invalidMarkersPagesReferencesAndCursorsFailWholeManifest` |
+| API017-PRIVACY | 응답 생성 중 Secret/email/회의 body가 fixture에 존재 | 응답에 포함되지 않음 | `MeetingListApiTests` |
 
-## 수동 QA
+## 실행 결과
 
-- Provider에 서로 다른 날짜의 Meeting 문서를 준비하고 API를 호출해 최신순 및 `limit` 결과 수를 확인한다.
-- 결과가 없을 때 빈 상태를 위한 정상 200 응답을 확인한다. 실제 SCR-009 화면 상태 표현은 TASK-014.03에서 검증한다.
-- 응답과 로그에 이메일, Meeting 본문, Transcript, Minutes, Authorization 또는 Provider 원문 응답이 없는지 확인한다.
+- 날짜: 2026-10-14.
+- Java: OpenJDK 25.0.4.
+- 명령: `./gradlew.bat test --tests com.meetingautomation.MeetingListApiTests --tests com.meetingautomation.document.DocumentTransferAdapterTests` (Backend 디렉터리에서 실행).
+- 결과: `MeetingListApiTests` 6 passed, `DocumentTransferAdapterTests` 33 passed; 총 39 passed, 0 failed.
+- 별도 `compileJava`/`compileTestJava`는 실행하지 않았다. focused `test --tests`가 Backend 및 선택 테스트를 컴파일한다.
+- `git diff --check`: passed.
+- 최초 실행 시 기본 `JAVA_HOME`이 설치되지 않은 JDK 17 경로를 가리켜 wrapper가 시작되지 않았다. 설치된 Java 25 경로를 프로세스 환경에 지정한 후 위 focused command가 통과했다.
 
 ## 릴리스 확인
 
-- `./gradlew test` 및 저장소의 Backend build 명령을 실행하고 결과를 Evidence 문서에 남긴다.
-- 선택된 Provider의 정상 자식 페이지 pagination을 비생산 데이터에서 확인한다. 운영 Secret이나 실제 민감 회의 데이터를 로그에 남기지 않는다.
+- Root leader가 PR/CI/review를 확인하고 `docs/evidence/TASK-014.01/verification.md`에 최종 병합 증거를 기록한다.
+- 검증 범위는 위 focused classes다. 별도 로컬 서비스 및 실제 Provider의 수동 pagination 확인은 저장소 지침상 수행하지 않는다.
 
 ## 🔗 전역 연결 소비자 실제 연동 회귀
 
-이 작업은 TASK-022.06에서 계약 fixture로만 검증한 실제 API-017을 연결한다. 이전된 target 문서를 조회하고 전환 전 source 목록/cache를 재사용하지 않으며 참석자 참조가 target roster와 일치하는지 실제 요청으로 검증한다.
+이 작업은 resolver가 활성 global connection에서 Provider를 선택하고, TASK-022.04 codec이 양쪽 Provider의 child pagination과 manifest metadata를 처리하는 것을 focused API/adapter tests로 확인한다. 실제 전환 후 소비자 smoke test는 별도 acceptance/QA 정책에 따라 이 task에서 실행하지 않는다.

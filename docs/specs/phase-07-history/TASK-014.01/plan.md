@@ -24,9 +24,16 @@ API/backend 계약이 PRD와 선행 Provider port에서 이미 고정되어 있�
 
 1. Controller/service 단위 테스트에서 query 경계, 빈 목록, 정렬·limit·오류 계약을 고정한다.
 2. Adapter 계약 테스트에서 cursor 끝까지 순회, child type/page 처리, participant 참조 매핑을 고정한다.
-3. `DocumentProvider` 기존 `listMeetings(max)` 계약을 유지하며 필요한 Adapter 읽기/요약 로직을 구현한다. 계약 변경이 불가피하면 TASK-002 공통 계약과 이 task의 영향 파일을 같은 변경에서 갱신한다.
-4. API-017 Controller와 application service를 연결하고 공통 envelope 및 기존 오류 매퍼를 사용한다.
-5. 전체 테스트에서 provider mock/fake만 사용해 두 Adapter와 endpoint의 성공·실패 경로를 통합 검증한다.
+3. TASK-022.04가 제공하는 활성 `DocumentTransferPort` codec manifest를 소비하고 Meeting record metadata/roster를 API-017 요약 DTO로 정규화한다. 전체 child pagination과 page 실패는 기존 transfer adapter 계약을 재사용한다.
+4. API-017 Controller와 application service를 연결하고 공통 envelope 및 기존 validation/provider 오류 매퍼를 사용한다.
+5. 변경 API와 직접 영향받는 TASK-022.04 provider pagination 계약만 focused Gradle tests로 검증한다. 저장소 정책에 따라 전체 Backend suite, 로컬 서비스, 별도 수동 QA는 실행하지 않는다.
+
+## 구현 결과
+
+- `GET /api/v1/meetings`는 resolver의 활성 global connection에서 TASK-022.04 `DocumentTransferPort`를 선택한다. 완전한 manifest를 읽고 문서 ID를 dedupe한 뒤 각 metadata record를 codec으로 해석한다.
+- 필수 meeting metadata 및 participant roster 참조가 누락되면 전체 요청을 `DOCUMENT_FAILED`로 실패시킨다. 모든 항목을 실제 `meetingAt` 최신순, 동률 `documentId` 오름차순으로 정렬한 뒤 limit을 적용한다.
+- Focused verification: Java 25, `./gradlew.bat test --tests com.meetingautomation.MeetingListApiTests --tests com.meetingautomation.document.DocumentTransferAdapterTests` (39 tests passed: 6 API and 33 adapter tests).
+- 환경 확인: shell 기본 `JAVA_HOME`은 오래된 JDK 17 경로를 가리켰다. 설치된 JDK 25 (`C:\Program Files\Eclipse Adoptium\jdk-25.0.4.101-hotspot`)를 프로세스 환경에 설정하고 위 명령을 통과시켰다.
 
 ## 검증 및 인접 작업
 
