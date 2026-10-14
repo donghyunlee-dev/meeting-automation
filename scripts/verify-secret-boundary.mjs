@@ -24,6 +24,18 @@ const BACKEND_REQUIRED = [
   'SLACK_MEETING_WEBHOOK_URL',
   'SLACK_ADMIN_WEBHOOK_URL'
 ];
+const SAFE_ENV_SAMPLE_PATHS = Object.freeze(['frontend/.env.example', 'backend/.env.example']);
+
+export function safeEnvSamplePaths() {
+  return [...SAFE_ENV_SAMPLE_PATHS];
+}
+
+export function formatDiagnostics(result) {
+  return result.issues.map(issue => {
+    const location = issue.line ? `${issue.file}:${issue.line}` : issue.file;
+    return `${location}: ${issue.code}`;
+  }).join('\n');
+}
 
 function parseSample(content, file, issues) {
   const entries = [];
@@ -96,18 +108,15 @@ export function inspectEnvSamples(frontendContent, backendContent) {
 }
 
 async function main() {
+  const [frontendPath, backendPath] = safeEnvSamplePaths();
   const [frontendContent, backendContent] = await Promise.all([
-    readFile(resolve(ROOT, 'frontend/.env.example'), 'utf8'),
-    readFile(resolve(ROOT, 'backend/.env.example'), 'utf8')
+    readFile(resolve(ROOT, frontendPath), 'utf8'),
+    readFile(resolve(ROOT, backendPath), 'utf8')
   ]);
   const result = inspectEnvSamples(frontendContent, backendContent);
 
   if (!result.valid) {
-    for (const issue of result.issues) {
-      const location = issue.line ? `${issue.file}:${issue.line}` : issue.file;
-      const key = issue.key ? ` (${issue.key})` : '';
-      console.error(`${location}: ${issue.code}${key}`);
-    }
+    console.error(formatDiagnostics(result));
     process.exitCode = 1;
     return;
   }

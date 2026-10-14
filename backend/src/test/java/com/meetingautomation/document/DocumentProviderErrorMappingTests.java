@@ -2,11 +2,13 @@ package com.meetingautomation.document;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.meetingautomation.api.error.ApiErrorResponse;
 import com.meetingautomation.api.error.ApiExceptionHandler;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
+import tools.jackson.databind.json.JsonMapper;
 
 class DocumentProviderErrorMappingTests {
     private final ApiExceptionHandler handler = new ApiExceptionHandler();
@@ -51,6 +53,29 @@ class DocumentProviderErrorMappingTests {
         assertEquals("NOT_FOUND", error(response).category());
         assertFalse(error(response).retryable());
         assertFalse(error(response).message().contains("raw-response-marker"));
+    }
+
+    @Test
+    void providerResponseAndCredentialCanariesNeverEnterErrorEnvelopeOrDetails() throws Exception {
+        String canary = "Bearer synthetic-token provider-private-body first@example.test transcript-canary minutes-canary";
+        RuntimeException providerFailure = new RuntimeException(canary);
+
+        var response = handler.handleDocumentProviderFailure(
+                DocumentProviderException.documentFailed(true, providerFailure), request());
+        String serialized = JsonMapper.builder().build().writeValueAsString(response.getBody());
+
+        assertEquals(502, response.getStatusCode().value());
+        assertEquals("DOCUMENT_FAILED", error(response).code());
+        assertEquals("DOCUMENT_FAILURE", error(response).category());
+        assertEquals("document-contract-test", error(response).traceId());
+        assertTrue(error(response).retryable());
+        assertTrue(error(response).details().isEmpty());
+        assertFalse(serialized.contains("synthetic-token"));
+        assertFalse(serialized.contains("provider-private-body"));
+        assertFalse(serialized.contains("first@example.test"));
+        assertFalse(serialized.contains("transcript-canary"));
+        assertFalse(serialized.contains("minutes-canary"));
+        assertFalse(serialized.contains("RuntimeException"));
     }
 
     private static MockHttpServletRequest request() {

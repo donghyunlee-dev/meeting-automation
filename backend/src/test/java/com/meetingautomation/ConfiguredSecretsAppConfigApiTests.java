@@ -16,12 +16,15 @@ import org.springframework.test.web.servlet.MockMvc;
         "DOCUMENT_PROVIDER=NOTION",
         "DOCUMENT_ROOT_ID=app-config-root-secret-marker",
         "NOTION_TOKEN=app-config-notion-token-secret-marker",
+        "OPENAI_API_KEY=app-config-openai-api-key-marker",
         "EMAIL_PROVIDER=GMAIL_API",
         "EMAIL_OAUTH_CLIENT_ID=app-config-email-client-id-marker",
         "EMAIL_OAUTH_CLIENT_SECRET=app-config-email-client-secret-marker",
         "EMAIL_OAUTH_REFRESH_TOKEN=app-config-email-refresh-token-marker",
         "EMAIL_SENDER_ADDRESS=automation@example.test",
-        "NOTIFICATION_PROVIDER=SLACK"
+        "NOTIFICATION_PROVIDER=SLACK",
+        "SLACK_MEETING_WEBHOOK_URL=https://hooks.slack.com/services/T-APP/B-MEETING/app-config-meeting-webhook-marker",
+        "SLACK_ADMIN_WEBHOOK_URL=https://hooks.slack.com/services/T-APP/B-ADMIN/app-config-admin-webhook-marker"
 })
 @AutoConfigureMockMvc
 @Import({SelectedDocumentProviderApiTests.MockProviderHttpConfiguration.class,
@@ -45,6 +48,10 @@ class ConfiguredSecretsAppConfigApiTests {
                     assertFalse(response.contains("app-config-email-client-id-marker"));
                     assertFalse(response.contains("app-config-email-client-secret-marker"));
                     assertFalse(response.contains("app-config-email-refresh-token-marker"));
+                    assertFalse(response.contains("app-config-root-secret-marker"));
+                    assertFalse(response.contains("app-config-openai-api-key-marker"));
+                    assertFalse(response.contains("app-config-meeting-webhook-marker"));
+                    assertFalse(response.contains("app-config-admin-webhook-marker"));
                 });
     }
 }
