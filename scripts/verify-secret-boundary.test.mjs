@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { inspectEnvSamples } from './verify-secret-boundary.mjs';
+import { formatDiagnostics, inspectEnvSamples, safeEnvSamplePaths } from './verify-secret-boundary.mjs';
 
 const validFrontend = 'VITE_API_BASE_URL=http://localhost:8080\n';
 const validBackend = `APP_COMPANY_ID=sfood
@@ -81,4 +81,18 @@ test('requires the documented non-secret backend settings', () => {
   assert.ok(result.issues.some(issue => issue.file === 'backend/.env.example'
     && issue.key === 'DOCUMENT_SETTINGS_DIR'
     && issue.code === 'MISSING_REQUIRED_KEY'));
+});
+
+test('limits file-based inspection to the two checked-in environment samples', () => {
+  assert.deepEqual(safeEnvSamplePaths(), ['frontend/.env.example', 'backend/.env.example']);
+  assert.equal(safeEnvSamplePaths().some(path => path.endsWith('/.env') || path.includes('secret-store')), false);
+});
+
+test('formats scanner findings with only file path and rule, never key or matched value', () => {
+  const result = inspectEnvSamples(`${validFrontend}VITE_OPENAI_API_KEY=synthetic-provider-secret-canary`, validBackend);
+  const report = formatDiagnostics(result);
+
+  assert.equal(report, 'frontend/.env.example: UNSUPPORTED_FRONTEND_KEY');
+  assert.equal(report.includes('VITE_OPENAI_API_KEY'), false);
+  assert.equal(report.includes('synthetic-provider-secret-canary'), false);
 });
