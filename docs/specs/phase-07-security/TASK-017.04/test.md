@@ -14,13 +14,13 @@
 | SEC-REG-04 | Provider 예외 body/header에 canary 주입 | 공통 `{error}` response에 raw body, Authorization, token 없음 | exception mapping test |
 | SEC-REG-05 | Audio/Transcript/Minutes/Email을 담은 처리 오류 fixture | captured structured logs에 원문/전체 PII 없음; safe stage/error/trace만 있음 | log capture rule summary |
 | SEC-REG-06 | Admin incident payload에 credential, webhook, content 필드 추가 | allowlist 밖 필드 제거/거부; 실제 Admin Slack 호출은 mock에서 0회 | payload schema + interaction count |
-| SEC-REG-07 | storage config, object access mode, synthetic object | public/anonymous read 거부; Browser/API response에 credential, object key, direct URL 없음 | isolated storage access result |
+| SEC-REG-07 | storage config, object access mode, synthetic object | automated tests verify private storage configuration, opaque identifiers, and that Browser/API responses expose no credentials, object key, or direct URL; anonymous read denial is deferred to SEC-QA-01 | S3 adapter configuration contract; live anonymous-read denial is SEC-QA-01 |
 | SEC-REG-08 | API-021 유효 Session/action 및 만료/없는 Session | 유효한 요청만 Backend stream; 만료/없는 Session은 `AUDIO_NOT_AVAILABLE` 또는 `SESSION_NOT_FOUND` | API contract result |
 | SEC-REG-09 | Audio object `audioExpiresAt` 전·후 | expiry 전 허용, 만료 즉시 API retry/download 차단 | fake clock and API result |
 | SEC-REG-10 | 성공 REVIEW 전이 | chunk와 assembled Audio object delete가 요청되고 storage에 남지 않음 | adapter interaction/object inventory |
 | SEC-REG-11 | 실패 Audio의 retry, 재실패, active retry lease | retry 중 delete 없음; 재실패 후 expiry가 failure time+24h로 재설정 | fake clock/object metadata check |
 | SEC-REG-12 | 만료 sweep, Backend restart 후 실행, 동일 sweep 반복 | expired app object 삭제, 미만료 object 유지, repeat가 멱등 | object inventory without key values |
-| SEC-REG-13 | `DOWNLOADED`/`DISCARDED` 실패 finalize | 허용 metadata만 Meeting document에 있고 Email/Slack delivery 0건 | document allowlist + mock call count |
+| SEC-REG-13 | `DOWNLOADED`/`DISCARDED` failure finalize | production `ProviderFailureDocumentWriter` emits only allowlisted failure metadata and participant/meeting metadata, with no existing minutes or transcript; no delivery provider is invoked | captured `CreateMeetingCommand` and provider interaction count |
 | SEC-REG-14 | 자동 검사 violation report와 stderr | canary value, secret, content, raw response가 한 건도 출력되지 않음 | captured process output scan |
 
 모든 수용 기준은 SEC-REG-01~14에 연결한다. Scanner는 Git 추적 대상, 전용 fixture, 제한된 build output만 검사하고 personal `.env*`, keyring, 배포 Secret store, production data를 열지 않는다.
@@ -41,9 +41,24 @@
 - FE/BE 자동 test, focused security scanner, 필요한 관련 regression test/build 결과를 분리 기록한다. 테스트가 명령을 새로 도입하면 tasks의 결과물로 문서화한다.
 - Storage 수동 검증은 non-production 전용 store/object prefix와 synthetic fixture를 사용하고 작업 후 테스트 객체를 삭제한다. Production account, production data, 운영 Secret store는 사용하지 않는다.
 
+### Focused verification commands
+
+The repository task rules replace the boilerplate full-suite and `clean build` requests with selectors that directly cover SEC-REG-01~14. Run the Backend command from `backend` with Temurin Java 25; run Frontend and scanner commands with the isolated Node 22 runtime required by `frontend/package.json`.
+
+```powershell
+.\gradlew.bat test --tests com.meetingautomation.DocumentSetupApiTests --tests com.meetingautomation.ConfiguredSecretsAppConfigApiTests --tests com.meetingautomation.ConfiguredSecretsIntegrationHealthApiTests --tests com.meetingautomation.document.GlobalSettingsTests --tests com.meetingautomation.document.DocumentProviderResolverTests --tests com.meetingautomation.document.DocumentProviderErrorMappingTests --tests com.meetingautomation.api.error.FailureContextTests --tests com.meetingautomation.api.error.FailureContextReporterTests --tests com.meetingautomation.notification.slack.admin.SlackAdminIncidentPayloadTests --tests com.meetingautomation.notification.slack.admin.SlackAdminIncidentNotifierTests --tests com.meetingautomation.MeetingSessionStatusApiTests --tests com.meetingautomation.api.audio.S3PrivateAudioStorageAdapterTests --tests com.meetingautomation.api.audio.AudioDownloadServiceTests --tests com.meetingautomation.api.audio.PrivateAudioAssemblyStorageTests --tests com.meetingautomation.api.audio.PrivateAudioExpiryCleanupSchedulerTests --tests com.meetingautomation.api.processing.ProcessingRetryServiceTests --tests com.meetingautomation.api.processing.ProcessingPipelineTests --tests com.meetingautomation.api.processing.ProviderFailureDocumentWriterTests --tests com.meetingautomation.api.processing.FailureFinalizeServiceTests --tests com.meetingautomation.api.processing.FailureFinalizeControllerTests
+
+npm exec --yes --package=node@22.23.3 -- npm run test -- --run src/publicBuildSecurity.test.ts
+npm exec --yes --package=node@22.23.3 -- npm run build
+npm exec --yes --package=node@22.23.3 -- node --test scripts/verify-secret-boundary.test.mjs
+npm exec --yes --package=node@22.23.3 -- node scripts/verify-secret-boundary.mjs
+```
+
+SEC-QA-01~04 require a non-production provider/storage environment, browser download, or configured meeting. They are deferred for the user to perform after setup; this implementation run does not access provider accounts, start a service, or exercise a meeting. SEC-QA-05 is recorded as a sanitized evidence review.
+
 ## Evidence와 완료 확인
 
-- 생성 경로: `docs/evidence/TASK-017.04.md`
+- 생성 경로: `docs/evidence/TASK-017.04/verification.md`
 - 기록 항목: repository commit, FE/BE runtime/build version, non-production environment class, 실행 명령, pass/fail 요약, storage private/expiry 설정 상태, 잔존 object 수, 문서/전송 호출 수.
 - 금지 항목: canary 원문, Secret, 개인 식별정보, Audio/Transcript/Minutes 본문, storage object key/public URL, raw API/provider response, 환경 dump, 운영 로그.
 - 종료 전 `git diff --check` 및 변경 파일 목록을 확인하고 Evidence 자체도 같은 민감값 scanner 대상으로 검사한다.
