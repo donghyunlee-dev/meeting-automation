@@ -37,3 +37,8 @@ Java 25와 Backend Gradle Wrapper의 JUnit 5를 사용한다. 변경 코드와 �
 ## 완료 증거
 
 API contract, 상태 경쟁, idempotency replay, 채널 격리, 안전한 오류/민감정보 가림 테스트 결과와 정확한 실행 명령을 Issue #50에 기록한다. 실제 Gmail/Slack 메시지를 보내지 않는다.
+
+## 자동화 검증 결과
+
+- Java 25, 작업 디렉터리 `backend`: `./gradlew.bat test --tests com.meetingautomation.MeetingSessionPublishApiTests --tests com.meetingautomation.MeetingSessionStatusApiTests` — 총 26건 통과(클래스별 20건/6건), 실패 0건.
+- `git diff --check` — 통과. 검증한 코드 head: `487ad173ee30a25f4248e505fdbfbfef32781cff`.

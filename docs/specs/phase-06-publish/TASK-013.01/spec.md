@@ -61,3 +61,9 @@ Email 재시도 때는 저장된 `recipientParticipantId`로 최신 Participant 
 - [구현 계획](./plan.md)
 - [작업 목록](./tasks.md)
 - [검증 계획](./test.md)
+
+## 자동화 검증 기록
+
+- 기준 코드 head: `487ad173ee30a25f4248e505fdbfbfef32781cff`.
+- Backend (Java 25, 작업 디렉터리 `backend`): `./gradlew.bat test --tests com.meetingautomation.MeetingSessionPublishApiTests --tests com.meetingautomation.MeetingSessionStatusApiTests` — publish 20건, status 6건, 총 26건 통과; 실패 0건.
+- `git diff --check` — 통과.

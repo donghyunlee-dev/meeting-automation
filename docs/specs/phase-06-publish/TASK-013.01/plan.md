@@ -43,3 +43,8 @@ Retry endpoint는 기존 Delivery 상태를 재사용하고 중복 Provider 부�
 ## 검증 접근
 
 JUnit 5에서 고정 clock/동시 요청 barrier와 fake Email/Notification Provider를 사용해 delivery 단위 호출과 상태 전이를 확인한다. Controller test에서 공통 `{data}`/`{error}` envelope와 API-010 결과를 검사한다. 실제 Gmail/Slack 전송은 자동화 테스트에 포함하지 않는다.
+
+## 자동화 검증 결과
+
+- Java 25, 작업 디렉터리 `backend`: `./gradlew.bat test --tests com.meetingautomation.MeetingSessionPublishApiTests --tests com.meetingautomation.MeetingSessionStatusApiTests` — 총 26건 통과(클래스별 20건/6건), 실패 0건.
+- `git diff --check` — 통과. 검증한 코드 head: `487ad173ee30a25f4248e505fdbfbfef32781cff`.
