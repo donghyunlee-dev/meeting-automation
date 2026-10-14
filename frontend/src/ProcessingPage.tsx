@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { audioDownloadUrl, finalizeProcessingFailure, getProcessingStatus, ProcessingApiError, retryProcessing, type ProcessingAction, type ProcessingSnapshot, type ProcessingStage } from './processingApi';
 import { ProcessingPoller } from './processingPoller';
+import { AsyncState } from './components/async-state/AsyncState';
 
 const stageNames = ['오디오 준비', '음성 인식', '화자 분석', '회의록 생성'] as const;
 const stageLabels: Record<ProcessingStage, string> = { AUDIO_ASSEMBLY: '오디오 준비', TRANSCRIPTION: '음성 인식', DIARIZATION: '화자 분석', MINUTES_GENERATION: '회의록 생성', DRAFT_READY: '회의록 생성', DRAFT_REGENERATION: '회의록 재생성' };
@@ -170,6 +171,7 @@ export function ProcessingPage() {
   return (
     <main className="processing-page" aria-labelledby="processing-title">
       <header className="processing-heading"><p className="eyebrow">MEETING AUTOMATION</p><h1 id="processing-title">회의 처리</h1><p>회의 내용을 정리하고 있습니다. 이 화면을 닫아도 처리는 계속됩니다.</p></header>
+      {!snapshot && failure === null && <AsyncState state={{ status: 'loading', label: '회의 처리 상태를 확인하고 있습니다.' }} renderReady={() => null} />}
       {failure === 'missing' && <section className="processing-message" role="alert"><h2>회의를 찾을 수 없습니다</h2><p>서버에서 회의 처리 정보를 찾을 수 없어 다시 변환하거나 오디오를 복구할 수 없습니다. 새 회의를 시작해 주세요.</p><Link className="button button-primary" to="/meetings/new">새 회의 시작</Link></section>}
       {failure === 'session-mismatch' && <p role="alert" className="processing-message">회의 처리 정보를 확인할 수 없습니다. 다시 시도해 주세요.</p>}
       {failure === 'invalid' && <p role="alert" className="processing-message">회의 처리 상태를 확인할 수 없습니다. 잠시 후 다시 시도해 주세요.</p>}

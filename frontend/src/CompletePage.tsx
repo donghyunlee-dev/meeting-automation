@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { listParticipants, type Participant } from './participantsApi';
 import { createIdempotencyKey, getPublishSnapshot, PublishApiError, retryDelivery, type PublishDelivery, type PublishSnapshot } from './publishApi';
+import { AsyncState } from './components/async-state/AsyncState';
+import { normalizeApiError } from './lib/api/normalizeApiError';
 
 function safeDocumentUrl(value: string | null | undefined): string | null {
   if (!value) return null;
@@ -157,8 +159,15 @@ export function CompletePage() {
     }
   }
 
-  if (loading) return <main className="share-page"><p role="status">회의 결과를 불러오는 중…</p></main>;
-  if (!viewSnapshot) return <main className="share-page"><h1>회의 결과</h1><p role="alert">{error || '회의 결과를 불러오지 못했습니다.'}</p><button type="button" className="button button-secondary" onClick={() => { setReloadLoading(true); setError(''); void refresh().catch(() => setError('회의 결과를 불러오지 못했습니다. 다시 시도해 주세요.')).finally(() => setReloadLoading(false)); }}>다시 시도</button></main>;
+  if (loading) return <main className="share-page"><AsyncState state={{ status: 'loading', label: '회의 결과를 불러오는 중…' }} renderReady={() => null} /></main>;
+  if (!viewSnapshot) return <main className="share-page"><h1>회의 결과</h1><AsyncState state={{
+    status: 'error',
+    title: '회의 결과를 불러오지 못했습니다.',
+    error: normalizeApiError(error ? { error: { code: 'REQUEST_FAILED' } } : undefined),
+    description: error || '회의 결과를 불러오지 못했습니다. 다시 시도해 주세요.',
+    onRetry: () => { setReloadLoading(true); setError(''); void refresh().catch(() => setError('회의 결과를 불러오지 못했습니다. 다시 시도해 주세요.')).finally(() => setReloadLoading(false)); },
+    retryLabel: '다시 시도',
+  }} renderReady={() => null} /></main>;
 
   const people = new Map(participants.map((participant) => [participant.id, participant]));
   const emailRows = (viewSnapshot.deliveries ?? []).filter((delivery) => delivery.channel === 'EMAIL');
