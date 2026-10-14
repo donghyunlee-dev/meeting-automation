@@ -22,6 +22,27 @@ function SwitchToOtherSession() {
 }
 
 describe('CompletePage', () => {
+  it('ASYNC-GET-RETRY uses the shared safe error state and retries the API-010 GET explicitly', async () => {
+    let snapshotReads = 0;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const path = new URL(String(input)).pathname;
+      if (path.endsWith('/participants')) return response({ items: [] });
+      if (path.endsWith('/meeting-sessions/s1')) {
+        snapshotReads += 1;
+        return snapshotReads === 1
+          ? new Response(JSON.stringify({ error: { code: 'PROVIDER_FAILURE', message: 'private provider response' } }), { status: 503 })
+          : response({ sessionId: 's1', version: 1, status: 'DOCUMENT_SAVED', allowedActions: [], document: { documentId: 'doc1' }, deliveries: [] });
+      }
+      throw new Error(`Unexpected request: ${path}`);
+    });
+    renderComplete(fetchMock);
+
+    expect(await screen.findByRole('heading', { name: '회의 결과를 불러오지 못했습니다.' })).toBeTruthy();
+    expect(document.body.textContent).not.toContain('private provider response');
+    fireEvent.click(screen.getByRole('button', { name: '다시 시도' }));
+    expect(await screen.findByRole('heading', { name: '문서 저장 완료' })).toBeTruthy();
+    expect(snapshotReads).toBe(2);
+  });
   it.each([
     ['all deliveries accepted', [{ deliveryId: 'e1', channel: 'EMAIL', status: 'SENT', retryable: false }], '완료'],
     ['all deliveries failed', [{ deliveryId: 'e1', channel: 'EMAIL', status: 'FAILED', retryable: false }], '전달 실패'],

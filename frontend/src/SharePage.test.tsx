@@ -65,6 +65,7 @@ describe('Share page', () => {
     renderShare(fetchMock, { emailRecipientParticipantIds: ['p2'] });
 
     expect(await screen.findByRole('alert')).toBeTruthy();
+    expect(screen.getByRole('heading', { name: '참석자 목록을 불러오지 못했습니다.' })).toBeTruthy();
     expect(screen.getByText(/참석자 목록을 불러오지 못했습니다/)).toBeTruthy();
     expect((screen.getByRole('checkbox', { name: 'p1' }) as HTMLInputElement).checked).toBe(false);
     expect((screen.getByRole('checkbox', { name: 'p2' }) as HTMLInputElement).checked).toBe(true);
