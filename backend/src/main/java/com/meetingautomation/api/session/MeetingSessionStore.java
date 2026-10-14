@@ -21,6 +21,8 @@ public final class MeetingSessionStore {
     private final Map<String, MeetingSession> sessions = new ConcurrentHashMap<>();
     private final Map<String, DocumentConnectionGate.SessionLease> registrations = new ConcurrentHashMap<>();
     private final Map<String, UploadPolicy> uploadPolicies = new ConcurrentHashMap<>();
+    private final Map<String, MinutesRegenerationBackup> minutesRegenerationBackups = new ConcurrentHashMap<>();
+    private final Map<String, MeetingSessionStatusResponse.LastOperation> lastOperations = new ConcurrentHashMap<>();
     private final ReentrantLock[] sessionLockStripes = createSessionLockStripes();
 
     public <T> T withSessionLock(String sessionId, Supplier<T> operation) {
@@ -49,6 +51,8 @@ public final class MeetingSessionStore {
             MeetingSession session,
             DocumentConnectionGate.SessionLease registration,
             UploadPolicy uploadPolicy) {
+        minutesRegenerationBackups.remove(session.sessionId());
+        lastOperations.remove(session.sessionId());
         sessions.put(session.sessionId(), session);
         if (registration != null) registrations.put(session.sessionId(), registration);
         else registrations.remove(session.sessionId());
@@ -66,6 +70,8 @@ public final class MeetingSessionStore {
                 removed = sessions.remove(sessionId);
                 registration = registrations.remove(sessionId);
                 uploadPolicies.remove(sessionId);
+                minutesRegenerationBackups.remove(sessionId);
+                lastOperations.remove(sessionId);
             }
             if (registration != null) registration.close();
             return removed != null;
@@ -81,6 +87,94 @@ public final class MeetingSessionStore {
     public Optional<MeetingSession> find(String sessionId) {
         return Optional.ofNullable(sessions.get(sessionId));
     }
+
+    public Optional<MeetingSessionStatusResponse.LastOperation> findLastOperation(String sessionId) {
+        return Optional.ofNullable(lastOperations.get(sessionId));
+    }
+
+    public synchronized boolean isActiveMinutesRegeneration(String sessionId, String operationId) {
+        MeetingSession current = sessions.get(sessionId);
+        MinutesRegenerationBackup backup = minutesRegenerationBackups.get(sessionId);
+        return current != null && backup != null && backup.operationId().equals(operationId)
+                && "PROCESSING".equals(current.status())
+                && "DRAFT_REGENERATION".equals(current.processingStage());
+    }
+
+    /** Starts a regeneration while preserving its complete Review snapshot for a fenced rollback. */
+    public synchronized MeetingSession startMinutesRegeneration(
+            String sessionId, int expectedVersion, String operationId, String requestedTemplateId) {
+        MeetingSession current = sessions.get(sessionId);
+        if (current == null) throw new IllegalStateException("Session is no longer available.");
+        if (!"REVIEW".equals(current.status())) throw new SessionStateConflictException();
+        if (current.version() != expectedVersion) throw new SessionVersionConflictException();
+        if (operationId == null || operationId.isBlank() || requestedTemplateId == null
+                || requestedTemplateId.isBlank() || current.minutes() == null) {
+            throw new IllegalArgumentException("Minutes regeneration cannot be started.");
+        }
+        MinutesRegenerationBackup backup = new MinutesRegenerationBackup(operationId, current.meeting(),
+                current.minutes(), requestedTemplateId);
+        MeetingSession updated = copy(current, Math.addExact(current.version(), 1), "PROCESSING",
+                "DRAFT_REGENERATION", 0, current.speakers(), current.transcript(), null);
+        minutesRegenerationBackups.put(sessionId, backup);
+        lastOperations.remove(sessionId);
+        sessions.put(sessionId, updated);
+        return updated;
+    }
+
+    /** Commits the complete generated Minutes and selected template as one fenced mutation. */
+    public synchronized MeetingSession completeMinutesRegeneration(
+            String sessionId, String operationId, String templateId, String templateVersion,
+            StructuredMinutes replacementMinutes) {
+        MeetingSession current = requireActiveMinutesRegeneration(sessionId, operationId);
+        if (templateId == null || templateId.isBlank() || templateVersion == null || templateVersion.isBlank()
+                || replacementMinutes == null || !templateId.equals(replacementMinutes.templateId())
+                || !templateVersion.equals(replacementMinutes.templateVersion())) {
+            throw new IllegalArgumentException("Minutes regeneration result is invalid.");
+        }
+        MeetingSession.Meeting updatedMeeting = new MeetingSession.Meeting(
+                current.meeting().title(), templateId, templateVersion,
+                current.meeting().participantIds(), current.meeting().timezone(),
+                current.meeting().participantReferences());
+        MeetingSession updated = new MeetingSession(current.sessionId(), Math.addExact(current.version(), 1),
+                "REVIEW", current.documentConnectionVersion(), updatedMeeting, "DRAFT_READY", 100,
+                current.speakers(), current.transcript(), null, replacementMinutes);
+        minutesRegenerationBackups.remove(sessionId);
+        sessions.put(sessionId, updated);
+        lastOperations.put(sessionId, new MeetingSessionStatusResponse.LastOperation(
+                "MINUTES_REGENERATION", "SUCCEEDED", templateId, null));
+        return updated;
+    }
+
+    /** Restores the exact pre-regeneration Review snapshot only while this operation still owns the session. */
+    public synchronized MeetingSession failMinutesRegeneration(String sessionId, String operationId) {
+        MeetingSession current = requireActiveMinutesRegeneration(sessionId, operationId);
+        MinutesRegenerationBackup backup = minutesRegenerationBackups.get(sessionId);
+        MeetingSession updated = new MeetingSession(current.sessionId(), Math.addExact(current.version(), 1),
+                "REVIEW", current.documentConnectionVersion(), backup.meeting(), "DRAFT_READY", 100,
+                current.speakers(), current.transcript(), null, backup.minutes());
+        minutesRegenerationBackups.remove(sessionId);
+        sessions.put(sessionId, updated);
+        lastOperations.put(sessionId, new MeetingSessionStatusResponse.LastOperation(
+                "MINUTES_REGENERATION", "FAILED", backup.requestedTemplateId(),
+                "MINUTES_REGENERATION_FAILED"));
+        return updated;
+    }
+
+    private MeetingSession requireActiveMinutesRegeneration(String sessionId, String operationId) {
+        MeetingSession current = sessions.get(sessionId);
+        MinutesRegenerationBackup backup = minutesRegenerationBackups.get(sessionId);
+        if (current == null) throw new IllegalStateException("Session is no longer available.");
+        if (backup == null || !backup.operationId().equals(operationId)
+                || !"PROCESSING".equals(current.status())
+                || !"DRAFT_REGENERATION".equals(current.processingStage())) {
+            throw new SessionStateConflictException();
+        }
+        return current;
+    }
+
+    private record MinutesRegenerationBackup(
+            String operationId, MeetingSession.Meeting meeting,
+            StructuredMinutes minutes, String requestedTemplateId) { }
 
     public Optional<UploadPolicy> findUploadPolicy(String sessionId) {
         return Optional.ofNullable(uploadPolicies.get(sessionId));
@@ -242,3 +336,4 @@ public final class MeetingSessionStore {
                 current.meeting(), processingStage, progressPercent, speakers, transcript, failure, minutes);
     }
 }
+

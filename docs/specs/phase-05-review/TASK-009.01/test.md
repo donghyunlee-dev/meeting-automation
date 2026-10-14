@@ -23,7 +23,7 @@
 | REG-API-17 | 성공 및 실패 요청의 dependency 호출 기록 | Audio assembly, TranscriptionProvider, Diarization adapter 각각 0회 | application port spy test |
 | REG-API-18 | 기존 일반 pipeline failure `PROCESSING_FAILED` API-010 조회 | 기존 TASK-006.06 계약 유지; regeneration-specific `lastOperation` 미포함 | regression compatibility test |
 
-실행 명령: `./gradlew test`, 전체 검증 `./gradlew clean build`.
+Focused Windows 검증 명령: `.\gradlew.bat test --tests "com.meetingautomation.MinutesRegenerationApiTests" --tests "com.meetingautomation.MeetingSessionStatusApiTests"`. 이 selector는 TASK-009.01 regeneration/API-010 계약과 영향을 받는 status API 호환성을 검증한다. 전체 Backend suite, `clean build`, unrelated tests는 task-local 검증에서 실행하지 않는다.
 
 ## 수동 API QA
 
@@ -38,3 +38,4 @@
 - API-010 optional `lastOperation`은 공통 response fields를 변경하지 않고 미지원 optional field를 무시하는 소비자 호환성이 확인되어야 한다.
 - 성공/실패 결과와 backup은 memory-only Session lifecycle과 동일한 복구 한계를 가진다. process restart 후 복구를 제공한다고 설명하지 않는다.
 - 이 작업에서는 production 배포를 수행하지 않는다. 구현 Issue에 자동화 결과와 수동 QA 증거를 남긴다.
+

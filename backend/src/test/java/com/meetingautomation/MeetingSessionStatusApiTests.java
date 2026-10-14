@@ -117,7 +117,8 @@ class MeetingSessionStatusApiTests {
                 .andExpect(jsonPath("$.data.allowedActions[0]").value("UPDATE_SPEAKER_MAPPING"))
                 .andExpect(jsonPath("$.data.allowedActions[1]").value("UPDATE_MINUTES"))
                 .andExpect(jsonPath("$.data.allowedActions[2]").value("REGENERATE_MINUTES"))
-                .andExpect(jsonPath("$.data.allowedActions[3]").value("CONFIRM"));
+                .andExpect(jsonPath("$.data.allowedActions[3]").value("CONFIRM"))
+                .andExpect(jsonPath("$.data.lastOperation").doesNotExist());
 
         MeetingSessionStatusResponse response = statusService.get(SESSION_ID);
         assertThat(response.toString()).doesNotContain("Opening discussion", "Later discussion");
@@ -148,6 +149,7 @@ class MeetingSessionStatusApiTests {
                 .andExpect(jsonPath("$.data.transcript").isEmpty())
                 .andExpect(jsonPath("$.data.minutes").value(Matchers.nullValue()))
                 .andExpect(jsonPath("$.data.allowedActions").isEmpty())
+                .andExpect(jsonPath("$.data.lastOperation").doesNotExist())
                 .andReturn().getResponse().getContentAsString();
 
         assertThat(body).doesNotContain("private-transcript-sentinel", "private-minutes-sentinel",
@@ -183,3 +185,4 @@ class MeetingSessionStatusApiTests {
                 .andExpect(jsonPath("$.error.category").value("NOT_FOUND"));
     }
 }
+

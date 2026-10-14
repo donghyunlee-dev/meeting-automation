@@ -47,4 +47,5 @@ HTTP/API 검증 → versioned Review snapshot 및 idempotency reservation → at
 
 ## 검증 방법
 
-Backend: `./gradlew test`, `./gradlew clean build`. API integration에서 202 acceptance, API-010 polling snapshot, 성공/실패 terminal state, 400/404/409/412 응답과 redaction을 확인한다. Audio/STT/Diarization adapter 호출 spy는 모두 0이어야 한다. 명령은 구현 저장소의 Gradle wrapper 위치에 맞춰 실행한다.
+Windows Backend focused tests: `.\gradlew.bat test --tests "com.meetingautomation.MinutesRegenerationApiTests" --tests "com.meetingautomation.MeetingSessionStatusApiTests"`. API tests에서 202 acceptance, API-010 terminal snapshot, 성공/실패 rollback, 400/404/409/412 응답과 redaction을 확인한다. Audio/STT/Diarization adapter 호출 spy는 모두 0이어야 한다. 전체 Backend suite와 `clean build`는 task-local 검증에서 실행하지 않는다.
+
