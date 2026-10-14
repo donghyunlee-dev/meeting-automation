@@ -36,6 +36,6 @@
 
 ## Release/evidence
 
-- Frontend repository/package scripts are not present in the current checkout; implementation must discover the actual test/lint/build commands before running them.
+- Frontend focused tests (from `frontend/`, Node 22.23.3): `npm exec --yes --package=node@22.23.3 -- npm run test -- --run src/processingApi.test.ts src/ProcessingPage.test.tsx src/App.test.tsx`. Quality checks: `npm exec --yes --package=node@22.23.3 -- npm run lint` and `npm exec --yes --package=node@22.23.3 -- npm run build`. Do not run a local service or device QA for this task. Android/iOS download behavior is reserved for the user's later setup and meeting test.
 - Evidence stores fixture IDs, route/status/action, response codes, Session/trace IDs and redacted screenshots only. Do not attach Audio, Transcript, Secret or raw Provider body.
 - Actual mobile download behavior is a manual release evidence item for Android Chrome and iOS Safari.

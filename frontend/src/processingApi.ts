@@ -1,16 +1,19 @@
 export type ProcessingStage = 'AUDIO_ASSEMBLY' | 'TRANSCRIPTION' | 'DIARIZATION' | 'MINUTES_GENERATION' | 'DRAFT_READY' | 'DRAFT_REGENERATION';
 export type ProcessingStatus = 'PROCESSING' | 'REVIEW' | 'COMPLETED_WITH_WARNINGS' | 'PROCESSING_FAILED';
+export type ProcessingAction = 'RETRY_PROCESSING' | 'DOWNLOAD_AUDIO' | 'FINALIZE_PROCESSING_FAILURE';
+export type AudioDisposition = 'DOWNLOADED' | 'DISCARDED';
 
 export type ProcessingSnapshot = {
   sessionId: string;
   version: number;
   status: ProcessingStatus;
-  processing: { stage?: ProcessingStage; progressPercent?: number | null; errorCode?: string | null; audioExpiresAt?: string | null };
+  processing: { stage?: ProcessingStage; progressPercent?: number | null; errorCode?: string | null; retryable?: boolean; audioAvailable?: boolean; audioExpiresAt?: string | null };
   allowedActions: string[];
+  document?: { documentId?: string; documentUrl?: string };
 };
 
 export class ProcessingApiError extends Error {
-  constructor(readonly code: 'SESSION_NOT_FOUND' | 'NETWORK_ERROR' | 'INVALID_RESPONSE' | 'HTTP_ERROR', readonly status?: number) {
+  constructor(readonly code: string, readonly status?: number, readonly responseUncertain = false) {
     super(code);
     this.name = 'ProcessingApiError';
   }
@@ -42,16 +45,58 @@ export async function getProcessingStatus(sessionId: string, signal?: AbortSigna
     const processing = {
       ...(knownStage ? { stage: knownStage } : {}),
       ...(typeof progress === 'number' ? { progressPercent: progress } : {}),
-      ...(typeof processingRaw.errorCode === 'string' ? { errorCode: processingRaw.errorCode } : {}),
+      ...(typeof processingRaw.retryable === 'boolean' ? { retryable: processingRaw.retryable } : {}),
+      ...(typeof processingRaw.audioAvailable === 'boolean' ? { audioAvailable: processingRaw.audioAvailable } : {}),
       audioExpiresAt: typeof processingRaw.audioExpiresAt === 'string' ? processingRaw.audioExpiresAt : null,
     };
     return {
       sessionId: raw.sessionId, version: raw.version, status: raw.status as ProcessingStatus, processing,
-      allowedActions: Array.isArray(raw.allowedActions) ? raw.allowedActions.filter((item): item is string => typeof item === 'string') : [],
+      allowedActions: Array.isArray(raw.allowedActions) ? raw.allowedActions.filter((item): item is ProcessingAction => item === 'RETRY_PROCESSING' || item === 'DOWNLOAD_AUDIO' || item === 'FINALIZE_PROCESSING_FAILURE') : [],
+      ...(typeof raw.document === 'object' && raw.document !== null ? { document: {
+        ...(typeof (raw.document as Record<string, unknown>).documentId === 'string' ? { documentId: (raw.document as Record<string, unknown>).documentId as string } : {}),
+        ...(typeof (raw.document as Record<string, unknown>).documentUrl === 'string' ? { documentUrl: (raw.document as Record<string, unknown>).documentUrl as string } : {}),
+      } } : {}),
     };
   } catch {
     throw new ProcessingApiError('INVALID_RESPONSE', response.status);
   }
+}
+
+export async function retryProcessing(sessionId: string, version: number, idempotencyKey: string, fetchImpl: typeof fetch = fetch): Promise<{ sessionId: string; status: 'PROCESSING'; stage: string }> {
+  return postAccepted(`${baseUrl()}/api/v1/meeting-sessions/${encodeURIComponent(sessionId)}/processing/retry`, sessionId, version, idempotencyKey, undefined, fetchImpl);
+}
+
+export async function finalizeProcessingFailure(sessionId: string, version: number, audioDisposition: AudioDisposition, idempotencyKey: string, fetchImpl: typeof fetch = fetch): Promise<void> {
+  await postAccepted(`${baseUrl()}/api/v1/meeting-sessions/${encodeURIComponent(sessionId)}/processing/finalize-failure`, sessionId, version, idempotencyKey, { audioDisposition }, fetchImpl);
+}
+
+export function audioDownloadUrl(sessionId: string): string {
+  return `${baseUrl()}/api/v1/meeting-sessions/${encodeURIComponent(sessionId)}/audio/download`;
+}
+
+async function postAccepted(url: string, sessionId: string, version: number, idempotencyKey: string, body: unknown, fetchImpl: typeof fetch): Promise<{ sessionId: string; status: 'PROCESSING'; stage: string }> {
+  let response: Response;
+  let payload: unknown;
+  try {
+    response = await fetchImpl(url, {
+      method: 'POST',
+      headers: { Accept: 'application/json', ...(body === undefined ? {} : { 'Content-Type': 'application/json' }), 'If-Match': `"${version}"`, 'Idempotency-Key': idempotencyKey },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+  } catch {
+    throw new ProcessingApiError('NETWORK_ERROR', undefined, true);
+  }
+  try { payload = await response.json(); } catch { payload = undefined; }
+  const data = typeof payload === 'object' && payload !== null && 'data' in payload ? (payload as { data?: unknown }).data : undefined;
+  if (response.status !== 202) {
+    const error = typeof payload === 'object' && payload !== null && 'error' in payload ? (payload as { error?: { code?: string } }).error : undefined;
+    throw new ProcessingApiError(error?.code ?? 'HTTP_ERROR', response.status, response.status >= 500 || response.status === 408 || response.status === 429);
+  }
+  if (body !== undefined) return { sessionId, status: 'PROCESSING', stage: '' };
+  if (typeof data !== 'object' || data === null || (data as Record<string, unknown>).sessionId !== sessionId || (data as Record<string, unknown>).status !== 'PROCESSING' || typeof (data as Record<string, unknown>).stage !== 'string') {
+    throw new ProcessingApiError('INVALID_RESPONSE', 202, true);
+  }
+  return { sessionId, status: 'PROCESSING', stage: (data as Record<string, unknown>).stage as string };
 }
 
 function baseUrl(): string {

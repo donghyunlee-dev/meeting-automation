@@ -48,3 +48,9 @@ Frontend 검증 전 `frontend/package.json`의 `engines.node`와 `node --version
 ## Frontend regression note
 
 - React StrictMode can replay effects in development. Share only in-flight GETs for the same URL/key, then remove the entry on resolve/reject so retries and revisits can fetch again. `limit=5` and default-100 need distinct keys; include a StrictMode replay regression test.
+
+## Runtime and finalization guard
+
+- Before Frontend checks, compare `node --version` with `frontend/package.json` `engines`; this project requires Node `>=22.12.0 <23`. If the global runtime differs, select an isolated Node 22 executable for the command and record its exact version. Do not treat a passing build under an unsupported Node version as valid evidence.
+- After each completion-document commit, refresh the FINALIZE checkpoint for the new `HEAD`, then run `node .codex/automation/workflow.mjs gate-finalize` **before** pushing. The gate verifies only the current task's PRD/evidence files in `origin/master..HEAD`; after push that range is empty. Push only after the gate allows it, then confirm `HEAD` equals `origin/master`.
+- Run `gate-finalize` once per final documentation head. If another documentation commit is needed, refresh the checkpoint and run the gate again before the next push.
