@@ -32,4 +32,4 @@
 - [ ] Document/Email/Slack 혼합 결과와 `deliveries:[]` 결과를 확인한다.
 - [ ] retryable false 또는 ambiguous 결과에서는 API-016 호출이 0회인지 확인한다.
 - [ ] API-016 202 이후 polling으로 API-010 최종 상태를 표시하고 원문/Secret/Email 주소가 보이지 않는지 확인한다.
-- [ ] Browser/accessibility 및 실제 Frontend 명령의 결과를 Issue #51에 기록한다.
+- [ ] focused component/accessibility 테스트와 실제 Frontend 명령의 결과를 Issue #51에 기록한다. 별도 Browser QA나 local service는 시작하지 않는다.
