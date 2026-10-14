@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import { listMeetings, type MeetingSummary } from './meetingListApi';
+import { filterMeetings, groupMeetingsByLocalMonth, hasInvalidDateRange, type MeetingFilters } from './meetingFilters';
 
 type ListState = 'loading' | 'ready' | 'error';
 
@@ -19,12 +20,12 @@ function participantSummary(meeting: MeetingSummary, showNames: boolean): string
   return names.length ? names.join(', ') : '참석자 정보 없음';
 }
 
-function MeetingRows({ meetings, showParticipantNames }: { meetings: MeetingSummary[]; showParticipantNames: boolean }) {
+function MeetingRows({ meetings, showParticipantNames, linkRows = false }: { meetings: MeetingSummary[]; showParticipantNames: boolean; linkRows?: boolean }) {
   return (
     <ul className="meeting-summary-list">
       {meetings.map((meeting) => (
         <li className="meeting-summary-row" key={meeting.documentId}>
-          <h3>{meeting.title}</h3>
+          <h3>{linkRows ? <Link aria-label={`${meeting.title} 상세 보기`} to={`/meetings/${encodeURIComponent(meeting.documentId)}`}>{meeting.title}</Link> : meeting.title}</h3>
           <p>{formatMeetingDate(meeting.meetingAt)}</p>
           <p>{participantSummary(meeting, showParticipantNames)}</p>
         </li>
@@ -33,10 +34,11 @@ function MeetingRows({ meetings, showParticipantNames }: { meetings: MeetingSumm
   );
 }
 
-function MeetingList({ limit, emptyMessage }: { limit?: number; emptyMessage: string }) {
+function MeetingList({ limit, emptyMessage, enableFilters = false }: { limit?: number; emptyMessage: string; enableFilters?: boolean }) {
   const [meetings, setMeetings] = useState<MeetingSummary[]>([]);
   const [state, setState] = useState<ListState>('loading');
   const [attempt, setAttempt] = useState(0);
+  const [filters, setFilters] = useState<MeetingFilters>({ query: '', from: '', to: '' });
 
   useEffect(() => {
     let active = true;
@@ -50,6 +52,8 @@ function MeetingList({ limit, emptyMessage }: { limit?: number; emptyMessage: st
     return () => { active = false; };
   }, [limit, attempt]);
 
+  const visibleMeetings = useMemo(() => (enableFilters ? filterMeetings(meetings, filters) : meetings).slice(0, limit ?? 100), [enableFilters, filters, limit, meetings]);
+
   if (state === 'loading') return <div className="state-card loading" role="status"><span className="spinner" aria-hidden="true" />회의 목록을 불러오는 중…</div>;
   if (state === 'error') return (
     <div className="state-card error-card" role="alert">
@@ -58,7 +62,28 @@ function MeetingList({ limit, emptyMessage }: { limit?: number; emptyMessage: st
     </div>
   );
   if (meetings.length === 0) return <div className="state-card empty-card"><p>{emptyMessage}</p></div>;
-  return <MeetingRows meetings={meetings.slice(0, limit ?? 100)} showParticipantNames={limit === undefined} />;
+  if (!enableFilters) return <MeetingRows meetings={visibleMeetings} showParticipantNames={limit === undefined} />;
+  const invalidRange = hasInvalidDateRange(filters.from, filters.to);
+  const reset = () => setFilters({ query: '', from: '', to: '' });
+  return (
+    <>
+      <form className="meeting-filters" aria-label="회의 필터" onSubmit={(event) => event.preventDefault()}>
+        <label>회의 검색<input type="search" aria-label="회의 검색" value={filters.query} onChange={(event) => setFilters((current) => ({ ...current, query: event.target.value }))} placeholder="회의명 또는 참석자" /></label>
+        <label>시작일<input type="date" aria-label="시작일" value={filters.from} onChange={(event) => setFilters((current) => ({ ...current, from: event.target.value }))} aria-invalid={invalidRange} aria-describedby={invalidRange ? 'meeting-date-error' : undefined} /></label>
+        <label>종료일<input type="date" aria-label="종료일" value={filters.to} onChange={(event) => setFilters((current) => ({ ...current, to: event.target.value }))} aria-invalid={invalidRange} aria-describedby={invalidRange ? 'meeting-date-error' : undefined} /></label>
+        {invalidRange && <p id="meeting-date-error" className="field-error" role="alert">시작일은 종료일보다 늦을 수 없습니다. 날짜 범위는 적용하지 않았습니다.</p>}
+        <button className="button button-secondary" type="button" onClick={reset}>필터 초기화</button>
+      </form>
+      {visibleMeetings.length === 0 ? (
+        <div className="state-card empty-card"><p>검색 결과가 없습니다.</p><button className="button button-secondary" type="button" onClick={reset}>필터 초기화</button></div>
+      ) : groupMeetingsByLocalMonth(visibleMeetings).map((group) => (
+        <section className="meeting-month-group" aria-labelledby={`month-${group.key}`} key={group.key}>
+          <h2 id={`month-${group.key}`}>{group.label}</h2>
+          <MeetingRows meetings={group.meetings} showParticipantNames linkRows />
+        </section>
+      ))}
+    </>
+  );
 }
 
 export function HomePage() {
@@ -92,7 +117,7 @@ export function MeetingsPage() {
         <h1>회의록</h1>
         <p>저장된 회의를 최신순으로 확인합니다.</p>
       </header>
-      <MeetingList emptyMessage="회의 기록이 없습니다. 회의를 완료하면 여기에 표시됩니다." />
+      <MeetingList emptyMessage="회의 기록이 없습니다. 회의를 완료하면 여기에 표시됩니다." enableFilters />
     </main>
   );
 }
