@@ -13,6 +13,7 @@ import com.meetingautomation.api.audio.AudioStorageException;
 import com.meetingautomation.api.processing.AudioChunksIncompleteException;
 import com.meetingautomation.api.session.SessionStateConflictException;
 import com.meetingautomation.api.session.SessionVersionConflictException;
+import com.meetingautomation.api.session.ReviewValidationException;
 import com.meetingautomation.document.DocumentProviderException;
 import com.meetingautomation.api.idempotency.IdempotencyKeyConflictException;
 import com.meetingautomation.api.participant.ParticipantNotFoundException;
@@ -195,6 +196,20 @@ public class ApiExceptionHandler {
             HttpServletRequest request) {
         return errorResponse(HttpStatus.PRECONDITION_FAILED, "SESSION_VERSION_CONFLICT",
                 "The session version no longer matches the request.", "CONFLICT", false, request, Map.of());
+    }
+
+    @ExceptionHandler(ReviewValidationException.class)
+    public ResponseEntity<ApiErrorResponse> handleReviewValidationFailure(
+            ReviewValidationException exception,
+            HttpServletRequest request) {
+        return errorResponse(
+                HttpStatus.UNPROCESSABLE_ENTITY,
+                "REVIEW_VALIDATION_FAILED",
+                "회의록 검토가 완료되지 않았습니다.",
+                "VALIDATION",
+                false,
+                request,
+                Map.of("issues", exception.issues()));
     }
 
     @ExceptionHandler(ParticipantNotFoundException.class)

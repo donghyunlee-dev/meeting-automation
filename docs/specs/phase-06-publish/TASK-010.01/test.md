@@ -25,7 +25,15 @@
 | CONF-API-19 | API-014 success/failure dependency interaction | DocumentProvider/Publish/Email/notification 호출 0회; success만 status를 변경 | no-side-effect verification |
 | CONF-API-20 | Error category/trace/error details serialization | incomplete Review는 422 `REVIEW_VALIDATION_FAILED`, `category=VALIDATION`, `retryable=false`, traceId 및 issues 반환 | error envelope contract test |
 
-Backend root에서 `./gradlew test`, `./gradlew clean build`를 실행한다. 설계 단계에서는 실행하지 않는다.
+## Focused Windows verification
+
+Java 25와 Gradle Wrapper를 사용하고 `backend` 디렉터리에서 실행한다. API-014 통합 contract 전체와 API-012 schema/parser 회귀만 선택한다.
+
+```powershell
+.\gradlew.bat test --tests com.meetingautomation.ReviewConfirmationApiTests --tests com.meetingautomation.MeetingSessionMinutesApiTests
+```
+
+전체 Backend suite 또는 `clean build`는 task-local 검증에서 실행하지 않는다.
 
 ## 수동 API QA
 
