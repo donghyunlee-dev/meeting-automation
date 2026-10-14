@@ -34,7 +34,7 @@ TASK-020.02 코드/test revision `b552f6b8884931ece3077bacfdcdfaa5dfc0d855`에�
 | `npm exec -- vitest run src/ProcessingPage.test.tsx -t "ASYNC-GET-RETRY|shows safe Korean stage copy and only actions allowed|keeps actions hidden when API-010 metadata says retry or assembled audio is unavailable"` | 1 file, 3 passed / 7 skipped |
 | `npm exec -- vitest run src/NewMeetingPage.test.tsx src/SettingsPage.test.tsx` | 2 files, 15 passed |
 | `npm exec -- vitest run src/App.test.tsx src/ProcessingPage.test.tsx src/ReviewSpeakerPage.test.tsx src/SharePage.test.tsx src/CompletePage.test.tsx` | 5 files, 141 passed |
-| `npm exec -- vitest run src/CompletePage.test.tsx src/ReviewSpeakerPage.test.tsx -t "ASYNC-GET-RETRY"` | 2 files, 2 passed / 50 skipped; both new GET recovery regressions passed on the published head |
+| `npm exec -- vitest run src/CompletePage.test.tsx src/ReviewSpeakerPage.test.tsx -t "ASYNC-GET-RETRY"` | 2 files, 2 passed / 50 skipped; both new GET recovery regressions passed on `b6ca96e` |
 | Issue-focused 12-file selector run (명령 아래 참조) | 10 files passed, 2 skipped; 30 passed / 153 skipped |
 | Changed-file ESLint across TASK-020.02 frontend source/tests | Passed |
 | `npm exec -- tsc --project tsconfig.app.json --noEmit --pretty false` | Passed |
