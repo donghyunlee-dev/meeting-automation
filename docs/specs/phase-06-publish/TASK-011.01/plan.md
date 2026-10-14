@@ -16,13 +16,13 @@
 - Application integration: TASK-011.02가 API-015 workflow에서 선택 수신자를 command로 보내고 독립 Delivery 상태를 저장하도록 연결한다. 이 task는 실제 provider adapter와 contract만 제공한다.
 - Admin Settings/Health surface는 기존 API-019 `email.configured/reachable` contract를 유지하며 인증/검증 로직만 연결한다.
 
-Backend source와 `build.gradle`은 현재 repository에 없으므로 구현 시작 시 Java 21/Gradle project layout과 기존 HTTP/client/auth dependency를 확인한다. Google official Java client/auth libraries를 사용할 때 Java 21 compatible 최신 patch를 선택하고 dependency version을 Gradle에 고정한다. Source file/package path와 build command는 그 확인 후 계획 evidence에 확정한다.
+Repository에는 Java 25 toolchain과 Spring Boot 4.1.1을 쓰는 `backend/` Gradle 프로젝트가 이미 있다. PRD `DEC-004`와 `AGENTS.md`의 제품 기준을 따르며 Java 21 전제는 적용하지 않는다. 구현 전 실제 패키지 구조, 기존 HTTP/client 경계, 설정 로딩 방식을 확인한다. Gradle 의존성은 wrapper와 기존 프로젝트 convention을 따르고, 변경한 코드와 직접 영향받는 테스트만 `backend/gradlew.bat test --tests <fully.qualified.TestClass>`로 검증한다.
 
 ## 구현 순서
 
 Port command/result가 recipient Delivery model과 일치해야 adapter 호출/재시도가 안전하므로 contract부터 고정한 뒤 인증과 전송을 붙인다.
 
-1. Backend build/layout, external HTTP client standard, configuration binding, error redaction, Delivery model을 확인한다. 결과: 구현 파일과 실제 `./gradlew` 명령을 확인한다.
+1. Backend build/layout, external HTTP client standard, configuration binding, error redaction, Delivery model을 확인한다. 결과: 구현 파일과 실제 `backend/gradlew.bat` focused-test 명령을 확인한다.
 2. EmailProvider contract tests를 먼저 작성한다. mixed recipient/empty list, per-recipient result isolation, accepted-success no repeat 및 safe errors가 테스트에서 고정된다.
 3. Gmail OAuth config validation/token refresh와 `validateConnection()` tests를 작성한다. 결과: secret 누락/refresh failure가 Gmail send를 부르지 않는다.
 4. Gmail API fake/mock client를 통해 MIME/header/base64url contract와 `users.messages.send(userId="me")` interaction tests를 먼저 작성한다.

@@ -4,7 +4,7 @@
 
 ## 자동화 검증
 
-Backend 구현 시 Java 21/Gradle의 JUnit 5 검증을 사용한다. Exact build commands는 Backend project setup을 확인한 뒤 고정한다. OAuth/Gmail network calls는 stub/fake로 대체하고 실제 Gmail 계정을 자동화 test에서 사용하지 않는다. 설계 단계에서는 tests를 실행하지 않는다.
+Backend 구현 시 PRD `DEC-004`와 `AGENTS.md`에 정의된 Java 25/Gradle Wrapper의 JUnit 5 검증을 사용한다. Windows에서는 `backend/gradlew.bat test --tests <fully.qualified.TestClass>`로 변경된 동작과 직접 영향받는 계약 테스트만 선택한다. 전체 Backend suite나 `clean build`는 task-local 검증에 사용하지 않는다. OAuth/Gmail network calls는 stub/fake로 대체하고 실제 Gmail 계정을 자동화 test에서 사용하지 않는다.
 
 | ID | 준비 및 입력 | 기대 결과 | 증거 |
 |---|---|---|---|
@@ -22,6 +22,7 @@ Backend 구현 시 Java 21/Gradle의 JUnit 5 검증을 사용한다. Exact build
 | MAIL-12 | invalid scope/forbidden/invalid recipient | safe FAILED, 확정 거절은 retryable true, 다음 유효 수신자 처리는 계속 | Correctable rejection classification test |
 | MAIL-13 | Gmail `messages.send`의 전송 결과가 불명확한 5xx response | `EMAIL_FAILED`, retryable false; 자동 반복/수동 재시도 불가 | Ambiguous server outcome test |
 | MAIL-19 | Gmail send 이전 OAuth token refresh의 명시 5xx/일시 실패 | Gmail send 0회, `EMAIL_FAILED`, retryable true; 사용자가 설정/서비스 복구 뒤 API-016으로 재시도 | Pre-send retryability test |
+| MAIL-20 | 앞 recipient Gmail send가 진행되는 동안 access token 만료 | 다음 recipient 전에 token을 refresh하고 이전 recipient 결과를 보존; refresh 실패 시 미전송 recipients만 retryable 실패, Gmail send 0회 추가 | Mid-batch token expiry test |
 | MAIL-14 | send request timeout/response loss | FAILED, retryable false; 재전송하지 않고 uncertain outcome을 기록 | Ambiguous send outcome test |
 | MAIL-15 | subject CR/LF, malformed URL, body containing plain text punctuation | header injection은 거부; URL/content를 HTML 실행 없이 text/plain으로 전송 | MIME/input safety test |
 | MAIL-16 | captured logs and API error response | oauth client secret/refresh/access token/Authorization/email/MIME/provider body 0건 | Redaction/log capture test |

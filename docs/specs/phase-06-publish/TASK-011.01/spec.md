@@ -69,6 +69,7 @@ Adapter result에는 recipient participant ID를 유지한다. `deliveryId` 발�
 - 명시적인 quota/rate limit 거절과 Gmail 전송을 시작하지 않은 OAuth token refresh의 일시 실패는 `retryable=true`다. Gmail `messages.send`의 HTTP 5xx는 수락 여부를 보장할 수 없으므로 `retryable=false`다. 재시도는 사용자가 API-016을 명시 호출한 경우에만 수행하고 adapter 내부 자동 반복은 하지 않는다.
 - 연결 timeout이나 응답 유실처럼 Gmail이 메시지를 접수했는지 판단할 수 없으면 `FAILED`, `retryable=false`로 보수 처리한다. blind retry로 중복 이메일을 만들지 않고 수동 확인이 필요함을 안전하게 표시한다.
 - Token refresh가 batch 시작 전에 실패하면 Gmail API send를 하지 않고 아직 미처리 recipient 각각의 실패 결과를 반환한다. 한 recipient의 확정 실패는 나머지 수신자 발송을 막지 않는다.
+- 각 recipient send 직전에 유효한 access token을 확보한다. 앞선 발송 중 token이 만료되면 다음 recipient 전송 전에 refresh한다. refresh에 실패하면 이미 완료된 결과를 보존하고 아직 전송하지 않은 recipient를 retryable 실패로 반환하며 Gmail send를 호출하지 않는다.
 - 원 Google HTTP error body는 로깅/응답하지 않는다. API error는 common envelope와 기존 `EMAIL_FAILED` 코드만 노출하고 오류 category는 `EMAIL_FAILURE`다.
 
 ## 보안 및 개인정보

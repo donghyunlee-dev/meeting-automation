@@ -5,13 +5,14 @@
 ## 사전 확인
 
 - [ ] TASK-010.02에서 Email Provider 호출 시점이 Document 저장 완료 뒤임을 확인한다. 결과: Document reference가 없는 command는 전송할 수 없다.
-- [ ] Backend Java 21/Gradle setup 및 HTTP/OAuth convention과 secret property loading 경계를 확인한다. 결과: 실제 package, dependency version, build command를 기록한다.
+- [ ] PRD `DEC-004` 및 `AGENTS.md` 기준의 Java 25/Gradle Wrapper setup과 기존 HTTP/OAuth convention 및 secret property loading 경계를 확인한다. 결과: 실제 package, dependency version, focused test command를 기록한다.
 - [ ] Data Specification Delivery status/attempt/retryable와 EXT-004 `validateConnection/sendMeetingEmail`를 cross-check한다. 결과: provider result와 application Delivery mapping이 모순되지 않는다.
 
 ## 구현 단계
 
 - [ ] Mixed valid/invalid recipients, empty recipient list, mixed success/failure, already-sent no-repeat의 port contract test를 작성한다.
 - [ ] OAuth credential 누락/refresh rejection/success의 test를 작성하고 실패 때 Gmail API 호출 수 0을 assertion한다.
+- [ ] Recipient batch 중 access token이 만료되는 경우 다음 발송 전 refresh하고, refresh 실패 시 이미 성공한 결과는 보존하며 미전송 수신자만 retryable 실패로 반환하는지 검증한다.
 - [ ] Gmail request mock으로 one recipient per message, From/To/Subject, text body, MIME Base64URL `raw`, `userId="me"`를 검증하는 failing test를 작성한다.
 - [ ] Domain-neutral `EmailProvider`, `MeetingEmailCommand`, `RecipientDeliveryResult`를 정의하고 Google types를 경계 밖으로 누출하지 않는다.
 - [ ] `EMAIL_PROVIDER=GMAIL_API` selection, secret configuration validation, refresh-token credential client, `validateConnection()`을 구현한다.
@@ -19,7 +20,7 @@
 - [ ] Per-recipient result/status mapping을 구현한다. 한 recipient format/API error는 다음 사람의 send를 중단하지 않는다.
 - [ ] OAuth/수신자 교정 오류, 명시 quota/rate-limit, token refresh 이전 실패, Gmail send의 5xx, ambiguous timeout을 `EMAIL_FAILED` 및 `retryable`로 분류한다. 결과 불명 send의 수동/자동 retry를 차단한다.
 - [ ] Secret/PII/raw request/error body redaction과 API-019 configured/reachable semantics를 regression 검증한다.
-- [ ] Project test/lint/build/release-check 명령을 실행하고 결과를 Issue #46에 기록한다. 실제 Gmail smoke test는 승인된 test account만 사용한다.
+- [ ] 변경 코드와 직접 영향받는 테스트만 Windows Gradle Wrapper의 `test --tests <fully.qualified.TestClass>` selector로 검증하고 결과를 Issue #46에 기록한다. Backend 전체 suite나 clean build는 실행하지 않는다. 실제 Gmail smoke test는 승인된 test account만 사용한다.
 
 ## 완료 확인
 
