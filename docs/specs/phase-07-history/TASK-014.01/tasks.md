@@ -15,7 +15,7 @@
 - [x] 활성 global connection에서 선택된 Provider의 history 목록 operation으로 decoded records를 받고 metadata/roster를 조립한다. 실제 meetingAt 내림차순과 documentId 오름차순 tie-break 후 limit을 적용한다.
 - [x] API-017 Controller와 공통 `{data:{items}}` envelope, 표준 validation/provider 오류 응답을 연결했다.
 - [x] HTTP 테스트로 정상·빈 목록·Provider/필수 metadata 오류와 민감 데이터 비노출을 확인했다.
-- [x] Java 25 focused tests 43개와 `git diff --check`를 실행했다. 정확한 명령 및 범위는 [검증 계획](./test.md)에 기록했다.
+- [x] Java 25 focused tests 44개와 `git diff --check`를 실행했다. 정확한 명령 및 범위는 [검증 계획](./test.md)에 기록했다.
 
 ## 완료 확인
 

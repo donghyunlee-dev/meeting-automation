@@ -72,7 +72,7 @@ Provider `Meetings` child page의 모든 cursor/page를 따라가며 Meeting 요
 ## 구현 검증 기록
 
 - 구현: API-017 Controller/Service/DTO와 history 전용 `DocumentTransferPort.listMeetingRecords()`를 추가했다. 활성 resolver의 TASK-022.04 transfer codec으로 모든 child pages를 읽고 meeting child ID는 dedupe하되, participant/meeting 간 충돌과 roster 오류는 거부한다. migration용 strict `readManifest()` 의미는 그대로 유지한다.
-- 결과: Java 25 focused tests 43개 통과. 명령은 `./gradlew.bat test --tests com.meetingautomation.MeetingListApiTests --tests com.meetingautomation.document.DocumentTransferAdapterTests`이며, `MeetingListApiTests` 6개와 `DocumentTransferAdapterTests` 37개를 실행했다.
+- 결과: Java 25 focused tests 44개 통과. 명령은 `./gradlew.bat test --tests com.meetingautomation.MeetingListApiTests --tests com.meetingautomation.document.DocumentTransferAdapterTests`이며, `MeetingListApiTests` 7개와 `DocumentTransferAdapterTests` 37개를 실행했다.
 - 제한: 저장소 정책에 따라 전체 Backend suite, 로컬 서비스 및 별도 실제 Provider acceptance/QA는 실행하지 않았다.
 
 ## 연결 문서

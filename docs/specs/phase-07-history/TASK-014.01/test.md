@@ -12,7 +12,7 @@ Java 25 및 Gradle Wrapper로 변경 API와 직접 영향받는 provider codec �
 | API017-LIMIT-BOUNDARY | `limit=1`, `limit=100`, 0 또는 101 | 각각 최대 1개/100개, 범위 밖은 400 `VALIDATION_FAILED` | `MeetingListApiTests` |
 | API017-LIMIT-FORMAT | 비정수 query | 400 `VALIDATION_FAILED` | `MeetingListApiTests` |
 | API017-EMPTY | Meetings child에 문서 없음 | 200 `{data:{items:[]}}` | `MeetingListApiTests` |
-| API017-SORT | 서로 다른 offset 표현의 meetingAt | 실제 시각 내림차순, 동률 documentId 오름차순 | `MeetingListApiTests` |
+| API017-SORT | 서로 다른 offset 표현의 meetingAt 및 동일 instant의 서로 다른 offset/documents | 실제 시각 내림차순, 동률 documentId 오름차순 | `MeetingListApiTests.listUsesNewestRealMeetingTimeOrdersRosterAndAppliesLimit`, `MeetingListApiTests.equalMeetingInstantsWithDifferentOffsetsUseDocumentIdAscendingTieBreak` |
 | API017-PAGINATION | 두 Provider의 여러 cursor/page, 여러 회의 문서 | manifest가 양쪽 provider의 모든 child page를 소비 | `DocumentTransferAdapterTests.manifestExhaustsMultipleCursorsForBothRootsAndPreservesRevision` |
 | API017-DUPLICATE | 동일 meeting child ID가 페이지 간 중복 | history list는 한 decoded record만 반환하며 strict `readManifest()`는 기존대로 오류 | `DocumentTransferAdapterTests.historyListDeduplicatesMeetingIdsAcrossPagesButStrictManifestStillRejectsThem` (Notion/Confluence) |
 | API017-CROSS-ROOT | participant와 meeting child ID 충돌 | history list 전체를 실패시킴 | `DocumentTransferAdapterTests.historyListStillRejectsCrossRootIdCollisionAndInvalidRosterReference` |
@@ -27,7 +27,7 @@ Java 25 및 Gradle Wrapper로 변경 API와 직접 영향받는 provider codec �
 - 날짜: 2026-10-14.
 - Java: OpenJDK 25.0.4.
 - 명령: `./gradlew.bat test --tests com.meetingautomation.MeetingListApiTests --tests com.meetingautomation.document.DocumentTransferAdapterTests` (Backend 디렉터리에서 실행).
-- 결과: `MeetingListApiTests` 6 passed, `DocumentTransferAdapterTests` 37 passed; 총 43 passed, 0 failed.
+- 결과: `MeetingListApiTests` 7 passed, `DocumentTransferAdapterTests` 37 passed; 총 44 passed, 0 failed.
 - 별도 `compileJava`/`compileTestJava`는 실행하지 않았다. focused `test --tests`가 Backend 및 선택 테스트를 컴파일한다.
 - `git diff --check`: passed.
 - 최초 실행 시 기본 `JAVA_HOME`이 설치되지 않은 JDK 17 경로를 가리켜 wrapper가 시작되지 않았다. 설치된 Java 25 경로를 프로세스 환경에 지정한 후 위 focused command가 통과했다.

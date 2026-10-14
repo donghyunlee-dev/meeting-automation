@@ -82,6 +82,19 @@ class MeetingListApiTests {
     }
 
     @Test
+    void equalMeetingInstantsWithDifferentOffsetsUseDocumentIdAscendingTieBreak() throws Exception {
+        provider.records = List.of(
+                meeting("doc-zeta", "2026-10-03T09:00:00+09:00", List.of(), List.of(), null),
+                meeting("doc-alpha", "2026-10-03T00:00:00Z", List.of(), List.of(), null));
+
+        mockMvc.perform(get("/api/v1/meetings"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items.length()").value(2))
+                .andExpect(jsonPath("$.data.items[0].documentId").value("doc-alpha"))
+                .andExpect(jsonPath("$.data.items[1].documentId").value("doc-zeta"));
+    }
+
+    @Test
     void missingLimitDefaultsToOneHundredAndEmptyManifestReturnsEmptyItems() throws Exception {
         provider.records = new java.util.ArrayList<>();
         for (int index = 0; index < 105; index++) {
