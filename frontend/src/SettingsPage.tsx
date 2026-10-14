@@ -19,6 +19,10 @@ function ProviderStatus({ state, configuredLabel = '설정됨' }: { state: Integ
   return <p className="settings-status" data-state={state}>{label}</p>;
 }
 
+function StaleHealthNotice({ onRetry }: { onRetry: () => void }) {
+  return <div className="settings-refresh-warning"><p role="alert">연결 상태 갱신에 실패했습니다. 이전에 불러온 상태를 표시하고 있습니다.</p><button className="button button-secondary" type="button" onClick={onRetry}>연결 상태 다시 확인</button></div>;
+}
+
 export function SettingsPage() {
   const [config, setConfig] = useState<QueryState<AppConfig>>({ status: 'loading', data: null });
   const [health, setHealth] = useState<QueryState<IntegrationHealth>>({ status: 'loading', data: null });
@@ -73,19 +77,21 @@ export function SettingsPage() {
       {health.status === 'loading' && !health.data && <p role="status">연결 상태를 불러오는 중…</p>}
       {health.status === 'error' && !health.data && !bothQueriesFailed && <div role="alert"><p>문서 연결 상태를 불러오지 못했습니다.</p><button className="button button-secondary" type="button" onClick={() => void refreshHealth()}>연결 상태 다시 확인</button></div>}
       {summary && <><p>{documentName}</p><ProviderStatus state={summary.document.state} configuredLabel="연결 상태 확인됨" /><Link className="button button-secondary" to="/settings/document">문서 연결 설정 열기</Link></>}
-      {health.status === 'error' && health.data && <p role="alert">연결 상태 갱신에 실패했습니다. 이전에 불러온 상태를 표시하고 있습니다.</p>}
+      {health.status === 'error' && health.data && <StaleHealthNotice onRetry={() => void refreshHealth()} />}
     </section>
     <section className="settings-card" aria-labelledby="settings-email-heading">
       <h2 id="settings-email-heading">이메일</h2>
       {health.status === 'loading' && !health.data && <p role="status">연결 상태를 불러오는 중…</p>}
       {summary && <><p>{emailStatus === 'not-configured' ? '이메일 서비스가 설정되지 않았습니다.' : '이메일 서비스'}</p><ProviderStatus state={emailStatus ?? 'health-unknown'} configuredLabel="설정 연결 확인됨" /></>}
       {health.status === 'error' && !health.data && !bothQueriesFailed && <div role="alert"><p>이메일 연결 상태를 불러오지 못했습니다.</p><button className="button button-secondary" type="button" onClick={() => void refreshHealth()}>연결 상태 다시 확인</button></div>}
+      {health.status === 'error' && health.data && <StaleHealthNotice onRetry={() => void refreshHealth()} />}
     </section>
     <section className="settings-card" aria-labelledby="settings-notification-heading">
       <h2 id="settings-notification-heading">알림</h2>
       {health.status === 'loading' && !health.data && <p role="status">연결 상태를 불러오는 중…</p>}
       {summary && <><p>{notificationName}</p><ProviderStatus state={notificationStatus ?? 'health-unknown'} configuredLabel="공개 상태 확인됨" /><p className="settings-note">연결 상태는 실제 이메일 또는 Slack 메시지 전달 성공을 보장하지 않습니다.</p></>}
       {health.status === 'error' && !health.data && !bothQueriesFailed && <div role="alert"><p>알림 연결 상태를 불러오지 못했습니다.</p><button className="button button-secondary" type="button" onClick={() => void refreshHealth()}>연결 상태 다시 확인</button></div>}
+      {health.status === 'error' && health.data && <StaleHealthNotice onRetry={() => void refreshHealth()} />}
     </section>
     {config.status === 'ready' && health.status === 'ready' && <button className="button button-secondary" type="button" onClick={() => { void refreshConfig(); void refreshHealth(); }}>모든 공개 상태 새로고침</button>}
     <nav aria-label="설정 메뉴" className="settings-links"><Link to="/settings/document">문서 연결 설정</Link><Link to="/settings/participants">참석자 관리</Link></nav>

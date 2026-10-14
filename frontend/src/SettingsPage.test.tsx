@@ -58,6 +58,44 @@ describe('Settings page', () => {
     expect(fetchMock.mock.calls.some(([, init]) => init?.method && init.method !== 'GET')).toBe(false);
   });
 
+  it('labels stale health after refresh failure and keeps retry available in every health section', async () => {
+    let healthCalls = 0;
+    const recoveredHealth = {
+      ...health,
+      document: { ...health.document, reachable: false },
+      email: { ...health.email, reachable: false },
+      notification: { ...health.notification, reachable: true },
+    };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = new URL(String(input)).pathname;
+      expect(init?.method).toBeUndefined();
+      if (path.endsWith('/app-config')) return response(config);
+      healthCalls += 1;
+      if (healthCalls === 2) return response('private-provider-error', 503);
+      return response(healthCalls === 1 ? health : recoveredHealth);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<MemoryRouter><SettingsPage /></MemoryRouter>);
+
+    fireEvent.click(await screen.findByRole('button', { name: '모든 공개 상태 새로고침' }));
+    const documentSection = screen.getByRole('region', { name: '문서 서비스' });
+    const emailSection = screen.getByRole('region', { name: '이메일' });
+    const notificationSection = screen.getByRole('region', { name: '알림' });
+    await within(documentSection).findByText('연결 상태 갱신에 실패했습니다. 이전에 불러온 상태를 표시하고 있습니다.');
+
+    for (const section of [documentSection, emailSection, notificationSection]) {
+      expect(within(section).getByRole('alert').textContent).toContain('이전');
+      expect(within(section).getByRole('button', { name: '연결 상태 다시 확인' })).toBeTruthy();
+    }
+    expect(healthCalls).toBe(2);
+    fireEvent.click(within(notificationSection).getByRole('button', { name: '연결 상태 다시 확인' }));
+    expect(await within(notificationSection).findByText('공개 상태 확인됨')).toBeTruthy();
+    for (const section of [documentSection, emailSection, notificationSection]) {
+      await waitFor(() => expect(within(section).queryByRole('alert')).toBeNull());
+    }
+    expect(healthCalls).toBe(3);
+  });
+
   it('keeps successful health sections visible when public configuration fails', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => new URL(String(input)).pathname.endsWith('/app-config')
       ? response('configuration-private-error', 503) : response(health));
