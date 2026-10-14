@@ -4,7 +4,7 @@
 
 - [ ] SCR-007 navigation, Review route state, API client/query cache, Settings return route를 탐색한다. 결과: 상태를 소유하는 컴포넌트와 보존할 interaction 값을 기록한다.
 - [ ] API-001/010/014/015 response DTO, API-010 `PUBLISH` allowedAction과 document reference가 TASK-010.02 계약에 포함됐는지 확인한다. 결과: client types와 response examples가 일치한다.
-- [ ] Frontend package manifest와 실제 test/lint/build scripts를 확인한다. 현재 설계 시점 repo에는 `frontend/`가 없어 구현 branch에서 runnable project commands를 확보한다.
+- [x] Frontend package manifest와 실제 test/lint/build scripts를 확인한다. `frontend/package.json`은 Node `>=22.12.0 <23`, `npm test` (`vitest run`), `npm run lint` (`eslint .`), `npm run build` (`tsc -b && vite build`)을 선언한다.
 
 ## 구현 단계
 

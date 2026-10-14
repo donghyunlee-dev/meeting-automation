@@ -128,6 +128,32 @@ describe('Review minutes and transcript', () => {
     vi.unstubAllGlobals();
   });
 
+  it('keeps the Share action disabled while a speaker mapping draft is unsaved', async () => {
+    renderReview(mockApiFetch(), { drafts: { 'review-minutes': { 'speaker-a': null } } });
+
+    const shareButton = await screen.findByRole('button', { name: '저장하고 공유' });
+
+    expect((shareButton as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText('화자 매핑 또는 회의록을 저장한 뒤 공유하세요.')).toBeTruthy();
+  });
+
+  it('keeps the Share action disabled while a Minutes edit is unsaved', async () => {
+    renderReview(mockApiFetch());
+    fireEvent.change(await screen.findByLabelText('회의 요약'), { target: { value: 'Unsaved draft' } });
+
+    expect((screen.getByRole('button', { name: '저장하고 공유' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText('화자 매핑 또는 회의록을 저장한 뒤 공유하세요.')).toBeTruthy();
+  });
+
+  it('keeps the Share action disabled while a Minutes save is in flight', async () => {
+    renderReview(mockApiFetch(), { minutesSaveState: { sessionId: 'review-minutes', status: 'saving', message: 'Saving edits' } });
+
+    const shareButton = await screen.findByRole('button', { name: '저장하고 공유' });
+
+    expect((shareButton as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText('저장 중인 변경사항이 있습니다. 저장이 끝날 때까지 기다려 주세요.')).toBeTruthy();
+  });
+
   it('loads every Structured Minutes field into the Review editor without exposing participant email', async () => {
     renderReview(vi.mocked(fetch));
 

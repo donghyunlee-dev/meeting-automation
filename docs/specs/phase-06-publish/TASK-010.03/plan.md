@@ -16,7 +16,7 @@
 - Publish view: progress, saved document link, failed/retryable state
 - Router/cache: version-aware API-010 reconciliation, SCR-011 Settings 복귀
 
-현재 repository에는 `frontend/` 디렉터리나 frontend package manifest가 없다. 구현 착수 시 현재 branch/PRD 기준으로 FE source/package를 확인하고 scripts가 있으면 그대로 사용한다. 없다면 FE baseline에 맞는 runnable test/lint/build scripts를 project setup 작업에서 먼저 제공하고, 이 task는 그 실제 명령을 실행한다. 설계에서 존재하지 않는 npm scripts를 가정하지 않는다.
+현재 `frontend/` 프로젝트와 `frontend/package.json`이 있다. 구현 전 확인 결과 package는 Node `>=22.12.0 <23`을 요구하며 `test`, `lint`, `build` 명령은 각각 `vitest run`, `eslint .`, `tsc -b && vite build`다. 기존 FE 환경을 사용하고 새 package setup을 추가하지 않는다.
 
 Backend API 변경은 선행 TASK-010.02가 제공할 publish action/error/document reference 계약만 소비한다. 채널 provider 구현 및 채널 결과 화면은 별도 선행/후속 TASK의 경계다.
 
@@ -44,4 +44,4 @@ response envelopes는 common `{data}`/`{error}`를 유지하며 업무별 확장
 
 ## 검증 및 제한
 
-자동화 테스트는 API 호출 순서, issue mapping, provider null, polling state, link URL validation, retries/replay, cache races 및 accessible UI를 분리해 검증한다. 실제 frontend command는 구현 시 package manifest에서 확인한다. 로컬 project가 없는 상황에서 설계 단계 테스트를 실행하지 않는다. Document URL을 열 때 `noopener`/`noreferrer`를 적용한다.
+자동화 테스트는 API 호출 순서, issue mapping, provider null, polling state, link URL validation, retries/replay, cache races 및 accessible UI를 분리해 검증한다. 구현 시 변경 컴포넌트와 직접 영향을 받는 FE 테스트를 선택하고 package manifest의 lint/build를 수행한다. Document URL을 열 때 `noopener`/`noreferrer`를 적용한다.

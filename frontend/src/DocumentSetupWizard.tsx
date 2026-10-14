@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { Link } from 'react-router';
+import { Link, useLocation } from 'react-router';
 import { actOnSetupOperation, getSetupOperation, getSetupSnapshot, initializeSetup, saveSetupDraft, switchSetup, testSetupDraft, DocumentSetupError, type DocumentProvider, type DraftInput, type SetupOperation, type SetupSnapshot, type SwitchMode, type TestedDraft } from './documentSetupApi';
 import { getDocumentAppConfig, listMeetingParticipants } from './newMeetingApi';
 
@@ -52,6 +52,10 @@ function operationGuidance(operation: SetupOperation) {
 }
 
 export function DocumentSetupWizard({ settings = false }: { settings?: boolean }) {
+  const route = useLocation();
+  const returnState = route.state as { returnTo?: unknown; returnState?: unknown } | null;
+  const returnTo = typeof returnState?.returnTo === 'string' && returnState.returnTo.startsWith('/meetings/') && !returnState.returnTo.startsWith('//')
+    ? returnState.returnTo : null;
   const [snapshot, setSnapshot] = useState<SetupSnapshot | null>(null);
   const [provider, setProvider] = useState<DocumentProvider | null>(null);
   const [credentials, setCredentials] = useState(EMPTY_CREDENTIALS);
@@ -314,7 +318,7 @@ export function DocumentSetupWizard({ settings = false }: { settings?: boolean }
   if (!snapshot) return <main className="setup-page">{error ? <section role="alert"><p>{error}</p><button className="button button-secondary" type="button" onClick={() => void safeRefresh()}>다시 확인</button></section> : <p role="status">문서 설정을 불러오는 중…</p>}</main>;
   if (snapshot.status === 'STORAGE_UNAVAILABLE') return <main className="setup-page"><h1>문서 서비스 연결</h1><section className="setup-card" role="alert"><h2>저장소 설정을 확인할 수 없습니다</h2><p>문서 설정 저장소가 준비되지 않아 문서 기능을 사용할 수 없습니다. 관리자에게 저장소 설정을 확인해 달라고 요청해 주세요.</p><button className="button button-secondary" type="button" onClick={() => void refresh()}>다시 확인</button></section></main>;
   const activeSummary = snapshot.active && <section className="setup-card" aria-label="현재 활성 문서 연결"><h2>문서 서비스</h2><p>현재 연결: {snapshot.active.provider === 'NOTION' ? 'Notion' : 'Confluence Cloud'}</p><p>연결 버전: {snapshot.active.connectionVersion}</p><a href={snapshot.active.rootUrl} target="_blank" rel="noreferrer">활성 문서 루트 열기</a></section>;
-  if (snapshot.status === 'READY' && settings && !changing) return <main className="setup-page"><h1>설정</h1>{activeSummary}{error && <p role="alert" className="setup-error">{error}</p>}{consumerRefreshFailed && retryConsumerRefresh}{notice && <p role="status">{notice}</p>}<button className="button button-primary" type="button" onClick={beginChange}>문서 서비스 변경</button><section className="setup-card"><h2>참석자</h2><p>회의에서 사용할 참석자 정보를 관리합니다.</p><Link className="button button-secondary" to="/settings/participants">참석자 관리</Link></section></main>;
+  if (snapshot.status === 'READY' && settings && !changing) return <main className="setup-page"><h1>설정</h1>{activeSummary}{error && <p role="alert" className="setup-error">{error}</p>}{consumerRefreshFailed && retryConsumerRefresh}{notice && <p role="status">{notice}</p>}{returnTo && <Link className="button button-secondary" to={returnTo} state={returnState?.returnState}>Back to sharing</Link>}<button className="button button-primary" type="button" onClick={beginChange}>문서 서비스 변경</button><section className="setup-card"><h2>참석자</h2><p>회의에서 사용할 참석자 정보를 관리합니다.</p><Link className="button button-secondary" to="/settings/participants">참석자 관리</Link></section></main>;
 
   const operationStatus = operation?.status ?? snapshot.operation?.status ?? '';
   const preparedTarget = snapshot.active && snapshot.draft?.state === 'PREPARED' && snapshot.status === 'READY' && !preparedInvalid;

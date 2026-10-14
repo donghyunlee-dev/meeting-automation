@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { Link, useLocation, useParams } from 'react-router';
+import { Link, useLocation, useNavigate, useParams } from 'react-router';
 import { getDocumentAppConfig, listMeetingParticipants, type DocumentAppConfig } from './newMeetingApi';
 import type { Participant } from './participantsApi';
 import { getReviewSession, ReviewApiError, updateReviewMinutes, updateSpeakerMappings, type ReviewSession, type ReviewSpeaker, type SpeakerMappingInput, type StructuredMinutes } from './reviewApi';
@@ -31,6 +31,7 @@ type Props = {
 export function ReviewSpeakerPage({ drafts, onInitialize, onChange, onCommit, onMinutesSave, minutesSaveState }: Props) {
   const { sessionId = '' } = useParams();
   const location = useLocation();
+  const navigate = useNavigate();
   const [review, setReview] = useState<ReviewResource>(() => ({ status: 'loading', requestSessionId: sessionId }));
   const [participants, setParticipants] = useState<Resource<Participant[]>>({ status: 'loading' });
   const [config, setConfig] = useState<Resource<DocumentAppConfig>>({ status: 'loading' });
@@ -53,7 +54,9 @@ export function ReviewSpeakerPage({ drafts, onInitialize, onChange, onCommit, on
   const latestReview = useRef<{ sessionId: string; version: number } | null>(null);
   const serverBaseBySession = useRef(new Map<string, { version: number; minutes: StructuredMinutes | null }>());
   const minutesDraftBySession = useRef(new Map<string, StructuredMinutes | null>());
-  const currentDraft = drafts[sessionId] ?? {};
+  const restoredRouteState = useRef<string | null>(null);
+  const routeSpeakerDrafts = (location.state as { speakerDrafts?: Record<string, string | null> } | null)?.speakerDrafts;
+  const currentDraft = Object.keys(drafts[sessionId] ?? {}).length > 0 ? drafts[sessionId] ?? {} : routeSpeakerDrafts ?? {};
   const sessionSaveState = saveState.sessionId === sessionId ? saveState : { sessionId, saving: false, message: '', recoveryAttempt: null };
   const saving = sessionSaveState.saving;
   const saveMessage = sessionSaveState.message;
@@ -293,6 +296,24 @@ export function ReviewSpeakerPage({ drafts, onInitialize, onChange, onCommit, on
     setMinutesDraftStore((current) => ({ ...current, drafts: { ...current.drafts, [sessionId]: draft } }));
   }, [sessionId]);
 
+  useEffect(() => {
+    const state = location.state as { minutesDraft?: StructuredMinutes } | null;
+    if (currentReview?.sessionId !== sessionId || !state?.minutesDraft || restoredRouteState.current === location.key) return;
+    restoredRouteState.current = location.key;
+    updateMinutesDraft(state.minutesDraft);
+  }, [currentReview, location.key, location.state, sessionId, updateMinutesDraft]);
+
+  useEffect(() => {
+    if (!location.hash || currentReview?.sessionId !== sessionId) return;
+    const targetId = decodeURIComponent(location.hash.slice(1));
+    requestAnimationFrame(() => {
+      const target = document.getElementById(targetId);
+      if (!target) return;
+      target.scrollIntoView({ block: 'center' });
+      if (target instanceof HTMLElement) target.focus({ preventScroll: true });
+    });
+  }, [currentReview, location.hash, sessionId]);
+
   function sameMinutes(left: StructuredMinutes | null | undefined, right: StructuredMinutes | null | undefined): boolean {
     return JSON.stringify(left) === JSON.stringify(right);
   }
@@ -488,6 +509,10 @@ export function ReviewSpeakerPage({ drafts, onInitialize, onChange, onCommit, on
   const submittedMappings = currentReview?.speakers.map((speaker) => ({ speakerId: speaker.speakerId, participantId: speakerValue(speaker) || null })) ?? [];
   const committedMappings = currentReview?.speakers.map((speaker) => ({ speakerId: speaker.speakerId, participantId: speaker.participantId })) ?? [];
   const draftIsDirty = submittedMappings.length > 0 && submittedMappings.some((mapping, index) => mapping.participantId !== committedMappings[index]?.participantId);
+  const minutesDraftIsDirty = Boolean(currentReview && !sameMinutes(currentMinutes, minutesBaseline));
+  const savingMinutes = sessionMinutesSaveState.status === 'saving';
+  const shareBlocked = draftIsDirty || minutesDraftIsDirty || saving || savingMinutes;
+  const canShare = Boolean(currentReview?.allowedActions.includes('CONFIRM')) && !shareBlocked;
   const canSave = Boolean(currentReview && providerReady && currentReview.allowedActions.includes('UPDATE_SPEAKER_MAPPING')
     && draftIsDirty && !saving && participants.status !== 'loading');
 
@@ -603,6 +628,18 @@ export function ReviewSpeakerPage({ drafts, onInitialize, onChange, onCommit, on
       </section>}
 
       {currentReview && <>
+        <div className="review-save-controls">
+          <button className="button button-primary" type="button" disabled={!canShare}
+            aria-describedby={shareBlocked ? 'share-save-instruction' : undefined}
+            onClick={() => navigate(`/meetings/${encodeURIComponent(sessionId)}/share`, { state: {
+              review: currentReview,
+              speakerDrafts: currentDraft,
+              minutesDraft: currentMinutes,
+            } })}>저장하고 공유</button>
+          {shareBlocked && <p id="share-save-instruction" role="status" aria-live="polite">
+            {saving || savingMinutes ? '저장 중인 변경사항이 있습니다. 저장이 끝날 때까지 기다려 주세요.' : '화자 매핑 또는 회의록을 저장한 뒤 공유하세요.'}
+          </p>}
+        </div>
         <ReviewMinutesEditor
           key={sessionId}
           sessionId={sessionId}
