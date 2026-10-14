@@ -14,6 +14,9 @@ import com.meetingautomation.email.EmailProvider;
 import com.meetingautomation.email.EmailSettings;
 import com.meetingautomation.email.MeetingEmailCommand;
 import com.meetingautomation.email.RecipientDeliveryResult;
+import com.meetingautomation.notification.DeliveryResult;
+import com.meetingautomation.notification.MeetingPublishedCommand;
+import com.meetingautomation.notification.NotificationProvider;
 import java.util.ArrayList;
 import java.util.Map;
 import java.util.function.Function;
@@ -30,8 +33,11 @@ final class PublishJobRunner {
     private final MeetingSessionStore sessions;
     private final DocumentProviderFactory providers;
     private final EmailProvider emailProvider;
-    PublishJobRunner(MeetingSessionStore sessions, DocumentProviderFactory providers, EmailProvider emailProvider) {
+    private final NotificationProvider notificationProvider;
+    PublishJobRunner(MeetingSessionStore sessions, DocumentProviderFactory providers, EmailProvider emailProvider,
+            NotificationProvider notificationProvider) {
         this.sessions = sessions; this.providers = providers; this.emailProvider = emailProvider;
+        this.notificationProvider = notificationProvider;
     }
 
     void run(PublishJob job) {
@@ -45,6 +51,7 @@ final class PublishJobRunner {
                 return null;
             });
             sendSelectedEmail(job, provider, ref);
+            sendSelectedNotification(job, ref);
             LOG.info("Document publish sessionId={} outcome=SUCCEEDED", job.session().sessionId());
         } catch (RuntimeException failure) {
             try {
@@ -58,6 +65,33 @@ final class PublishJobRunner {
         } finally {
             job.lease().close();
         }
+    }
+
+    private void sendSelectedNotification(PublishJob job, MeetingDocumentRef ref) {
+        String sessionId = job.session().sessionId();
+        MeetingSessionStore.PublishSnapshot snapshot = sessions.findPublishSnapshot(sessionId);
+        if (snapshot == null || !snapshot.notificationEnabled() || snapshot.notificationDelivery() == null) return;
+        NotificationDelivery sending = sessions.withSessionLock(sessionId,
+                () -> sessions.beginNotificationDelivery(sessionId));
+        if (sending == null) return;
+
+        NotificationDelivery outcome;
+        try {
+            var meeting = job.session().meeting();
+            var meetingAt = job.session().createdAt().atZone(ZoneId.of(meeting.timezone())).toOffsetDateTime();
+            DeliveryResult result = notificationProvider.sendMeetingPublished(
+                    new MeetingPublishedCommand(meeting.title(), meetingAt, ref.documentUrl()));
+            outcome = result != null && result.status() == DeliveryResult.Status.SENT
+                    ? sending.sent()
+                    : sending.failed(result != null && result.retryable(), "NOTIFICATION_FAILED");
+        } catch (RuntimeException failure) {
+            outcome = sending.failed(false, "NOTIFICATION_FAILED");
+        }
+        NotificationDelivery completed = outcome;
+        sessions.withSessionLock(sessionId, () -> {
+            sessions.completeNotificationDelivery(sessionId, completed);
+            return null;
+        });
     }
 
     private void sendSelectedEmail(PublishJob job, DocumentStructureProvider provider, MeetingDocumentRef ref) {

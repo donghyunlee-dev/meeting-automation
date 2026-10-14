@@ -105,12 +105,19 @@ public record MeetingSessionStatusResponse(Data data) {
                 && publishSnapshot.document() != null
                         ? new Document(publishSnapshot.document().documentId(), publishSnapshot.document().documentUrl())
                         : null;
-        List<Delivery> deliveries = publishSnapshot == null || "DOCUMENT_FAILED".equals(session.status()) ? null
-                : publishSnapshot.deliveries().stream()
-                .map(delivery -> new Delivery(delivery.deliveryId(), delivery.channel(),
-                        delivery.recipientParticipantId(), delivery.status(), delivery.attemptCount(),
-                        delivery.retryable(), delivery.lastAttemptAt(), delivery.errorCode()))
-                .toList();
+        List<Delivery> deliveries = null;
+        if (publishSnapshot != null && !"DOCUMENT_FAILED".equals(session.status())) {
+            var projected = new java.util.ArrayList<>(publishSnapshot.deliveries().stream()
+                    .map(delivery -> new Delivery(delivery.deliveryId(), delivery.channel(),
+                            delivery.recipientParticipantId(), delivery.status(), delivery.attemptCount(),
+                            delivery.retryable(), delivery.lastAttemptAt(), delivery.errorCode()))
+                    .toList());
+            NotificationDelivery notification = publishSnapshot.notificationDelivery();
+            if (notification != null) projected.add(new Delivery(notification.deliveryId(), "NOTIFICATION", null,
+                    notification.status(), notification.attemptCount(), notification.retryable(),
+                    notification.lastAttemptAt(), notification.errorCode()));
+            deliveries = List.copyOf(projected);
+        }
         return new MeetingSessionStatusResponse(new Data(session.sessionId(), session.version(), session.status(),
                 new Meeting(session.meeting().participantIds()), processing, speakers, transcript, minutes,
                 allowedActions, reviewReady ? lastOperation : null, document, deliveries));

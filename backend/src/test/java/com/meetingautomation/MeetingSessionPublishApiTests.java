@@ -33,6 +33,9 @@ import com.meetingautomation.document.settings.GlobalSettingsStore;
 import com.meetingautomation.email.EmailProvider;
 import com.meetingautomation.email.MeetingEmailCommand;
 import com.meetingautomation.email.RecipientDeliveryResult;
+import com.meetingautomation.notification.DeliveryResult;
+import com.meetingautomation.notification.MeetingPublishedCommand;
+import com.meetingautomation.notification.slack.SlackNotificationAdapter;
 import java.time.LocalDate;
 import java.time.Instant;
 import java.util.List;
@@ -73,6 +76,7 @@ class MeetingSessionPublishApiTests {
 
     @MockitoBean private DocumentProviderFactory providerFactory;
     @MockitoBean private EmailProvider emailProvider;
+    @MockitoBean private SlackNotificationAdapter notificationProvider;
 
     @BeforeEach
     void saveConfirmedSessionAndResetQueue() {
@@ -85,6 +89,7 @@ class MeetingSessionPublishApiTests {
             return command.recipients().stream().map(recipient ->
                     RecipientDeliveryResult.sent(recipient.participantId())).toList();
         });
+        when(notificationProvider.sendMeetingPublished(any())).thenReturn(DeliveryResult.sent());
         sessionStore.save(new MeetingSession(SESSION_ID, 7, "CONFIRMED", 1,
                 new MeetingSession.Meeting("Planning", "default.md", "1.0.0", List.of("pt_ada", "pt_grace"),
                         "Asia/Seoul", List.of(new MeetingSession.ParticipantReference("pt_ada", "Ada"),
@@ -131,7 +136,7 @@ class MeetingSessionPublishApiTests {
         workerExecutor.drain();
         assertThat(FakePublishProvider.PUBLISH_CALLS.get()).isEqualTo(1);
         assertThat(sessionStore.find(SESSION_ID).orElseThrow().status()).isEqualTo("DOCUMENT_SAVED");
-        assertThat(sessionStore.find(SESSION_ID).orElseThrow().version()).isEqualTo(11);
+        assertThat(sessionStore.find(SESSION_ID).orElseThrow().version()).isEqualTo(13);
         assertThat(sessionStore.findPublishSnapshot(SESSION_ID).document().documentId()).isEqualTo("doc_publish");
         assertThat(sessionStore.findPublishSnapshot(SESSION_ID).recipients()).containsExactly("pt_ada");
         assertThat(sessionStore.findPublishSnapshot(SESSION_ID).notificationEnabled()).isTrue();
@@ -152,6 +157,8 @@ class MeetingSessionPublishApiTests {
                 .andExpect(jsonPath("$.data.deliveries[0].retryable").value(false))
                 .andExpect(jsonPath("$.data.deliveries[0].email").doesNotExist())
                 .andExpect(jsonPath("$.data.deliveries[0].providerMessageId").doesNotExist())
+                .andExpect(jsonPath("$.data.deliveries[1].channel").value("NOTIFICATION"))
+                .andExpect(jsonPath("$.data.deliveries[1].status").value("SENT"))
                 .andExpect(jsonPath("$.data.publish").doesNotExist());
         try (var switchLease = gate.beginSwitch(globalSettingsStore.read().version())) {
             assertThat(switchLease).isNotNull();
@@ -166,6 +173,7 @@ class MeetingSessionPublishApiTests {
         workerExecutor.drain();
 
         verify(emailProvider, never()).sendMeetingEmail(any());
+        verify(notificationProvider, never()).sendMeetingPublished(any());
         assertThat(sessionStore.find(SESSION_ID).orElseThrow().status()).isEqualTo("DOCUMENT_SAVED");
         assertThat(sessionStore.find(SESSION_ID).orElseThrow().version()).isEqualTo(9);
         assertThat(sessionStore.findPublishSnapshot(SESSION_ID).recipients()).isEmpty();
@@ -173,6 +181,45 @@ class MeetingSessionPublishApiTests {
                 .andExpect(jsonPath("$.data.document.documentId").value("doc_publish"))
                 .andExpect(jsonPath("$.data.deliveries").isArray())
                 .andExpect(jsonPath("$.data.deliveries").isEmpty());
+    }
+
+    @Test
+    void selectedNotificationIsSentAfterDocumentAndAppearsAsIndependentGenericDelivery() throws Exception {
+        mockMvc.perform(publish(SESSION_ID, "7", "notification-success", REQUEST))
+                .andExpect(status().isAccepted());
+        workerExecutor.drain();
+
+        org.mockito.ArgumentCaptor<MeetingPublishedCommand> command =
+                org.mockito.ArgumentCaptor.forClass(MeetingPublishedCommand.class);
+        verify(notificationProvider).sendMeetingPublished(command.capture());
+        assertThat(command.getValue().title()).isEqualTo("Planning");
+        assertThat(command.getValue().documentUrl()).isEqualTo("https://docs.example/doc_publish");
+        mockMvc.perform(get(SESSION_URL, SESSION_ID)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("DOCUMENT_SAVED"))
+                .andExpect(jsonPath("$.data.deliveries[0].channel").value("EMAIL"))
+                .andExpect(jsonPath("$.data.deliveries[0].status").value("SENT"))
+                .andExpect(jsonPath("$.data.deliveries[1].channel").value("NOTIFICATION"))
+                .andExpect(jsonPath("$.data.deliveries[1].recipientParticipantId").doesNotExist())
+                .andExpect(jsonPath("$.data.deliveries[1].status").value("SENT"))
+                .andExpect(jsonPath("$.data.deliveries[1].attemptCount").value(1));
+    }
+
+    @Test
+    void notificationFailureKeepsSuccessfulEmailAndDocumentOutcome() throws Exception {
+        when(notificationProvider.sendMeetingPublished(any())).thenReturn(DeliveryResult.failed(true));
+        mockMvc.perform(publish(SESSION_ID, "7", "notification-failure", REQUEST))
+                .andExpect(status().isAccepted());
+        workerExecutor.drain();
+
+        mockMvc.perform(get(SESSION_URL, SESSION_ID)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("DOCUMENT_SAVED"))
+                .andExpect(jsonPath("$.data.deliveries[0].channel").value("EMAIL"))
+                .andExpect(jsonPath("$.data.deliveries[0].status").value("SENT"))
+                .andExpect(jsonPath("$.data.deliveries[1].channel").value("NOTIFICATION"))
+                .andExpect(jsonPath("$.data.deliveries[1].status").value("FAILED"))
+                .andExpect(jsonPath("$.data.deliveries[1].errorCode").value("NOTIFICATION_FAILED"))
+                .andExpect(jsonPath("$.data.deliveries[1].retryable").value(true));
+        verify(notificationProvider).sendMeetingPublished(any());
     }
 
     @Test
@@ -184,7 +231,7 @@ class MeetingSessionPublishApiTests {
 
         verify(emailProvider, never()).sendMeetingEmail(any());
         assertThat(sessionStore.find(SESSION_ID).orElseThrow().status()).isEqualTo("DOCUMENT_SAVED");
-        assertThat(sessionStore.find(SESSION_ID).orElseThrow().version()).isEqualTo(10);
+        assertThat(sessionStore.find(SESSION_ID).orElseThrow().version()).isEqualTo(12);
         mockMvc.perform(get(SESSION_URL, SESSION_ID)).andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.document.documentId").value("doc_publish"))
                 .andExpect(jsonPath("$.data.deliveries[0].status").value("FAILED"))
@@ -201,7 +248,7 @@ class MeetingSessionPublishApiTests {
         workerExecutor.drain();
 
         assertThat(sessionStore.find(SESSION_ID).orElseThrow().status()).isEqualTo("DOCUMENT_SAVED");
-        assertThat(sessionStore.find(SESSION_ID).orElseThrow().version()).isEqualTo(11);
+        assertThat(sessionStore.find(SESSION_ID).orElseThrow().version()).isEqualTo(13);
         String response = mockMvc.perform(get(SESSION_URL, SESSION_ID)).andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.deliveries[0].status").value("FAILED"))
                 .andExpect(jsonPath("$.data.deliveries[0].retryable").value(false))

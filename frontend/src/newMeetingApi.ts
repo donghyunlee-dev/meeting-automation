@@ -2,7 +2,12 @@ import type { Participant } from './participantsApi';
 
 export type MeetingTemplate = { id: string; name: string; version: string };
 export type CompanyConfig = { id: string; name: string; timezone: string };
-export type DocumentAppConfig = { company: CompanyConfig; document?: { provider: string; configured: boolean; connectionVersion: number; rootUrl: string }; setup?: { status: string; required: boolean; canCreateMeeting: boolean; operationId: string | null } };
+export type DocumentAppConfig = {
+  company: CompanyConfig;
+  document?: { provider: string; configured: boolean; connectionVersion: number; rootUrl: string };
+  notification?: { provider: string | null; configured: boolean };
+  setup?: { status: string; required: boolean; canCreateMeeting: boolean; operationId: string | null };
+};
 export type MeetingSessionAttempt = {
   title: string;
   templateId: string;
