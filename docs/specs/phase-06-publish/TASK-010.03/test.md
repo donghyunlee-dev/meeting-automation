@@ -2,7 +2,7 @@
 
 ## 자동화 검증
 
-Frontend 구현 때 repository package manifest가 선언한 test runner로 component/API integration tests를 수행한다. 현 시점 repository에 frontend manifest가 없으므로 exact command는 구현 전 FE setup 결과로 확정한다. 설계 단계에서는 테스트를 실행하지 않는다.
+`frontend/package.json`의 `test`, `lint`, `build` scripts를 사용한다. 구현 시 변경 컴포넌트와 직접 영향을 받는 FE 테스트에 Vitest file selectors를 적용하고 lint/build를 실행한다. 환경: Node `>=22.12.0 <23`.
 
 | ID | 준비/입력 | 기대 결과 | 증거 |
 |---|---|---|---|
