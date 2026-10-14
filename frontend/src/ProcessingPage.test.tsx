@@ -19,6 +19,24 @@ function renderPage() {
 }
 
 describe('ProcessingPage failure recovery', () => {
+  it('ASYNC-GET-RETRY shows the shared safe network error and retries API-010 with GET', async () => {
+    let available = false;
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      if (!available) throw new TypeError('private proxy diagnostic');
+      expect(!init?.method || init.method === 'GET').toBe(true);
+      return new Response(JSON.stringify(apiSnapshot('PROCESSING', [], 'TRANSCRIPTION')), { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderPage();
+
+    expect(await screen.findByRole('heading', { name: '처리 상태를 불러오지 못했습니다.' })).toBeTruthy();
+    expect(document.body.textContent).not.toContain('private proxy diagnostic');
+    available = true;
+    fireEvent.click(screen.getByRole('button', { name: '다시 시도' }));
+    expect(await screen.findByText('음성 인식 단계 처리 중입니다.')).toBeTruthy();
+    expect(fetchMock.mock.calls.filter(([, init]) => !init?.method || init.method === 'GET').length).toBe(fetchMock.mock.calls.length);
+  });
+
   it('shows safe Korean stage copy and only actions allowed by API-010', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(apiSnapshot('PROCESSING_FAILED', ['DOWNLOAD_AUDIO', 'FINALIZE_PROCESSING_FAILURE'])), { status: 200 })));
     renderPage();

@@ -38,6 +38,19 @@ describe('AsyncState', () => {
     expect(onRetry).toHaveBeenCalledTimes(1);
   });
 
+  it('keeps heading references unique when multiple async states appear together', () => {
+    const error = normalizeApiError(null);
+    render(<>
+      <AsyncState state={{ status: 'error', title: '설정 조회 실패', error }} renderReady={() => null} />
+      <AsyncState state={{ status: 'error', title: '참석자 조회 실패', error }} renderReady={() => null} />
+    </>);
+
+    const alerts = screen.getAllByRole('alert');
+    const labelledBy = alerts.map((alert) => alert.getAttribute('aria-labelledby'));
+    expect(new Set(labelledBy).size).toBe(2);
+    expect(labelledBy.every((id) => id && document.getElementById(id)?.tagName === 'H2')).toBe(true);
+  });
+
   it('ERROR-404 distinguishes not-found errors from empty resources and does not invent a retry action', () => {
     const error = normalizeApiError({ error: { code: 'MEETING_NOT_FOUND', message: 'raw provider details' } }, 404);
     render(<AsyncState state={{ status: 'error', title: '회의 기록을 찾을 수 없습니다.', description: '목록으로 돌아가 다시 선택해 주세요.', error }} renderReady={() => null} />);

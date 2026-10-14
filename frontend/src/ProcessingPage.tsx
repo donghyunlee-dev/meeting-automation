@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router';
 import { audioDownloadUrl, finalizeProcessingFailure, getProcessingStatus, ProcessingApiError, retryProcessing, type ProcessingAction, type ProcessingSnapshot, type ProcessingStage } from './processingApi';
 import { ProcessingPoller } from './processingPoller';
 import { AsyncState } from './components/async-state/AsyncState';
+import { normalizeApiError } from './lib/api/normalizeApiError';
 
 const stageNames = ['오디오 준비', '음성 인식', '화자 분석', '회의록 생성'] as const;
 const stageLabels: Record<ProcessingStage, string> = { AUDIO_ASSEMBLY: '오디오 준비', TRANSCRIPTION: '음성 인식', DIARIZATION: '화자 분석', MINUTES_GENERATION: '회의록 생성', DRAFT_READY: '회의록 생성', DRAFT_REGENERATION: '회의록 재생성' };
@@ -13,6 +14,7 @@ const failureMessages: Record<ProcessingStage, string> = {
   DRAFT_READY: '회의록을 생성하는 중 문제가 발생했습니다.', DRAFT_REGENERATION: '회의록을 재생성하는 중 문제가 발생했습니다.',
 };
 const DOWNLOAD_RETURN_KEY = 'processing-download-return';
+const SAFE_NETWORK_ERROR = normalizeApiError({ error: { code: 'NETWORK_ERROR' } });
 
 function newKey(): string { return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`; }
 
@@ -172,11 +174,20 @@ export function ProcessingPage() {
     <main className="processing-page" aria-labelledby="processing-title">
       <header className="processing-heading"><p className="eyebrow">MEETING AUTOMATION</p><h1 id="processing-title">회의 처리</h1><p>회의 내용을 정리하고 있습니다. 이 화면을 닫아도 처리는 계속됩니다.</p></header>
       {!snapshot && failure === null && <AsyncState state={{ status: 'loading', label: '회의 처리 상태를 확인하고 있습니다.' }} renderReady={() => null} />}
+      {failure === 'network' && !snapshot && <AsyncState state={{
+        status: 'error',
+        title: '처리 상태를 불러오지 못했습니다.',
+        error: SAFE_NETWORK_ERROR,
+        description: '연결을 확인해 주세요. 처리 상태는 자동으로 다시 확인합니다.',
+        onRetry: () => void refresh(),
+      }} renderReady={() => null} />}
+      {failure === 'network' && snapshot && <AsyncState state={{
+        status: 'ready', data: snapshot, warning: SAFE_NETWORK_ERROR, onRetry: () => void refresh(),
+      }} renderReady={() => null} />}
       {failure === 'missing' && <section className="processing-message" role="alert"><h2>회의를 찾을 수 없습니다</h2><p>서버에서 회의 처리 정보를 찾을 수 없어 다시 변환하거나 오디오를 복구할 수 없습니다. 새 회의를 시작해 주세요.</p><Link className="button button-primary" to="/meetings/new">새 회의 시작</Link></section>}
       {failure === 'session-mismatch' && <p role="alert" className="processing-message">회의 처리 정보를 확인할 수 없습니다. 다시 시도해 주세요.</p>}
       {failure === 'invalid' && <p role="alert" className="processing-message">회의 처리 상태를 확인할 수 없습니다. 잠시 후 다시 시도해 주세요.</p>}
       {failure === 'unavailable' && <p role="alert" className="processing-message">회의 처리 상태를 확인할 수 없습니다. 잠시 후 다시 시도해 주세요.</p>}
-      {failure === 'network' && <p role="status" className="processing-message">처리 상태를 불러오지 못했습니다. 연결을 확인하고 다시 확인하는 중입니다.</p>}
       {snapshot?.status === 'PROCESSING_FAILED' && failure === null && <section className="processing-message processing-recovery" role="region" aria-labelledby="processing-failed-title">
         <p className="visually-hidden" role="alert">{stageForFailure ? failureMessages[stageForFailure] : '회의를 처리하는 중 문제가 발생했습니다.'}</p>
         <h2 id="processing-failed-title">처리를 완료하지 못했습니다</h2>

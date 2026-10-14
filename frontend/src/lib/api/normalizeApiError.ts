@@ -50,9 +50,7 @@ export function normalizeApiError(value: unknown, status?: number): SafeApiError
   const envelope = objectRecord(value);
   const bodyError = objectRecord(envelope?.error);
   const code = safeCode(bodyError?.code);
-  const mapped = SAFE_MESSAGES[code] ?? (status === 404
-    ? { kind: 'not-found' as const, message: '요청한 정보를 찾을 수 없습니다.' }
-    : status === 409 || status === 412
+  const mapped = SAFE_MESSAGES[code] ?? (status === 409 || status === 412
       ? { kind: 'conflict' as const, message: '요청한 내용을 적용하지 못했습니다. 최신 상태를 확인해 주세요.' }
       : { kind: 'unavailable' as const, message: '요청을 완료하지 못했습니다. 잠시 후 다시 시도해 주세요.' });
   const category = safeCategory(bodyError?.category);

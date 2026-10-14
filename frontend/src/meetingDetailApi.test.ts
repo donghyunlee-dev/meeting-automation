@@ -19,5 +19,16 @@ describe('getMeetingDetail', () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: { code: 'SECRET', message: 'private provider detail' } }), { status: 502 })));
     await expect(getMeetingDetail('doc')).rejects.toMatchObject({ code: 'MEETING_DETAIL_FAILED', message: expect.not.stringContaining('private') });
   });
+
+  it('keeps an unrecognized HTTP 404 on the generic safe failure path', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      error: { code: 'UNEXPECTED_PROXY_404', message: 'private proxy detail' },
+    }), { status: 404 })));
+
+    await expect(getMeetingDetail('doc')).rejects.toMatchObject({
+      code: 'MEETING_DETAIL_FAILED',
+      safe: { kind: 'unavailable', message: expect.not.stringContaining('private') },
+    });
+  });
 });
 
