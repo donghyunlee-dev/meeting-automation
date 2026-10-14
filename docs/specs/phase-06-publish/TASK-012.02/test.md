@@ -4,7 +4,7 @@
 
 ## 자동화 검증
 
-구현 시 Backend Java 21/Gradle JUnit 5와 저장소의 Frontend component/API 테스트 체계를 사용한다. 저장소에 구현/build wrapper가 아직 없으므로 정확한 명령은 해당 코드가 마련될 때 기록하며 임의의 실행 명령을 만들지 않는다. Slack HTTP는 TASK-012.01 mock 계약으로 격리하고 실제 채널 전송은 자동 테스트에서 하지 않는다.
+구현 시 Backend Java 25/Gradle JUnit 5와 저장소의 Frontend component/API 테스트 체계를 사용한다. 저장소에 구현/build wrapper가 아직 없으므로 정확한 명령은 해당 코드가 마련될 때 기록하며 임의의 실행 명령을 만들지 않는다. Slack HTTP는 TASK-012.01 mock 계약으로 격리하고 실제 채널 전송은 자동 테스트에서 하지 않는다.
 
 | ID | 준비 및 입력 | 기대 결과 | 증거 |
 |---|---|---|---|

@@ -22,7 +22,7 @@ Backend 계약 테스트와 Frontend API/component 테스트를 먼저 작성한
 5. SCR-007의 명시 선택값/초기값과 API-019 미설정 안내를 연결한다. 결과: 요청 body에 boolean 선택을 포함하고 `provider=null`이면 Settings 이동을 안내한다.
 6. API-010 polling 결과를 SCR-007 Notification 결과 영역에 연결한다. 결과: loading/SENT/FAILED/retryable을 Email recipient 목록과 독립 표시한다.
 7. API 응답 지연/유실, 최신 version 비교, 재진입 polling을 검증한다. 결과: 중복 Publish/notification과 상태 역전이 없다.
-8. Java 21/Gradle 및 Frontend 저장소의 정확한 검증 명령을 확인해 API/application/component 테스트와 접근성 증거를 Issue #49에 기록한다.
+8. Verify only changed Backend test classes with Java 25 and the Windows Gradle Wrapper using `test --tests <fully.qualified.TestClass>`. Run only the changed Frontend API/component test files; do not run local services or separate acceptance QA. Record exact commands and results in Issue #49.
 
 ## 데이터/오류 매핑
 
