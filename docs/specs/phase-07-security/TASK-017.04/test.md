@@ -41,9 +41,24 @@
 - FE/BE 자동 test, focused security scanner, 필요한 관련 regression test/build 결과를 분리 기록한다. 테스트가 명령을 새로 도입하면 tasks의 결과물로 문서화한다.
 - Storage 수동 검증은 non-production 전용 store/object prefix와 synthetic fixture를 사용하고 작업 후 테스트 객체를 삭제한다. Production account, production data, 운영 Secret store는 사용하지 않는다.
 
+### Focused verification commands
+
+The repository task rules replace the boilerplate full-suite and `clean build` requests with selectors that directly cover SEC-REG-01~14. Run the Backend command from `backend` with Temurin Java 25; run Frontend and scanner commands with the isolated Node 22 runtime required by `frontend/package.json`.
+
+```powershell
+.\gradlew.bat test --tests com.meetingautomation.DocumentSetupApiTests --tests com.meetingautomation.ConfiguredSecretsAppConfigApiTests --tests com.meetingautomation.ConfiguredSecretsIntegrationHealthApiTests --tests com.meetingautomation.document.GlobalSettingsTests --tests com.meetingautomation.document.DocumentProviderResolverTests --tests com.meetingautomation.document.DocumentProviderErrorMappingTests --tests com.meetingautomation.api.error.FailureContextTests --tests com.meetingautomation.api.error.FailureContextReporterTests --tests com.meetingautomation.notification.slack.admin.SlackAdminIncidentPayloadTests --tests com.meetingautomation.notification.slack.admin.SlackAdminIncidentNotifierTests --tests com.meetingautomation.MeetingSessionStatusApiTests --tests com.meetingautomation.api.audio.S3PrivateAudioStorageAdapterTests --tests com.meetingautomation.api.audio.AudioDownloadServiceTests --tests com.meetingautomation.api.audio.PrivateAudioAssemblyStorageTests --tests com.meetingautomation.api.audio.PrivateAudioExpiryCleanupSchedulerTests --tests com.meetingautomation.api.processing.ProcessingRetryServiceTests --tests com.meetingautomation.api.processing.ProcessingPipelineTests --tests com.meetingautomation.api.processing.FailureFinalizeServiceTests --tests com.meetingautomation.api.processing.FailureFinalizeControllerTests
+
+npm exec --yes --package=node@22.23.3 -- npm run test -- --run src/publicBuildSecurity.test.ts
+npm exec --yes --package=node@22.23.3 -- npm run build
+npm exec --yes --package=node@22.23.3 -- node --test scripts/verify-secret-boundary.test.mjs
+npm exec --yes --package=node@22.23.3 -- node scripts/verify-secret-boundary.mjs
+```
+
+SEC-QA-01~04 require a non-production provider/storage environment, browser download, or configured meeting. They are deferred for the user to perform after setup; this implementation run does not access provider accounts, start a service, or exercise a meeting. SEC-QA-05 is recorded as a sanitized evidence review.
+
 ## Evidence와 완료 확인
 
-- 생성 경로: `docs/evidence/TASK-017.04.md`
+- 생성 경로: `docs/evidence/TASK-017.04/verification.md`
 - 기록 항목: repository commit, FE/BE runtime/build version, non-production environment class, 실행 명령, pass/fail 요약, storage private/expiry 설정 상태, 잔존 object 수, 문서/전송 호출 수.
 - 금지 항목: canary 원문, Secret, 개인 식별정보, Audio/Transcript/Minutes 본문, storage object key/public URL, raw API/provider response, 환경 dump, 운영 로그.
 - 종료 전 `git diff --check` 및 변경 파일 목록을 확인하고 Evidence 자체도 같은 민감값 scanner 대상으로 검사한다.
