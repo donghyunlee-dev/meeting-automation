@@ -60,6 +60,27 @@ describe('CompletePage', () => {
     expect(screen.getByRole('status').getAttribute('aria-live')).toBe('polite');
   });
 
+  it.each([
+    ['SENT', false],
+    ['PENDING', false],
+    ['SENDING', false],
+    ['FAILED', false],
+  ])('does not offer API-016 retry for a %s delivery with retryable=%s', async (status, retryable) => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const path = new URL(String(input)).pathname;
+      if (path.endsWith('/participants')) return response({ items: [] });
+      if (path.endsWith('/meeting-sessions/s1')) return response({ sessionId: 's1', version: 1, status: 'DOCUMENT_SAVED', allowedActions: [],
+        document: { documentId: 'doc1' }, deliveries: [{ deliveryId: 'd-gated', channel: 'EMAIL', recipientParticipantId: 'p1', status, retryable }] });
+      throw new Error(`Unexpected request: ${path}`);
+    });
+    renderComplete(fetchMock);
+
+    await screen.findByText(new RegExp(`p1: ${status === 'SENT' ? '전송 요청 수락' : status === 'FAILED' ? '전달 실패' : '전달 진행 중'}`));
+
+    expect(screen.queryByRole('button', { name: /Retry/ })).toBeNull();
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/deliveries/d-gated/retry'))).toBe(false);
+  });
+
   it('shows retry only on retryable failed rows and reconciles a 202 through API-010 polling', async () => {
     let snapshots = 0;
     let releaseRetry!: (result: Response) => void;
@@ -109,6 +130,46 @@ describe('CompletePage', () => {
     expect(retry.tagName).toBe('BUTTON');
     expect(screen.queryByRole('link', { name: /저장된 회의록 열기/ })).toBeNull();
     expect(screen.getByRole('main').classList.contains('complete-page')).toBe(true);
+  });
+
+  it.each([404, 409])('reconciles an API-016 HTTP %i once and preserves the refreshed document and independent delivery rows', async (status) => {
+    let snapshotReads = 0;
+    let retryCalls = 0;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const path = new URL(String(input)).pathname;
+      if (path.endsWith('/participants')) return response({ items: [{ id: 'p1', name: 'Ada', email: 'private@example.test' }] });
+      if (path.endsWith('/deliveries/d-conflict/retry')) {
+        retryCalls += 1;
+        return response({ error: { code: status === 404 ? 'DELIVERY_NOT_FOUND' : 'DELIVERY_STATE_CONFLICT', message: 'provider token=secret-detail' } }, status);
+      }
+      if (path.endsWith('/meeting-sessions/s1')) {
+        snapshotReads += 1;
+        return response({ sessionId: 's1', version: snapshotReads, status: 'DOCUMENT_SAVED', allowedActions: [],
+          document: { documentId: 'doc1', documentUrl: 'https://docs.example/doc1' },
+          deliveries: snapshotReads === 1
+            ? [
+              { deliveryId: 'd-conflict', channel: 'EMAIL', recipientParticipantId: 'p1', status: 'FAILED', retryable: true },
+              { deliveryId: 'd-independent', channel: 'NOTIFICATION', status: 'SENT', retryable: false },
+            ]
+            : [
+              { deliveryId: 'd-conflict', channel: 'EMAIL', recipientParticipantId: 'p1', status: 'FAILED', retryable: false },
+              { deliveryId: 'd-independent', channel: 'NOTIFICATION', status: 'SENT', retryable: false },
+            ] });
+      }
+      throw new Error(`Unexpected request: ${path}`);
+    });
+    renderComplete(fetchMock);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Retry Ada' }));
+
+    expect((await screen.findByRole('status')).textContent).toMatch(/최신 상태를 확인했습니다\. 재시도 가능 여부를 확인해 주세요/);
+    expect(screen.getByText(/중복 전달을 막기 위해 자동 재전송하지 않습니다/)).toBeTruthy();
+    expect(await screen.findByText(/Slack: 전송 요청 수락/)).toBeTruthy();
+    expect(screen.getByRole('link', { name: /저장된 회의록 열기/ }).getAttribute('href')).toBe('https://docs.example/doc1');
+    expect(screen.queryByRole('button', { name: 'Retry Ada' })).toBeNull();
+    expect(document.body.textContent).not.toMatch(/provider token|secret-detail|private@example\.test/);
+    expect(snapshotReads).toBe(2);
+    expect(retryCalls).toBe(1);
   });
 
   it('retains and reuses the same key when both the retry response and reconciliation snapshot are lost', async () => {
