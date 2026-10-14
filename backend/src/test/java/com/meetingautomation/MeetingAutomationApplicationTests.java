@@ -129,6 +129,17 @@ class MeetingAutomationApplicationTests {
     }
 
     @Test
+    void unsafeRequestIdIsNotReflectedInErrorEnvelope() throws Exception {
+        mockMvc.perform(get("/__test/errors/unexpected")
+                        .header("X-Request-Id", "secret-token trace injection"))
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.error.code").value("INTERNAL_ERROR"))
+                .andExpect(jsonPath("$.error.traceId", startsWith("tr_")))
+                .andExpect(result -> org.junit.jupiter.api.Assertions.assertFalse(
+                        result.getResponse().getContentAsString().contains("secret-token")));
+    }
+
+    @Test
     void missingRequiredHeaderKeepsClientErrorStatusAndReturnsSafeEnvelope() throws Exception {
         mockMvc.perform(get("/__test/errors/required-header"))
                 .andExpect(status().isBadRequest())

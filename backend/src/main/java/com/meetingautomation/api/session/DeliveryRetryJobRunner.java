@@ -1,6 +1,7 @@
 package com.meetingautomation.api.session;
 
 import com.meetingautomation.document.DocumentProviderException;
+import com.meetingautomation.api.error.FailureContext;
 import com.meetingautomation.document.DocumentStructureProvider;
 import com.meetingautomation.document.ParticipantListingProvider;
 import com.meetingautomation.document.Participant;
@@ -42,21 +43,30 @@ final class DeliveryRetryJobRunner {
     }
 
     void run(String sessionId, String deliveryId) {
+        run(sessionId, deliveryId, null);
+    }
+
+    void run(String sessionId, String deliveryId, String requestTraceId) {
+        String traceId = FailureContext.correlationId(requestTraceId);
         try {
             MeetingSession session = sessions.find(sessionId).orElse(null);
             MeetingSessionStore.PublishSnapshot snapshot = sessions.findPublishSnapshot(sessionId);
             if (session == null || snapshot == null || snapshot.document() == null) return;
             if (snapshot.deliveries().stream().anyMatch(delivery -> delivery.deliveryId().equals(deliveryId)))
-                retryEmail(session, snapshot, deliveryId);
+                retryEmail(session, snapshot, deliveryId, traceId);
             else if (snapshot.notificationDelivery() != null
                     && snapshot.notificationDelivery().deliveryId().equals(deliveryId))
-                retryNotification(session, snapshot, deliveryId);
+                retryNotification(session, snapshot, deliveryId, traceId);
         } catch (RuntimeException failure) {
-            LOG.warn("Delivery retry sessionId={} outcome=FAILED errorCode=DELIVERY_RETRY_FAILURE", sessionId);
+            String code = errorCode(sessionId, deliveryId);
+            String stage = "EMAIL_FAILED".equals(code) ? "EMAIL_DELIVERY" : "NOTIFICATION";
+            FailureContext.from(sessionId, stage, traceId, code, false, java.time.Instant.now())
+                    .ifPresent(context -> context.logWarning(LOG));
         }
     }
 
-    private void retryEmail(MeetingSession session, MeetingSessionStore.PublishSnapshot snapshot, String deliveryId) {
+    private void retryEmail(MeetingSession session, MeetingSessionStore.PublishSnapshot snapshot, String deliveryId,
+            String traceId) {
         EmailDelivery delivery = snapshot.deliveries().stream()
                 .filter(item -> item.deliveryId().equals(deliveryId)).findFirst().orElse(null);
         if (delivery == null) return;
@@ -64,12 +74,12 @@ final class DeliveryRetryJobRunner {
         try {
             var connection = resolver.active().orElse(null);
             if (connection == null) {
-                finish(session.sessionId(), deliveryId, false, true);
+                finish(session.sessionId(), deliveryId, false, true, traceId);
                 return;
             }
             DocumentStructureProvider provider = providerFactory.create(connection);
             if (!(provider instanceof ParticipantListingProvider participantsProvider)) {
-                finish(session.sessionId(), deliveryId, false, true);
+                finish(session.sessionId(), deliveryId, false, true, traceId);
                 return;
             }
             var structure = participantsProvider.discoverParticipantStructure(connection.rootId());
@@ -79,14 +89,14 @@ final class DeliveryRetryJobRunner {
                     .collect(Collectors.toMap(Participant::id, Function.identity(), (first, ignored) -> first));
             recipient = byId.get(delivery.recipientParticipantId());
             if (recipient == null || !EmailSettings.validAddress(recipient.email())) {
-                finish(session.sessionId(), deliveryId, false, true);
+                finish(session.sessionId(), deliveryId, false, true, traceId);
                 return;
             }
         } catch (DocumentProviderException failure) {
-            finish(session.sessionId(), deliveryId, false, failure.retryable());
+            finish(session.sessionId(), deliveryId, false, failure.retryable(), traceId);
             return;
         } catch (RuntimeException preflightFailure) {
-            finish(session.sessionId(), deliveryId, false, true);
+            finish(session.sessionId(), deliveryId, false, true, traceId);
             return;
         }
         if (!sessions.withSessionLock(session.sessionId(), () -> sessions.beginDeliveryRetry(session.sessionId(), deliveryId)))
@@ -104,14 +114,14 @@ final class DeliveryRetryJobRunner {
                     .findFirst().orElse(null);
             finish(session.sessionId(), deliveryId,
                     result != null && result.status() == RecipientDeliveryResult.Status.SENT,
-                    result != null && result.retryable());
+                    result != null && result.retryable(), traceId);
         } catch (RuntimeException providerFailure) {
-            finish(session.sessionId(), deliveryId, false, false);
+            finish(session.sessionId(), deliveryId, false, false, traceId);
         }
     }
 
     private void retryNotification(MeetingSession session, MeetingSessionStore.PublishSnapshot snapshot,
-            String deliveryId) {
+            String deliveryId, String traceId) {
         if (!sessions.withSessionLock(session.sessionId(), () -> sessions.beginDeliveryRetry(session.sessionId(), deliveryId)))
             return;
         try {
@@ -120,16 +130,22 @@ final class DeliveryRetryJobRunner {
             DeliveryResult result = notificationProvider.sendMeetingPublished(
                     new MeetingPublishedCommand(meeting.title(), meetingAt, snapshot.document().documentUrl()));
             finish(session.sessionId(), deliveryId, result != null && result.status() == DeliveryResult.Status.SENT,
-                    result != null && result.retryable());
+                    result != null && result.retryable(), traceId);
         } catch (RuntimeException failure) {
-            finish(session.sessionId(), deliveryId, false, false);
+            finish(session.sessionId(), deliveryId, false, false, traceId);
         }
     }
 
-    private void finish(String sessionId, String deliveryId, boolean sent, boolean retryable) {
+    private void finish(String sessionId, String deliveryId, boolean sent, boolean retryable, String traceId) {
+        String code = errorCode(sessionId, deliveryId);
+        if (!sent) {
+            String stage = "EMAIL_FAILED".equals(code) ? "EMAIL_DELIVERY" : "NOTIFICATION";
+            FailureContext.from(sessionId, stage, traceId, code, retryable, java.time.Instant.now())
+                    .ifPresent(context -> context.logWarning(LOG));
+        }
         sessions.withSessionLock(sessionId, () -> {
             sessions.completeDeliveryRetry(sessionId, deliveryId, sent, retryable,
-                    deliveryId.startsWith("dlv_") ? errorCode(sessionId, deliveryId) : "DELIVERY_FAILED");
+                    deliveryId.startsWith("dlv_") ? code : "DELIVERY_FAILED");
             return null;
         });
     }

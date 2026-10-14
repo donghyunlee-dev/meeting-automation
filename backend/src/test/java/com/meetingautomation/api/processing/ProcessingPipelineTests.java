@@ -192,7 +192,8 @@ class ProcessingPipelineTests {
         assertThat(failed.speakers()).isEmpty();
         assertThat(failed.transcript()).isEmpty();
         String logs = loggedContent(appender);
-        assertThat(logs).contains(SESSION_ID, TRACE_ID, "DIARIZATION", "DIARIZATION_INVALID_RESULT");
+        assertThat(logs).contains(SESSION_ID, TRACE_ID, "DIARIZATION", "DIARIZATION_INVALID_RESULT",
+                "PROCESSING_FAILURE", "occurredAt", "safeMessage");
         assertThat(logs).doesNotContain("private provider transcript response", "provider-speaker", "secret-key");
         verify(minutesProvider, never()).generateMinutes(any());
     }

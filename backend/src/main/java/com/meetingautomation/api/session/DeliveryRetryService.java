@@ -1,6 +1,7 @@
 package com.meetingautomation.api.session;
 
 import com.meetingautomation.api.error.ApiValidationException;
+import com.meetingautomation.api.error.FailureContext;
 import java.util.concurrent.Executor;
 import java.util.regex.Pattern;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -23,6 +24,10 @@ final class DeliveryRetryService {
     }
 
     DeliveryRetryResponse retry(String sessionId, String deliveryId, String keyHeader) {
+        return retry(sessionId, deliveryId, keyHeader, null);
+    }
+
+    DeliveryRetryResponse retry(String sessionId, String deliveryId, String keyHeader, String traceId) {
         String key = normalizeKey(keyHeader);
         if (sessionId == null || !SESSION_ID.matcher(sessionId).matches())
             throw new ApiValidationException("sessionId");
@@ -33,7 +38,8 @@ final class DeliveryRetryService {
                     sessions.acceptDeliveryRetry(sessionId, deliveryId, key);
             if (!accepted.newlyAccepted()) return accepted.response();
             try {
-                executor.execute(() -> runner.run(sessionId, deliveryId));
+                String safeTraceId = FailureContext.correlationId(traceId);
+                executor.execute(() -> runner.run(sessionId, deliveryId, safeTraceId));
                 return accepted.response();
             } catch (RuntimeException rejected) {
                 sessions.rollbackDeliveryRetry(sessionId, deliveryId, key, accepted);

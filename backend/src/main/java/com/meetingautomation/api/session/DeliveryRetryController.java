@@ -20,7 +20,9 @@ public final class DeliveryRetryController {
     @PostMapping
     public ResponseEntity<DeliveryRetryResponse> retry(@PathVariable String sessionId,
             @PathVariable String deliveryId,
-            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
-        return ResponseEntity.status(HttpStatus.ACCEPTED).body(service.retry(sessionId, deliveryId, idempotencyKey));
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+            @RequestHeader(value = "X-Request-Id", required = false) String traceId) {
+        return ResponseEntity.status(HttpStatus.ACCEPTED)
+                .body(service.retry(sessionId, deliveryId, idempotencyKey, traceId));
     }
 }
