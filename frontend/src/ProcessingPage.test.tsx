@@ -121,6 +121,8 @@ describe('ProcessingPage failure recovery', () => {
     fireEvent.click(await screen.findByRole('button', { name: '오디오 다운로드 준비' }));
     const link = await screen.findByRole('link', { name: '원본 오디오 다운로드' });
     expect(link.getAttribute('href')).toContain('/audio/download');
+    expect(link.getAttribute('target')).toBe('_blank');
+    expect(link.getAttribute('rel')).toContain('noopener');
     fireEvent.click(link);
     expect(fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(0);
     fireEvent.focus(window);
@@ -130,6 +132,28 @@ describe('ProcessingPage failure recovery', () => {
     expect(await screen.findByRole('heading', { name: '실패 기록을 저장했습니다' })).toBeTruthy();
     const post = fetchMock.mock.calls.find(([, init]) => init?.method === 'POST');
     expect(JSON.parse(String(post?.[1]?.body))).toEqual({ audioDisposition: 'DOWNLOADED' });
+  });
+
+  it('does not confirm an audio download when the refreshed API-010 removes DOWNLOAD_AUDIO', async () => {
+    let statusReads = 0;
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === 'POST') return new Response('', { status: 202 });
+      statusReads += 1;
+      const actions = statusReads <= 2 ? ['DOWNLOAD_AUDIO', 'FINALIZE_PROCESSING_FAILURE'] : ['FINALIZE_PROCESSING_FAILURE'];
+      const body = apiSnapshot('PROCESSING_FAILED', actions);
+      if (statusReads > 2) body.data.processing.audioAvailable = false;
+      return new Response(JSON.stringify(body), { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderPage();
+    fireEvent.click((await screen.findAllByRole('button'))[0]);
+    await waitFor(() => expect(document.querySelector('a[download]')).not.toBeNull());
+    const link = document.querySelector<HTMLAnchorElement>('a[download]')!;
+    fireEvent.click(link);
+    fireEvent.focus(window);
+    await waitFor(() => expect(screen.getAllByRole('alert').length).toBeGreaterThan(1));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(0);
   });
 
   it('does not offer recovery after the Session disappears', async () => {

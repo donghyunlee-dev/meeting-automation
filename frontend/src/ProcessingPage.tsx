@@ -33,6 +33,7 @@ export function ProcessingPage() {
   const downloadDialogRef = useRef<HTMLElement | null>(null);
   const returnFocusRef = useRef<HTMLElement | null>(null);
   const downloadLinkRef = useRef<HTMLAnchorElement | null>(null);
+  const reconcilingDownloadRef = useRef(false);
 
   useEffect(() => { snapshotRef.current = snapshot; }, [snapshot]);
 
@@ -65,8 +66,26 @@ export function ProcessingPage() {
     poller.start();
     const onVisibilityChange = () => {
       if (document.visibilityState !== 'visible') return;
-      if (sessionStorage.getItem(DOWNLOAD_RETURN_KEY) === sessionId) { sessionStorage.removeItem(DOWNLOAD_RETURN_KEY); returnFocusRef.current = downloadLinkRef.current; setConfirmDownload(true); }
-      if (snapshotRef.current?.status === 'PROCESSING_FAILED') void refresh(); else poller.refreshNow();
+      if (sessionStorage.getItem(DOWNLOAD_RETURN_KEY) === sessionId) {
+        sessionStorage.removeItem(DOWNLOAD_RETURN_KEY);
+        returnFocusRef.current = downloadLinkRef.current;
+        setConfirmDownload(false);
+        reconcilingDownloadRef.current = true;
+        setBusy(true);
+        setActionError('');
+        void getProcessingStatus(sessionId).then((latest) => {
+          applySnapshot(latest);
+          if (latest.status === 'PROCESSING_FAILED' && latest.processing.audioAvailable === true && latest.allowedActions.includes('DOWNLOAD_AUDIO')) {
+            setConfirmDownload(true);
+          } else {
+            setActionError('\uC624\uB514\uC624\uB97C \uC0AC\uC6A9\uD560 \uC218 \uC5C6\uAC70\uB098 \uBCF4\uAD00 \uAE30\uD55C\uC774 \uC9C0\uB0AC\uC2B5\uB2C8\uB2E4. \uCD5C\uC2E0 \uC0C1\uD0DC\uB97C \uD655\uC778\uD574 \uC8FC\uC138\uC694.');
+          }
+        }).catch(() => {
+          setFailure('network');
+          setActionError('\uC624\uB514\uC624 \uC0C1\uD0DC\uB97C \uD655\uC778\uD558\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4. \uC5F0\uACB0\uC744 \uD655\uC778\uD558\uACE0 \uB2E4\uC2DC \uD655\uC778\uD574 \uC8FC\uC138\uC694.');
+        }).finally(() => { reconcilingDownloadRef.current = false; setBusy(false); });
+      } else if (reconcilingDownloadRef.current) return;
+      else if (snapshotRef.current?.status === 'PROCESSING_FAILED') void refresh(); else poller.refreshNow();
     };
     document.addEventListener('visibilitychange', onVisibilityChange);
     window.addEventListener('focus', onVisibilityChange);
@@ -166,7 +185,9 @@ export function ProcessingPage() {
         <div className="processing-recovery-actions" aria-busy={busy}>
           {allowed('RETRY_PROCESSING') && <button className="button button-primary" disabled={busy} onClick={() => void mutate('retry')}>{busy ? '요청 중…' : '다시 변환'}</button>}
           {allowed('DOWNLOAD_AUDIO') && !downloadReady && <button className="button button-secondary" disabled={busy} onClick={() => void checkDownloadAvailability()}>오디오 다운로드 준비</button>}
-          {allowed('DOWNLOAD_AUDIO') && downloadReady && <a ref={downloadLinkRef} className="button button-secondary" href={audioDownloadUrl(sessionId)} download onClick={() => sessionStorage.setItem(DOWNLOAD_RETURN_KEY, sessionId)}>원본 오디오 다운로드</a>}
+          {allowed('DOWNLOAD_AUDIO') && downloadReady && <a ref={downloadLinkRef} className="button button-secondary" href={audioDownloadUrl(sessionId)} download target="_blank" rel="noopener" onClick={() => {
+            sessionStorage.setItem(DOWNLOAD_RETURN_KEY, sessionId);
+          }}>원본 오디오 다운로드</a>}
           {allowed('FINALIZE_PROCESSING_FAILURE') && <button className="button button-secondary" disabled={busy} onClick={(event) => { returnFocusRef.current = event.currentTarget; setConfirmDiscard(true); }}>오디오 없이 실패 마무리</button>}
         </div>
         {actionError && <p role="alert">{actionError}</p>}
