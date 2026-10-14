@@ -1,6 +1,7 @@
 package com.meetingautomation.api.session;
 
 import com.meetingautomation.api.audio.AudioSessionNotFoundException;
+import com.meetingautomation.api.error.FailureContext;
 import com.meetingautomation.api.error.ApiValidationException;
 import com.meetingautomation.document.DocumentConnectionGate;
 import com.meetingautomation.document.DocumentProviderResolver;
@@ -24,6 +25,10 @@ final class PublishService {
     }
 
     PublishResponse publish(String sessionId, String ifMatch, String keyHeader, JsonNode body) {
+        return publish(sessionId, ifMatch, keyHeader, body, null);
+    }
+
+    PublishResponse publish(String sessionId, String ifMatch, String keyHeader, JsonNode body, String traceId) {
         PublishRequest request = PublishRequest.parse(body);
         int expected = parseVersion(ifMatch);
         String key = normalizeKey(keyHeader);
@@ -46,7 +51,8 @@ final class PublishService {
                 MeetingSessionStore.PublishAcceptance accepted = sessions.acceptPublish(sessionId, expected, key,
                         fingerprint, request.emailRecipientParticipantIds(), request.notificationEnabled());
                 committed = accepted.newlyAccepted();
-                queue.enqueue(new PublishJob(UUID.randomUUID().toString(), accepted.session(), connection, lease));
+                queue.enqueue(new PublishJob(UUID.randomUUID().toString(), accepted.session(), connection, lease,
+                        FailureContext.correlationId(traceId)));
                 return accepted.response();
             } catch (RuntimeException rejected) {
                 lease.close();

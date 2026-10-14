@@ -1,6 +1,7 @@
 package com.meetingautomation.api.processing;
 
 import com.meetingautomation.api.audio.AudioAssemblyStorage;
+import com.meetingautomation.api.error.FailureContext;
 import com.meetingautomation.api.session.MeetingSession;
 import com.meetingautomation.api.session.MeetingSessionStore;
 import com.meetingautomation.api.session.ProcessingFailure;
@@ -164,14 +165,19 @@ public class ProcessingPipeline {
         ProcessingFailure failure = new ProcessingFailure(stage, safeErrorCode, retryable);
         sessionStore.failProcessing(sessionId, failure.stage(), lastCompletedProgress,
                 failure.errorCode(), failure.retryable());
-        LOGGER.atWarn()
-                .addKeyValue("sessionId", sessionId)
-                .addKeyValue("traceId", traceId)
-                .addKeyValue("stage", stage)
-                .addKeyValue("durationMs", elapsedMillis(stageStartedAt))
-                .addKeyValue("errorCode", safeErrorCode)
-                .addKeyValue("retryable", retryable)
-                .log("Processing stage failed.");
+        FailureContext context = FailureContext.from(sessionId, stage, traceId, safeErrorCode, retryable,
+                java.time.Instant.now()).orElse(null);
+        if (context != null) {
+            context.logWarning(LOGGER);
+        } else {
+            LOGGER.atWarn()
+                    .addKeyValue("sessionId", sessionId)
+                    .addKeyValue("traceId", FailureContext.correlationId(traceId))
+                    .addKeyValue("stage", stage)
+                    .addKeyValue("errorCode", safeErrorCode)
+                    .addKeyValue("retryable", retryable)
+                    .log("Processing failed with safe fallback.");
+        }
     }
 
     private static void validateResult(TranscriptResult result, long meetingDurationMs) {

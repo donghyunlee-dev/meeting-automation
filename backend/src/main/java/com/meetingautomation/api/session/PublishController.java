@@ -19,7 +19,8 @@ final class PublishController {
     ResponseEntity<PublishResponse> publish(@PathVariable String sessionId,
             @RequestHeader(value = "If-Match", required = false) String ifMatch,
             @RequestHeader(value = "Idempotency-Key", required = false) String key,
+            @RequestHeader(value = "X-Request-Id", required = false) String traceId,
             @RequestBody JsonNode body) {
-        return ResponseEntity.accepted().body(service.publish(sessionId, ifMatch, key, body));
+        return ResponseEntity.accepted().body(service.publish(sessionId, ifMatch, key, body, traceId));
     }
 }

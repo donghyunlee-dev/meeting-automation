@@ -5,7 +5,6 @@ import jakarta.validation.ConstraintViolation;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 import com.meetingautomation.api.audio.AudioChunkConflictException;
 import com.meetingautomation.api.audio.AudioChunkInvalidException;
 import com.meetingautomation.api.audio.AudioSessionNotFoundException;
@@ -371,11 +370,7 @@ public class ApiExceptionHandler {
     }
 
     private static String traceId(HttpServletRequest request) {
-        String requestId = request.getHeader(REQUEST_ID_HEADER);
-        if (requestId != null && !requestId.isBlank()) {
-            return requestId;
-        }
-        return "tr_" + UUID.randomUUID();
+        return FailureContext.correlationId(request.getHeader(REQUEST_ID_HEADER));
     }
 
     private record InvalidField(String field, String code) {
