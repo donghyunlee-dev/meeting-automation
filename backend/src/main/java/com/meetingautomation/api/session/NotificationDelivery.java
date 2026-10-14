@@ -14,6 +14,10 @@ public record NotificationDelivery(String deliveryId, String status, int attempt
         return new NotificationDelivery(deliveryId, "SENDING", attemptCount + 1, false, attemptedAt, null);
     }
 
+    public NotificationDelivery retryPending() {
+        return new NotificationDelivery(deliveryId, "PENDING", attemptCount, false, lastAttemptAt, null);
+    }
+
     public NotificationDelivery sent() {
         return new NotificationDelivery(deliveryId, "SENT", attemptCount, false, lastAttemptAt, null);
     }

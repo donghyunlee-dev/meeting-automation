@@ -27,6 +27,7 @@ public final class MeetingSessionStore {
     private final Map<String, AcceptedPublish> acceptedPublishes = new java.util.HashMap<>();
     private final Map<String, PublishSnapshot> publishSnapshots = new ConcurrentHashMap<>();
     private final Map<String, PublishPreAcceptance> publishPreAcceptance = new ConcurrentHashMap<>();
+    private final Map<DeliveryRetryKey, DeliveryRetryAcceptance> acceptedDeliveryRetries = new java.util.HashMap<>();
     private final ReentrantLock[] sessionLockStripes = createSessionLockStripes();
 
     public <T> T withSessionLock(String sessionId, Supplier<T> operation) {
@@ -79,6 +80,7 @@ public final class MeetingSessionStore {
                 acceptedReviewConfirmations.entrySet().removeIf(entry ->
                         entry.getValue().fingerprint().sessionId().equals(sessionId));
                 acceptedPublishes.entrySet().removeIf(entry -> entry.getValue().fingerprint().sessionId().equals(sessionId));
+                acceptedDeliveryRetries.entrySet().removeIf(entry -> entry.getKey().sessionId().equals(sessionId));
                 publishSnapshots.remove(sessionId);
                 publishPreAcceptance.remove(sessionId);
             }
@@ -251,6 +253,119 @@ public final class MeetingSessionStore {
         advancePublishVersion(sessionId);
         return sending;
     }
+
+    public synchronized DeliveryRetryAcceptance acceptDeliveryRetry(String sessionId, String deliveryId, String key) {
+        DeliveryRetryKey retryKey = new DeliveryRetryKey(sessionId, key);
+        DeliveryRetryAcceptance accepted = acceptedDeliveryRetries.get(retryKey);
+        if (accepted != null) {
+            if (!accepted.deliveryId().equals(deliveryId))
+                throw new com.meetingautomation.api.idempotency.IdempotencyKeyConflictException();
+            return new DeliveryRetryAcceptance(accepted.deliveryId(), accepted.response(), accepted.before(),
+                    accepted.beforeSession(), false);
+        }
+        if (!sessions.containsKey(sessionId)) throw new com.meetingautomation.api.audio.AudioSessionNotFoundException();
+        PublishSnapshot prior = publishSnapshots.get(sessionId);
+        DeliveryView status = findDeliveryStatus(prior, deliveryId);
+        if (status == null) throw new DeliveryRetryException(DeliveryRetryException.Reason.NOT_FOUND);
+        if ("PENDING".equals(status.status()) || "SENDING".equals(status.status()))
+            throw new DeliveryRetryException(DeliveryRetryException.Reason.IN_PROGRESS);
+        if (!"FAILED".equals(status.status()) || !status.retryable())
+            throw new DeliveryRetryException(DeliveryRetryException.Reason.NOT_RETRYABLE);
+        PublishSnapshot pending = replaceDelivery(prior, deliveryId, retryPending(prior, deliveryId));
+        publishSnapshots.put(sessionId, pending);
+        advancePublishVersion(sessionId);
+        DeliveryRetryAcceptance result = new DeliveryRetryAcceptance(deliveryId,
+                new DeliveryRetryResponse(new DeliveryRetryResponse.Data(deliveryId, "PENDING")), prior,
+                sessions.get(sessionId), true);
+        acceptedDeliveryRetries.put(retryKey, result);
+        return result;
+    }
+
+    public synchronized boolean beginDeliveryRetry(String sessionId, String deliveryId) {
+        PublishSnapshot prior = publishSnapshots.get(sessionId);
+        if (prior == null || findDeliveryStatus(prior, deliveryId) == null) return false;
+        DeliveryView status = findDeliveryStatus(prior, deliveryId);
+        if (!"PENDING".equals(status.status())) return false;
+        PublishSnapshot sending = replaceDelivery(prior, deliveryId, startAttempt(prior, deliveryId));
+        publishSnapshots.put(sessionId, sending);
+        advancePublishVersion(sessionId);
+        return true;
+    }
+
+    public synchronized void completeDeliveryRetry(String sessionId, String deliveryId, boolean sent,
+            boolean retryable, String errorCode) {
+        PublishSnapshot prior = publishSnapshots.get(sessionId);
+        if (prior == null) return;
+        DeliveryView current = findDeliveryStatus(prior, deliveryId);
+        if (current == null || !("SENDING".equals(current.status()) || "PENDING".equals(current.status()))) return;
+        PublishSnapshot completed = replaceDelivery(prior, deliveryId,
+                finishAttempt(prior, deliveryId, sent, retryable, errorCode));
+        if (completed.equals(prior)) return;
+        publishSnapshots.put(sessionId, completed);
+        advancePublishVersion(sessionId);
+    }
+
+    public synchronized void rollbackDeliveryRetry(String sessionId, String deliveryId, String key,
+            DeliveryRetryAcceptance accepted) {
+        DeliveryRetryKey retryKey = new DeliveryRetryKey(sessionId, key);
+        if (acceptedDeliveryRetries.get(retryKey) != accepted) return;
+        acceptedDeliveryRetries.remove(retryKey);
+        PublishSnapshot current = publishSnapshots.get(sessionId);
+        if (current == null) return;
+        publishSnapshots.put(sessionId, accepted.before());
+        MeetingSession session = sessions.get(sessionId);
+        MeetingSession before = accepted.beforeSession();
+        if (session != null && before != null) sessions.put(sessionId, before);
+    }
+
+    private static DeliveryView findDeliveryStatus(PublishSnapshot snapshot, String deliveryId) {
+        if (snapshot == null || deliveryId == null) return null;
+        for (EmailDelivery delivery : snapshot.deliveries()) if (delivery.deliveryId().equals(deliveryId))
+            return new DeliveryView(delivery.status(), delivery.retryable());
+        NotificationDelivery notification = snapshot.notificationDelivery();
+        if (notification != null && notification.deliveryId().equals(deliveryId))
+            return new DeliveryView(notification.status(), notification.retryable());
+        return null;
+    }
+
+    private static DeliveryChange retryPending(PublishSnapshot snapshot, String deliveryId) {
+        for (EmailDelivery delivery : snapshot.deliveries())
+            if (delivery.deliveryId().equals(deliveryId)) return new DeliveryChange(delivery.retryPending(), null);
+        NotificationDelivery notification = snapshot.notificationDelivery();
+        return new DeliveryChange(null, notification.retryPending());
+    }
+
+    private static DeliveryChange startAttempt(PublishSnapshot snapshot, String deliveryId) {
+        java.time.Instant attemptedAt = java.time.Instant.now();
+        for (EmailDelivery delivery : snapshot.deliveries())
+            if (delivery.deliveryId().equals(deliveryId)) return new DeliveryChange(delivery.sending(attemptedAt), null);
+        return new DeliveryChange(null, snapshot.notificationDelivery().sending(attemptedAt));
+    }
+
+    private static DeliveryChange finishAttempt(PublishSnapshot snapshot, String deliveryId, boolean sent,
+            boolean retryable, String errorCode) {
+        for (EmailDelivery delivery : snapshot.deliveries()) if (delivery.deliveryId().equals(deliveryId))
+            return new DeliveryChange(sent ? delivery.sent() : delivery.failed(retryable, errorCode), null);
+        NotificationDelivery notification = snapshot.notificationDelivery();
+        return new DeliveryChange(null, sent ? notification.sent() : notification.failed(retryable, errorCode));
+    }
+
+    private static PublishSnapshot replaceDelivery(PublishSnapshot snapshot, String deliveryId,
+            DeliveryChange replacement) {
+        java.util.List<EmailDelivery> deliveries = snapshot.deliveries().stream()
+                .map(delivery -> delivery.deliveryId().equals(deliveryId) && replacement.email() != null
+                        ? replacement.email() : delivery).toList();
+        NotificationDelivery notification = replacement.notification() == null
+                ? snapshot.notificationDelivery() : replacement.notification();
+        return new PublishSnapshot(snapshot.recipients(), snapshot.notificationEnabled(), snapshot.document(),
+                snapshot.errorCode(), deliveries, notification);
+    }
+
+    private record DeliveryRetryKey(String sessionId, String key) { }
+    private record DeliveryChange(EmailDelivery email, NotificationDelivery notification) { }
+    public record DeliveryRetryAcceptance(String deliveryId, DeliveryRetryResponse response, PublishSnapshot before,
+            MeetingSession beforeSession, boolean newlyAccepted) { }
+    private record DeliveryView(String status, boolean retryable) { }
 
     public synchronized void completeNotificationDelivery(String sessionId, NotificationDelivery delivery) {
         PublishSnapshot prior = publishSnapshots.get(sessionId);

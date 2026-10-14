@@ -30,7 +30,7 @@ Retry endpoint는 기존 Delivery 상태를 재사용하고 중복 Provider 부�
 5. API-016 response/error envelope 및 API-010 조회를 연결한다. 결과: 202는 PENDING 접수만 뜻하고 현재 상태는 API-010에서 읽는다.
 6. Pre-send correctable rejection, explicit 429와 ambiguous send 5xx/timeout의 `retryable` 분류 테스트를 Provider contract에 맞춘다.
 7. privacy/secret redaction 및 process-memory 경계를 검증한다. 결과: 주소, OAuth/Slack secret, 원문 오류가 Delivery에 남지 않는다.
-8. Backend Java 21/Gradle 검증 명령과 결과를 Issue #50에 기록한다. 저장소 구현 경로에서 실제 명령을 확인하고 임의 명령을 만들지 않는다.
+8. Java 25와 Gradle Wrapper로 변경 코드 및 직접 영향 범위의 JUnit 테스트만 실행하고, 정확한 `./gradlew.bat test --tests <changed test FQCN> [--tests <affected caller test FQCN> ...]` 명령과 결과를 Issue #50에 기록한다. 전체 Backend 테스트 suite는 실행하지 않는다.
 
 ## 오류 및 상태 응답
 
@@ -43,3 +43,8 @@ Retry endpoint는 기존 Delivery 상태를 재사용하고 중복 Provider 부�
 ## 검증 접근
 
 JUnit 5에서 고정 clock/동시 요청 barrier와 fake Email/Notification Provider를 사용해 delivery 단위 호출과 상태 전이를 확인한다. Controller test에서 공통 `{data}`/`{error}` envelope와 API-010 결과를 검사한다. 실제 Gmail/Slack 전송은 자동화 테스트에 포함하지 않는다.
+
+## 자동화 검증 결과
+
+- Java 25, 작업 디렉터리 `backend`: `./gradlew.bat test --tests com.meetingautomation.MeetingSessionPublishApiTests --tests com.meetingautomation.MeetingSessionStatusApiTests` — 총 26건 통과(클래스별 20건/6건), 실패 0건.
+- `git diff --check` — 통과. 검증한 코드 head: `487ad173ee30a25f4248e505fdbfbfef32781cff`.

@@ -16,6 +16,11 @@ public record EmailDelivery(String deliveryId, String channel, String recipientP
                 attemptCount + 1, false, attemptedAt, null);
     }
 
+    public EmailDelivery retryPending() {
+        return new EmailDelivery(deliveryId, channel, recipientParticipantId, "PENDING",
+                attemptCount, false, lastAttemptAt, null);
+    }
+
     public EmailDelivery sent() {
         return new EmailDelivery(deliveryId, channel, recipientParticipantId, "SENT",
                 attemptCount, false, lastAttemptAt, null);
