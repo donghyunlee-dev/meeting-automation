@@ -13,6 +13,7 @@ import { NewMeetingPage, type NewMeetingPayload } from './NewMeetingPage';
 import { createMeetingSession, type MeetingSession, type MeetingSessionAttempt } from './newMeetingApi';
 import { RecordingPage, type RecordingViewState } from './RecordingPage';
 import { DocumentSetupWizard } from './DocumentSetupWizard';
+import { SharePage } from './SharePage';
 import { getSetupSnapshot } from './documentSetupApi';
 import { browserMediaAdapter } from './browserMediaAdapter';
 import { RecordingController, type MediaRecorderAdapter, type RecordingSnapshot } from './recordingController';
@@ -602,6 +603,7 @@ export function App({ onNewMeetingSubmit = () => undefined, onMinutesSave, minut
         <Route path="/meetings/:sessionId/recording" element={<MeetingRecordingRoute session={createdSession} setState={setRecordingState} mediaAdapter={mediaAdapter} />} />
         <Route path="/meetings/:sessionId/processing" element={<ProcessingPage />} />
         <Route path="/meetings/:sessionId/review" element={<ReviewSpeakerPage drafts={speakerDrafts} onInitialize={initializeSpeakerDraft} onChange={updateSpeakerDraft} onCommit={commitSpeakerMappings} onMinutesSave={onMinutesSave} minutesSaveState={minutesSaveState} />} />
+        <Route path="/meetings/:sessionId/share" element={<SharePage />} />
         <Route path="/settings/participants" element={<SetupGate><ParticipantsPage /></SetupGate>} />
         <Route path="*" element={<FutureRouteNotice />} />
       </Routes>

@@ -53,6 +53,7 @@ export function ReviewSpeakerPage({ drafts, onInitialize, onChange, onCommit, on
   const latestReview = useRef<{ sessionId: string; version: number } | null>(null);
   const serverBaseBySession = useRef(new Map<string, { version: number; minutes: StructuredMinutes | null }>());
   const minutesDraftBySession = useRef(new Map<string, StructuredMinutes | null>());
+  const restoredRouteState = useRef<string | null>(null);
   const currentDraft = drafts[sessionId] ?? {};
   const sessionSaveState = saveState.sessionId === sessionId ? saveState : { sessionId, saving: false, message: '', recoveryAttempt: null };
   const saving = sessionSaveState.saving;
@@ -292,6 +293,24 @@ export function ReviewSpeakerPage({ drafts, onInitialize, onChange, onCommit, on
     minutesDraftBySession.current.set(sessionId, draft);
     setMinutesDraftStore((current) => ({ ...current, drafts: { ...current.drafts, [sessionId]: draft } }));
   }, [sessionId]);
+
+  useEffect(() => {
+    const state = location.state as { minutesDraft?: StructuredMinutes } | null;
+    if (currentReview?.sessionId !== sessionId || !state?.minutesDraft || restoredRouteState.current === location.key) return;
+    restoredRouteState.current = location.key;
+    updateMinutesDraft(state.minutesDraft);
+  }, [currentReview, location.key, location.state, sessionId, updateMinutesDraft]);
+
+  useEffect(() => {
+    if (!location.hash || currentReview?.sessionId !== sessionId) return;
+    const targetId = decodeURIComponent(location.hash.slice(1));
+    requestAnimationFrame(() => {
+      const target = document.getElementById(targetId);
+      if (!target) return;
+      target.scrollIntoView({ block: 'center' });
+      if (target instanceof HTMLElement) target.focus({ preventScroll: true });
+    });
+  }, [currentReview, location.hash, sessionId]);
 
   function sameMinutes(left: StructuredMinutes | null | undefined, right: StructuredMinutes | null | undefined): boolean {
     return JSON.stringify(left) === JSON.stringify(right);
@@ -603,6 +622,13 @@ export function ReviewSpeakerPage({ drafts, onInitialize, onChange, onCommit, on
       </section>}
 
       {currentReview && <>
+        <div className="review-save-controls">
+          <Link className="button button-primary" to={`/meetings/${encodeURIComponent(sessionId)}/share`} state={{
+            review: currentReview,
+            speakerDrafts: currentDraft,
+            minutesDraft: currentMinutes,
+          }}>저장하고 공유</Link>
+        </div>
         <ReviewMinutesEditor
           key={sessionId}
           sessionId={sessionId}

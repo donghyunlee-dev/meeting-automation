@@ -1,7 +1,8 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { MemoryRouter } from 'react-router';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
 import { App } from './App';
+import { DocumentSetupWizard } from './DocumentSetupWizard';
 
 function response(data: unknown, status = 200) {
   return new Response(JSON.stringify({ data }), { status, headers: { 'Content-Type': 'application/json' } });
@@ -17,7 +18,27 @@ function operation(operationId: string, status: string) {
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
+function RouteState() {
+  const location = useLocation();
+  return <output data-testid="route-state">{JSON.stringify(location.state)}</output>;
+}
+
 describe('document setup wizard', () => {
+  it('returns from Settings to the saved Share route state', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response({ version: 5, status: 'READY', active: { provider: 'NOTION', connectionVersion: 2, rootUrl: 'https://notion.example' }, draft: null, operation: null, canCreateMeeting: true })));
+    const returnState = { emailRecipientParticipantIds: ['participant-2'], notificationEnabled: false };
+    render(<MemoryRouter initialEntries={[{ pathname: '/settings', state: { returnTo: '/meetings/session-1/share', returnState } }]}>
+      <Routes>
+        <Route path="/settings" element={<><DocumentSetupWizard settings /><RouteState /></>} />
+        <Route path="/meetings/:sessionId/share" element={<RouteState />} />
+      </Routes>
+    </MemoryRouter>);
+
+    fireEvent.click(await screen.findByRole('link', { name: 'Back to sharing' }));
+
+    expect(screen.getByTestId('route-state').textContent).toBe(JSON.stringify(returnState));
+  });
+
   it('routes an unconfigured meeting entry to setup without requesting meeting data', async () => {
     const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(response({ version: 0, status: 'UNCONFIGURED', active: null, draft: null, operation: null, canCreateMeeting: false })));
     vi.stubGlobal('fetch', fetchMock);
