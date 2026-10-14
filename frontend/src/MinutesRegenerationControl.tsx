@@ -25,6 +25,7 @@ export function MinutesRegenerationControl({ session, blocked = false, prepareSn
   const [intent, setIntent] = useState<Intent | null>(null);
   const [progress, setProgress] = useState<number | null>(null);
   const opener = useRef<HTMLButtonElement>(null);
+  const templateSelector = useRef<HTMLSelectElement>(null);
   const confirmButton = useRef<HTMLButtonElement>(null);
   const resultStatus = useRef<HTMLParagraphElement>(null);
   const poller = useRef<ProcessingPoller | null>(null);
@@ -63,7 +64,7 @@ export function MinutesRegenerationControl({ session, blocked = false, prepareSn
   function closeDialog() {
     setState('idle');
     setSelectedTemplateId(session.minutes?.templateId ?? '');
-    requestAnimationFrame(() => opener.current?.focus());
+    requestAnimationFrame(() => templateSelector.current?.focus());
   }
 
   function handleDialogKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
@@ -227,7 +228,7 @@ export function MinutesRegenerationControl({ session, blocked = false, prepareSn
       }}>Template 목록 다시 시도</button></div>}
     {templates.status === 'ready' && <>
       <label htmlFor="minutes-regeneration-template">새 Template</label>
-      <select id="minutes-regeneration-template" value={selectedTemplateId}
+      <select ref={templateSelector} id="minutes-regeneration-template" value={selectedTemplateId}
         onChange={(event) => setSelectedTemplateId(event.target.value)} disabled={busy || blocked}>
         {currentTemplateId && !templates.items?.some(({ id }) => id === currentTemplateId)
           && <option value={currentTemplateId}>현재 Template ({currentTemplateId}) — 목록에서 사용할 수 없음</option>}

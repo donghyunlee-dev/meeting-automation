@@ -712,6 +712,7 @@ describe('Review minutes and transcript', () => {
     const dialog = await screen.findByRole('dialog', { name: 'Minutes를 재생성할까요?' });
     fireEvent.keyDown(dialog, { key: 'Escape' });
     expect(screen.queryByRole('dialog')).toBeNull();
+    await waitFor(() => expect(document.activeElement).toBe(selector));
     expect((screen.getByLabelText('새 Template') as HTMLSelectElement).value).toBe('weekly');
     expect(fetchMock.mock.calls.some(([input, init]) => String(input).endsWith('/minutes/regenerate') || init?.method === 'PUT')).toBe(false);
 
