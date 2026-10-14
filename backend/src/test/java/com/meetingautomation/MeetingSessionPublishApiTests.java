@@ -36,6 +36,9 @@ import com.meetingautomation.email.RecipientDeliveryResult;
 import com.meetingautomation.notification.DeliveryResult;
 import com.meetingautomation.notification.MeetingPublishedCommand;
 import com.meetingautomation.notification.slack.SlackNotificationAdapter;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import java.time.LocalDate;
 import java.time.Instant;
 import java.util.List;
@@ -47,6 +50,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -355,6 +359,35 @@ class MeetingSessionPublishApiTests {
                 .andExpect(jsonPath("$.data.deliveries[0].retryable").value(true))
                 .andExpect(jsonPath("$.data.deliveries[0].attemptCount").value(1));
         verify(emailProvider, org.mockito.Mockito.times(1)).sendMeetingEmail(any());
+    }
+
+    @Test
+    void initialEmailPreflightFailureEmitsSafeCorrelatedIncidentLog() throws Exception {
+        when(providerFactory.create(any())).thenReturn(new FakePublishProvider(false, true));
+        Logger logger = (Logger) LoggerFactory.getLogger("com.meetingautomation.api.session.PublishJobRunner");
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+
+        mockMvc.perform(publish(SESSION_ID, "7", "initial-email-preflight-failure",
+                "{\"emailRecipientParticipantIds\":[\"pt_ada\"],\"notificationEnabled\":false}")
+                .header("X-Request-Id", "publish-trace-57"))
+                .andExpect(status().isAccepted());
+        workerExecutor.drain();
+
+        mockMvc.perform(get(SESSION_URL, SESSION_ID)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.deliveries[0].status").value("FAILED"))
+                .andExpect(jsonPath("$.data.deliveries[0].retryable").value(true))
+                .andExpect(jsonPath("$.data.deliveries[0].attemptCount").value(0));
+        String logs = appender.list.stream()
+                .map(event -> event.getFormattedMessage() + event.getKeyValuePairs())
+                .reduce("", String::concat);
+        logger.detachAppender(appender);
+        appender.stop();
+
+        assertThat(logs).contains("EMAIL_FAILURE", SESSION_ID, "publish-trace-57", "EMAIL_DELIVERY",
+                "EMAIL_FAILED", "retryable=\"true\"", "occurredAt", "Email delivery failed.")
+                .doesNotContain("ada@example.com", "pt_ada", "private-provider-body", "Notion-Version", "fake-token");
     }
 
     @Test

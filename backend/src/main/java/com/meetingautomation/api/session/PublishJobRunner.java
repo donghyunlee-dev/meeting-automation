@@ -112,7 +112,7 @@ final class PublishJobRunner {
         if (deliveries.isEmpty()) return;
         try {
             if (!(provider instanceof ParticipantListingProvider participantProvider)) {
-                completeFailures(sessionId, deliveries, true);
+                completeFailures(sessionId, deliveries, true, traceId);
                 return;
             }
             var structure = participantProvider.discoverParticipantStructure(job.connection().rootId());
@@ -120,7 +120,7 @@ final class PublishJobRunner {
                     participantProvider.listParticipants(structure.participantsPageId()));
             if (participants.stream().anyMatch(p -> p == null || p.id() == null || p.id().isBlank())
                     || participants.stream().map(Participant::id).distinct().count() != participants.size()) {
-                completeFailures(sessionId, deliveries, true);
+                completeFailures(sessionId, deliveries, true, traceId);
                 return;
             }
             Map<String, Participant> byId = participants.stream().collect(Collectors.toMap(
@@ -187,27 +187,33 @@ final class PublishJobRunner {
                     .map(delivery -> outcomes.getOrDefault(delivery.recipientParticipantId(),
                             delivery.failed(false, "EMAIL_FAILED")))
                     .toList();
-            completed.stream().filter(delivery -> "FAILED".equals(delivery.status())).forEach(delivery ->
-                    FailureContext.from(sessionId, "EMAIL_DELIVERY", traceId, "EMAIL_FAILED", delivery.retryable(),
-                            java.time.Instant.now()).ifPresent(context -> context.logWarning(LOG)));
+            logEmailFailures(sessionId, traceId, completed);
             sessions.withSessionLock(sessionId, () -> {
                 sessions.completeEmailDelivery(sessionId, completed);
                 return null;
             });
         } catch (DocumentProviderException failure) {
-            completeFailures(sessionId, deliveries, failure.retryable());
+            completeFailures(sessionId, deliveries, failure.retryable(), traceId);
         } catch (RuntimeException failure) {
-            completeFailures(sessionId, deliveries, true);
+            completeFailures(sessionId, deliveries, true, traceId);
         }
     }
 
-    private void completeFailures(String sessionId, java.util.List<EmailDelivery> deliveries, boolean retryable) {
+    private void completeFailures(String sessionId, java.util.List<EmailDelivery> deliveries, boolean retryable,
+            String traceId) {
         java.util.List<EmailDelivery> failed = deliveries.stream()
                 .map(delivery -> delivery.failed(retryable, "EMAIL_FAILED")).toList();
+        logEmailFailures(sessionId, traceId, failed);
         sessions.withSessionLock(sessionId, () -> {
             sessions.completeEmailDelivery(sessionId, failed);
             return null;
         });
+    }
+
+    private void logEmailFailures(String sessionId, String traceId, java.util.List<EmailDelivery> deliveries) {
+        deliveries.stream().filter(delivery -> "FAILED".equals(delivery.status())).forEach(delivery ->
+                FailureContext.from(sessionId, "EMAIL_DELIVERY", traceId, "EMAIL_FAILED", delivery.retryable(),
+                        java.time.Instant.now()).ifPresent(context -> context.logWarning(LOG)));
     }
 
     private static TransferRecord toRecord(MeetingSession session) {
