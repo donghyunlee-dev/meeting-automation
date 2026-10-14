@@ -30,6 +30,7 @@ import type { ReviewSpeaker, StructuredMinutes } from './reviewApi';
 import type { MinutesSaveState } from './ReviewMinutesEditor';
 import { HomePage, MeetingsPage } from './MeetingHistory';
 import { MeetingDetailPage } from './MeetingDetailPage';
+import { SettingsPage } from './SettingsPage';
 
 type ViewState = 'loading' | 'ready' | 'error';
 type FormState = { mode: 'create' } | { mode: 'edit'; participant: Participant };
@@ -584,7 +585,7 @@ export function App({ onNewMeetingSubmit = () => undefined, onMinutesSave, minut
       <Routes>
         <Route path="/" element={<SetupGate><HomePage /></SetupGate>} />
         <Route path="/setup/document" element={<DocumentSetupWizard />} />
-        <Route path="/settings" element={<DocumentSetupWizard settings />} />
+        <Route path="/settings" element={<SettingsPage />} />
         <Route path="/settings/document" element={<DocumentSetupWizard settings />} />
         <Route path="/meetings" element={<MeetingsPage />} />
         <Route path="/meetings/new" element={<SetupGate><NewMeetingRoute onCreated={(session) => { setCreatedSession(session); saveRecordingSession(session); setRecordingState('Ready'); }} onSubmitted={onNewMeetingSubmit} /></SetupGate>} />
