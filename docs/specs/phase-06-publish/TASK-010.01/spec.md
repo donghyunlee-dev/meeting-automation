@@ -47,6 +47,7 @@ Content-Type: application/json
 - Speaker는 Transcript의 감지 집합 전체를 뜻한다. 각 `speakers[i].participantId`가 null이 아니고 Session `meeting.participantIds` 안에 있어야 한다. Speaker 수가 0이면 mapping 검사는 통과한다. 동일 Participant가 여러 Speaker에 매핑되는 것은 허용한다.
 - 검증 기준은 회의 생성자가 Meeting Session에 저장한 `participantIds` reference뿐이다. API-014는 외부 Provider를 조회하지 않는다.
 - `minutes`에는 TASK-008.01의 필수 일곱 field `templateId`, `templateVersion`, `summary`, `discussionPoints`, `decisions`, `actionItems`, `followUps`가 있어야 한다. id/version/summary는 문자열, section은 올바른 배열이어야 한다. 불완전/잘못된 persisted 구조는 issue로 반환한다.
+- `minutes.templateId`와 `minutes.templateVersion`은 Session Meeting의 현재 template provenance와 각각 일치해야 한다. API-012가 해당 필드를 변경하지 못하게 하더라도 corrupt/legacy snapshot을 확정하지 않도록 검사하며, 불일치 field마다 `TEMPLATE_MISMATCH` issue를 반환한다.
 - empty summary, 빈 section arrays, 빈 `actionItems`, `ownerParticipantId:null`, `dueDate:null`은 유효하다.
 - discussion/decision/follow-up 항목과 `actionItems[i].task`는 trim 기준 공백이 아니어야 한다. `dueDate`는 null 또는 calendar-valid `YYYY-MM-DD`여야 한다.
 - non-null `ownerParticipantId`는 Session `meeting.participantIds`에 있어야 한다. 외부 Document Provider를 조회하지 않는다.
@@ -76,7 +77,7 @@ Content-Type: application/json
 
 - Issue item은 `{path,code}`이며 입력 값/회의 콘텐츠/Provider 상세는 넣지 않는다.
 - `path`는 API-010 Review DTO root 기준 dot/bracket path로, 사용자 데이터 값 대신 field/index/opaque `speakerId`만 포함한다.
-- 오류 code는 안정적인 enum: `SPEAKER_UNMAPPED`, `PARTICIPANT_OUTSIDE_SESSION_ROSTER`, `REQUIRED`, `INVALID_TYPE`, `BLANK_VALUE`, `INVALID_DATE`.
+- 오류 code는 안정적인 enum: `SPEAKER_UNMAPPED`, `PARTICIPANT_OUTSIDE_SESSION_ROSTER`, `REQUIRED`, `INVALID_TYPE`, `BLANK_VALUE`, `INVALID_DATE`, `TEMPLATE_MISMATCH`.
 - 같은 snapshot이면 오류 목록은 Speaker 순서 → Minutes 필드/배열 순서로 결정적으로 정렬한다. 해당 항목이 비어 있거나 type이 틀려 파생 검증을 수행할 수 없는 경우 중복 issue를 만들지 않고 직접 원인만 반환한다.
 - request/header 문제는 `VALIDATION_FAILED` 400이며 business issue response와 혼합하지 않는다. 422는 최종 오류 목록이므로 일부만 반환하거나 첫 오류에서 멈추지 않는다.
 
