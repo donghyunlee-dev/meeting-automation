@@ -61,6 +61,29 @@ test('SCR-012 settings shell exposes named navigation and PRD-sized primary cont
   expect(addBounds!.height).toBeGreaterThanOrEqual(52);
 });
 
+test('SCR-012 keyboard focus stays visible and follows shell-to-content tab order', async ({ page }) => {
+  const screen = screens.find(({ id }) => id === 'SCR-012');
+  if (!screen) throw new Error('SCR-012 fixture is missing');
+  await visitScreen(page, screen);
+
+  const homeLink = page.getByRole('link', { name: 'Meeting Automation 홈' });
+  const addButton = page.getByRole('button', { name: '새 참석자 추가' });
+  const search = page.getByRole('searchbox', { name: '참석자 검색' });
+  await page.keyboard.press('Tab');
+  await expect(homeLink).toBeFocused();
+  const focusStyle = await homeLink.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return { outlineStyle: style.outlineStyle, outlineWidth: Number.parseFloat(style.outlineWidth) };
+  });
+  expect(focusStyle.outlineStyle).not.toBe('none');
+  expect(focusStyle.outlineWidth).toBeGreaterThanOrEqual(2);
+
+  await page.keyboard.press('Tab');
+  await expect(addButton).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(search).toBeFocused();
+});
+
 test('SCR-004 end confirmation is named, keyboard reachable, scanned, and restores focus on Escape', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.addInitScript((session) => {
@@ -139,4 +162,63 @@ test('SCR-002 participant selection controls stay named and operable by keyboard
   const bounds = await primary.boundingBox();
   expect(bounds).not.toBeNull();
   expect(bounds!.height).toBeGreaterThanOrEqual(52);
+});
+
+test('SCR-002 form validation exposes linked text errors and keeps them keyboard reachable', async ({ page }) => {
+  const screen = screens.find(({ id }) => id === 'SCR-002');
+  if (!screen) throw new Error('SCR-002 fixture is missing');
+  await visitScreen(page, screen);
+
+  const submit = page.getByRole('button', { name: '회의 시작' });
+  await submit.click();
+  const title = page.getByRole('textbox', { name: '회의 제목' });
+  const template = page.getByLabel('Template');
+  const participantPicker = page.getByRole('button', { name: '참석자 추가' });
+  await expect(title).toHaveAttribute('aria-invalid', 'true');
+  await expect(title).toHaveAttribute('aria-describedby', 'meeting-title-error');
+  await expect(page.locator('#meeting-title-error')).toHaveText('회의 제목을 입력해 주세요.');
+  await expect(template).toHaveAttribute('aria-invalid', 'true');
+  await expect(template).toHaveAttribute('aria-describedby', 'meeting-template-error');
+  await expect(page.locator('#meeting-template-error')).toHaveText('Template을 선택해 주세요.');
+  await expect(participantPicker).toHaveAttribute('aria-invalid', 'true');
+  await expect(participantPicker).toHaveAttribute('aria-describedby', 'meeting-participants-error');
+  await expect(page.locator('#meeting-participants-error')).toHaveText('참석자를 한 명 이상 추가해 주세요.');
+
+  await page.keyboard.press('Shift+Tab');
+  await page.keyboard.press('Shift+Tab');
+  await page.keyboard.press('Shift+Tab');
+  await expect(title).toBeFocused();
+  await expect(title).toHaveAttribute('aria-describedby', 'meeting-title-error');
+});
+
+test('SCR-002 async template error is announced and its recovery keeps a keyboard path to the form', async ({ page }) => {
+  const screen = screens.find(({ id }) => id === 'SCR-002');
+  if (!screen) throw new Error('SCR-002 fixture is missing');
+  await visitScreen(page, screen);
+  await page.route('**/api/v1/templates', (route) => route.fulfill({
+    status: 503,
+    json: { error: { code: 'TEMPLATE_SERVICE_UNAVAILABLE' } },
+  }));
+  await page.reload();
+
+  const alert = page.getByRole('alert', { name: 'Template 목록 조회에 실패했습니다.' });
+  await expect(alert).toBeVisible();
+  await expect(alert).toContainText('Template 목록을 불러오지 못했습니다. 다시 시도해 주세요.');
+  const retry = alert.getByRole('button', { name: 'Template 목록 다시 시도' });
+  await retry.focus();
+  await expect(retry).toBeFocused();
+  await page.keyboard.press('Shift+Tab');
+  await expect(page.getByRole('textbox', { name: '회의 제목' })).toBeFocused();
+});
+
+test('SCR-005 processing progress is announced with readable status text', async ({ page }) => {
+  const screen = screens.find(({ id }) => id === 'SCR-005');
+  if (!screen) throw new Error('SCR-005 fixture is missing');
+  await visitScreen(page, screen);
+
+  const currentStatus = page.getByRole('status');
+  await expect(currentStatus).toHaveText('음성 인식 단계 처리 중입니다.');
+  const progress = page.getByRole('progressbar', { name: '처리 진행률' });
+  await expect(progress).toHaveAttribute('value', '55');
+  await expectNoSeriousAxeViolations(page);
 });
