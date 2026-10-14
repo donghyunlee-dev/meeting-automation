@@ -52,8 +52,16 @@ function TranscriptDrawer({ detail, onClose }: { detail: MeetingDetail; onClose:
         first.focus();
       }
     };
+    const onFocusIn = (event: FocusEvent) => {
+      const dialog = dialogRef.current;
+      if (dialog && event.target instanceof Node && !dialog.contains(event.target)) closeRef.current?.focus();
+    };
     document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
+    document.addEventListener('focusin', onFocusIn, true);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      document.removeEventListener('focusin', onFocusIn, true);
+    };
   }, [onClose]);
   const speakerNames = new Map(detail.participants.map(({ id, name }) => [id, name]));
   return (

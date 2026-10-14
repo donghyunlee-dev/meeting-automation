@@ -57,11 +57,13 @@ describe('Meetings filters and detail', () => {
     expect(external.getAttribute('href')).toBe('https://docs.example/meeting');
     expect(external.getAttribute('target')).toBe('_blank');
     expect(external.getAttribute('rel')).toBe('noopener noreferrer');
-    fireEvent.click(screen.getByRole('button', { name: 'Transcript 보기' }));
+    const transcriptTrigger = screen.getByRole('button', { name: 'Transcript 보기' });
+    fireEvent.click(transcriptTrigger);
     expect(await screen.findByRole('dialog', { name: 'Transcript' })).toBeTruthy();
     expect(screen.getByText('Transcript words')).toBeTruthy();
     fireEvent.keyDown(screen.getByRole('dialog', { name: 'Transcript' }), { key: 'Escape' });
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Transcript' })).toBeNull());
+    await waitFor(() => expect(document.activeElement).toBe(transcriptTrigger));
   });
 
   it('contains forward and reverse keyboard focus inside the transcript modal', async () => {
@@ -76,6 +78,7 @@ describe('Meetings filters and detail', () => {
       const closeButton = await screen.findByRole('button', { name: 'Transcript 닫기' });
 
       backgroundButton.focus();
+      expect(document.activeElement).toBe(closeButton);
       expect(fireEvent.keyDown(document, { key: 'Tab' })).toBe(false);
       expect(document.activeElement).toBe(closeButton);
 
