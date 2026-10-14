@@ -19,7 +19,7 @@
 - API-015 coordinator 호출, `notificationEnabled` 검사, Delivery 결과 저장/API-010 반영은 TASK-012.02의 책임이다.
 - API-016 retry는 TASK-013.01이 담당하며 실패한 Delivery만 재시도하고 성공 건은 다시 보내지 않는다.
 
-현재 설계 workspace에는 Backend 소스/build 구조가 없다. 구현 시 Java 21/Gradle 기준과 저장소의 Spring HTTP client 규약을 따른다. Slack SDK/Domain 타입을 공통 Provider Port 밖으로 노출하지 않으며, Slack Incoming Webhook은 JSON HTTP POST이므로 Backend 공통 HTTP client를 사용한다.
+The Backend source and Gradle build are present. Use the repository baseline Java 25 and Windows Gradle Wrapper. Keep Slack SDK types behind the provider port and use the shared HTTP client for the JSON webhook request.
 
 ## 구현 순서
 
@@ -32,7 +32,7 @@
 5. HTTP Adapter가 meeting webhook URL로 POST를 한 번 보내고 status/body/Retry-After를 분류한다. `ok`만 `SENT`가 되며 자동 재시도는 없다.
 6. `validateConnection()`의 설정 및 최근 전송 결과 의미를 구현한다. Health 조회는 POST나 시험용 message를 만들지 않는다.
 7. Secret/Meeting 본문 가림, Admin webhook 분리, API-010 generic `NOTIFICATION` Delivery 연결을 검증한다.
-8. Java 21/Gradle Backend 단위/빌드 명령, 모의 HTTP 검증 및 증거를 기록한다. 실제 Slack channel 확인은 별도 시험용 Webhook으로 수행한다.
+The Backend source and Gradle build are present. Use the repository baseline Java 25 and Windows Gradle Wrapper. Keep Slack SDK types behind the provider port and use the shared HTTP client for the JSON webhook request.
 
 ## 인터페이스 및 불변식
 

@@ -4,7 +4,7 @@
 
 ## 자동화 검증
 
-Backend 구현 시 Java 21/Gradle JUnit 5를 사용하고 Slack HTTP 요청은 모의 endpoint로 격리한다. 실제 Slack 채널에는 자동 메시지를 보내지 않는다. 설계 단계에서는 테스트를 실행하지 않는다. 명령은 Backend wrapper 경로를 확인해 정한다.
+Backend implementation uses Java 25 and the Windows Gradle Wrapper. Isolate Slack HTTP calls behind a mock endpoint. Run only focused tests for changed classes with `test --tests <fully.qualified.TestClass>`; do not run the full Backend suite, clean build, local service, or a separate acceptance pass.
 
 | ID | 준비 및 입력 | 기대 결과 | 증거 |
 |---|---|---|---|
