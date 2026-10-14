@@ -10,21 +10,27 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.meetingautomation.api.session.MeetingSession;
 import com.meetingautomation.api.session.MeetingSessionStore;
 import com.meetingautomation.api.session.MeetingSessionStatusResponse;
+import com.meetingautomation.api.audio.AudioAssemblyStorage;
+import com.meetingautomation.api.processing.AudioAssemblyUseCase;
 import com.meetingautomation.document.Speaker;
 import com.meetingautomation.document.StructuredMinutes;
 import com.meetingautomation.document.TranscriptSegment;
+import com.meetingautomation.transcription.DiarizationResultAdapter;
+import com.meetingautomation.transcription.TranscriptionProvider;
 import com.meetingautomation.minutes.GroundedMinutesResult;
 import com.meetingautomation.minutes.MinutesCommand;
 import com.meetingautomation.minutes.MinutesGenerationProvider;
 import java.util.List;
-import java.time.Duration;
-import java.time.Instant;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
@@ -32,6 +38,9 @@ import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Primary;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
+import static org.mockito.Mockito.clearInvocations;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 @SpringBootTest(properties = {"DOCUMENT_PROVIDER=", "NOTIFICATION_PROVIDER=SLACK", "OPENAI_API_KEY="})
 @AutoConfigureMockMvc
@@ -49,10 +58,27 @@ class MinutesRegenerationApiTests {
     @Autowired
     private TestMinutesGenerationProvider provider;
 
+    @Autowired
+    private ManualWorkerExecutor workerExecutor;
+
+    @MockitoSpyBean
+    private AudioAssemblyUseCase audioAssembly;
+
+    @MockitoSpyBean
+    private AudioAssemblyStorage audioAssemblyStorage;
+
+    @MockitoSpyBean
+    private TranscriptionProvider transcriptionProvider;
+
+    @MockitoSpyBean
+    private DiarizationResultAdapter diarizationAdapter;
+
     @BeforeEach
     void createReviewSession() {
         sessionStore.remove(SESSION_ID);
         provider.reset();
+        workerExecutor.reset();
+        clearInvocations(audioAssembly, audioAssemblyStorage, transcriptionProvider, diarizationAdapter);
         sessionStore.save(new MeetingSession(SESSION_ID, 7, "REVIEW", 1,
                 new MeetingSession.Meeting("Planning", "default.md", "1.0.0", List.of("participant-1"),
                         "Asia/Seoul", List.of(new MeetingSession.ParticipantReference("participant-1", "Ari"))),
@@ -90,6 +116,8 @@ class MinutesRegenerationApiTests {
         assertThat(completed.transcript()).isEqualTo(List.of(
                 new TranscriptSegment("seg_1", "speaker_a", 0, 1200, "Discuss launch")));
         assertThat(sessionStore.findLastOperation(SESSION_ID).orElseThrow().outcome()).isEqualTo("SUCCEEDED");
+        assertThat(provider.generationCalls()).isEqualTo(1);
+        assertRegenerationSkippedProcessingPipeline();
         mockMvc.perform(get("/api/v1/meeting-sessions/{sessionId}", SESSION_ID))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.lastOperation.type").value("MINUTES_REGENERATION"))
@@ -145,6 +173,8 @@ class MinutesRegenerationApiTests {
         assertThat(operation.outcome()).isEqualTo("FAILED");
         assertThat(operation.requestedTemplateId()).isEqualTo("project.md");
         assertThat(operation.errorCode()).isEqualTo("MINUTES_REGENERATION_FAILED");
+        assertThat(provider.generationCalls()).isEqualTo(1);
+        assertRegenerationSkippedProcessingPipeline();
 
         String statusBody = mockMvc.perform(get("/api/v1/meeting-sessions/{sessionId}", SESSION_ID))
                 .andExpect(status().isOk())
@@ -238,7 +268,6 @@ class MinutesRegenerationApiTests {
 
     @Test
     void identicalIdempotencyReplayReturnsTheOriginalAcceptanceWithoutChangingTheSnapshotAgain() throws Exception {
-        setTranscript(List.of());
         String key = newIdempotencyKey();
         String first = mockMvc.perform(post(URL, SESSION_ID)
                         .header("If-Match", "\"7\"")
@@ -260,7 +289,31 @@ class MinutesRegenerationApiTests {
 
         assertThat(replay).isEqualTo(first);
         assertThat(sessionStore.find(SESSION_ID).orElseThrow().version()).isEqualTo(terminalVersion);
-        assertThat(provider.command.get()).isNull();
+        assertThat(provider.generationCalls()).isEqualTo(1);
+        assertRegenerationSkippedProcessingPipeline();
+    }
+
+    @Test
+    void duplicateDeliveryOfTheAcceptedWorkerTaskDoesNotRegenerateOrOverwriteTheTerminalSnapshot() throws Exception {
+        mockMvc.perform(post(URL, SESSION_ID)
+                        .header("If-Match", "\"7\"")
+                        .header("Idempotency-Key", newIdempotencyKey())
+                        .contentType("application/json")
+                        .content("{\"templateId\":\"project.md\"}"))
+                .andExpect(status().isAccepted());
+
+        Runnable delivery = workerExecutor.takeNext();
+        delivery.run();
+        MeetingSession terminal = sessionStore.find(SESSION_ID).orElseThrow();
+        MeetingSessionStatusResponse.LastOperation operation =
+                sessionStore.findLastOperation(SESSION_ID).orElseThrow();
+        delivery.run();
+
+        assertThat(provider.generationCalls()).isEqualTo(1);
+        assertThat(sessionStore.find(SESSION_ID).orElseThrow()).isEqualTo(terminal);
+        assertThat(sessionStore.findLastOperation(SESSION_ID).orElseThrow()).isEqualTo(operation);
+        assertThat(operation.outcome()).isEqualTo("SUCCEEDED");
+        assertRegenerationSkippedProcessingPipeline();
     }
 
     @Test
@@ -292,16 +345,16 @@ class MinutesRegenerationApiTests {
                 current.progressPercent(), current.speakers(), transcript, current.processingFailure(), current.minutes()), null);
     }
 
-    private MeetingSession awaitTerminalOperation() throws InterruptedException {
-        Instant deadline = Instant.now().plus(Duration.ofSeconds(5));
-        while (Instant.now().isBefore(deadline)) {
-            MeetingSession current = sessionStore.find(SESSION_ID).orElseThrow();
-            if ("REVIEW".equals(current.status()) && sessionStore.findLastOperation(SESSION_ID).isPresent()) {
-                return current;
-            }
-            Thread.sleep(10);
-        }
-        throw new AssertionError("Minutes regeneration did not reach a terminal Review snapshot.");
+    private MeetingSession awaitTerminalOperation() {
+        workerExecutor.runNext();
+        MeetingSession current = sessionStore.find(SESSION_ID).orElseThrow();
+        assertThat(current.status()).isEqualTo("REVIEW");
+        assertThat(sessionStore.findLastOperation(SESSION_ID)).isPresent();
+        return current;
+    }
+
+    private void assertRegenerationSkippedProcessingPipeline() {
+        verifyNoInteractions(audioAssembly, audioAssemblyStorage, transcriptionProvider, diarizationAdapter);
     }
 
     private static String newIdempotencyKey() {
@@ -315,14 +368,46 @@ class MinutesRegenerationApiTests {
         TestMinutesGenerationProvider regenerationTestProvider() {
             return new TestMinutesGenerationProvider();
         }
+
+        @Bean
+        @Primary
+        @Qualifier("processingJobExecutor")
+        ManualWorkerExecutor manualWorkerExecutor() {
+            return new ManualWorkerExecutor();
+        }
+    }
+
+    static final class ManualWorkerExecutor implements Executor {
+        private final ConcurrentLinkedQueue<Runnable> queued = new ConcurrentLinkedQueue<>();
+
+        @Override
+        public void execute(Runnable command) {
+            queued.add(command);
+        }
+
+        Runnable takeNext() {
+            Runnable next = queued.poll();
+            if (next == null) throw new AssertionError("Expected a queued Minutes regeneration delivery.");
+            return next;
+        }
+
+        void runNext() {
+            takeNext().run();
+        }
+
+        void reset() {
+            queued.clear();
+        }
     }
 
     static class TestMinutesGenerationProvider implements MinutesGenerationProvider {
         private final AtomicReference<MinutesCommand> command = new AtomicReference<>();
         private final AtomicBoolean fail = new AtomicBoolean();
+        private final AtomicInteger calls = new AtomicInteger();
 
         @Override
         public GroundedMinutesResult generateMinutes(MinutesCommand input) {
+            calls.incrementAndGet();
             command.set(input);
             if (fail.get()) throw new IllegalStateException("provider-secret-sentinel");
             String segmentId = input.transcript().getFirst().segmentId();
@@ -334,7 +419,10 @@ class MinutesRegenerationApiTests {
         void reset() {
             command.set(null);
             fail.set(false);
+            calls.set(0);
         }
+
+        int generationCalls() { return calls.get(); }
     }
 }
 

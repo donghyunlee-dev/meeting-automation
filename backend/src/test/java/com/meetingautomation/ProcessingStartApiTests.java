@@ -12,6 +12,16 @@ import com.meetingautomation.api.session.MeetingSessionStore;
 import com.meetingautomation.api.session.UploadPolicy;
 import com.meetingautomation.api.processing.ProcessingJob;
 import com.meetingautomation.api.processing.ProcessingJobQueue;
+import com.meetingautomation.api.processing.ProcessingJobRunner;
+import com.meetingautomation.api.processing.AudioAssemblyUseCase;
+import com.meetingautomation.api.audio.AudioAssemblyStorage;
+import com.meetingautomation.minutes.GroundedMinutesResult;
+import com.meetingautomation.minutes.MinutesCommand;
+import com.meetingautomation.minutes.MinutesGenerationProvider;
+import com.meetingautomation.transcription.DiarizationResultAdapter;
+import com.meetingautomation.transcription.ProviderTranscriptionResponse;
+import com.meetingautomation.transcription.TranscriptionCommand;
+import com.meetingautomation.transcription.TranscriptionProvider;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -36,6 +46,13 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
+import org.mockito.InOrder;
+import static org.mockito.Mockito.clearInvocations;
+import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.times;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 
 @SpringBootTest(properties = {
         "DOCUMENT_PROVIDER=",
@@ -61,6 +78,24 @@ class ProcessingStartApiTests {
     @Autowired
     private ControllableProcessingQueue processingExecutor;
 
+    @Autowired
+    private ProcessingJobRunner processingJobRunner;
+
+    @Autowired
+    private TestTranscriptionProvider transcriptionProvider;
+
+    @MockitoSpyBean
+    private AudioAssemblyUseCase audioAssembly;
+
+    @MockitoSpyBean
+    private AudioAssemblyStorage audioAssemblyStorage;
+
+    @MockitoSpyBean
+    private TranscriptionProvider transcriptionPort;
+
+    @MockitoSpyBean
+    private DiarizationResultAdapter diarizationAdapter;
+
     @DynamicPropertySource
     static void registerDirectories(DynamicPropertyRegistry registry) {
         registry.add("TEMP_AUDIO_DIR", AUDIO_ROOT::toString);
@@ -75,8 +110,11 @@ class ProcessingStartApiTests {
         deleteRecursively(AUDIO_ROOT);
         Files.createDirectories(AUDIO_ROOT);
         processingExecutor.reset();
+        transcriptionProvider.reset();
+        clearInvocations(audioAssembly, audioAssemblyStorage, transcriptionPort, diarizationAdapter);
         sessionStore.save(new MeetingSession(SESSION_ID, 1, "CREATED", 1,
-                new MeetingSession.Meeting("Planning", "default.md", List.of("participant-1"), "Asia/Seoul")),
+                new MeetingSession.Meeting("Planning", "default.md", "1.0.0", List.of("participant-1"),
+                        "Asia/Seoul", List.of(new MeetingSession.ParticipantReference("participant-1", "Ari")))),
                 null, new UploadPolicy(15, 64, List.of("audio/webm", "audio/mp4")));
     }
 
@@ -152,6 +190,28 @@ class ProcessingStartApiTests {
         assertThat(queued.transcript()).isEmpty();
         assertThat(processingExecutor.jobs()).containsExactly(
                 new ProcessingJob(SESSION_ID, 1, 15000, "audio/webm"));
+    }
+
+    @Test
+    void api009InitialProcessingInvokesAssemblyTranscriptionAndDiarizationInOrder() throws Exception {
+        byte[] syntheticPayload = {8, 9};
+        upload("0", syntheticPayload, "positive-control-upload").andExpect(status().isOk());
+        mockMvc.perform(process("positive-control-key", "{\"expectedChunks\":1,\"durationMs\":15000,"
+                        + "\"mimeType\":\"audio/webm\"}"))
+                .andExpect(status().isAccepted());
+
+        ProcessingJob job = processingExecutor.jobs().getFirst();
+        processingJobRunner.run(job);
+
+        InOrder pipelineOrder = inOrder(audioAssembly, audioAssemblyStorage, transcriptionPort, diarizationAdapter);
+        pipelineOrder.verify(audioAssembly).assemble(any(), any(), any());
+        pipelineOrder.verify(audioAssemblyStorage).chunks(eq(SESSION_ID));
+        pipelineOrder.verify(audioAssemblyStorage, times(1)).openChunk(eq(SESSION_ID), eq(0));
+        pipelineOrder.verify(transcriptionPort).transcribeWithDiarization(any(TranscriptionCommand.class));
+        pipelineOrder.verify(diarizationAdapter).normalize(any(), eq(15000L));
+        assertThat(transcriptionProvider.calls()).isEqualTo(1);
+        assertThat(sessionStore.find(SESSION_ID).orElseThrow().status()).isEqualTo("REVIEW");
+        assertThat(sessionStore.find(SESSION_ID).orElseThrow().transcript()).hasSize(1);
     }
 
     @Test
@@ -458,6 +518,45 @@ class ProcessingStartApiTests {
         @Primary
         ControllableProcessingQueue processingExecutor() {
             return new ControllableProcessingQueue();
+        }
+
+        @Bean
+        @Primary
+        TestTranscriptionProvider testTranscriptionProvider() {
+            return new TestTranscriptionProvider();
+        }
+
+        @Bean
+        @Primary
+        TestMinutesGenerationProvider testMinutesGenerationProvider() {
+            return new TestMinutesGenerationProvider();
+        }
+    }
+
+    static class TestTranscriptionProvider implements TranscriptionProvider {
+        private final AtomicInteger callCount = new AtomicInteger();
+
+        @Override
+        public ProviderTranscriptionResponse transcribeWithDiarization(TranscriptionCommand command) {
+            callCount.incrementAndGet();
+            return new ProviderTranscriptionResponse(
+                    List.of(new ProviderTranscriptionResponse.Speaker("speaker-a")),
+                    List.of(new ProviderTranscriptionResponse.Segment(
+                            "provider-segment-a", "speaker-a", 0, 1000, "Synthetic transcript")));
+        }
+
+        int calls() { return callCount.get(); }
+
+        void reset() { callCount.set(0); }
+    }
+
+    static final class TestMinutesGenerationProvider implements MinutesGenerationProvider {
+        @Override
+        public GroundedMinutesResult generateMinutes(MinutesCommand command) {
+            String segmentId = command.transcript().getFirst().segmentId();
+            return new GroundedMinutesResult(command.templateId(), command.templateVersion(),
+                    List.of(new GroundedMinutesResult.TextClaim("Synthetic summary", List.of(segmentId))),
+                    List.of(), List.of(), List.of(), List.of());
         }
     }
 
