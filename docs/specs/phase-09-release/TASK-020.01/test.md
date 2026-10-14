@@ -2,7 +2,7 @@
 
 ## 자동화 테스트
 
-기존 FE unit/component 명령은 `frontend/`에서 `npm run test`, `npm run lint`, `npm run build`이다. `vitest`/`jsdom`은 page CSS layout을 계산하지 않으므로 이 task는 현재 구현 시점의 stable `@playwright/test` dev dependency, Chromium/WebKit projects, `playwright.viewport.config.ts`, Vite `webServer` config 및 `npm run test:viewport`를 추가한다. Browser binaries는 `npx playwright install chromium webkit`으로 setup한다. 계획 단계에서는 test를 실행하지 않는다.
+`vitest`/`jsdom`은 page CSS layout을 계산하지 않으므로 전용 Playwright 설정(`playwright.viewport.config.ts`)이 두 엔진(Chromium/WebKit)에서 합성 API 응답을 사용해 뷰포트를 검증한다. 필요한 browser binaries는 `npm exec playwright -- install chromium webkit`으로 설치한다. 이 검증은 실제 iOS/Android 기기 결과로 간주하지 않는다.
 
 | ID | 조건/절차 | 기대 결과 | 증거 |
 |---|---|---|---|
@@ -18,7 +18,16 @@
 | NAV-RECORDING | SCR-001 nav 및 SCR-003 Recording layout at phone/desktop widths | Recording nav hidden; timer/title/end action remain within 360px; Home nav fits | selector rect/nav state |
 | RECHECK-SHARED | CSS fix 뒤 target route plus shared nav/modal/drawer pages re-run | original assertion green, no regression at all matrix widths | test reports/build commit |
 
-`npm run test:viewport`은 Playwright Chromium/WebKit projects를 모두 실행한다. CI에서 Browser cache를 사용할 수 없을 때만 위의 browser-install command를 실행하며 설치 결과/browser revision을 Evidence에 기록한다.
+`frontend/`에서 실행한 검증 결과:
+
+| 명령 | 결과 |
+|---|---|
+| `npm run test:viewport -- --grep SCR-012` | 참석자 화면 모바일 회귀 12/12 통과 |
+| `npm run test:viewport` | 전체 140/140 통과 (Chromium 70, WebKit 70) |
+| `npm exec eslint -- e2e/responsive-viewports.spec.ts playwright.viewport.config.ts` | 통과 |
+| `git diff --check` | 통과 |
+
+WebKit 결과는 브라우저 엔진 점검이며 iOS Safari 실기기 검증이 아니다. 360 CSS px 실기기 시각 확인과 OS별 동작은 사용자 테스트로 남겨둔다.
 
 ## 수동 시각 점검
 
