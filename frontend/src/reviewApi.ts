@@ -18,6 +18,7 @@ export type ReviewSession = {
   transcript: TranscriptSegment[];
   minutes: StructuredMinutes | null;
   allowedActions: string[];
+  lastOperation?: { type: string; outcome: string; requestedTemplateId?: string; errorCode?: string } | null;
 };
 export type SpeakerMappingInput = { speakerId: string; participantId: string | null };
 export type SpeakerMappingResult = { speakerId: string; participantId: string | null; participantName: string | null };
@@ -110,10 +111,18 @@ export async function getReviewSession(sessionId: string): Promise<ReviewSession
   if (response.status === 404) throw new ReviewApiError('SESSION_NOT_FOUND', 404);
   if (!response.ok) throw new ReviewApiError('REQUEST_FAILED', response.status);
   try {
-    const raw = parseData(await response.json());
+    return parseReviewSessionData(parseData(await response.json()), sessionId, response.status);
+  } catch (error) {
+    if (error instanceof ReviewApiError) throw error;
+    throw new ReviewApiError('INVALID_REVIEW', response.status);
+  }
+}
+
+export function parseReviewSessionData(raw: Record<string, unknown>, sessionId: string, statusCode?: number): ReviewSession {
+  try {
     const meeting = typeof raw.meeting === 'object' && raw.meeting !== null ? raw.meeting as Record<string, unknown> : null;
     if (raw.sessionId !== sessionId) throw new Error('invalid');
-    if (raw.status !== 'REVIEW') throw new ReviewApiError('SESSION_NOT_IN_REVIEW', response.status);
+    if (raw.status !== 'REVIEW') throw new ReviewApiError('SESSION_NOT_IN_REVIEW', statusCode);
     if (!meeting || !Array.isArray(meeting.participantIds)
       || !meeting.participantIds.every((id) => typeof id === 'string') || !Array.isArray(raw.speakers)) throw new Error('invalid');
     const speakers = raw.speakers.map((speaker): ReviewSpeaker => {
@@ -131,15 +140,26 @@ export async function getReviewSession(sessionId: string): Promise<ReviewSession
         || typeof value.endMs !== 'number' || typeof value.text !== 'string') throw new Error('invalid');
       return { segmentId: value.segmentId, speakerId: value.speakerId, startMs: value.startMs, endMs: value.endMs, text: value.text };
     }) : [];
+    const operationRaw = typeof raw.lastOperation === 'object' && raw.lastOperation !== null
+      ? raw.lastOperation as Record<string, unknown> : null;
+    const lastOperation = operationRaw && typeof operationRaw.type === 'string' && typeof operationRaw.outcome === 'string'
+      ? {
+        type: operationRaw.type,
+        outcome: operationRaw.outcome,
+        ...(typeof operationRaw.requestedTemplateId === 'string' ? { requestedTemplateId: operationRaw.requestedTemplateId } : {}),
+        ...(typeof operationRaw.errorCode === 'string' ? { errorCode: operationRaw.errorCode } : {}),
+      }
+      : null;
     return {
       sessionId, version: typeof raw.version === 'number' ? raw.version : 0,
       participantIds: meeting.participantIds as string[], speakers, transcript,
       minutes: parseMinutes(raw.minutes),
       allowedActions: Array.isArray(raw.allowedActions) ? raw.allowedActions.filter((action): action is string => typeof action === 'string') : [],
+      lastOperation,
     };
   } catch (error) {
     if (error instanceof ReviewApiError) throw error;
-    throw new ReviewApiError('INVALID_REVIEW', response.status);
+    throw new ReviewApiError('INVALID_REVIEW', statusCode);
   }
 }
 

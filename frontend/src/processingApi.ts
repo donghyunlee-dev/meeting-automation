@@ -1,4 +1,4 @@
-export type ProcessingStage = 'AUDIO_ASSEMBLY' | 'TRANSCRIPTION' | 'DIARIZATION' | 'MINUTES_GENERATION' | 'DRAFT_READY';
+export type ProcessingStage = 'AUDIO_ASSEMBLY' | 'TRANSCRIPTION' | 'DIARIZATION' | 'MINUTES_GENERATION' | 'DRAFT_READY' | 'DRAFT_REGENERATION';
 export type ProcessingStatus = 'PROCESSING' | 'REVIEW' | 'COMPLETED_WITH_WARNINGS' | 'PROCESSING_FAILED';
 
 export type ProcessingSnapshot = {
@@ -16,7 +16,7 @@ export class ProcessingApiError extends Error {
   }
 }
 
-const stages = new Set<ProcessingStage>(['AUDIO_ASSEMBLY', 'TRANSCRIPTION', 'DIARIZATION', 'MINUTES_GENERATION', 'DRAFT_READY']);
+const stages = new Set<ProcessingStage>(['AUDIO_ASSEMBLY', 'TRANSCRIPTION', 'DIARIZATION', 'MINUTES_GENERATION', 'DRAFT_READY', 'DRAFT_REGENERATION']);
 const statuses = new Set<ProcessingStatus>(['PROCESSING', 'REVIEW', 'COMPLETED_WITH_WARNINGS', 'PROCESSING_FAILED']);
 
 export async function getProcessingStatus(sessionId: string, signal?: AbortSignal, fetchImpl: typeof fetch = fetch): Promise<ProcessingSnapshot> {

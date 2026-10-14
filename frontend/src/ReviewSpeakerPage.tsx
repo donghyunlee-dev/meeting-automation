@@ -5,6 +5,9 @@ import type { Participant } from './participantsApi';
 import { getReviewSession, ReviewApiError, updateReviewMinutes, updateSpeakerMappings, type ReviewSession, type ReviewSpeaker, type SpeakerMappingInput, type StructuredMinutes } from './reviewApi';
 import { ReviewMinutesEditor, type MinutesSaveState } from './ReviewMinutesEditor';
 import { ReviewTranscriptDrawer } from './ReviewTranscriptDrawer';
+import { MinutesRegenerationControl } from './MinutesRegenerationControl';
+import { getMinutesRegenerationSnapshot, type MinutesRegenerationSnapshot } from './minutesRegenerationApi';
+import { ProcessingPoller } from './processingPoller';
 
 type Resource<T> = { status: 'loading' | 'ready' | 'error'; data?: T };
 type ReviewResource = Resource<Awaited<ReturnType<typeof getReviewSession>>> & { requestSessionId: string };
@@ -36,6 +39,10 @@ export function ReviewSpeakerPage({ drafts, onInitialize, onChange, onCommit, on
   const [minutesMutationStates, setMinutesMutationStates] = useState<Record<string, MinutesMutationState>>({});
   const [reviewFailure, setReviewFailure] = useState<{ sessionId: string; code: ReviewFailureCode } | null>(null);
   const [transcriptOpen, setTranscriptOpen] = useState(false);
+  const [regenerationProcessing, setRegenerationProcessing] = useState<{ sessionId: string; processing: boolean }>(() => ({ sessionId, processing: false }));
+  const [regenerationControlUsed, setRegenerationControlUsed] = useState<{ sessionId: string; used: boolean }>(() => ({ sessionId, used: false }));
+  const [regenerationResume, setRegenerationResume] = useState<{ sessionId: string; progress: number | null } | null>(null);
+  const [regenerationResumeMessage, setRegenerationResumeMessage] = useState<{ sessionId: string; message: string } | null>(null);
   const [saveState, setSaveState] = useState<{ sessionId: string; saving: boolean; message: string; recoveryAttempt: SpeakerMappingInput[] | null }>({
     sessionId: '', saving: false, message: '', recoveryAttempt: null,
   });
@@ -72,7 +79,7 @@ export function ReviewSpeakerPage({ drafts, onInitialize, onChange, onCommit, on
     return true;
   }
 
-  function recordReviewFailure(expectedSessionId: string, error: unknown) {
+  const recordReviewFailure = useCallback((expectedSessionId: string, error: unknown) => {
     if (activeSessionId.current !== expectedSessionId) return;
     const code = error instanceof ReviewApiError && (error.code === 'SESSION_NOT_FOUND' || error.apiCode === 'SESSION_NOT_FOUND')
       ? 'SESSION_NOT_FOUND'
@@ -82,7 +89,7 @@ export function ReviewSpeakerPage({ drafts, onInitialize, onChange, onCommit, on
     setReview((current) => code === 'OTHER' && current.data?.sessionId === expectedSessionId
       ? { status: 'ready', data: current.data, requestSessionId: expectedSessionId }
       : { status: 'error', requestSessionId: expectedSessionId });
-  }
+  }, []);
 
   function setSaving(value: boolean) {
     setSaveState((current) => ({ ...(current.sessionId === sessionId ? current : sessionSaveState), sessionId, saving: value }));
@@ -101,6 +108,11 @@ export function ReviewSpeakerPage({ drafts, onInitialize, onChange, onCommit, on
     latestReview.current = null;
   }, [sessionId]);
 
+  const reportRegenerationProcessing = useCallback((processing: boolean) => {
+    setRegenerationProcessing({ sessionId, processing });
+    if (processing) setRegenerationControlUsed({ sessionId, used: true });
+  }, [sessionId]);
+
   const applySnapshot = useCallback((data: ReviewSession) => {
     if (activeSessionId.current !== data.sessionId) return false;
     const latest = latestReview.current;
@@ -114,6 +126,35 @@ export function ReviewSpeakerPage({ drafts, onInitialize, onChange, onCommit, on
     onInitialize(data.sessionId, data.speakers);
     return true;
   }, [onInitialize]);
+
+  const applyRegenerationSnapshot = useCallback((data: ReviewSession, replaceMinutesDraft = false): boolean => {
+    const applied = applySnapshot(data);
+    if (!applied || !replaceMinutesDraft) return applied;
+    minutesDraftBySession.current.delete(data.sessionId);
+    setMinutesDraftStore((current) => {
+      const drafts = { ...current.drafts };
+      delete drafts[data.sessionId];
+      return { ...current, drafts };
+    });
+    return true;
+  }, [applySnapshot]);
+
+  const reconcileTerminalRegenerationSnapshot = useCallback((snapshot: MinutesRegenerationSnapshot): boolean => {
+    const operation = snapshot.lastOperation;
+    if (snapshot.status !== 'REVIEW' || snapshot.sessionId !== activeSessionId.current || !snapshot.review
+      || snapshot.review.sessionId !== snapshot.sessionId || snapshot.review.version !== snapshot.version
+      || operation?.type !== 'MINUTES_REGENERATION' || !['SUCCEEDED', 'FAILED'].includes(operation.outcome)
+      || typeof operation.requestedTemplateId !== 'string' || operation.requestedTemplateId.length === 0
+      || snapshot.review.lastOperation?.type !== operation.type
+      || snapshot.review.lastOperation.outcome !== operation.outcome
+      || snapshot.review.lastOperation.requestedTemplateId !== operation.requestedTemplateId) return false;
+
+    if (!applyRegenerationSnapshot(snapshot.review, true)) return false;
+    setRegenerationResumeMessage({ sessionId: snapshot.sessionId, message: operation.outcome === 'SUCCEEDED'
+      ? 'Minutes 재생성이 완료되어 최신 회의 정보를 표시합니다.'
+      : '재생성에 실패해 이전 회의록을 복구했습니다. 최신 회의 정보를 표시합니다.' });
+    return true;
+  }, [applyRegenerationSnapshot]);
 
   const loadRoster = useCallback(async () => {
     setRetryingRoster(true);
@@ -133,7 +174,41 @@ export function ReviewSpeakerPage({ drafts, onInitialize, onChange, onCommit, on
     } catch (error) {
       if (generation === reviewRequestGeneration.current) recordReviewFailure(sessionId, error);
     }
-  }, [applySnapshot, sessionId]);
+  }, [applySnapshot, recordReviewFailure, sessionId]);
+
+  useEffect(() => {
+    if (regenerationResume?.sessionId !== sessionId) return;
+    const poller = new ProcessingPoller({
+      sessionId,
+      getStatus: (id, signal) => getMinutesRegenerationSnapshot(id, signal),
+      onSnapshot: (snapshot: MinutesRegenerationSnapshot) => {
+        if (snapshot.sessionId !== sessionId) return;
+        if (snapshot.status === 'PROCESSING') {
+          if (snapshot.processing.stage === 'DRAFT_REGENERATION') {
+            setRegenerationResume({ sessionId, progress: snapshot.processing.progressPercent ?? null });
+          } else {
+            setRegenerationResume(null);
+            recordReviewFailure(sessionId, new ReviewApiError('SESSION_NOT_IN_REVIEW'));
+          }
+          return;
+        }
+        if (snapshot.status === 'REVIEW' && reconcileTerminalRegenerationSnapshot(snapshot)) {
+          setRegenerationResume(null);
+          return;
+        }
+        setRegenerationResume(null);
+        recordReviewFailure(sessionId, new ReviewApiError('SESSION_NOT_IN_REVIEW'));
+      },
+      onError: (error) => {
+        if (error.code === 'SESSION_NOT_FOUND') {
+          setRegenerationResume(null);
+          recordReviewFailure(sessionId, new ReviewApiError('SESSION_NOT_FOUND', 404));
+        }
+      },
+    });
+    poller.start();
+    return () => poller.stop();
+  }, [reconcileTerminalRegenerationSnapshot, recordReviewFailure, regenerationResume?.sessionId, sessionId]);
 
   const loadConfig = useCallback(async () => {
     setConfig((current) => ({ status: 'loading', data: current.data }));
@@ -146,11 +221,28 @@ export function ReviewSpeakerPage({ drafts, onInitialize, onChange, onCommit, on
     saveInFlight.current = false;
     latestReview.current = null;
     let active = true;
+    const statusController = new AbortController();
     void getReviewSession(sessionId).then((data) => {
       if (!active || generation !== reviewRequestGeneration.current) return;
       applySnapshot(data);
     }).catch((error: unknown) => {
-      if (active && generation === reviewRequestGeneration.current) recordReviewFailure(sessionId, error);
+      if (!active || generation !== reviewRequestGeneration.current) return;
+      if (error instanceof ReviewApiError && error.code === 'SESSION_NOT_IN_REVIEW') {
+        void getMinutesRegenerationSnapshot(sessionId, statusController.signal).then((snapshot) => {
+          if (active && generation === reviewRequestGeneration.current && snapshot.status === 'PROCESSING'
+            && snapshot.processing.stage === 'DRAFT_REGENERATION') {
+            setRegenerationResume({ sessionId, progress: snapshot.processing.progressPercent ?? null });
+            return;
+          }
+          if (active && generation === reviewRequestGeneration.current && snapshot.status === 'REVIEW'
+            && reconcileTerminalRegenerationSnapshot(snapshot)) return;
+          if (active && generation === reviewRequestGeneration.current) recordReviewFailure(sessionId, error);
+        }).catch(() => {
+          if (active && generation === reviewRequestGeneration.current) recordReviewFailure(sessionId, error);
+        });
+        return;
+      }
+      recordReviewFailure(sessionId, error);
     });
     void listMeetingParticipants().then((data) => {
       if (active) setParticipants({ status: 'ready', data });
@@ -162,8 +254,8 @@ export function ReviewSpeakerPage({ drafts, onInitialize, onChange, onCommit, on
     }).catch(() => {
       if (active) setConfig((current) => ({ status: 'error', data: current.data }));
     });
-    return () => { active = false; reviewRequestGeneration.current += 1; };
-  }, [applySnapshot, onInitialize, sessionId]);
+    return () => { active = false; statusController.abort(); reviewRequestGeneration.current += 1; };
+  }, [applySnapshot, onInitialize, reconcileTerminalRegenerationSnapshot, recordReviewFailure, sessionId]);
 
   const currentReview = review.requestSessionId === sessionId && review.data?.sessionId === sessionId ? review.data : undefined;
   const reviewIsLoading = review.requestSessionId !== sessionId || review.status === 'loading';
@@ -347,6 +439,35 @@ export function ReviewSpeakerPage({ drafts, onInitialize, onChange, onCommit, on
     }
   }
 
+  async function prepareRegenerationSnapshot(): Promise<ReviewSession | null> {
+    const expectedSessionId = sessionId;
+    const visibleReview = review.data;
+    if (!visibleReview || visibleReview.sessionId !== expectedSessionId || activeSessionId.current !== expectedSessionId) return null;
+    const draft = minutesDraftBySession.current.has(expectedSessionId)
+      ? minutesDraftBySession.current.get(expectedSessionId) ?? null
+      : currentMinutes;
+    const base = serverBaseBySession.current.get(expectedSessionId) ?? { version: visibleReview.version, minutes: visibleReview.minutes };
+    if (!sameMinutes(draft, base.minutes)) {
+      if (!draft) return null;
+      await saveMinutes(expectedSessionId, draft);
+      const draftAfterSave = minutesDraftBySession.current.has(expectedSessionId)
+        ? minutesDraftBySession.current.get(expectedSessionId) ?? null : draft;
+      if (!sameMinutes(draftAfterSave, draft)) return null;
+      const savedBase = serverBaseBySession.current.get(expectedSessionId);
+      if (!savedBase || !sameMinutes(savedBase.minutes, draft)) return null;
+    }
+    try {
+      const latest = await getReviewSession(expectedSessionId);
+      if (latest.version < (serverBaseBySession.current.get(expectedSessionId)?.version ?? visibleReview.version)) return null;
+      if (!sameMinutes(latest.minutes, draft)) return null;
+      if (!applySnapshot(latest)) return null;
+      return latest;
+    } catch (error) {
+      recordReviewFailure(expectedSessionId, error);
+      return null;
+    }
+  }
+
   async function checkMinutesResult(expectedSessionId: string) {
     const submittedSnapshot = minutesMutationStates[expectedSessionId]?.recoverySnapshot;
     if (!submittedSnapshot || minutesSaveInFlight.current.has(expectedSessionId)) return;
@@ -459,7 +580,13 @@ export function ReviewSpeakerPage({ drafts, onInitialize, onChange, onCommit, on
         <p>회의록과 화자 정보를 확인하고 수정할 수 있습니다.</p>
       </header>
 
-      {reviewIsLoading && <p role="status">회의의 화자 정보를 불러오는 중입니다.</p>}
+      {reviewIsLoading && regenerationResume?.sessionId !== sessionId && <p role="status">회의의 화자 정보를 불러오는 중입니다.</p>}
+      {regenerationResume?.sessionId === sessionId && <section className="review-speaker-message" role="status" aria-live="polite">
+        <h2>Minutes 재생성 진행 중</h2>
+        <p>처리 중인 Minutes와 Transcript 내용은 아직 표시하지 않습니다. 완료되면 최신 회의 정보를 불러옵니다.</p>
+        {regenerationResume.progress !== null && <progress aria-label="Minutes 재생성 진행" value={regenerationResume.progress} max={100} />}
+      </section>}
+      {regenerationResumeMessage?.sessionId === sessionId && <p role="status" aria-live="polite">{regenerationResumeMessage.message}</p>}
       {reviewHasError && reviewFailure?.sessionId === sessionId && reviewFailure.code === 'SESSION_NOT_FOUND' && <section className="review-speaker-message" role="alert">
         <h2>회의를 찾을 수 없습니다</h2>
         <p>회의 처리 정보를 사용할 수 없습니다. 새 회의를 시작해 주세요.</p>
@@ -485,9 +612,17 @@ export function ReviewSpeakerPage({ drafts, onInitialize, onChange, onCommit, on
           ownerState={minutesOwnerState}
           saveState={sessionMinutesSaveState}
           saveBlockedMessage={minutesSaveBlockedMessage}
+          disabled={regenerationProcessing.sessionId === sessionId && regenerationProcessing.processing}
           onSave={onMinutesSave ?? saveMinutes}
           onChange={updateMinutesDraft}
         />
+        {(currentReview.allowedActions.includes('REGENERATE_MINUTES') || (regenerationControlUsed.sessionId === sessionId && regenerationControlUsed.used)) && <MinutesRegenerationControl
+          session={currentReview}
+          blocked={(regenerationProcessing.sessionId === sessionId && regenerationProcessing.processing) || saving || Boolean(sessionMinutesMutationState.status === 'saving')}
+          prepareSnapshot={prepareRegenerationSnapshot}
+          applySnapshot={applyRegenerationSnapshot}
+          onProcessingChange={reportRegenerationProcessing}
+        />}
         {sessionMinutesMutationState.recoverySnapshot && <button className="button button-secondary" type="button"
           disabled={sessionMinutesMutationState.status === 'saving'} onClick={() => void checkMinutesResult(sessionId)}>
           저장 결과 다시 확인
@@ -520,7 +655,7 @@ export function ReviewSpeakerPage({ drafts, onInitialize, onChange, onCommit, on
                 id={`speaker-${speaker.speakerId}`}
                 aria-label={`${speaker.label} 참가자`}
                 value={value}
-                disabled={saving || participants.status === 'loading' || availableParticipants.length === 0}
+                disabled={(regenerationProcessing.sessionId === sessionId && regenerationProcessing.processing) || saving || participants.status === 'loading' || availableParticipants.length === 0}
                 onChange={(event) => onChange(sessionId, speaker.speakerId, event.target.value || null)}
               >
                 <option value="">참가자 선택</option>
@@ -545,7 +680,7 @@ export function ReviewSpeakerPage({ drafts, onInitialize, onChange, onCommit, on
           })}
         </section>}
         {(currentReview.allowedActions.includes('UPDATE_SPEAKER_MAPPING') || saveMessage) && <div className="review-save-controls">
-          {currentReview.allowedActions.includes('UPDATE_SPEAKER_MAPPING') && <button className="button button-primary" type="button" disabled={!canSave} onClick={() => void saveMappings()}>
+          {currentReview.allowedActions.includes('UPDATE_SPEAKER_MAPPING') && <button className="button button-primary" type="button" disabled={!canSave || (regenerationProcessing.sessionId === sessionId && regenerationProcessing.processing)} onClick={() => void saveMappings()}>
             {saving ? '저장 중…' : '매핑 저장'}
           </button>}
           {saveMessage && <p role="status">{saveMessage}</p>}

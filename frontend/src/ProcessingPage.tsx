@@ -4,13 +4,14 @@ import { getProcessingStatus, type ProcessingSnapshot, type ProcessingStage } fr
 import { ProcessingPoller } from './processingPoller';
 
 const stageNames = ['오디오 준비', '음성 인식', '화자 분석', '회의록 생성'] as const;
-const stageIndex: Record<ProcessingStage, number> = { AUDIO_ASSEMBLY: 0, TRANSCRIPTION: 1, DIARIZATION: 2, MINUTES_GENERATION: 3, DRAFT_READY: 3 };
+const stageIndex: Record<ProcessingStage, number> = { AUDIO_ASSEMBLY: 0, TRANSCRIPTION: 1, DIARIZATION: 2, MINUTES_GENERATION: 3, DRAFT_READY: 3, DRAFT_REGENERATION: 3 };
 const failureMessages: Record<ProcessingStage, string> = {
   AUDIO_ASSEMBLY: '오디오를 준비하는 중 문제가 발생했습니다.',
   TRANSCRIPTION: '음성을 변환하는 중 문제가 발생했습니다.',
   DIARIZATION: '화자를 분석하는 중 문제가 발생했습니다.',
   MINUTES_GENERATION: '회의록을 생성하는 중 문제가 발생했습니다.',
   DRAFT_READY: '회의록을 생성하는 중 문제가 발생했습니다.',
+  DRAFT_REGENERATION: '회의록을 재생성하는 중 문제가 발생했습니다.',
 };
 
 export function ProcessingPage() {

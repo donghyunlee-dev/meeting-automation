@@ -1054,7 +1054,7 @@ describe('Processing route', () => {
 
     expect(await screen.findByRole('heading', { name: '회의 처리' })).toBeTruthy();
     expect(screen.getByText('오디오 준비')).toBeTruthy();
-    expect(screen.getByRole('progressbar', { name: '처리 진행률' })).toHaveProperty('value', 25);
+    expect(await screen.findByRole('progressbar', { name: '처리 진행률' })).toHaveProperty('value', 25);
     expect(screen.queryByRole('navigation', { name: '주요 메뉴' })).toBeNull();
     expect(screen.queryByText('partial transcript must stay hidden')).toBeNull();
     expect(screen.queryByText('partial minutes must stay hidden')).toBeNull();

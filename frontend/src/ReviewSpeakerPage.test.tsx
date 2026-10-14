@@ -59,11 +59,14 @@ function renderReview(fetchMock: ReturnType<typeof vi.fn>, props: Partial<Review
   return { ...rendered, rerenderWithProps: (nextProps: Partial<ReviewTestProps>) => rendered.rerender(page({ ...props, ...nextProps })) };
 }
 
-function mockApiFetch(overrides: { config?: unknown; participants?: unknown; review?: unknown } = {}) {
+function mockApiFetch(overrides: { config?: unknown; participants?: unknown; review?: unknown; templates?: unknown } = {}) {
   return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     void init;
     const url = new URL(String(input));
     if (url.pathname.endsWith('/meeting-sessions/review-minutes')) return apiResponse(overrides.review ?? { data: reviewData });
+    if (url.pathname.endsWith('/templates')) return apiResponse(overrides.templates ?? { data: { items: [
+      { id: 'weekly', name: 'Weekly', version: '4' }, { id: 'project', name: 'Project', version: '2' },
+    ] } });
     if (url.pathname.endsWith('/app-config')) return apiResponse(overrides.config ?? { data: {
       company: { id: 'company-1', name: 'Example', timezone: 'Asia/Seoul' },
       document: { provider: 'NOTION', configured: true, connectionVersion: 2, rootUrl: 'https://notion.example' },
@@ -81,6 +84,7 @@ function mockApiFetch(overrides: { config?: unknown; participants?: unknown; rev
 function minutesIntegrationFetch(options: {
   reviews?: Array<unknown | Error | Response>;
   updateMinutes?: (init?: RequestInit) => Promise<Response> | Response;
+  regenerate?: (init?: RequestInit) => Promise<Response> | Response;
   config?: unknown;
 } = {}) {
   let reviewIndex = 0;
@@ -95,6 +99,14 @@ function minutesIntegrationFetch(options: {
     if (url.pathname === '/api/v1/meeting-sessions/review-minutes/minutes' && init?.method === 'PUT') {
       return options.updateMinutes ? options.updateMinutes(init) : apiResponse({ data: { version: 8, minutes: reviewData.minutes } });
     }
+    if (url.pathname === '/api/v1/meeting-sessions/review-minutes/minutes/regenerate' && init?.method === 'POST') {
+      return options.regenerate ? options.regenerate(init) : httpResponse({ data: {
+        sessionId: 'review-minutes', status: 'PROCESSING', stage: 'DRAFT_REGENERATION', templateId: 'project',
+      } }, 202);
+    }
+    if (url.pathname === '/api/v1/templates') return apiResponse({ data: { items: [
+      { id: 'weekly', name: 'Weekly', version: '4' }, { id: 'project', name: 'Project', version: '2' },
+    ] } });
     if (url.pathname.endsWith('/app-config')) return apiResponse(options.config ?? { data: {
       company: { id: 'company-1', name: 'Example', timezone: 'Asia/Seoul' },
       document: { provider: 'NOTION', configured: true, connectionVersion: 2, rootUrl: 'https://notion.example' },
@@ -344,7 +356,8 @@ describe('Review minutes and transcript', () => {
 
   it('preserves original and saved Minutes baselines per session across route reuse', async () => {
     const otherReview = { ...reviewData, sessionId: 'review-other', minutes: { ...reviewData.minutes, summary: '다른 회의 요약' } };
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      void init;
       const url = new URL(String(input));
       if (url.pathname.endsWith('/meeting-sessions/review-minutes')) return apiResponse({ data: reviewData });
       if (url.pathname.endsWith('/meeting-sessions/review-other')) return apiResponse({ data: otherReview });
@@ -660,5 +673,215 @@ describe('Review minutes and transcript', () => {
     expect(alert.textContent).toContain('회의를 찾을 수 없습니다');
     expect(within(alert).getByRole('link', { name: '새 회의 시작' }).getAttribute('href')).toBe('/meetings/new');
     expect(screen.queryByLabelText('회의 요약')).toBeNull();
+  });
+
+  it('cancels Template regeneration without mutations and applies one correlated terminal snapshot after explicit confirmation', async () => {
+    const api010 = vi.fn();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(String(input));
+      if (url.pathname === '/api/v1/meeting-sessions/review-minutes' && init?.method !== 'POST') {
+        const count = api010.mock.calls.length;
+        api010();
+        if (count < 2) return apiResponse({ data: { ...reviewData, allowedActions: [...reviewData.allowedActions, 'REGENERATE_MINUTES'] } });
+        return apiResponse({ data: {
+          ...reviewData, version: 8, minutes: { ...reviewData.minutes, templateId: 'project', templateVersion: '2', summary: 'Regenerated minutes' },
+          speakers: [{ ...reviewData.speakers[0], participantId: 'p1' }],
+          transcript: [{ segmentId: 'terminal-segment', speakerId: 'speaker-a', startMs: 0, endMs: 1_000, text: 'Authoritative transcript' }],
+          allowedActions: ['UPDATE_MINUTES'],
+          lastOperation: { type: 'MINUTES_REGENERATION', outcome: 'SUCCEEDED', requestedTemplateId: 'project' },
+        } });
+      }
+      if (url.pathname === '/api/v1/meeting-sessions/review-minutes/minutes/regenerate' && init?.method === 'POST') {
+        return httpResponse({ data: { sessionId: 'review-minutes', status: 'PROCESSING', stage: 'DRAFT_REGENERATION', templateId: 'project' } }, 202);
+      }
+      if (url.pathname === '/api/v1/templates') return apiResponse({ data: { items: [
+        { id: 'weekly', name: 'Weekly', version: '4' }, { id: 'project', name: 'Project', version: '2' },
+      ] } });
+      if (url.pathname.endsWith('/app-config')) return apiResponse({ data: {
+        company: { id: 'company-1', name: 'Example', timezone: 'Asia/Seoul' },
+        document: { provider: 'NOTION', configured: true, connectionVersion: 2, rootUrl: 'https://notion.example' },
+      } });
+      if (url.pathname.endsWith('/participants')) return apiResponse({ data: { items: [{ id: 'p1', name: 'Ada Lovelace', email: 'private@example.com' }] } });
+      throw new Error(`Unexpected request: ${url.pathname}`);
+    });
+    renderReview(fetchMock);
+
+    const selector = await screen.findByLabelText('새 Template');
+    fireEvent.change(selector, { target: { value: 'project' } });
+    fireEvent.click(screen.getByRole('button', { name: '선택한 Template으로 재생성' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Minutes를 재생성할까요?' });
+    fireEvent.keyDown(dialog, { key: 'Escape' });
+    expect(screen.queryByRole('dialog')).toBeNull();
+    await waitFor(() => expect(document.activeElement).toBe(selector));
+    expect((screen.getByLabelText('새 Template') as HTMLSelectElement).value).toBe('weekly');
+    expect(fetchMock.mock.calls.some(([input, init]) => String(input).endsWith('/minutes/regenerate') || init?.method === 'PUT')).toBe(false);
+
+    fireEvent.change(await screen.findByLabelText('새 Template'), { target: { value: 'project' } });
+    fireEvent.click(screen.getByRole('button', { name: '선택한 Template으로 재생성' }));
+    fireEvent.click(await screen.findByRole('button', { name: '재생성 시작' }));
+    expect(await screen.findByText('Minutes를 선택한 Template으로 재생성했습니다.')).toBeTruthy();
+    const post = fetchMock.mock.calls.find(([input, init]) => String(input).endsWith('/minutes/regenerate') && init?.method === 'POST');
+    expect(post).toBeTruthy();
+    expect(new Headers(post?.[1]?.headers).get('If-Match')).toBe('"7"');
+    expect(new Headers(post?.[1]?.headers).get('Idempotency-Key')).toMatch(/.+/);
+    expect(JSON.parse(String(post?.[1]?.body))).toEqual({ templateId: 'project' });
+    expect(fetchMock.mock.calls.filter(([input, init]) => String(input).endsWith('/minutes/regenerate') && init?.method === 'POST')).toHaveLength(1);
+    expect((screen.getByLabelText('회의 요약') as HTMLTextAreaElement).value).toBe('Regenerated minutes');
+    fireEvent.click(screen.getByRole('button', { name: 'Transcript 원문 보기' }));
+    const drawer = await screen.findByRole('dialog', { name: 'Transcript 원문' });
+    expect(within(drawer).getByText('Authoritative transcript')).toBeTruthy();
+  });
+
+  it('saves a dirty Minutes draft and re-reads API-010 before regenerating with the confirmed latest version', async () => {
+    const initial = { ...reviewData, allowedActions: [...reviewData.allowedActions, 'REGENERATE_MINUTES'] };
+    const savedMinutes = { ...reviewData.minutes, summary: 'Draft saved before regeneration' };
+    const afterSave = { ...initial, version: 8, minutes: savedMinutes };
+    const terminal = {
+      ...afterSave, version: 9,
+      minutes: { ...savedMinutes, templateId: 'project', templateVersion: '2', summary: 'Regenerated from saved draft' },
+      lastOperation: { type: 'MINUTES_REGENERATION', outcome: 'SUCCEEDED', requestedTemplateId: 'project' },
+    };
+    const fetchMock = minutesIntegrationFetch({
+      reviews: [initial, afterSave, afterSave, terminal],
+      updateMinutes: () => httpResponse({ data: { version: 8, minutes: savedMinutes } }),
+    });
+    renderReview(fetchMock);
+
+    fireEvent.change(await screen.findByLabelText('회의 요약'), { target: { value: savedMinutes.summary } });
+    fireEvent.change(await screen.findByLabelText('새 Template'), { target: { value: 'project' } });
+    fireEvent.click(screen.getByRole('button', { name: '선택한 Template으로 재생성' }));
+    fireEvent.click(await screen.findByRole('button', { name: '재생성 시작' }));
+
+    expect(await screen.findByText('Minutes를 선택한 Template으로 재생성했습니다.')).toBeTruthy();
+    const calls = fetchMock.mock.calls;
+    const putIndex = calls.findIndex(([input, init]) => String(input).endsWith('/minutes') && init?.method === 'PUT');
+    const postIndex = calls.findIndex(([input, init]) => String(input).endsWith('/minutes/regenerate') && init?.method === 'POST');
+    expect(putIndex).toBeGreaterThan(-1);
+    expect(postIndex).toBeGreaterThan(putIndex);
+    expect(new Headers(calls[putIndex]?.[1]?.headers).get('If-Match')).toBe('"7"');
+    expect(new Headers(calls[postIndex]?.[1]?.headers).get('If-Match')).toBe('"8"');
+    expect(JSON.parse(String(calls[postIndex]?.[1]?.body))).toEqual({ templateId: 'project' });
+    expect((screen.getByLabelText('회의 요약') as HTMLTextAreaElement).value).toBe('Regenerated from saved draft');
+  });
+
+  it('reconciles an API-010 rollback after regeneration failure and does not show the requested Template as current', async () => {
+    const initial = { ...reviewData, allowedActions: [...reviewData.allowedActions, 'REGENERATE_MINUTES'] };
+    const rollback = { ...initial, version: 8, lastOperation: {
+      type: 'MINUTES_REGENERATION', outcome: 'FAILED', requestedTemplateId: 'project', errorCode: 'MINUTES_REGENERATION_FAILED',
+    } };
+    const fetchMock = minutesIntegrationFetch({ reviews: [initial, initial, rollback] });
+    renderReview(fetchMock);
+
+    fireEvent.change(await screen.findByLabelText('새 Template'), { target: { value: 'project' } });
+    fireEvent.click(screen.getByRole('button', { name: '선택한 Template으로 재생성' }));
+    fireEvent.click(await screen.findByRole('button', { name: '재생성 시작' }));
+
+    expect(await screen.findByText('Minutes를 재생성하지 못해 이전 회의록을 복구했습니다. 기존 회의록을 확인해 주세요.')).toBeTruthy();
+    expect((screen.getByLabelText('회의 요약') as HTMLTextAreaElement).value).toBe(reviewData.minutes.summary);
+    expect(screen.getByText('weekly', { selector: '.review-template-identity strong' })).toBeTruthy();
+    expect(fetchMock.mock.calls.filter(([input, init]) => String(input).endsWith('/minutes/regenerate') && init?.method === 'POST')).toHaveLength(1);
+  });
+
+  it('checks API-010 after an uncertain API-013 response without retrying the POST', async () => {
+    let reviewReads = 0;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(String(input));
+      if (url.pathname === '/api/v1/meeting-sessions/review-minutes' && init?.method !== 'POST') {
+        const read = reviewReads++;
+        if (read < 2) return apiResponse({ data: { ...reviewData, allowedActions: [...reviewData.allowedActions, 'REGENERATE_MINUTES'] } });
+        return apiResponse({ data: {
+          ...reviewData, version: 8, minutes: { ...reviewData.minutes, templateId: 'project', templateVersion: '2' },
+          lastOperation: { type: 'MINUTES_REGENERATION', outcome: 'SUCCEEDED', requestedTemplateId: 'project' },
+        } });
+      }
+      if (url.pathname === '/api/v1/meeting-sessions/review-minutes/minutes/regenerate' && init?.method === 'POST') throw new Error('connection lost after request');
+      if (url.pathname === '/api/v1/templates') return apiResponse({ data: { items: [
+        { id: 'weekly', name: 'Weekly', version: '4' }, { id: 'project', name: 'Project', version: '2' },
+      ] } });
+      if (url.pathname.endsWith('/app-config')) return apiResponse({ data: {
+        company: { id: 'company-1', name: 'Example', timezone: 'Asia/Seoul' },
+        document: { provider: 'NOTION', configured: true, connectionVersion: 2, rootUrl: 'https://notion.example' },
+      } });
+      if (url.pathname.endsWith('/participants')) return apiResponse({ data: { items: [{ id: 'p1', name: 'Ada Lovelace', email: 'private@example.com' }] } });
+      throw new Error(`Unexpected request: ${url.pathname}`);
+    });
+    renderReview(fetchMock);
+
+    fireEvent.change(await screen.findByLabelText('새 Template'), { target: { value: 'project' } });
+    fireEvent.click(screen.getByRole('button', { name: '선택한 Template으로 재생성' }));
+    fireEvent.click(await screen.findByRole('button', { name: '재생성 시작' }));
+
+    expect(await screen.findByText('Minutes를 선택한 Template으로 재생성했습니다.')).toBeTruthy();
+    const calls = fetchMock.mock.calls;
+    expect(calls.filter(([input, init]) => String(input).endsWith('/minutes/regenerate') && init?.method === 'POST')).toHaveLength(1);
+    expect(calls.filter(([input]) => new URL(String(input)).pathname === '/api/v1/meeting-sessions/review-minutes')).toHaveLength(3);
+  });
+
+  it('resumes observing DRAFT_REGENERATION after returning to Review without rendering partial Minutes', async () => {
+    let statusReads = 0;
+    const terminal = {
+      ...reviewData, version: 8, minutes: { ...reviewData.minutes, templateId: 'project', templateVersion: '2', summary: 'Returned after completion' },
+      lastOperation: { type: 'MINUTES_REGENERATION', outcome: 'SUCCEEDED', requestedTemplateId: 'project' },
+    };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      void init;
+      const url = new URL(String(input));
+      if (url.pathname === '/api/v1/meeting-sessions/review-minutes') {
+        statusReads += 1;
+        if (statusReads < 3) return apiResponse({ data: {
+          sessionId: 'review-minutes', version: 7, status: 'PROCESSING',
+          processing: { stage: 'DRAFT_REGENERATION', progressPercent: 45 }, allowedActions: [],
+        } });
+        return apiResponse({ data: terminal });
+      }
+      if (url.pathname === '/api/v1/app-config') return apiResponse({ data: {
+        company: { id: 'company-1', name: 'Example', timezone: 'Asia/Seoul' },
+        document: { provider: 'NOTION', configured: true, connectionVersion: 2, rootUrl: 'https://notion.example' },
+      } });
+      if (url.pathname === '/api/v1/participants') return apiResponse({ data: { items: [{ id: 'p1', name: 'Ada Lovelace', email: 'private@example.com' }] } });
+      throw new Error(`Unexpected request: ${url.pathname}`);
+    });
+    renderReview(fetchMock);
+
+    expect(await screen.findByLabelText('회의 요약')).toHaveProperty('value', 'Returned after completion');
+    expect(statusReads).toBe(3);
+    expect(fetchMock.mock.calls.some(([input, init]) => String(input).endsWith('/minutes/regenerate') || init?.method === 'PUT')).toBe(false);
+  });
+
+  it('applies a correlated terminal API-010 REVIEW snapshot when the initial Review read races with completion', async () => {
+    const terminal = {
+      ...reviewData,
+      version: 8,
+      speakers: [{ speakerId: 'speaker-b', label: 'Speaker B', participantId: 'p1' }],
+      transcript: [{ segmentId: 'terminal-segment', speakerId: 'speaker-b', startMs: 3000, endMs: 5000, text: 'Terminal transcript' }],
+      minutes: { ...reviewData.minutes, templateId: 'project', templateVersion: '2', summary: 'Terminal regenerated Minutes' },
+      allowedActions: ['UPDATE_SPEAKER_MAPPING'],
+      lastOperation: { type: 'MINUTES_REGENERATION', outcome: 'SUCCEEDED', requestedTemplateId: 'project' },
+    };
+    let reviewReads = 0;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input));
+      if (url.pathname === '/api/v1/meeting-sessions/review-minutes') {
+        reviewReads += 1;
+        if (reviewReads === 1) return apiResponse({ data: {
+          sessionId: 'review-minutes', version: 7, status: 'PROCESSING',
+          processing: { stage: 'DRAFT_REGENERATION', progressPercent: 100 }, allowedActions: [],
+        } });
+        return apiResponse({ data: { ...terminal, status: 'REVIEW' } });
+      }
+      if (url.pathname === '/api/v1/app-config') return apiResponse({ data: {
+        company: { id: 'company-1', name: 'Example', timezone: 'Asia/Seoul' },
+        document: { provider: 'NOTION', configured: true, connectionVersion: 2, rootUrl: 'https://notion.example' },
+      } });
+      if (url.pathname === '/api/v1/participants') return apiResponse({ data: { items: [{ id: 'p1', name: 'Ada Lovelace', email: 'private@example.com' }] } });
+      throw new Error(`Unexpected request: ${url.pathname}`);
+    });
+    renderReview(fetchMock);
+
+    expect(await screen.findByLabelText('회의 요약')).toHaveProperty('value', 'Terminal regenerated Minutes');
+    expect(screen.getByText('Terminal transcript')).toBeTruthy();
+    expect(screen.getByLabelText('Speaker B 참가자')).toBeTruthy();
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(reviewReads).toBe(2);
   });
 });
