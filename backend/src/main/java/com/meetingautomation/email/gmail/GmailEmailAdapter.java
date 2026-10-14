@@ -54,16 +54,19 @@ public final class GmailEmailAdapter implements EmailProvider {
     public List<RecipientDeliveryResult> sendMeetingEmail(MeetingEmailCommand command) {
         if (command.recipients().isEmpty()) return List.of();
         if (!settings.configured() || !validCommand(command)) return failures(command, true);
-        if (command.recipients().stream().noneMatch(recipient -> EmailSettings.validAddress(recipient.email()))) {
-            return failures(command, true);
-        }
-        String token = token(false);
-        if (token == null) return failures(command, true);
         List<RecipientDeliveryResult> results = new ArrayList<>();
-        for (var recipient : command.recipients()) {
+        for (int index = 0; index < command.recipients().size(); index++) {
+            var recipient = command.recipients().get(index);
             if (!EmailSettings.validAddress(recipient.email())) {
                 results.add(RecipientDeliveryResult.failed(recipient.participantId(), true));
                 continue;
+            }
+            // An earlier send may outlast the token. Refresh before each recipient, never repeat a prior send.
+            String token = token(false);
+            if (token == null) {
+                command.recipients().subList(index, command.recipients().size()).forEach(pending ->
+                        results.add(RecipientDeliveryResult.failed(pending.participantId(), true)));
+                break;
             }
             results.add(send(command, recipient, token));
         }

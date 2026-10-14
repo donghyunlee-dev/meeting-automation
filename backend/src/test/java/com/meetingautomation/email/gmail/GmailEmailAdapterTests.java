@@ -261,6 +261,43 @@ class GmailEmailAdapterTests {
         server.verify();
     }
 
+    @Test
+    void tokenExpiringDuringFirstSendIsRefreshedBeforeSendingLaterRecipient() {
+        var clock = new MutableClock(Instant.parse("2026-10-14T00:00:00Z"));
+        var builder = RestClient.builder();
+        var server = MockRestServiceServer.bindTo(builder).build();
+        var client = new TestClient(new GmailEmailAdapter(builder, SETTINGS, clock), server);
+        expectToken(client);
+        expectSend(client, "first@example.test", ACCESS_TOKEN, () -> clock.now = clock.now.plusSeconds(3601));
+        client.server.expect(requestTo(TOKEN_URL)).andRespond(withSuccess(
+                token(SCOPE, 3600).replace(ACCESS_TOKEN, "refreshed-access-token"), MediaType.APPLICATION_JSON));
+        expectSend(client, "second@example.test", "refreshed-access-token", () -> { });
+
+        assertThat(client.adapter.sendMeetingEmail(command(List.of(new Recipient("pt_1", "first@example.test"),
+                new Recipient("pt_2", "second@example.test")))))
+                .containsExactly(RecipientDeliveryResult.sent("pt_1"), RecipientDeliveryResult.sent("pt_2"));
+        server.verify();
+    }
+
+    @Test
+    void failedRefreshAfterFirstSendPreservesSentAndFailsOnlyRemainingRecipientsRetryably() {
+        var clock = new MutableClock(Instant.parse("2026-10-14T00:00:00Z"));
+        var builder = RestClient.builder();
+        var server = MockRestServiceServer.bindTo(builder).build();
+        var client = new TestClient(new GmailEmailAdapter(builder, SETTINGS, clock), server);
+        expectToken(client);
+        expectSend(client, "first@example.test", ACCESS_TOKEN, () -> clock.now = clock.now.plusSeconds(3601));
+        client.server.expect(requestTo(TOKEN_URL)).andRespond(withStatus(HttpStatusCode.valueOf(503))
+                .body("private-refresh-failure"));
+
+        assertThat(client.adapter.sendMeetingEmail(command(List.of(new Recipient("pt_1", "first@example.test"),
+                new Recipient("pt_2", "second@example.test"), new Recipient("pt_invalid", "invalid"),
+                new Recipient("pt_3", "third@example.test")))))
+                .containsExactly(RecipientDeliveryResult.sent("pt_1"), RecipientDeliveryResult.failed("pt_2", true),
+                        RecipientDeliveryResult.failed("pt_invalid", true), RecipientDeliveryResult.failed("pt_3", true));
+        server.verify();
+    }
+
     @ParameterizedTest
     @ValueSource(strings = {"{}", "not-json", "{\"id\":\"\"}"})
     void malformedSuccessfulSendResponseHasAmbiguousAcceptanceAndIsNotRepeated(String body) {
@@ -334,8 +371,12 @@ class GmailEmailAdapterTests {
     }
 
     private static void expectSend(TestClient client, String recipient) {
+        expectSend(client, recipient, ACCESS_TOKEN, () -> { });
+    }
+
+    private static void expectSend(TestClient client, String recipient, String accessToken, Runnable duringSend) {
         client.server.expect(requestTo(SEND_URL)).andExpect(method(HttpMethod.POST))
-                .andExpect(header("Authorization", "Bearer " + ACCESS_TOKEN))
+                .andExpect(header("Authorization", "Bearer " + accessToken))
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                 .andExpect(request -> {
                     var json = JsonMapper.builder().build().readTree(((MockClientHttpRequest) request).getBodyAsString());
@@ -358,8 +399,11 @@ class GmailEmailAdapterTests {
                     } catch (jakarta.mail.MessagingException malformedMime) {
                         throw new AssertionError("Outgoing message must be valid MIME", malformedMime);
                     }
-                }).andRespond(withSuccess("{\"id\":\"gmail-message-id\",\"threadId\":\"gmail-thread-id\",\"labelIds\":[\"SENT\"]}",
-                        MediaType.APPLICATION_JSON));
+                }).andRespond(request -> {
+                    duringSend.run();
+                    return withSuccess("{\"id\":\"gmail-message-id\",\"threadId\":\"gmail-thread-id\",\"labelIds\":[\"SENT\"]}",
+                            MediaType.APPLICATION_JSON).createResponse(request);
+                });
     }
 
     private static TestClient client(EmailSettings settings) {
