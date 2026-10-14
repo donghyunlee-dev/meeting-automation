@@ -13,6 +13,7 @@ type Props = {
   ownerState: MinutesOwnerState;
   saveState: MinutesSaveState;
   saveBlockedMessage?: string;
+  disabled?: boolean;
   onSave?: (sessionId: string, minutes: StructuredMinutes) => void;
   onChange: (minutes: StructuredMinutes) => void;
 };
@@ -40,7 +41,7 @@ function sameMinutes(left: StructuredMinutes | null, right: StructuredMinutes | 
   return JSON.stringify(left) === JSON.stringify(right);
 }
 
-export function ReviewMinutesEditor({ sessionId, minutes, baseline, participants, ownerState, saveState, saveBlockedMessage, onSave, onChange }: Props) {
+export function ReviewMinutesEditor({ sessionId, minutes, baseline, participants, ownerState, saveState, saveBlockedMessage, disabled = false, onSave, onChange }: Props) {
   const saving = saveState.sessionId === sessionId && saveState.status === 'saving';
   const saved = saveState.sessionId === sessionId && saveState.status === 'saved';
   const failed = saveState.sessionId === sessionId && saveState.status === 'error';
@@ -77,11 +78,11 @@ export function ReviewMinutesEditor({ sessionId, minutes, baseline, participants
       </div>
     </div>
 
-    <div className="review-minutes-fields">
+      <div className="review-minutes-fields" aria-disabled={disabled}>
       <div className="review-minutes-field">
         <label htmlFor="minutes-summary">회의 요약</label>
         <textarea id="minutes-summary" rows={5} value={minutes.summary}
-          onChange={(event) => onChange({ ...minutes, summary: event.target.value })} />
+          disabled={disabled} onChange={(event) => onChange({ ...minutes, summary: event.target.value })} />
       </div>
 
       {LIST_FIELDS.map(({ key, title }) => <fieldset className="review-minutes-section" key={key}>
@@ -91,14 +92,14 @@ export function ReviewMinutesEditor({ sessionId, minutes, baseline, participants
           const id = `minutes-${key}-${index}`;
           return <div className="review-minutes-list-row" key={`${key}-${index}`}>
             <label className="visually-hidden" htmlFor={id}>{title} {index + 1}</label>
-            <textarea id={id} rows={2} value={value} aria-invalid={invalid}
+            <textarea id={id} rows={2} value={value} aria-invalid={invalid} disabled={disabled}
               aria-describedby={invalid ? `${id}-error` : undefined} onChange={(event) => updateList(key, index, event.target.value)} />
             {invalid && <p className="review-minutes-field-error" id={`${id}-error`}>내용을 입력해 주세요.</p>}
             <button className="button button-secondary" type="button" aria-label={`${title} ${index + 1} 삭제`}
-              onClick={() => onChange({ ...minutes, [key]: minutes[key].filter((_, itemIndex) => itemIndex !== index) })}>삭제</button>
+              disabled={disabled} onClick={() => onChange({ ...minutes, [key]: minutes[key].filter((_, itemIndex) => itemIndex !== index) })}>삭제</button>
           </div>;
         })}
-        <button className="button button-secondary review-minutes-add" type="button" onClick={() => onChange({ ...minutes, [key]: [...minutes[key], ''] })}>
+        <button className="button button-secondary review-minutes-add" type="button" disabled={disabled} onClick={() => onChange({ ...minutes, [key]: [...minutes[key], ''] })}>
           {title} 추가
         </button>
       </fieldset>)}
@@ -119,13 +120,13 @@ export function ReviewMinutesEditor({ sessionId, minutes, baseline, participants
           return <div className="review-action-item" key={`action-${index}`}>
             <div className="review-minutes-field">
               <label htmlFor={taskId}>할 일 {index + 1}</label>
-              <textarea id={taskId} rows={2} value={item.task} aria-invalid={taskInvalid}
+              <textarea id={taskId} rows={2} value={item.task} aria-invalid={taskInvalid} disabled={disabled}
                 aria-describedby={taskInvalid ? `${taskId}-error` : undefined} onChange={(event) => updateActionItem({ task: event.target.value })} />
               {taskInvalid && <p className="review-minutes-field-error" id={`${taskId}-error`}>할 일을 입력해 주세요.</p>}
             </div>
             <div className="review-minutes-field">
               <label htmlFor={`minutes-action-owner-${index}`}>담당자 {index + 1}</label>
-              <select id={`minutes-action-owner-${index}`} value={item.ownerParticipantId ?? ''} disabled={!canChooseOwner}
+              <select id={`minutes-action-owner-${index}`} value={item.ownerParticipantId ?? ''} disabled={disabled || !canChooseOwner}
                 onChange={(event) => updateActionItem({ ownerParticipantId: event.target.value || null })}>
                 <option value="">미지정</option>
                 {item.ownerParticipantId && (!canChooseOwner || !ownerInRoster) && <option value={item.ownerParticipantId}>기존 담당자 유지</option>}
@@ -138,24 +139,24 @@ export function ReviewMinutesEditor({ sessionId, minutes, baseline, participants
             </div>
             <div className="review-minutes-field">
               <label htmlFor={dateId}>기한 {index + 1}</label>
-              <input id={dateId} type="date" value={item.dueDate ?? ''} aria-invalid={dateInvalid}
+              <input id={dateId} type="date" value={item.dueDate ?? ''} aria-invalid={dateInvalid} disabled={disabled}
                 aria-describedby={dateInvalid ? `${dateId}-error` : undefined}
                 onChange={(event) => updateActionItem({ dueDate: event.target.value || null })} />
               {dateInvalid && <p className="review-minutes-field-error" id={`${dateId}-error`}>날짜를 확인해 주세요.</p>}
             </div>
             <button className="button button-secondary review-action-remove" type="button" aria-label={`Action Item ${index + 1} 삭제`}
-              onClick={() => onChange({ ...minutes, actionItems: minutes.actionItems.filter((_, itemIndex) => itemIndex !== index) })}>삭제</button>
+              disabled={disabled} onClick={() => onChange({ ...minutes, actionItems: minutes.actionItems.filter((_, itemIndex) => itemIndex !== index) })}>삭제</button>
           </div>;
         })}
         <button className="button button-secondary review-minutes-add" type="button"
-          onClick={() => onChange({ ...minutes, actionItems: [...minutes.actionItems, { ownerParticipantId: null, task: '', dueDate: null }] })}>
+          disabled={disabled} onClick={() => onChange({ ...minutes, actionItems: [...minutes.actionItems, { ownerParticipantId: null, task: '', dueDate: null }] })}>
           Action Item 추가
         </button>
       </fieldset>
     </div>
 
     <div className="review-minutes-save-controls">
-      <button className="button button-primary" type="button" disabled={!canSave} onClick={handleSave}>
+      <button className="button button-primary" type="button" disabled={!canSave || disabled} onClick={handleSave}>
         {saving ? '저장 중…' : '회의록 저장'}
       </button>
       {!valid && <p role="status">비어 있는 항목을 확인해 주세요.</p>}
