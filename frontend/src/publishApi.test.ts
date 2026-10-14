@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { confirmReview, getPublishSnapshot, publishSession, PublishApiError } from './publishApi';
+import { confirmReview, getPublishSnapshot, publishSession, retryDelivery, PublishApiError } from './publishApi';
 
 function response(data: unknown, status = 200): Response {
   return new Response(JSON.stringify({ data }), { status, headers: { 'Content-Type': 'application/json' } });
@@ -8,6 +8,23 @@ function response(data: unknown, status = 200): Response {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('publish API', () => {
+  it('retries exactly one delivery with the caller-owned idempotency key and accepts only a 202 pending result', async () => {
+    const fetchMock = vi.fn(async () => response({ deliveryId: 'd/1', status: 'PENDING' }, 202));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(retryDelivery('session-1', 'd/1', 'retry-key')).resolves.toEqual({ deliveryId: 'd/1', status: 'PENDING' });
+
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toContain('/meeting-sessions/session-1/deliveries/d%2F1/retry');
+    expect(init.method).toBe('POST');
+    expect(new Headers(init.headers).get('Idempotency-Key')).toBe('retry-key');
+    expect(init.body).toBeUndefined();
+  });
+
+  it('does not accept a non-pending retry response as successful admission', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => response({ deliveryId: 'd1', status: 'SENT' }, 200)));
+    await expect(retryDelivery('session-1', 'd1', 'retry-key')).rejects.toMatchObject({ code: 'INVALID_RESPONSE', outcomeUnknown: true });
+  });
   it('confirms the current Review version before publishing', async () => {
     const fetchMock = vi.fn(async () => response({ status: 'CONFIRMED', version: 12 }));
     vi.stubGlobal('fetch', fetchMock);

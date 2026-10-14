@@ -33,3 +33,13 @@
 - [ ] retryable false 또는 ambiguous 결과에서는 API-016 호출이 0회인지 확인한다.
 - [ ] API-016 202 이후 polling으로 API-010 최종 상태를 표시하고 원문/Secret/Email 주소가 보이지 않는지 확인한다.
 - [ ] focused component/accessibility 테스트와 실제 Frontend 명령의 결과를 Issue #51에 기록한다. 별도 Browser QA나 local service는 시작하지 않는다.
+
+## 구현 완료 및 검증 기록 (2026-10-14)
+
+- [x] SCR-008 route와 API-010 기반 Document/Email/Slack 렌더링을 구현했다. Share 화면에서 Complete 결과로 이동할 수 있다.
+- [x] retryable FAILED 행 전용 API-016 action, 클릭별 key, 응답 유실 시 같은 key 보존/재조정, API-010 polling을 구현했다.
+- [x] accessible Retry 이름/status live region, participant ID fallback, 이메일 숨김, HTTP(S) URL 검증, 모바일 CSS를 구현했다.
+- [x] `npm run test -- --run src/CompletePage.test.tsx src/publishApi.test.ts src/SharePage.test.tsx` (frontend): 34 passed.
+- [x] `npx eslint src/CompletePage.tsx src/CompletePage.test.tsx src/publishApi.ts src/publishApi.test.ts src/App.tsx src/SharePage.tsx` (frontend): passed.
+- [x] `npm run build` (frontend): TypeScript and Vite build passed.
+- [x] `git diff --check`: passed. local service/Browser QA는 실행하지 않았다.

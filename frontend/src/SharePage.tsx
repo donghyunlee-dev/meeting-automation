@@ -389,6 +389,7 @@ export function SharePage() {
       <h2>문서 저장 완료</h2>
       {documentUrl ? <a href={documentUrl} target="_blank" rel="noopener noreferrer">저장된 회의록 열기<span className="visually-hidden"> (새 탭)</span></a>
         : <p role="status">문서 저장은 완료되었습니다. 문서 링크를 확인할 수 없어 상태를 새로고침해 주세요.</p>}
+      <Link className="button button-secondary" to={`/meetings/${encodeURIComponent(sessionId)}/complete`}>전체 결과와 재시도 보기</Link>
       {(snapshot?.status === 'DELIVERING' || (snapshot?.status === 'DOCUMENT_SAVED' && hasPendingEmailDeliveries(snapshot)))
         && <p role="status">선택한 공유 채널의 전달 상태를 확인하고 있습니다.</p>}
       {(snapshot?.status === 'COMPLETED' || snapshot?.status === 'COMPLETED_WITH_WARNINGS') && <p role="status">문서 저장이 완료되었습니다. 채널별 결과는 상태 확인에서 갱신됩니다.</p>}

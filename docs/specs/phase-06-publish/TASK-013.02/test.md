@@ -38,3 +38,14 @@
 ## 완료 증거
 
 Frontend focused test/lint/build 명령과 결과, DOM accessibility/keyboard/360px breakpoint assertions, API-016 단건 action 및 민감정보 가림 증거를 Issue #51에 기록한다. local service/Browser QA pass와 실제 Gmail/Slack 메시지 전송은 수행하지 않는다.
+
+## 실행 결과 (2026-10-14)
+
+| 명령 (working directory: `frontend`) | 결과 |
+|---|---|
+| `npm run test -- --run src/CompletePage.test.tsx src/publishApi.test.ts src/SharePage.test.tsx` | PASS — 3 test files, 34 tests |
+| `npx eslint src/CompletePage.tsx src/CompletePage.test.tsx src/publishApi.ts src/publishApi.test.ts src/App.tsx src/SharePage.tsx` | PASS |
+| `npm run build` | PASS — TypeScript check and Vite production build |
+| `git diff --check` (repository root) | PASS |
+
+Component/API mock tests cover mixed/all-sent/all-failed/no-delivery summaries; safe and missing document links; participant ID fallback and email privacy; retry eligibility and 202 polling; accessible button focus/name/live status; and response-loss key reuse. CSS applies a 420px responsive layout; tests assert keyboard-accessible DOM. Repository policy prohibits local service/Browser QA, so no real provider delivery or rendered-device check was run.

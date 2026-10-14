@@ -34,3 +34,10 @@ API-010 결과 렌더링을 먼저 검증해 Retry 가능 여부/summary가 단�
 ## 검증 접근
 
 Frontend unit/component/API mock tests로 summary selector, Delivery row eligibility, idempotency key lifecycle, polling/state reconciliation, 접근 가능한 DOM 및 360px breakpoint를 확인한다. local service/Browser QA pass를 시작하지 않으며 실제 Gmail/Slack 전송은 수행하지 않는다. Frontend 검증은 저장소 package 명령으로 변경 파일 테스트, lint, build만 실행한다.
+
+## 구현 검증 결과 (2026-10-14)
+
+- `frontend`에서 `npm run test -- --run src/CompletePage.test.tsx src/publishApi.test.ts src/SharePage.test.tsx`: 3개 test files, 34 tests passed.
+- `frontend`에서 `npx eslint src/CompletePage.tsx src/CompletePage.test.tsx src/publishApi.ts src/publishApi.test.ts src/App.tsx src/SharePage.tsx`: 통과.
+- `frontend`에서 `npm run build`: `tsc -b` 및 Vite production build 통과.
+- `git diff --check`: 통과. 별도 local service/Browser QA는 실행하지 않았다.
