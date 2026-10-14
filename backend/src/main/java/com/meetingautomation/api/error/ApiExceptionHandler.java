@@ -14,6 +14,7 @@ import com.meetingautomation.api.processing.AudioChunksIncompleteException;
 import com.meetingautomation.api.session.SessionStateConflictException;
 import com.meetingautomation.api.session.SessionVersionConflictException;
 import com.meetingautomation.api.session.ReviewValidationException;
+import com.meetingautomation.api.session.DeliveryRetryException;
 import com.meetingautomation.document.DocumentProviderException;
 import com.meetingautomation.api.idempotency.IdempotencyKeyConflictException;
 import com.meetingautomation.api.participant.ParticipantNotFoundException;
@@ -172,6 +173,19 @@ public class ApiExceptionHandler {
                 false,
                 request,
                 Map.of());
+    }
+
+    @ExceptionHandler(DeliveryRetryException.class)
+    public ResponseEntity<ApiErrorResponse> handleDeliveryRetryFailure(
+            DeliveryRetryException exception, HttpServletRequest request) {
+        return switch (exception.reason()) {
+            case NOT_FOUND -> errorResponse(HttpStatus.NOT_FOUND, "DELIVERY_NOT_FOUND",
+                    "Delivery was not found for this meeting session.", "NOT_FOUND", false, request, Map.of());
+            case NOT_RETRYABLE -> errorResponse(HttpStatus.CONFLICT, "DELIVERY_NOT_RETRYABLE",
+                    "This delivery cannot be retried.", "CONFLICT", false, request, Map.of());
+            case IN_PROGRESS -> errorResponse(HttpStatus.CONFLICT, "DELIVERY_RETRY_IN_PROGRESS",
+                    "This delivery retry is already in progress.", "CONFLICT", false, request, Map.of());
+        };
     }
 
     @ExceptionHandler(AudioChunksIncompleteException.class)

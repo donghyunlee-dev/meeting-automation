@@ -41,7 +41,10 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -63,6 +66,7 @@ import org.springframework.test.web.servlet.MockMvc;
 class MeetingSessionPublishApiTests {
     private static final String SESSION_URL = "/api/v1/meeting-sessions/{sessionId}";
     private static final String PUBLISH_URL = SESSION_URL + "/publish";
+    private static final String RETRY_URL = SESSION_URL + "/deliveries/{deliveryId}/retry";
     private static final String SESSION_ID = "ms_publish-" + UUID.randomUUID();
     private static final String REQUEST = """
             {"emailRecipientParticipantIds":["pt_ada"],"notificationEnabled":true}
@@ -79,6 +83,10 @@ class MeetingSessionPublishApiTests {
     @MockitoBean private SlackNotificationAdapter notificationProvider;
 
     @BeforeEach
+    void resetPublishFixture() {
+        saveConfirmedSessionAndResetQueue();
+    }
+
     void saveConfirmedSessionAndResetQueue() {
         sessionStore.remove(SESSION_ID);
         workerExecutor.reset();
@@ -220,6 +228,228 @@ class MeetingSessionPublishApiTests {
                 .andExpect(jsonPath("$.data.deliveries[1].errorCode").value("NOTIFICATION_FAILED"))
                 .andExpect(jsonPath("$.data.deliveries[1].retryable").value(true));
         verify(notificationProvider).sendMeetingPublished(any());
+    }
+
+    @Test
+    void retryFailedEmailDeliveryReplaysByKeyAndLeavesOtherChannelUntouched() throws Exception {
+        doAnswer(invocation -> {
+            MeetingEmailCommand command = invocation.getArgument(0);
+            return command.recipients().stream().map(recipient ->
+                    RecipientDeliveryResult.failed(recipient.participantId(), true)).toList();
+        }).when(emailProvider).sendMeetingEmail(any());
+        mockMvc.perform(publish(SESSION_ID, "7", "retry-email-source", REQUEST)).andExpect(status().isAccepted());
+        workerExecutor.drain();
+        MeetingSessionStatusResponseData before = deliverySnapshot(SESSION_ID);
+        String emailId = before.emailDeliveryId();
+        int versionBeforeRetry = sessionStore.find(SESSION_ID).orElseThrow().version();
+        doAnswer(invocation -> {
+            MeetingEmailCommand command = invocation.getArgument(0);
+            return command.recipients().stream().map(recipient ->
+                    RecipientDeliveryResult.sent(recipient.participantId())).toList();
+        }).when(emailProvider).sendMeetingEmail(any());
+        when(providerFactory.create(any())).thenReturn(new FakePublishProvider(false, false, null,
+                "ada.current@example.com"));
+
+        String first = mockMvc.perform(retry(SESSION_ID, emailId, "email-retry-once"))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.data.deliveryId").value(emailId))
+                .andExpect(jsonPath("$.data.status").value("PENDING"))
+                .andReturn().getResponse().getContentAsString();
+        String replay = mockMvc.perform(retry(SESSION_ID, emailId, "email-retry-once"))
+                .andExpect(status().isAccepted()).andReturn().getResponse().getContentAsString();
+        assertThat(replay).isEqualTo(first);
+        assertThat(workerExecutor.pendingCount()).isEqualTo(1);
+        workerExecutor.drain();
+        assertThat(sessionStore.find(SESSION_ID).orElseThrow().version()).isGreaterThan(versionBeforeRetry);
+        mockMvc.perform(get(SESSION_URL, SESSION_ID)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.deliveries[0].status").value("SENT"))
+                .andExpect(jsonPath("$.data.deliveries[0].attemptCount").value(2))
+                .andExpect(jsonPath("$.data.deliveries[1].status").value("SENT"))
+                .andExpect(jsonPath("$.data.deliveries[1].attemptCount").value(1));
+        org.mockito.ArgumentCaptor<MeetingEmailCommand> command =
+                org.mockito.ArgumentCaptor.forClass(MeetingEmailCommand.class);
+        verify(emailProvider, org.mockito.Mockito.times(2)).sendMeetingEmail(command.capture());
+        assertThat(command.getAllValues().get(1).recipients())
+                .containsExactly(new MeetingEmailCommand.Recipient("pt_ada", "ada.current@example.com"));
+        verify(notificationProvider).sendMeetingPublished(any());
+    }
+
+    @Test
+    void retryRejectsMissingKeyUnknownDeliveryAndAlreadySuccessfulDelivery() throws Exception {
+        mockMvc.perform(retry(SESSION_ID, "dlv_00000000-0000-0000-0000-000000000000", null))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error.code").value("VALIDATION_FAILED"));
+        mockMvc.perform(retry("ms_publish_missing", "dlv_00000000-0000-0000-0000-000000000000", "missing-session"))
+                .andExpect(status().isNotFound()).andExpect(jsonPath("$.error.code").value("SESSION_NOT_FOUND"));
+        mockMvc.perform(retry(SESSION_ID, "dlv_00000000-0000-0000-0000-000000000000", "unknown-delivery"))
+                .andExpect(status().isNotFound()).andExpect(jsonPath("$.error.code").value("DELIVERY_NOT_FOUND"));
+
+        String foreignSessionId = "ms_publish_foreign-" + UUID.randomUUID();
+        sessionStore.save(new MeetingSession(foreignSessionId, 7, "CONFIRMED", 1,
+                new MeetingSession.Meeting("Foreign", "default.md", "1.0.0", List.of("pt_ada"),
+                        "Asia/Seoul", List.of(new MeetingSession.ParticipantReference("pt_ada", "Ada"))),
+                "DRAFT_READY", 100, List.of(), List.of(), null,
+                new StructuredMinutes("default.md", "1.0.0", "Summary", List.of(), List.of(), List.of(), List.of()),
+                Instant.parse("2026-10-01T03:00:00Z")), null);
+        mockMvc.perform(publish(foreignSessionId, "7", "foreign-owner-publish",
+                "{\"emailRecipientParticipantIds\":[\"pt_ada\"],\"notificationEnabled\":false}"))
+                .andExpect(status().isAccepted());
+        workerExecutor.drain();
+        mockMvc.perform(retry(SESSION_ID, deliveryId(foreignSessionId, 0), "foreign-owner-retry"))
+                .andExpect(status().isNotFound()).andExpect(jsonPath("$.error.code").value("DELIVERY_NOT_FOUND"));
+        sessionStore.remove(foreignSessionId);
+
+        mockMvc.perform(publish(SESSION_ID, "7", "retry-sent-source", REQUEST)).andExpect(status().isAccepted());
+        workerExecutor.drain();
+        String sentId = deliveryId(SESSION_ID, 0);
+        mockMvc.perform(retry(SESSION_ID, sentId, "retry-sent-delivery"))
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.error.code").value("DELIVERY_NOT_RETRYABLE"));
+        verify(emailProvider, org.mockito.Mockito.times(2)).sendMeetingEmail(any());
+        verify(notificationProvider).sendMeetingPublished(any());
+    }
+
+    @Test
+    void retryRejectsNonretryableAndPendingDeliveriesWithoutProviderCalls() throws Exception {
+        doThrow(new IllegalStateException("sensitive timeout detail"))
+                .when(emailProvider).sendMeetingEmail(any());
+        mockMvc.perform(publish(SESSION_ID, "7", "retry-nonretryable-source", REQUEST)).andExpect(status().isAccepted());
+        workerExecutor.drain();
+        String emailId = deliveryId(SESSION_ID, 0);
+        String response = mockMvc.perform(retry(SESSION_ID, emailId, "retry-nonretryable"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error.code").value("DELIVERY_NOT_RETRYABLE"))
+                .andReturn().getResponse().getContentAsString();
+        assertThat(response).doesNotContain("sensitive timeout detail");
+        verify(emailProvider).sendMeetingEmail(any());
+
+        org.mockito.Mockito.reset(emailProvider, notificationProvider);
+        saveConfirmedSessionAndResetQueue();
+        mockMvc.perform(publish(SESSION_ID, "7", "retry-pending-source", REQUEST)).andExpect(status().isAccepted());
+        String pendingId = deliveryId(SESSION_ID, 0);
+        mockMvc.perform(retry(SESSION_ID, pendingId, "retry-pending"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error.code").value("DELIVERY_RETRY_IN_PROGRESS"));
+        assertThat(workerExecutor.pendingCount()).isEqualTo(1);
+        verify(emailProvider, never()).sendMeetingEmail(any());
+        workerExecutor.drain();
+    }
+
+    @Test
+    void correctableEmailRosterLookupFailureRemainsRetryableWithoutCountingAnAttempt() throws Exception {
+        doAnswer(invocation -> {
+            MeetingEmailCommand command = invocation.getArgument(0);
+            return command.recipients().stream().map(recipient ->
+                    RecipientDeliveryResult.failed(recipient.participantId(), true)).toList();
+        }).when(emailProvider).sendMeetingEmail(any());
+        mockMvc.perform(publish(SESSION_ID, "7", "retry-preflight-source",
+                "{\"emailRecipientParticipantIds\":[\"pt_ada\"],\"notificationEnabled\":false}"))
+                .andExpect(status().isAccepted());
+        workerExecutor.drain();
+        String emailId = deliveryId(SESSION_ID, 0);
+        when(providerFactory.create(any())).thenReturn(new FakePublishProvider(false, true));
+
+        mockMvc.perform(retry(SESSION_ID, emailId, "retry-preflight-failure")).andExpect(status().isAccepted());
+        workerExecutor.drain();
+
+        mockMvc.perform(get(SESSION_URL, SESSION_ID)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.deliveries[0].status").value("FAILED"))
+                .andExpect(jsonPath("$.data.deliveries[0].retryable").value(true))
+                .andExpect(jsonPath("$.data.deliveries[0].attemptCount").value(1));
+        verify(emailProvider, org.mockito.Mockito.times(1)).sendMeetingEmail(any());
+    }
+
+    @Test
+    void retryNotificationUsesOnlyNotificationProviderAndConflictingKeyCannotTargetAnotherDelivery() throws Exception {
+        when(notificationProvider.sendMeetingPublished(any())).thenReturn(DeliveryResult.failed(true));
+        mockMvc.perform(publish(SESSION_ID, "7", "retry-notification-source",
+                "{\"emailRecipientParticipantIds\":[\"pt_ada\",\"pt_grace\"],\"notificationEnabled\":true}"))
+                .andExpect(status().isAccepted());
+        workerExecutor.drain();
+        String notificationId = deliveryId(SESSION_ID, 2);
+        String emailId = deliveryId(SESSION_ID, 0);
+        when(notificationProvider.sendMeetingPublished(any())).thenReturn(DeliveryResult.sent());
+        mockMvc.perform(retry(SESSION_ID, notificationId, "shared-retry-key")).andExpect(status().isAccepted());
+        mockMvc.perform(retry(SESSION_ID, emailId, "shared-retry-key"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error.code").value("IDEMPOTENCY_KEY_CONFLICT"));
+        workerExecutor.drain();
+        mockMvc.perform(get(SESSION_URL, SESSION_ID)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.deliveries[0].status").value("SENT"))
+                .andExpect(jsonPath("$.data.deliveries[0].attemptCount").value(1))
+                .andExpect(jsonPath("$.data.deliveries[1].status").value("SENT"))
+                .andExpect(jsonPath("$.data.deliveries[1].attemptCount").value(1))
+                .andExpect(jsonPath("$.data.deliveries[2].status").value("SENT"))
+                .andExpect(jsonPath("$.data.deliveries[2].attemptCount").value(2));
+        verify(notificationProvider, org.mockito.Mockito.times(2)).sendMeetingPublished(any());
+        verify(emailProvider, org.mockito.Mockito.times(1)).sendMeetingEmail(any());
+    }
+
+    @Test
+    void concurrentDifferentKeysCanQueueOnlyOneRetryForTheSameDelivery() throws Exception {
+        doAnswer(invocation -> {
+            MeetingEmailCommand command = invocation.getArgument(0);
+            return command.recipients().stream().map(recipient ->
+                    RecipientDeliveryResult.failed(recipient.participantId(), true)).toList();
+        }).when(emailProvider).sendMeetingEmail(any());
+        mockMvc.perform(publish(SESSION_ID, "7", "concurrent-retry-source",
+                "{\"emailRecipientParticipantIds\":[\"pt_ada\"],\"notificationEnabled\":false}"))
+                .andExpect(status().isAccepted());
+        workerExecutor.drain();
+        String emailId = deliveryId(SESSION_ID, 0);
+        doAnswer(invocation -> {
+            MeetingEmailCommand command = invocation.getArgument(0);
+            return command.recipients().stream().map(recipient ->
+                    RecipientDeliveryResult.sent(recipient.participantId())).toList();
+        }).when(emailProvider).sendMeetingEmail(any());
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+        var pool = Executors.newFixedThreadPool(2);
+        try {
+            var first = pool.submit(() -> retryStatus(emailId, "concurrent-key-a", ready, start));
+            var second = pool.submit(() -> retryStatus(emailId, "concurrent-key-b", ready, start));
+            assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
+            start.countDown();
+            assertThat(List.of(first.get(5, TimeUnit.SECONDS), second.get(5, TimeUnit.SECONDS)))
+                    .containsExactlyInAnyOrder(202, 409);
+            assertThat(workerExecutor.pendingCount()).isEqualTo(1);
+            verify(emailProvider).sendMeetingEmail(any());
+        } finally {
+            start.countDown();
+            pool.shutdownNow();
+        }
+        workerExecutor.drain();
+        mockMvc.perform(get(SESSION_URL, SESSION_ID)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.deliveries[0].status").value("SENT"))
+                .andExpect(jsonPath("$.data.deliveries[0].attemptCount").value(2));
+    }
+
+    private int retryStatus(String deliveryId, String key, CountDownLatch ready, CountDownLatch start)
+            throws Exception {
+        ready.countDown();
+        if (!start.await(5, TimeUnit.SECONDS)) throw new IllegalStateException("Retry test barrier timed out.");
+        return mockMvc.perform(retry(SESSION_ID, deliveryId, key)).andReturn().getResponse().getStatus();
+    }
+
+    private MeetingSessionStatusResponseData deliverySnapshot(String sessionId) throws Exception {
+        String json = mockMvc.perform(get(SESSION_URL, sessionId)).andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        var root = new tools.jackson.databind.ObjectMapper().readTree(json);
+        return new MeetingSessionStatusResponseData(root.at("/data/deliveries/0/deliveryId").asText());
+    }
+
+    private String deliveryId(String sessionId, int index) throws Exception {
+        String json = mockMvc.perform(get(SESSION_URL, sessionId)).andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        return new tools.jackson.databind.ObjectMapper().readTree(json)
+                .at("/data/deliveries/" + index + "/deliveryId").asText();
+    }
+
+    private record MeetingSessionStatusResponseData(String emailDeliveryId) { }
+
+    private static org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder retry(
+            String sessionId, String deliveryId, String key) {
+        var request = post(RETRY_URL, sessionId, deliveryId);
+        if (key != null) request.header("Idempotency-Key", key);
+        return request;
     }
 
     @Test
@@ -465,15 +695,21 @@ class MeetingSessionPublishApiTests {
         private final boolean fail;
         private final boolean failParticipantList;
         private final String missingEmailParticipantId;
+        private final String adaEmailAddress;
         FakePublishProvider() { this(false, false, null); }
         FakePublishProvider(boolean fail) { this(fail, false, null); }
         FakePublishProvider(boolean fail, boolean failParticipantList) {
             this(fail, failParticipantList, null);
         }
         FakePublishProvider(boolean fail, boolean failParticipantList, String missingEmailParticipantId) {
+            this(fail, failParticipantList, missingEmailParticipantId, "ada@example.com");
+        }
+        FakePublishProvider(boolean fail, boolean failParticipantList, String missingEmailParticipantId,
+                String adaEmailAddress) {
             this.fail = fail;
             this.failParticipantList = failParticipantList;
             this.missingEmailParticipantId = missingEmailParticipantId;
+            this.adaEmailAddress = adaEmailAddress;
         }
         @Override public ProviderHealth validateConnection() { return null; }
         @Override public DocumentStructure discoverStructure(String rootId) { return null; }
@@ -483,7 +719,7 @@ class MeetingSessionPublishApiTests {
         @Override public List<Participant> listParticipants(String participantsPageId) {
             assertThat(participantsPageId).isEqualTo("participants");
             if (failParticipantList) throw com.meetingautomation.document.DocumentProviderException.participantListFailed(true);
-            return List.of(new Participant("pt_ada", "Ada", "pt_ada".equals(missingEmailParticipantId) ? null : "ada@example.com"),
+            return List.of(new Participant("pt_ada", "Ada", "pt_ada".equals(missingEmailParticipantId) ? null : adaEmailAddress),
                     new Participant("pt_grace", "Grace", "grace@example.com"));
         }
         @Override public TransferManifest readManifest() { return new TransferManifest("sha256:" + "0".repeat(64), List.of(), List.of()); }
