@@ -163,7 +163,8 @@ public final class MeetingSessionStore {
                 current.processingFailure());
         sessions.put(sessionId, publishing);
         publishPreAcceptance.put(sessionId, new PublishPreAcceptance(current, publishSnapshots.get(sessionId)));
-        PublishSnapshot snapshot = new PublishSnapshot(java.util.List.copyOf(recipients), notificationEnabled, null, null);
+        PublishSnapshot snapshot = new PublishSnapshot(java.util.List.copyOf(recipients), notificationEnabled, null, null,
+                recipients.stream().map(EmailDelivery::pending).toList());
         publishSnapshots.put(sessionId, snapshot);
         PublishResponse response = PublishResponse.accepted(sessionId);
         acceptedPublishes.put(key, new AcceptedPublish(fingerprint, response));
@@ -198,7 +199,8 @@ public final class MeetingSessionStore {
         sessions.put(sessionId, updated);
         publishPreAcceptance.remove(sessionId);
         PublishSnapshot prior = publishSnapshots.get(sessionId);
-        publishSnapshots.put(sessionId, new PublishSnapshot(prior.recipients(), prior.notificationEnabled(), ref, null));
+        publishSnapshots.put(sessionId, new PublishSnapshot(prior.recipients(), prior.notificationEnabled(), ref, null,
+                prior.deliveries()));
         return updated;
     }
 
@@ -210,8 +212,40 @@ public final class MeetingSessionStore {
         publishPreAcceptance.remove(sessionId);
         PublishSnapshot prior = publishSnapshots.get(sessionId);
         publishSnapshots.put(sessionId, new PublishSnapshot(prior.recipients(), prior.notificationEnabled(), null,
-                "DOCUMENT_FAILURE"));
+                "DOCUMENT_FAILURE", java.util.List.of()));
         return updated;
+    }
+
+    public synchronized java.util.List<EmailDelivery> beginEmailDelivery(
+            String sessionId, java.util.Set<String> recipientIds) {
+        PublishSnapshot prior = publishSnapshots.get(sessionId);
+        if (prior == null || prior.document() == null || recipientIds.isEmpty())
+            return prior == null ? java.util.List.of() : prior.deliveries();
+        java.time.Instant attemptedAt = java.time.Instant.now();
+        java.util.List<EmailDelivery> deliveries = prior.deliveries().stream()
+                .map(delivery -> recipientIds.contains(delivery.recipientParticipantId())
+                        && "PENDING".equals(delivery.status()) ? delivery.sending(attemptedAt) : delivery)
+                .toList();
+        publishSnapshots.put(sessionId, new PublishSnapshot(prior.recipients(), prior.notificationEnabled(),
+                prior.document(), prior.errorCode(), deliveries));
+        advancePublishVersion(sessionId);
+        return deliveries;
+    }
+
+    public synchronized void completeEmailDelivery(String sessionId, java.util.List<EmailDelivery> deliveries) {
+        PublishSnapshot prior = publishSnapshots.get(sessionId);
+        if (prior == null || prior.document() == null || prior.deliveries().equals(deliveries)) return;
+        publishSnapshots.put(sessionId, new PublishSnapshot(prior.recipients(), prior.notificationEnabled(),
+                prior.document(), prior.errorCode(), deliveries));
+        advancePublishVersion(sessionId);
+    }
+
+    private void advancePublishVersion(String sessionId) {
+        MeetingSession current = sessions.get(sessionId);
+        if (current == null) return;
+        sessions.put(sessionId, copy(current, Math.addExact(current.version(), 1), current.status(),
+                current.processingStage(), current.progressPercent(), current.speakers(), current.transcript(),
+                current.processingFailure()));
     }
 
     public PublishSnapshot findPublishSnapshot(String sessionId) { return publishSnapshots.get(sessionId); }
@@ -226,8 +260,12 @@ public final class MeetingSessionStore {
             boolean notificationEnabled) { public PublishFingerprint { recipients = java.util.List.copyOf(recipients); } }
     public record PublishAcceptance(PublishResponse response, MeetingSession session, boolean newlyAccepted) { }
     public record PublishSnapshot(java.util.List<String> recipients, boolean notificationEnabled,
-            com.meetingautomation.document.MeetingDocumentRef document, String errorCode) {
-        public PublishSnapshot { recipients = java.util.List.copyOf(recipients); }
+            com.meetingautomation.document.MeetingDocumentRef document, String errorCode,
+            java.util.List<EmailDelivery> deliveries) {
+        public PublishSnapshot {
+            recipients = java.util.List.copyOf(recipients);
+            deliveries = java.util.List.copyOf(deliveries);
+        }
     }
     private record AcceptedPublish(PublishFingerprint fingerprint, PublishResponse response) { }
     private record PublishPreAcceptance(MeetingSession session, PublishSnapshot publishSnapshot) { }

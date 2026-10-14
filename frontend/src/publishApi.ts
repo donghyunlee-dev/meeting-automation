@@ -3,11 +3,23 @@ import { parseReviewSessionData, type ReviewSession } from './reviewApi';
 export type PublishStatus = 'REVIEW' | 'CONFIRMED' | 'PUBLISHING' | 'DOCUMENT_SAVED' | 'DELIVERING'
   | 'COMPLETED' | 'COMPLETED_WITH_WARNINGS' | 'DOCUMENT_FAILED' | 'PROCESSING_FAILED';
 export type ValidationIssue = { path: string; code: string };
+export type PublishDelivery = {
+  deliveryId?: string;
+  channel: string;
+  recipientParticipantId?: string;
+  status: string;
+  attemptCount?: number;
+  retryable?: boolean;
+  errorCode?: string;
+  lastAttemptAt?: string;
+};
 export type PublishSnapshot = {
   sessionId: string;
   version: number;
   status: PublishStatus;
   allowedActions: string[];
+  meeting?: { participantIds: string[] };
+  deliveries?: PublishDelivery[];
   review?: ReviewSession;
   document?: { documentId?: string; documentUrl?: string | null };
 };
@@ -31,6 +43,32 @@ function parseData(body: unknown): Record<string, unknown> {
   const value = typeof body === 'object' && body !== null && 'data' in body ? (body as { data: unknown }).data : null;
   if (typeof value !== 'object' || value === null || Array.isArray(value)) throw new Error('invalid');
   return value as Record<string, unknown>;
+}
+
+function parseMeeting(value: unknown): PublishSnapshot['meeting'] {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
+  const participantIds = (value as Record<string, unknown>).participantIds;
+  if (!Array.isArray(participantIds) || !participantIds.every((id) => typeof id === 'string')) return undefined;
+  return { participantIds: [...new Set(participantIds as string[])] };
+}
+
+function parseDeliveries(value: unknown): PublishDelivery[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  return value.flatMap((item): PublishDelivery[] => {
+    if (typeof item !== 'object' || item === null || Array.isArray(item)) return [];
+    const raw = item as Record<string, unknown>;
+    if (typeof raw.channel !== 'string' || typeof raw.status !== 'string') return [];
+    return [{
+      ...(typeof raw.deliveryId === 'string' ? { deliveryId: raw.deliveryId } : {}),
+      channel: raw.channel,
+      ...(typeof raw.recipientParticipantId === 'string' ? { recipientParticipantId: raw.recipientParticipantId } : {}),
+      status: raw.status,
+      ...(typeof raw.attemptCount === 'number' ? { attemptCount: raw.attemptCount } : {}),
+      ...(typeof raw.retryable === 'boolean' ? { retryable: raw.retryable } : {}),
+      ...(typeof raw.errorCode === 'string' && /^[A-Z][A-Z0-9_]*$/.test(raw.errorCode) ? { errorCode: raw.errorCode } : {}),
+      ...(typeof raw.lastAttemptAt === 'string' ? { lastAttemptAt: raw.lastAttemptAt } : {}),
+    }];
+  });
 }
 
 function parseError(body: unknown, status: number): PublishApiError {
@@ -114,12 +152,16 @@ export async function getPublishSnapshot(sessionId: string, signal?: AbortSignal
       ...(typeof documentRaw.documentUrl === 'string' || documentRaw.documentUrl === null
         ? { documentUrl: documentRaw.documentUrl as string | null } : {}),
     } : undefined;
+    const meeting = parseMeeting(raw.meeting);
+    const deliveries = parseDeliveries(raw.deliveries);
     const review = raw.status === 'REVIEW' ? parseReviewSessionData(raw, sessionId, response.status) : undefined;
     return {
       sessionId,
       version: raw.version,
       status: raw.status as PublishStatus,
       allowedActions: Array.isArray(raw.allowedActions) ? raw.allowedActions.filter((action): action is string => typeof action === 'string') : [],
+      ...(meeting ? { meeting } : {}),
+      ...(deliveries ? { deliveries } : {}),
       ...(review ? { review } : {}),
       ...(document ? { document } : {}),
     };
