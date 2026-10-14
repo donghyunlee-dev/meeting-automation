@@ -414,8 +414,11 @@ describe('Participants settings', () => {
     expect(fetchMock.mock.calls.some(([url]) => new URL(String(url)).pathname.endsWith('/meeting-sessions'))).toBe(false);
   });
 
-  it('renders the SCR-001 Home content and navigation without fetching recent meetings', async () => {
-    const fetchMock = vi.fn();
+  it('renders the SCR-001 Home content, loads recent meetings, and preserves navigation', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      void input;
+      return response({ data: { items: [] } });
+    });
     installFetchMock(fetchMock);
     renderHomeWithDestinationFixture();
 
@@ -425,11 +428,13 @@ describe('Participants settings', () => {
     expect(screen.getByRole('link', { name: '새 회의 시작' })).toBeTruthy();
     const navigation = within(screen.getByRole('navigation', { name: '주요 메뉴' }));
     expect(navigation.getAllByRole('link').map((link) => link.getAttribute('aria-label'))).toEqual(['홈', '회의록', '설정']);
-    expect(fetchMock).not.toHaveBeenCalled();
+    await screen.findByText(/최근 회의가 없습니다/);
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain('/api/v1/meetings?limit=5');
   });
 
   it('navigates the Home CTA to the New Meeting route fixture', async () => {
-    installFetchMock(vi.fn().mockResolvedValue(response({ data: {} })));
+    installFetchMock(vi.fn().mockResolvedValue(response({ data: { items: [] } })));
     renderHomeWithDestinationFixture();
     fireEvent.click(await screen.findByRole('link', { name: '새 회의 시작' }));
     expect(await screen.findByText('New Meeting fixture: /meetings/new')).toBeTruthy();

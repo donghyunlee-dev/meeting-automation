@@ -23,6 +23,20 @@ button:disabled { cursor: not-allowed; opacity: .6; }
 .home-message h2 { margin: 0 0 10px; color: #253044; font-size: clamp(23px, 5vw, 30px); letter-spacing: -.035em; }
 .home-message p { margin: 0; color: #697586; font-size: 15px; line-height: 1.65; }
 .home-cta { min-height: 52px; padding: 0 24px; text-decoration: none; font-size: 15px; }
+.home-recent { margin-top: 38px; text-align: left; }
+.home-recent-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.home-recent-heading h2 { margin: 0; color: #253044; font-size: 17px; }
+.home-recent-heading a { min-height: 44px; display: inline-flex; align-items: center; color: #4357c5; font-size: 13px; font-weight: 650; }
+.home-recent .state-card { min-height: 112px; }
+.meeting-summary-list { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.meeting-summary-row { min-width: 0; border: 1px solid #e5e9ef; border-radius: 12px; padding: 14px 16px; background: #fff; text-align: left; overflow-wrap: anywhere; }
+.meeting-summary-row h3 { margin: 0 0 7px; color: #253044; font-size: 15px; line-height: 1.4; }
+.meeting-summary-row p { margin: 3px 0 0; color: #697586; font-size: 12px; line-height: 1.5; }
+.meetings-page { width: min(100%, 920px); margin: 0 auto; padding: 38px 24px 96px; }
+.meetings-heading { margin-bottom: 24px; }
+.meetings-heading h1 { margin: 7px 0 6px; color: #182230; font-size: clamp(26px, 5vw, 32px); letter-spacing: -.04em; }
+.meetings-heading > p:last-child { margin: 0; color: #697586; font-size: 14px; }
+.meetings-page .state-card { min-height: 150px; }
 .future-page { max-width: 920px; margin: 0 auto; padding: 64px 24px; }
 .future-page h1 { color: #182230; }
 .future-page p { color: #697586; }
@@ -109,6 +123,8 @@ button:disabled { cursor: not-allowed; opacity: .6; }
 .complete-page a:focus-visible, .complete-page button:focus-visible { outline: 3px solid #8796ef; outline-offset: 2px; }
 .complete-page .share-actions { display: flex; flex-wrap: wrap; gap: 10px; padding-top: 8px; }
 @media (max-width: 420px) {
+  .meetings-page { padding-right: 14px; padding-left: 14px; }
+  .meeting-summary-row { padding: 13px; }
   .complete-page { padding-right: 12px; padding-left: 12px; }
   .complete-page .topbar { margin-right: -12px; margin-left: -12px; }
   .complete-page .share-result-card { padding: 14px; }
