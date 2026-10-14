@@ -35,7 +35,15 @@ public final class MeetingDetailService {
         }
 
         try {
-            TransferRecord record = transfer.exportMeeting(documentId);
+            List<TransferRecord> meetings = transfer.listMeetingRecords();
+            if (meetings == null) throw DocumentProviderException.documentFailed(false);
+            TransferRecord record = null;
+            for (TransferRecord candidate : meetings) {
+                if (candidate != null && documentId.equals(candidate.sourceDocumentId())) {
+                    if (record != null) throw DocumentProviderException.documentFailed(false);
+                    record = candidate;
+                }
+            }
             if (record == null) throw DocumentProviderException.meetingNotFound();
             return toData(documentId, record);
         } catch (DocumentProviderException failure) {

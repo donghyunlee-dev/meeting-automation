@@ -58,7 +58,7 @@ class MeetingDetailApiTests {
 
     @Test
     void detailReturnsNormalizedMeetingWithOffsetRosterMinutesTranscriptAndSafeUrl() throws Exception {
-        provider.record = meeting("doc_detail", "https://docs.example/meeting", "private summary");
+        provider.records = List.of(meeting("doc_detail", "https://docs.example/meeting", "private summary"));
         String body = mockMvc.perform(get("/api/v1/meetings/doc_detail"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.documentId").value("doc_detail"))
@@ -80,18 +80,41 @@ class MeetingDetailApiTests {
                 .andExpect(jsonPath("$.data.documentUrl").value("https://docs.example/meeting"))
                 .andReturn().getResponse().getContentAsString();
         assertThat(body).doesNotContain("ada@example.test", "secret-do-not-return", "provider raw body");
-        assertThat(provider.exportCalls).isEqualTo(1);
-        assertThat(provider.exportedId).isEqualTo("doc_detail");
+        assertThat(provider.listCalls).isEqualTo(1);
+        assertThat(provider.exportCalls).isZero();
         assertThat(provider.mutations).isZero();
     }
 
     @Test
+    void detailOnlyReturnsExactMembersOfConfiguredMeetingsCollection() throws Exception {
+        provider.records = List.of(meeting("doc_in_collection", "https://docs.example/valid", "valid content"));
+        provider.exportRecord = meeting("doc_outside", "https://docs.example/outside", "outside private content");
+
+        String body = mockMvc.perform(get("/api/v1/meetings/doc_outside"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error.code").value("MEETING_NOT_FOUND"))
+                .andReturn().getResponse().getContentAsString();
+
+        assertThat(body).doesNotContain("outside private content", "https://docs.example/outside");
+        assertThat(provider.listCalls).isEqualTo(1);
+        assertThat(provider.exportCalls).isZero();
+    }
+
+    @Test
+    void missingMeetingsCollectionStructureRemains422() throws Exception {
+        provider.missingStructure = true;
+
+        mockMvc.perform(get("/api/v1/meetings/doc_detail"))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.error.code").value("DOCUMENT_STRUCTURE_NOT_FOUND"));
+        assertThat(provider.exportCalls).isZero();
+    }
+
+    @Test
     void missingMeetingMapsTo404AndProviderFailureToSanitized502() throws Exception {
-        provider.notFound = true;
         mockMvc.perform(get("/api/v1/meetings/does-not-exist"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.error.code").value("MEETING_NOT_FOUND"));
-        provider.notFound = false;
         provider.fail = true;
         String body = mockMvc.perform(get("/api/v1/meetings/doc_detail"))
                 .andExpect(status().isBadGateway())
@@ -102,20 +125,20 @@ class MeetingDetailApiTests {
 
     @Test
     void invalidMinutesOrTranscriptAndUnsafeDocumentUrlNeverReturnPartialOrUnsafeData() throws Exception {
-        TransferRecord valid = provider.record;
-        provider.record = new TransferRecord("doc_detail", "r1", "javascript:alert(1)",
-                valid.marker(), "Planning", null, valid.transcript(), valid.participants(), null);
+        TransferRecord valid = provider.records.getFirst();
+        provider.records = List.of(new TransferRecord("doc_detail", "r1", "javascript:alert(1)",
+                valid.marker(), "Planning", null, valid.transcript(), valid.participants(), null));
         mockMvc.perform(get("/api/v1/meetings/doc_detail"))
                 .andExpect(status().isBadGateway())
                 .andExpect(jsonPath("$.error.code").value("DOCUMENT_FAILED"));
 
-        provider.record = new TransferRecord("doc_detail", "r1", null, valid.marker(), "Planning", valid.minutes(),
-                List.of(new TranscriptSegment("seg_1", "speaker_a", 10, 5, "invalid timing")), valid.participants(), null);
+        provider.records = List.of(new TransferRecord("doc_detail", "r1", null, valid.marker(), "Planning", valid.minutes(),
+                List.of(new TranscriptSegment("seg_1", "speaker_a", 10, 5, "invalid timing")), valid.participants(), null));
         mockMvc.perform(get("/api/v1/meetings/doc_detail"))
                 .andExpect(status().isBadGateway())
                 .andExpect(jsonPath("$.error.code").value("DOCUMENT_FAILED"));
 
-        provider.record = meeting("doc_detail", "javascript:alert(1)", "summary");
+        provider.records = List.of(meeting("doc_detail", "javascript:alert(1)", "summary"));
         mockMvc.perform(get("/api/v1/meetings/doc_detail"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.documentUrl").value(org.hamcrest.Matchers.nullValue()));
@@ -134,23 +157,28 @@ class MeetingDetailApiTests {
     }
 
     private static final class FakeProvider implements DocumentStructureProvider, DocumentTransferPort {
-        private TransferRecord record = meeting("doc_detail", "https://docs.example/meeting", "private summary");
-        private boolean notFound;
+        private List<TransferRecord> records = List.of(meeting("doc_detail", "https://docs.example/meeting", "private summary"));
+        private TransferRecord exportRecord;
         private boolean fail;
+        private boolean missingStructure;
+        private int listCalls;
         private int exportCalls;
-        private String exportedId;
         private int mutations;
-        void reset() { record = meeting("doc_detail", "https://docs.example/meeting", "private summary"); notFound = false; fail = false; exportCalls = 0; exportedId = null; mutations = 0; }
+        void reset() { records = List.of(meeting("doc_detail", "https://docs.example/meeting", "private summary")); exportRecord = null; fail = false; missingStructure = false; listCalls = 0; exportCalls = 0; mutations = 0; }
         @Override public ProviderHealth validateConnection() { return null; }
         @Override public DocumentStructure discoverStructure(String rootId) { return null; }
         @Override public TransferManifest readManifest() { return null; }
-        @Override public List<TransferRecord> listMeetingRecords() { return List.of(); }
+        @Override public List<TransferRecord> listMeetingRecords() {
+            listCalls++;
+            if (missingStructure) throw DocumentProviderException.structureNotFound();
+            if (fail) throw DocumentProviderException.documentFailed(true,
+                    new IllegalStateException("token-secret-marker provider raw body"));
+            return records;
+        }
         @Override public TransferRecord exportMeeting(String id) {
             exportCalls++;
-            exportedId = id;
-            if (notFound) throw DocumentProviderException.meetingNotFound();
             if (fail) throw DocumentProviderException.documentFailed(true, new IllegalStateException("token-secret-marker provider raw body"));
-            return record;
+            return exportRecord == null ? records.stream().filter(record -> record.sourceDocumentId().equals(id)).findFirst().orElse(null) : exportRecord;
         }
         @Override public Participant importParticipant(TransferRecord source, String fingerprint) { mutations++; return null; }
         @Override public MeetingDocumentRef importMeeting(TransferRecord source, Map<String, String> map, String fingerprint) { mutations++; return null; }
