@@ -7,7 +7,7 @@
 Backend 구현 시 JUnit 5로 API/application/provider 경계를 검증한다. Java 25와 Gradle Wrapper를 사용해 아래 변경 경로와 직접 영향받는 API-010/connection/codec 회귀만 선택한다.
 
 ```powershell
-.\gradlew.bat test --tests com.meetingautomation.MeetingSessionPublishApiTests --tests com.meetingautomation.MeetingSessionStatusApiTests --tests com.meetingautomation.document.DocumentConnectionGateTests --tests com.meetingautomation.document.transfer.ProviderTransferPublishTests --tests com.meetingautomation.document.DocumentTransferAdapterTests --tests com.meetingautomation.SelectedDocumentProviderApiTests
+.\gradlew.bat test --tests com.meetingautomation.MeetingSessionPublishApiTests --tests com.meetingautomation.MeetingSessionStatusApiTests --tests com.meetingautomation.ReviewConfirmationApiTests --tests com.meetingautomation.document.DocumentConnectionGateTests --tests com.meetingautomation.document.transfer.ProviderTransferPublishTests --tests com.meetingautomation.document.DocumentTransferAdapterTests --tests com.meetingautomation.SelectedDocumentProviderApiTests
 ```
 
 | ID | 준비 및 입력 | 기대 결과 | 증거 |

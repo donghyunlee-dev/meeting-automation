@@ -79,7 +79,8 @@ class ReviewConfirmationApiTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("CONFIRMED"))
                 .andExpect(jsonPath("$.data.version").value(8))
-                .andExpect(jsonPath("$.data.allowedActions").isEmpty());
+                .andExpect(jsonPath("$.data.allowedActions[0]").value("PUBLISH"))
+                .andExpect(jsonPath("$.data.allowedActions.length()").value(1));
         assertNoExternalProviderCalls();
     }
 

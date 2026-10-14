@@ -26,7 +26,7 @@ public final class MeetingSessionStore {
     private final Map<String, AcceptedReviewConfirmation> acceptedReviewConfirmations = new java.util.HashMap<>();
     private final Map<String, AcceptedPublish> acceptedPublishes = new java.util.HashMap<>();
     private final Map<String, PublishSnapshot> publishSnapshots = new ConcurrentHashMap<>();
-    private final Map<String, MeetingSession> publishPreAcceptance = new ConcurrentHashMap<>();
+    private final Map<String, PublishPreAcceptance> publishPreAcceptance = new ConcurrentHashMap<>();
     private final ReentrantLock[] sessionLockStripes = createSessionLockStripes();
 
     public <T> T withSessionLock(String sessionId, Supplier<T> operation) {
@@ -162,7 +162,7 @@ public final class MeetingSessionStore {
                 current.processingStage(), current.progressPercent(), current.speakers(), current.transcript(),
                 current.processingFailure());
         sessions.put(sessionId, publishing);
-        publishPreAcceptance.put(sessionId, current);
+        publishPreAcceptance.put(sessionId, new PublishPreAcceptance(current, publishSnapshots.get(sessionId)));
         PublishSnapshot snapshot = new PublishSnapshot(java.util.List.copyOf(recipients), notificationEnabled, null, null);
         publishSnapshots.put(sessionId, snapshot);
         PublishResponse response = PublishResponse.accepted(sessionId);
@@ -183,10 +183,12 @@ public final class MeetingSessionStore {
         if (accepted != null && accepted.fingerprint().sessionId().equals(sessionId)) acceptedPublishes.remove(key);
         MeetingSession current = sessions.get(sessionId);
         if (current != null && "PUBLISHING".equals(current.status())) {
-            MeetingSession prior = publishPreAcceptance.remove(sessionId);
-            sessions.put(sessionId, prior == null ? current : prior);
+            PublishPreAcceptance prior = publishPreAcceptance.remove(sessionId);
+            sessions.put(sessionId, prior == null ? current : prior.session());
+            if (prior != null && prior.publishSnapshot() != null)
+                publishSnapshots.put(sessionId, prior.publishSnapshot());
+            else publishSnapshots.remove(sessionId);
         }
-        publishSnapshots.remove(sessionId);
     }
 
     public synchronized MeetingSession completePublish(String sessionId, com.meetingautomation.document.MeetingDocumentRef ref) {
@@ -228,6 +230,7 @@ public final class MeetingSessionStore {
         public PublishSnapshot { recipients = java.util.List.copyOf(recipients); }
     }
     private record AcceptedPublish(PublishFingerprint fingerprint, PublishResponse response) { }
+    private record PublishPreAcceptance(MeetingSession session, PublishSnapshot publishSnapshot) { }
 
     public Optional<MeetingSessionStatusResponse.LastOperation> findLastOperation(String sessionId) {
         return Optional.ofNullable(lastOperations.get(sessionId));

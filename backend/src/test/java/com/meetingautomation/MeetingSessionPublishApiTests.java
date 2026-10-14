@@ -220,6 +220,18 @@ class MeetingSessionPublishApiTests {
         assertThat(workerExecutor.pendingCount()).isZero();
         try (var switchLease = gate.beginSwitch(globalSettingsStore.read().version())) { assertThat(switchLease).isNotNull(); }
 
+        MeetingSession failedBeforeRetry = sessionStore.find(SESSION_ID).orElseThrow();
+        MeetingSessionStore.PublishSnapshot failureBeforeRetry = sessionStore.findPublishSnapshot(SESSION_ID);
+        workerExecutor.rejectNext();
+        mockMvc.perform(publish(SESSION_ID, "9", "publish-retry-rejected", REQUEST))
+                .andExpect(status().isInternalServerError());
+        assertThat(sessionStore.find(SESSION_ID).orElseThrow()).isEqualTo(failedBeforeRetry);
+        assertThat(sessionStore.find(SESSION_ID).orElseThrow().status()).isEqualTo("DOCUMENT_FAILED");
+        assertThat(sessionStore.find(SESSION_ID).orElseThrow().version()).isEqualTo(9);
+        assertThat(sessionStore.findPublishSnapshot(SESSION_ID)).isEqualTo(failureBeforeRetry);
+        assertThat(sessionStore.findPublishSnapshot(SESSION_ID).errorCode()).isEqualTo("DOCUMENT_FAILURE");
+        try (var switchLease = gate.beginSwitch(globalSettingsStore.read().version())) { assertThat(switchLease).isNotNull(); }
+
         when(providerFactory.create(any())).thenReturn(new FakePublishProvider(false));
         mockMvc.perform(publish(SESSION_ID, "9", "publish-retry", REQUEST)).andExpect(status().isAccepted());
         workerExecutor.drain();
