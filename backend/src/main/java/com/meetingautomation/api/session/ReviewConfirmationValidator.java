@@ -4,6 +4,7 @@ import com.meetingautomation.document.Speaker;
 import com.meetingautomation.document.StructuredMinutes;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import org.springframework.stereotype.Component;
 
 /** Collects stable, value-free semantic issues from one immutable Review snapshot. */
@@ -22,18 +23,27 @@ public final class ReviewConfirmationValidator {
                 issues.add(new ReviewValidationIssue(path, "PARTICIPANT_OUTSIDE_SESSION_ROSTER"));
             }
         }
-        validateMinutes(session.minutes(), rosterIds, issues);
+        validateMinutes(session.minutes(), session.meeting(), rosterIds, issues);
         return List.copyOf(issues);
     }
 
     private static void validateMinutes(
-            StructuredMinutes minutes, List<String> rosterIds, List<ReviewValidationIssue> issues) {
+            StructuredMinutes minutes, MeetingSession.Meeting meeting, List<String> rosterIds,
+            List<ReviewValidationIssue> issues) {
         if (minutes == null) {
             issues.add(new ReviewValidationIssue("minutes", "REQUIRED"));
             return;
         }
         required(minutes.templateId(), "minutes.templateId", issues);
         required(minutes.templateVersion(), "minutes.templateVersion", issues);
+        if (minutes.templateId() != null && !minutes.templateId().isBlank()
+                && !Objects.equals(minutes.templateId(), meeting == null ? null : meeting.templateId())) {
+            issues.add(new ReviewValidationIssue("minutes.templateId", "TEMPLATE_MISMATCH"));
+        }
+        if (minutes.templateVersion() != null && !minutes.templateVersion().isBlank()
+                && !Objects.equals(minutes.templateVersion(), meeting == null ? null : meeting.templateVersion())) {
+            issues.add(new ReviewValidationIssue("minutes.templateVersion", "TEMPLATE_MISMATCH"));
+        }
         if (minutes.summary() == null) issues.add(new ReviewValidationIssue("minutes.summary", "REQUIRED"));
         validateTextList(minutes.discussionPoints(), "minutes.discussionPoints", issues);
         validateTextList(minutes.decisions(), "minutes.decisions", issues);

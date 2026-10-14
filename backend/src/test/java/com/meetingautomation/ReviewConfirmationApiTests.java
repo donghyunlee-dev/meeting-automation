@@ -246,6 +246,28 @@ class ReviewConfirmationApiTests {
     }
 
     @Test
+    void mismatchingMinutesTemplateProvenanceReturnsBothIssuesWithoutMutation() throws Exception {
+        StructuredMinutes minutes = new StructuredMinutes("different-template.md", "2.0.0", "Summary",
+                List.of(), List.of(), List.of(), List.of());
+        String sessionId = saveReview("REVIEW", 6, List.of(), minutes);
+        MeetingSession before = sessionStore.find(sessionId).orElseThrow();
+
+        MvcResult result = mockMvc.perform(confirm(sessionId, "6", "confirm-template-mismatch", "{\"confirm\":true}"))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.error.code").value("REVIEW_VALIDATION_FAILED"))
+                .andReturn();
+
+        JsonNode issues = objectMapper.readTree(result.getResponse().getContentAsString())
+                .path("error").path("details").path("issues");
+        assertThat(issues.toString()).isEqualTo("""
+                [{"path":"minutes.templateId","code":"TEMPLATE_MISMATCH"},
+                 {"path":"minutes.templateVersion","code":"TEMPLATE_MISMATCH"}]
+                """.replace("\n", "").replace(" ", ""));
+        assertThat(sessionStore.find(sessionId).orElseThrow()).isEqualTo(before);
+        assertNoExternalProviderCalls();
+    }
+
+    @Test
     void missingPersistedMinutesAndRosterExternalSpeakerAreReportedWithoutPartialTransition() throws Exception {
         String sessionId = saveReview("REVIEW", 9,
                 List.of(new Speaker("speaker_1", "Speaker", "outside-roster")), null);
