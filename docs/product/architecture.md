@@ -92,7 +92,7 @@ configuration/
 3. Browser는 녹음 데이터를 순서 번호가 있는 chunk로 임시 저장하고 업로드한다. ACK 받은 chunk만 로컬 재전송 대기열에서 제거한다.
 4. 종료 시 Frontend는 expected chunk 수와 녹음 정보를 보내 processing을 시작한다.
 5. Backend는 누락 sequence 확인 후 Audio를 조립하고 STT/diarization을 호출한다.
-6. 변환 실패면 서버는 실패 stage/retryability와 Audio 만료 시각을 저장한다. Chunk와 assembled Audio는 비공개 객체 저장소에 마지막 실패 기준 최대 24시간 보관한다. 사용자가 명시적으로 재시도하면 실패 stage부터 재개한다. 만료 전 사용자는 Backend 인증 경로로 원본 Audio를 내려받고 실패 종료를 선택할 수 있다.
+6. 변환 실패면 서버는 실패 stage/retryability와 Audio 만료 시각을 저장한다. Chunk와 assembled Audio는 비공개 객체 저장소에 마지막 실패 기준 최대 24시간 보관한다. 사용자가 명시적으로 재시도하면 실패 stage부터 재개한다. 만료 전 사용자는 기존 V1 배포 접근 정책으로 보호되는 Backend API에서 원본 Audio를 내려받고 실패 종료를 선택할 수 있다. 사용자 계정 인증은 현재 API 계약에 포함하지 않는다.
 7. Provider 결과를 표준 Transcript와 internal `speakerId`로 변환한다. Transcript 원문은 `speakerId`를 계속 보존한다.
 8. Minutes Provider에 Transcript, Speaker mapping, 선택 Template을 전달하고 구조화 결과를 Session에 둔다.
 9. Frontend는 상태 polling으로 검토 데이터를 받고 Speaker 단위 mapping 및 Minutes 편집을 수행한다.
@@ -107,7 +107,7 @@ configuration/
 2. Publish는 먼저 Document를 생성하거나 같은 Session ID의 기존 문서를 찾아 재사용한다.
 3. Document 저장 성공 뒤 Email 수신자별 delivery와 선택적 Slack notification을 실행한다. 두 채널 결과는 서로 독립적이다.
 4. 완료 상태와 실패한 개별 delivery를 기록한다. 재시도는 실패한 단계만 수행한다.
-5. 성공 시 Audio 객체는 Review 진입 때 삭제한다. 처리 실패 시 필요한 chunks/Audio 객체를 idle 기준 마지막 실패 뒤 최대 24시간 보존하고, 명시 retry가 실행 중일 때는 만료 sweep을 멈춘다. 재시도 실패 때 만료를 갱신한다. 명시적 실패 종료 또는 만료 후 객체를 삭제한다. Transcript/Minutes 본문은 일반 로그나 Admin Slack으로 내보내지 않는다.
+5. 성공 시 Audio 객체는 Review 진입 때 삭제한다. 처리 실패 시 필요한 chunks/Audio 객체를 idle 기준 마지막 실패 뒤 최대 24시간 보존하고, 명시 retry가 실행 중일 때는 만료 sweep을 멈춘다. 재시도 실패 때 만료를 갱신한다. 명시적 실패 종료 또는 만료 후 객체를 삭제한다. 만료 시 Session이 메모리에 있으면 `DISCARDED` 실패 문서로 마무리하지만, Backend 재시작 뒤 Session이 없는 경우에는 객체만 삭제한다. Transcript/Minutes 본문은 일반 로그나 Admin Slack으로 내보내지 않는다.
 6. 변환 실패 종료 시 회의 메타데이터와 실패 요약만 Meeting 문서에 기록한다. Email/Slack을 참석자에게 전달하지 않는다. 정상 변환 회의는 기존 Confirm/Publish 흐름을 따른다.
 
 ## 세션 상태 및 동시성
@@ -135,7 +135,7 @@ Backend는 녹음 중 상태를 별도 API로 저장하지 않는다. 첫 Chunk�
 - 일반 로그에는 `traceId`, `sessionId`, stage, 안전한 오류 코드/메시지만 기록한다.
 - Audio, Transcript, Minutes, Authorization 값, webhook URL, 전체 이메일 주소는 로그 및 Admin Slack에서 제외하거나 마스킹한다.
 - Audio object storage는 private access만 허용하고 공개 URL을 노출하지 않는다. API-021은 Backend의 Session 상태/action 검증 뒤 stream하며 Audio key는 서버 생성 opaque ID다. Object storage credential은 Backend service만 사용한다.
-- 만료 metadata는 객체 저장소에 durable하게 저장한다. Cleanup sweep은 Session memory와 독립적으로 만료된 app-owned Audio 객체를 조회·삭제한다.
+- 만료 metadata는 객체 저장소에 durable하게 저장한다. Cleanup sweep은 Session memory와 독립적으로 만료된 app-owned Audio 객체를 조회·삭제한다. Session이 메모리에 있을 때만 만료 실패 문서 마무리를 수행할 수 있으며, Session이 소실된 재시작 뒤에는 문서를 만들지 않는다.
 - 네 가지 운영 오류 분류는 `PROCESSING_FAILURE`, `DOCUMENT_FAILURE`, `EMAIL_FAILURE`, `NOTIFICATION_FAILURE`다.
 - `X-Request-Id`가 오면 trace correlation에 활용하고 없으면 Backend가 trace ID를 만든다.
 

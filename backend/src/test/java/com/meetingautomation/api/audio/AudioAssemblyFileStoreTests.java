@@ -33,7 +33,7 @@ class AudioAssemblyFileStoreTests {
         AudioAssemblyStorage.Assembly published = store.publish("../../session-traversal", "audio/webm",
                 audio.length, digest);
 
-        assertThat(Files.readAllBytes(published.reference())).containsExactly(audio);
+        assertThat(Files.readAllBytes(Path.of(published.reference()))).containsExactly(audio);
         assertThat(published.reference().toString()).doesNotContain("session-traversal");
         assertThat(store.findAssembly("../../session-traversal")).contains(published);
         assertThat(partialFiles()).isEmpty();
@@ -43,7 +43,7 @@ class AudioAssemblyFileStoreTests {
     void rejectsInvalidStoredAssemblyMetadataInsteadOfReturningUnverifiedReference() throws Exception {
         AudioAssemblyFileStore store = new AudioAssemblyFileStore(audioRoot, new AudioChunkFileStore(audioRoot));
         AudioAssemblyStorage.Assembly published = publish(store, "ms_corrupt-assembly", new byte[] {1, 2});
-        Files.writeString(published.reference().getParent().resolve("metadata"), "audio/webm\n1\ninvalid\n");
+        Files.writeString(Path.of(published.reference()).getParent().resolve("metadata"), "audio/webm\n1\ninvalid\n");
 
         assertThatThrownBy(() -> store.findAssembly("ms_corrupt-assembly"))
                 .isInstanceOf(AudioAssemblyStorageException.class);
@@ -53,7 +53,7 @@ class AudioAssemblyFileStoreTests {
     void rejectsModifiedStoredAssemblyBytesByVerifyingLengthAndDigest() throws Exception {
         AudioAssemblyFileStore store = new AudioAssemblyFileStore(audioRoot, new AudioChunkFileStore(audioRoot));
         AudioAssemblyStorage.Assembly published = publish(store, "ms_corrupt-bytes", new byte[] {1, 2});
-        Files.write(published.reference(), new byte[] {1, 2, 3});
+        Files.write(Path.of(published.reference()), new byte[] {1, 2, 3});
 
         assertThatThrownBy(() -> store.findAssembly("ms_corrupt-bytes"))
                 .isInstanceOf(AudioAssemblyStorageException.class);

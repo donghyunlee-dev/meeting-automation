@@ -951,7 +951,7 @@ Backend가 Template에 렌더링한다.
   `NFR-005`                           Provider Secret은 Backend에서만
                                       사용한다.
 
-  `NFR-006`                           Audio는 처리 목적의 임시 데이터이며 영구 보관하지 않는다. 비공개 객체 저장소에서 변환 실패 Audio를 마지막 실패부터 최대 24시간 보존한다. 사용자 retry 실행 중에는 처리 입력으로 유지한다. 인증된 Backend 경로로만 읽고 공개 URL을 만들지 않으며 성공·사용자 종료·만료 후 삭제한다.
+  `NFR-006`                           Audio는 처리 목적의 임시 데이터이며 영구 보관하지 않는다. 비공개 객체 저장소에서 변환 실패 Audio를 마지막 실패부터 최대 24시간 보존한다. 사용자 retry 실행 중에는 처리 입력으로 유지한다. 기존 V1 배포 접근 정책으로 보호되는 Backend 경로에서만 읽고 공개 URL을 만들지 않으며 성공·사용자 종료·만료 후 삭제한다. 사용자 계정 인증은 현재 API 계약에 포함하지 않는다.
 
   `NFR-007`                           네트워크 일시 단절 시 미전송
                                       chunk를 재전송할 수 있어야 한다.
@@ -1131,7 +1131,7 @@ Bottom Sheet/Modal:
 
 실제 Backend 상태와 동기화한다.
 
-`PROCESSING_FAILED`이면 실패 stage와 안전한 안내를 표시한다. `retryable=true`이고 Audio 보존 기한 전이면 사용자가 `변환 재시도`를 명시적으로 실행할 수 있다. 자동 재시도는 없다. 실패가 반복되면 사용자는 비공개 객체 저장소의 원본 Audio를 내려받은 뒤 `변환 실패로 마무리`를 선택할 수 있다. 실패 종료 시 Meeting 문서에는 회의 정보, 변환 실패, Audio 다운로드 완료 여부를 기록하고 Email/Slack은 참석자에게 보내지 않는다. 24시간 안에 결정을 하지 않으면 Audio를 정리하고 실패 문서를 마무리한다.
+`PROCESSING_FAILED`이면 실패 stage와 안전한 안내를 표시한다. `retryable=true`이고 Audio 보존 기한 전이면 사용자가 `변환 재시도`를 명시적으로 실행할 수 있다. 자동 재시도는 없다. 실패가 반복되면 사용자는 비공개 객체 저장소의 원본 Audio를 내려받은 뒤 `변환 실패로 마무리`를 선택할 수 있다. 실패 종료 시 Meeting 문서에는 회의 정보, 변환 실패, Audio 다운로드 완료 여부를 기록하고 Email/Slack은 참석자에게 보내지 않는다. 24시간 안에 결정하지 않으면, Session이 메모리에 남아 있는 동안 Backend가 실패 문서를 `DISCARDED`로 마무리하고 Audio를 정리한다. Backend가 재시작되어 Session이 소실된 뒤에는 Audio만 정리하며, 실패 문서는 생성하지 않는다.
 
 ``` text
 녹음 변환에 실패했어요
@@ -1142,7 +1142,7 @@ Bottom Sheet/Modal:
 [ 변환 실패로 마무리 ]
 ```
 
-재시도 버튼은 API가 retry를 허용할 때만 보인다. 다운로드 후 저장 여부를 확인받고 실패 종료할 수 있다. 만료 뒤에는 재시도/다운로드 action을 숨기고 실패 종료 상태와 자동 정리 결과를 표시한다.
+재시도 버튼은 API가 retry를 허용할 때만 보인다. 다운로드 후 저장 여부를 확인받고 실패 종료할 수 있다. 만료 뒤에는 재시도/다운로드 action을 숨기고 Session이 남아 있으면 실패 종료 상태와 자동 정리 결과를 표시한다. Backend 재시작으로 Session이 소실된 경우 API는 `SESSION_NOT_FOUND`를 반환한다.
 
 ------------------------------------------------------------------------
 
@@ -2666,7 +2666,7 @@ Backend API 작업은 정상 응답뿐 아니라 명세된 검증 오류, 없는
 | 세부 작업 / 영역 | 선행 작업 | Related IDs | 완료 및 검증 조건 | 설계 상태 / 문서 |
 |---|---|---|------|---|
 | `TASK-017.01` Secret 경계 및 로그 마스킹 / BE, FE | TASK-001.05, TASK-016.01 | DEC-017, FR-030, NFR-004~006 | FE bundle/API 응답/로그에서 Secret 탐지 0건. 자동 secret scan과 로그 테스트 통과 | 설계완료 · `docs/specs/phase-07-security/TASK-017.01/` |
-| `TASK-017.02` 비공개 Audio 보존·실패 종료 Backend / BE | TASK-006.01, TASK-006.04, TASK-006.05, TASK-010.02 | DEC-020, FR-027,028, NFR-006, API-020~022 | 변환 실패 Audio가 비공개 객체 저장소에 대기 중 최대 24시간 보존되고, 성공·실패 종료·만료 후 삭제된다. 인증되지 않은 공개 URL 접근이 불가능하고 실패 종료 문서는 Email/Slack으로 전달되지 않는다. | 설계완료 · `docs/specs/phase-07-security/TASK-017.02/` |
+| `TASK-017.02` 비공개 Audio 보존·실패 종료 Backend / BE | TASK-006.01, TASK-006.04, TASK-006.05, TASK-010.02 | DEC-020, FR-027,028, NFR-006, API-020~022 | 변환 실패 Audio가 비공개 객체 저장소에 대기 중 최대 24시간 보존되고, 성공·사용자 종료·만료 후 삭제된다. Session이 메모리에 남아 있는 만료 시에는 실패 문서로 자동 마무리하며, Backend 재시작 뒤 Session이 소실되면 객체만 정리한다. 실패 문서는 Email/Slack으로 전달되지 않는다. | 설계완료 · `docs/specs/phase-07-security/TASK-017.02/` |
 | `TASK-017.03` 처리 실패 재시도·Audio 복구 화면 / FE, INTEGRATION | TASK-017.02 | SCR-005, FR-027, API-010,020~022 | 실패 stage와 남은 보존 시간을 표시하고 명시 재시도, Audio 다운로드 및 실패 마무리를 제공한다. 완료/오류/만료 화면 상태를 검증한다. | 설계완료 · `docs/specs/phase-07-security/TASK-017.03/` |
 | `TASK-017.04` 보안·개인정보 회귀 점검 / QA | TASK-017.01, TASK-017.02, TASK-017.03 | DEC-017,020, FR-027,028,030, NFR-004~006 | FE Secret, Audio/Transcript/Minutes 로그·API·문서 노출, 비공개 Audio 저장소 접근·만료·삭제, 실패 문서 전달 억제를 synthetic fixture로 검증하고 비민감 Evidence를 기록한다. | 설계완료 · `docs/specs/phase-07-security/TASK-017.04/` |
 

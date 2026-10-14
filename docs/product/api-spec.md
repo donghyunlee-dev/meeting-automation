@@ -225,7 +225,7 @@ Session의 Audio가 private object storage에 존재하고 미만료일 때만 �
 
 `POST /api/v1/meeting-sessions/{sessionId}/processing/finalize-failure` (`Idempotency-Key`, `If-Match`) → `202`
 
-Request: `{"audioDisposition":"DOWNLOADED"|"DISCARDED"}`. `PROCESSING_FAILED`에서만 허용한다. 실패 stage와 회의 메타데이터, 사용자 선택을 Meeting 문서에 기록하고 status를 `COMPLETED_WITH_WARNINGS`로 마무리한다. `audioDisposition`이 `DOWNLOADED`이면 같은 Session에서 성공한 download 응답이 있어야 한다. Document 저장만 수행하고 Email/Slack delivery를 만들지 않는다. Audio와 chunk는 정리한다. 만료 시 Backend는 `DISCARDED`로 같은 종료 처리를 수행한다. 동일 key/payload의 접수 응답은 재사용하며, Provider 저장 실패 뒤 사용자가 재시도할 때는 새 `Idempotency-Key`를 사용한다. Document Provider 실패 시 안전한 `DOCUMENT_FAILED`로 남기고 Audio disposition 및 Session을 유지한다. `externalSessionId` 기준 문서 멱등성으로 재시도 중복 page 생성을 막는다.
+Request: `{"audioDisposition":"DOWNLOADED"|"DISCARDED"}`. `PROCESSING_FAILED`에서만 허용한다. 실패 stage와 회의 메타데이터, 사용자 선택을 Meeting 문서에 기록하고 status를 `COMPLETED_WITH_WARNINGS`로 마무리한다. `audioDisposition`이 `DOWNLOADED`이면 같은 Session에서 성공한 download 응답이 있어야 한다. Document 저장만 수행하고 Email/Slack delivery를 만들지 않는다. Audio와 chunk는 정리한다. 만료 시 Session이 메모리에 남아 있으면 Backend가 `DISCARDED`로 같은 종료 처리를 수행한다. Document 저장에 실패하면 만료 객체를 남겨 다음 sweep에서 다시 시도한다. Backend 재시작 후에는 Session을 복구하지 않으므로 만료 sweep은 남은 객체만 삭제하고 실패 문서를 생성하지 않는다. 해당 Session API는 `SESSION_NOT_FOUND`를 반환한다. 동일 key/payload의 접수 응답은 재사용하며, Provider 저장 실패 뒤 사용자가 재시도할 때는 새 `Idempotency-Key`를 사용한다. Document Provider 실패 시 안전한 `DOCUMENT_FAILED`로 남기고 Audio disposition 및 Session을 유지한다. `externalSessionId` 기준 문서 멱등성으로 재시도 중복 page 생성을 막는다.
 
 ### API-011 Speaker Mapping Update
 

@@ -39,7 +39,7 @@ PRD v1.8.1 (2026-10-06), `TASK-017.02`, `DEC-020`, `FR-027`, `FR-028`, `NFR-006`
 - 다운로드는 서버가 제공한 원본 Audio stream을 browser attachment로 전달한다. Browser가 성공 응답을 받은 뒤 사용자가 저장 여부를 선택한다. 사용자는 저장 확인 후 실패를 `DOWNLOADED`로 마무리하거나 `DISCARDED`로 마무리할 수 있다.
 - 실패 종료는 `COMPLETED_WITH_WARNINGS`로 전이하고, Meeting Document에 이미 확정된 meeting metadata, 실패 stage, 안전한 error code, 사용자의 Audio disposition, 완료 시각을 기록한다. Transcript/Minutes 본문/Audio/provider error 원문은 기록하지 않는다.
 - 실패 종료는 Meeting Document 저장만 실행한다. Email/Slack Delivery를 만들지 않으며 참석자에게 실패 상태를 보내지 않는다. 정상 변환은 기존 Review/Confirm/Publish 경로를 따른다.
-- 미종료 Audio는 마지막 변환 실패 후 24시간에 접근 불가해진다. 만료 처리기가 Audio/chunk를 제거하고 `DISCARDED`로 실패 문서를 저장해 `COMPLETED_WITH_WARNINGS`로 종료한다. Document 저장 실패는 안전 오류를 보존하고 Audio disposition/Session을 유지한다. 사용자가 finalize를 재요청할 때는 새 Idempotency-Key를 사용하고 provider `externalSessionId` 멱등성으로 중복 문서를 막는다.
+- 미종료 Audio는 마지막 변환 실패 후 24시간에 접근 불가해진다. Session이 메모리에 남아 있으면 만료 처리기가 `DISCARDED` 실패 문서를 저장하고 `COMPLETED_WITH_WARNINGS`로 종료한 뒤 Audio/chunk를 제거한다. Document 저장 실패 시 객체는 만료 상태로 유지해 다음 sweep에서 finalization을 재시도한다. 사용자가 finalize를 재요청할 때는 새 Idempotency-Key를 사용하고 provider `externalSessionId` 멱등성으로 중복 문서를 막는다. Backend 재시작 뒤에는 기존 V1 계약대로 Session을 복구하지 않으므로 만료 처리기는 남은 Audio/chunk만 삭제하고 실패 문서를 만들지 않는다. 해당 Session의 API 조회는 `SESSION_NOT_FOUND`다.
 - 만료 시각은 UTC instant로 저장한다. API는 만료 시각이 지났으면 처리기가 파일을 지우기 전이라도 retry/download를 거부한다. 정리기는 적어도 1분 주기로 기한을 확인하고 삭제를 재수행한다. active retry는 만료 sweep에서 제외한다. 삭제는 idempotent다.
 - Session과 job은 메모리 전용이다. Backend 재시작/재배포 뒤 Session 복구 및 Audio retry/download를 보장하지 않는다. Session이 사라지면 기존 API의 `SESSION_NOT_FOUND`를 반환한다.
 - expiry metadata는 객체와 함께 durable하게 저장해 Backend 재시작 뒤에도 cleanup scheduler가 세션 메모리와 독립적으로 만료 객체를 제거한다. 명시 retry 중인 객체는 lease/expiry를 갱신해 처리 종료 전 삭제하지 않고, retry 실패 시 새 실패시각+24h로 재설정한다.
@@ -60,7 +60,7 @@ PRD v1.8.1 (2026-10-06), `TASK-017.02`, `DEC-020`, `FR-027`, `FR-028`, `NFR-006`
 - `MINUTES_GENERATION` 재시도는 STT/Diarization을 다시 호출하지 않는다.
 - non-retryable 변환 실패는 재시도 action 없이 다운로드와 실패 종료를 제공한다.
 - 재시도는 완료 stage를 다시 호출하지 않으며 retry 실패 시 만료 시각을 갱신한다.
-- 기한 경과 즉시 API가 retry/download를 차단하고 정리기가 private object Audio/chunks를 삭제한다. Backend 재시작 후에도 만료 객체가 정리된다.
+- 기한 경과 즉시 API가 retry/download를 차단한다. Session이 메모리에 있으면 정리기가 실패 문서를 `DISCARDED`로 마무리하고 Audio/chunks를 삭제한다. Backend 재시작 뒤에도 만료 객체는 삭제하지만, 유실된 Session 메타데이터를 복구하거나 실패 문서를 만들지 않는다.
 - 성공 download 뒤 `DOWNLOADED`, 사용자가 저장하지 않기로 선택하면 `DISCARDED`로 실패 종료한다.
 - 실패 문서에는 meeting metadata와 실패 요약/disposition이 있고 Transcript/Minutes/Audio/raw provider 오류가 없다.
 - 실패 종료/만료 시 Email/Slack 호출 및 Delivery row가 0건이다.

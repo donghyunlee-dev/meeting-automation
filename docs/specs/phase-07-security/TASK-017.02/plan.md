@@ -44,7 +44,7 @@ Backend API/상태 계약을 먼저 구현한다. Frontend 후속 TASK-017.03는
 - Document write는 기존 Document Port를 사용한다. Provider ID나 payload 구조가 Domain으로 새지 않도록 한다.
 - 실패 문서는 기록 전용이며 Email/Slack port를 호출하지 않는다.
 - Storage provider는 `PrivateAudioStoragePort` 뒤 adapter/configuration에 격리하고 Domain/API 계약을 바꾸지 않는다. 선택 provider는 private object 읽기/쓰기/삭제와 expiry metadata 목록 조회를 지원해야 한다.
-- Object key는 서버 생성 opaque ID이며 공개 URL을 내보내지 않는다. API-021은 Backend 인증 후 stream하고, upload ACK는 durable object write 뒤에만 반환한다.
+- Object key는 서버 생성 opaque ID이며 공개 URL을 내보내지 않는다. API-021은 기존 V1 배포 접근 정책 아래에서 Session 상태/객체/만료를 검증한 뒤 stream한다. 사용자 계정 인증은 API 계약에 없으며, 공개 접근이 필요해지면 별도 PRD/ADR 변경을 선행한다. Upload ACK는 durable object write 뒤에만 반환한다.
 - Backend filesystem에는 영속 Audio를 두지 않는다. stream은 크기 제한과 backpressure를 적용하며 metadata/credential은 응답 및 로그에서 제외한다.
 
 ## 구현 중 주의할 계약
@@ -53,5 +53,5 @@ Backend API/상태 계약을 먼저 구현한다. Frontend 후속 TASK-017.03는
 - retryability는 retry button eligibility다. 다운로드 또는 실패 마무리 eligibility와 분리한다.
 - TTL은 만료 시각에서 API로 즉시 차단하고 정리 scheduler 지연이 download/retry 허용을 연장하지 않는다.
 - Download 완료를 확인하지 못하면 `audioDisposition=DOWNLOADED` finalize를 허용하지 않는다.
-- 만료 자동 종료는 `DISCARDED`로 기록하고 외부 delivery를 만들지 않는다. Cleanup은 Session memory와 독립적으로 private object metadata의 expiry를 기준으로 한다.
+- Session이 메모리에 남아 있는 만료 자동 종료는 `DISCARDED`로 기록하고 외부 delivery를 만들지 않는다. Backend 재시작 후 Session이 없으면 기존 memory-only 계약에 따라 문서는 생성하지 않고, cleanup은 Session memory와 독립적으로 private object metadata의 expiry를 기준으로 객체만 삭제한다.
 - Backend 재시작 시 Session은 복구하지 않지만, private object는 만료까지 존속하며 cleanup sweep은 재시작 후에도 접근 가능한 expired object를 지운다.

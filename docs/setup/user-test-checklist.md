@@ -23,7 +23,8 @@ Backend를 실행하는 IDE Run Configuration 또는 PowerShell 프로세스 환
 - `DOCUMENT_SETTINGS_DIR`: 저장소 바깥의 쓰기 가능한 로컬 경로
 - `DOCUMENT_SETTINGS_ENCRYPTION_KEY`: Base64로 인코딩한 임의의 32바이트 키
 - `OPENAI_API_KEY`, `TRANSCRIPTION_MODEL`, `MINUTES_MODEL`
-- `TEMP_AUDIO_DIR`: 저장소 바깥의 쓰기 가능한 임시 오디오 경로
+- `PRIVATE_AUDIO_S3_BUCKET`: Audio upload/processing에 쓸 private bucket
+- `PRIVATE_AUDIO_S3_REGION` 또는 `AWS_REGION`; AWS credentials chain 또는 해당 bucket에 한정된 Backend service role
 - `ALLOWED_ORIGINS=http://localhost:5173`
 
 메일 공유를 시험할 때는 `EMAIL_PROVIDER`, `EMAIL_OAUTH_CLIENT_ID`, `EMAIL_OAUTH_CLIENT_SECRET`, `EMAIL_OAUTH_REFRESH_TOKEN`, `EMAIL_SENDER_ADDRESS`도 설정한다. Slack 알림을 시험할 때는 `NOTIFICATION_PROVIDER`와 사용할 webhook 값을 설정한다. 값의 전체 목록과 저장 원칙은 [Backend 설정 안내의 환경변수 절](./backend-setup.md)을 따른다.

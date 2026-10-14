@@ -18,6 +18,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.InputStreamResource;
+import org.springframework.core.io.Resource;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatusCode;
@@ -94,12 +96,19 @@ public final class OpenAiTranscriptionAdapter implements TranscriptionProvider {
         try {
             MediaType type = MediaType.parseMediaType(command.mimeType());
             Path audio = command.audioReference();
-            if (!"audio".equalsIgnoreCase(type.getType()) || fileExtension(type) == null
-                    || Files.isSymbolicLink(audio)
-                    || !Files.isRegularFile(audio, LinkOption.NOFOLLOW_LINKS) || !Files.isReadable(audio)) {
+            if (!"audio".equalsIgnoreCase(type.getType()) || fileExtension(type) == null) {
                 throw failure(TranscriptionException.Code.INVALID_AUDIO, false);
             }
-            long audioBytes = Files.size(audio);
+            long audioBytes;
+            if (command.audioStream() != null) {
+                audioBytes = command.audioBytes();
+            } else {
+                if (audio == null || Files.isSymbolicLink(audio)
+                        || !Files.isRegularFile(audio, LinkOption.NOFOLLOW_LINKS) || !Files.isReadable(audio)) {
+                    throw failure(TranscriptionException.Code.INVALID_AUDIO, false);
+                }
+                audioBytes = Files.size(audio);
+            }
             if (audioBytes < 1 || audioBytes > settings.maxAudioBytes()) {
                 throw failure(TranscriptionException.Code.INVALID_AUDIO, false);
             }
@@ -114,13 +123,15 @@ public final class OpenAiTranscriptionAdapter implements TranscriptionProvider {
     private MultiValueMap<String, Object> requestBody(TranscriptionCommand command, MediaType audioMediaType) {
         HttpHeaders audioHeaders = new HttpHeaders();
         audioHeaders.setContentType(audioMediaType);
-        HttpEntity<FileSystemResource> audioPart = new HttpEntity<>(
-                new FileSystemResource(command.audioReference()) {
-                    @Override
-                    public String getFilename() {
-                        return "assembled." + fileExtension(audioMediaType);
-                    }
-                }, audioHeaders);
+        Resource audioResource = command.audioStream() != null
+                ? new InputStreamResource(command.audioStream()) {
+                    @Override public String getFilename() { return "assembled." + fileExtension(audioMediaType); }
+                    @Override public long contentLength() { return command.audioBytes(); }
+                }
+                : new FileSystemResource(command.audioReference()) {
+                    @Override public String getFilename() { return "assembled." + fileExtension(audioMediaType); }
+                };
+        HttpEntity<Resource> audioPart = new HttpEntity<>(audioResource, audioHeaders);
 
         MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
         body.add("file", audioPart);

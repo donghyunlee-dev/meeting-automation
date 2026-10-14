@@ -50,13 +50,13 @@ class AudioAssemblyUseCaseTests {
 
         AudioAssemblyStorage.Assembly result = useCase.assemble(job(2, 30_000, "audio/webm"), POLICY, TRACE_ID);
 
-        assertThat(Files.readAllBytes(result.reference())).containsExactly(1, 2, 3, 4, 5);
+        assertThat(Files.readAllBytes(Path.of(result.reference()))).containsExactly(1, 2, 3, 4, 5);
         assertThat(result.mimeType()).isEqualTo("audio/webm");
         assertThat(result.bytes()).isEqualTo(5);
         assertThat(result.sha256()).isEqualTo(sha256(new byte[] {1, 2, 3, 4, 5}));
         assertThat(result.reference().toString()).doesNotContain(SESSION_ID);
         assertThat(chunkStore.completedChunks(SESSION_ID)).isEmpty();
-        assertThat(Files.exists(result.reference())).isTrue();
+        assertThat(Files.exists(Path.of(result.reference()))).isTrue();
     }
 
     @Test
@@ -122,7 +122,7 @@ class AudioAssemblyUseCaseTests {
         AudioAssemblyStorage.Assembly replay = useCase.assemble(job, POLICY, TRACE_ID);
 
         assertThat(replay).isEqualTo(first);
-        assertThat(Files.readAllBytes(replay.reference())).containsExactly(6, 7, 8);
+        assertThat(Files.readAllBytes(Path.of(replay.reference()))).containsExactly(6, 7, 8);
         assertThat(chunkStore.completedChunks(SESSION_ID)).isEmpty();
         assertThat(storage.findAssembly(SESSION_ID)).contains(first);
     }
@@ -132,12 +132,12 @@ class AudioAssemblyUseCaseTests {
         storeChunk(0, new byte[] {6, 7, 8}, "audio/webm");
         ProcessingJob job = job(1, 15_000, "audio/webm");
         AudioAssemblyStorage.Assembly first = useCase.assemble(job, POLICY, TRACE_ID);
-        Files.write(first.reference(), new byte[] {0, 0, 0});
+        Files.write(Path.of(first.reference()), new byte[] {0, 0, 0});
 
         assertThatThrownBy(() -> useCase.assemble(job, POLICY, TRACE_ID))
                 .isInstanceOf(AudioAssemblyException.class);
 
-        assertThat(Files.readAllBytes(first.reference())).containsExactly(0, 0, 0);
+        assertThat(Files.readAllBytes(Path.of(first.reference()))).containsExactly(0, 0, 0);
         assertThat(chunkStore.completedChunks(SESSION_ID)).isEmpty();
     }
 
@@ -160,7 +160,7 @@ class AudioAssemblyUseCaseTests {
         AudioAssemblyStorage.Assembly first = new AudioAssemblyUseCase(cleanupFailsOnce, 60)
                 .assemble(job(1, 15_000, "audio/webm"), POLICY, TRACE_ID);
 
-        assertThat(Files.readAllBytes(first.reference())).containsExactly(2, 4, 6);
+        assertThat(Files.readAllBytes(Path.of(first.reference()))).containsExactly(2, 4, 6);
         assertThat(chunkStore.completedChunks(SESSION_ID)).hasSize(1);
         AudioAssemblyStorage.Assembly replay = useCase.assemble(job(1, 15_000, "audio/webm"), POLICY, TRACE_ID);
         assertThat(replay).isEqualTo(first);
@@ -291,6 +291,11 @@ class AudioAssemblyUseCaseTests {
         }
 
         @Override
+        public java.io.InputStream openAssembly(Assembly assembly) {
+            return delegate.openAssembly(assembly);
+        }
+
+        @Override
         public void discardPart(String sessionId) {
             delegate.discardPart(sessionId);
         }
@@ -298,6 +303,11 @@ class AudioAssemblyUseCaseTests {
         @Override
         public void deleteSourceChunks(String sessionId) {
             delegate.deleteSourceChunks(sessionId);
+        }
+
+        @Override
+        public void deleteAssembly(String sessionId) {
+            delegate.deleteAssembly(sessionId);
         }
     }
 }

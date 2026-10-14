@@ -12,7 +12,7 @@
 6. API-020 retry use case/controller를 구현한다. 완료 증거: 같은 job의 완료 stage는 건너뛰고 실패 stage만 재실행하며, non-retryable·만료·동시 요청은 안전 오류로 거절된다.
 7. API-021 authenticated object stream download를 구현한다. 완료 증거: 검증된 MIME과 attachment filename이 반환되고, public object URL/credential이나 만료/삭제 Audio는 노출되지 않는다.
 8. API-022 failure finalize와 Meeting document writer를 구현한다. 완료 증거: `DOWNLOADED`/`DISCARDED` 선택 및 회의 metadata/safe failure 요약이 저장되고 Delivery provider 호출이 없다.
-9. Session과 독립적인 durable object expiry scheduler를 구현한다. 완료 증거: 만료 직후 API access가 차단되고 Session restart 뒤에도 만료 객체가 삭제되며 반복 삭제/객체 없음이 멱등 처리된다.
+9. Session과 독립적인 durable object expiry scheduler를 구현한다. Session이 메모리에 있으면 만료 시 `DISCARDED` 실패 문서 종료를 재시도한 뒤 객체를 삭제하고, Backend restart 뒤 Session이 없으면 문서 생성 없이 만료 객체만 삭제한다. 완료 증거: 만료 직후 API access가 차단되고 재시작 뒤에도 만료 객체가 삭제되며 반복 삭제/객체 없음이 멱등 처리된다.
 10. API/controller/Document Port 연동 회귀 테스트와 evidence procedure를 갱신한다. 완료 증거: 기존 정상 Review/Publish 동작이 바뀌지 않고 모든 신규 acceptance criterion이 test case에 연결된다.
 
 ## 의존 관계

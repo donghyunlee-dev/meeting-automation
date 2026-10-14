@@ -43,6 +43,7 @@ Frontend 검증 전 `frontend/package.json`의 `engines.node`와 `node --version
 - SDD/PR 설명의 테스트 수와 실행 결과가 달라지면 PR 본문, evidence, PRD tracker를 같이 고친다. exact-head 해시를 모든 검증 기록에 명시한다.
 - 저장소의 `backend-validation.yml`은 `backend/**` 변경에만 실행된다. Frontend-only PR에서는 표시된 wrapper check가 현재 PR에 적용되는 필수 CI인지 저장소 설정과 함께 확인하고 Backend 검증이 실행된 것처럼 기록하지 않는다.
 - 같은 인증 계정이 PR 작성자이기도 하면 GitHub가 formal review를 거부할 수 있다. 이 경우 exact-head 독립 리뷰의 결과와 제한을 PR 대화 및 evidence에 명시하고, formal approval이 있었다고 표현하지 않는다.
+- PowerShell에서 예상 실패 build의 출력을 native-command pipeline으로 검사하면 긴 Rollup 진단의 줄바꿈/서식 때문에 규칙명이 잘린 것처럼 보일 수 있다. 실패를 검증할 때는 프로세스의 원시 stdout/stderr와 exit code를 함께 캡처하고, 보고할 때만 canary 값을 마스킹한다. UI에 잘린 텍스트만 보고 코드를 반복 수정하지 않는다.
 
 ## Frontend regression note
 

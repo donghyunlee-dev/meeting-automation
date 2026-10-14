@@ -76,13 +76,25 @@ public record MeetingSessionStatusResponse(Data data) {
 
     static MeetingSessionStatusResponse from(MeetingSession session, LastOperation lastOperation,
             MeetingSessionStore.PublishSnapshot publishSnapshot) {
+        return from(session, lastOperation, publishSnapshot, Instant.now());
+    }
+
+    static MeetingSessionStatusResponse from(MeetingSession session, LastOperation lastOperation,
+            MeetingSessionStore.PublishSnapshot publishSnapshot, Instant now) {
+        return from(session, lastOperation, publishSnapshot, null, now);
+    }
+
+    static MeetingSessionStatusResponse from(MeetingSession session, LastOperation lastOperation,
+            MeetingSessionStore.PublishSnapshot publishSnapshot, FailureFinalization failureFinalization, Instant now) {
         boolean failed = "PROCESSING_FAILED".equals(session.status());
         ProcessingFailure failure = failed ? session.processingFailure() : null;
+        boolean audioAvailable = failure != null && failure.audioAvailable()
+                && (failure.audioExpiresAt() == null || failure.audioExpiresAt().isAfter(now));
         Processing processing = new Processing(session.processingStage(), session.progressPercent(),
                 failure == null ? null : failure.errorCode(),
                 failure == null ? null : failure.retryable(),
-                failed ? false : null,
-                null);
+                failed ? audioAvailable : null,
+                failure == null ? null : failure.audioExpiresAt());
         boolean reviewReady = "REVIEW".equals(session.status());
         List<SpeakerView> speakers = reviewReady
                 ? session.speakers().stream()
@@ -98,13 +110,17 @@ public record MeetingSessionStatusResponse(Data data) {
                         .toList()
                 : List.of();
         StructuredMinutes minutes = reviewReady ? session.minutes() : null;
-        List<String> allowedActions = reviewReady ? REVIEW_ACTIONS
+        List<String> allowedActions = failed ? failureActions(failure, audioAvailable)
+                : reviewReady ? REVIEW_ACTIONS
                 : ("CONFIRMED".equals(session.status()) || "DOCUMENT_FAILED".equals(session.status()))
                         ? PUBLISH_ACTIONS : List.of();
         Document document = "DOCUMENT_SAVED".equals(session.status()) && publishSnapshot != null
                 && publishSnapshot.document() != null
                         ? new Document(publishSnapshot.document().documentId(), publishSnapshot.document().documentUrl())
                         : null;
+        if (failureFinalization != null && failureFinalization.document() != null)
+            document = new Document(failureFinalization.document().documentId(),
+                    failureFinalization.document().documentUrl());
         List<Delivery> deliveries = null;
         if (publishSnapshot != null && !"DOCUMENT_FAILED".equals(session.status())) {
             var projected = new java.util.ArrayList<>(publishSnapshot.deliveries().stream()
@@ -120,7 +136,19 @@ public record MeetingSessionStatusResponse(Data data) {
         }
         return new MeetingSessionStatusResponse(new Data(session.sessionId(), session.version(), session.status(),
                 new Meeting(session.meeting().participantIds()), processing, speakers, transcript, minutes,
-                allowedActions, reviewReady ? lastOperation : null, document, deliveries));
+                allowedActions, reviewReady ? lastOperation : failureFinalization == null ? null
+                        : new LastOperation("FINALIZE_PROCESSING_FAILURE", "COMPLETED", null, null),
+                document, deliveries));
+    }
+
+    private static List<String> failureActions(ProcessingFailure failure, boolean audioAvailable) {
+        var actions = new java.util.ArrayList<String>();
+        if (failure.retryable() && (audioAvailable || failure.retryInputAvailable())) {
+            actions.add("RETRY_PROCESSING");
+        }
+        if (audioAvailable) actions.add("DOWNLOAD_AUDIO");
+        actions.add("FINALIZE_PROCESSING_FAILURE");
+        return List.copyOf(actions);
     }
 }
 

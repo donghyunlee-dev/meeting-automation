@@ -21,9 +21,12 @@ import com.meetingautomation.transcription.TranscriptionProvider;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
+import java.time.Clock;
+import java.time.Instant;
 import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 /** Runs the ordered audio assembly, transcription, and diarization stages for one processing job. */
@@ -41,16 +44,27 @@ public class ProcessingPipeline {
     private final DiarizationResultAdapter diarizationAdapter;
     private final MinutesGenerationUseCase minutesGeneration;
     private final FailureContextReporter failureContextReporter;
+    private final Clock clock;
 
-    public ProcessingPipeline(MeetingSessionStore sessionStore, AudioAssemblyUseCase audioAssembly,
+    ProcessingPipeline(MeetingSessionStore sessionStore, AudioAssemblyUseCase audioAssembly,
             TranscriptionProvider transcriptionProvider, DiarizationResultAdapter diarizationAdapter,
-            MinutesGenerationUseCase minutesGeneration, FailureContextReporter failureContextReporter) {
+            MinutesGenerationUseCase minutesGeneration, FailureContextReporter failureContextReporter,
+            Clock processingClock) {
         this.sessionStore = sessionStore;
         this.audioAssembly = audioAssembly;
         this.transcriptionProvider = transcriptionProvider;
         this.diarizationAdapter = diarizationAdapter;
         this.minutesGeneration = minutesGeneration;
         this.failureContextReporter = failureContextReporter;
+        this.clock = processingClock;
+    }
+
+    @Autowired
+    public ProcessingPipeline(MeetingSessionStore sessionStore, AudioAssemblyUseCase audioAssembly,
+            TranscriptionProvider transcriptionProvider, DiarizationResultAdapter diarizationAdapter,
+            MinutesGenerationUseCase minutesGeneration, FailureContextReporter failureContextReporter) {
+        this(sessionStore, audioAssembly, transcriptionProvider, diarizationAdapter, minutesGeneration,
+                failureContextReporter, Clock.systemUTC());
     }
 
     public void process(ProcessingJob job, String traceId) {
@@ -62,78 +76,111 @@ public class ProcessingPipeline {
 
         UploadPolicy policy = sessionStore.findUploadPolicy(sessionId).orElse(null);
         long stageStartedAt = System.nanoTime();
-        logStageStarted(sessionId, effectiveTraceId, AUDIO_ASSEMBLY);
-        AudioAssemblyStorage.Assembly assembly;
-        try {
-            if (policy == null || job.expectedChunks() < 1 || job.durationMs() < 1
-                    || job.mimeType() == null || job.mimeType().isBlank()) {
-                throw new AudioAssemblyException("AUDIO_ASSEMBLY_INVALID_INPUT");
+        boolean minutesOnlyRetry = MINUTES_GENERATION.equals(session.processingStage());
+        if (!minutesOnlyRetry) {
+            boolean assembling = AUDIO_ASSEMBLY.equals(session.processingStage());
+            AudioAssemblyStorage.Assembly assembly;
+            if (assembling) {
+                logStageStarted(sessionId, effectiveTraceId, AUDIO_ASSEMBLY);
+                try {
+                    if (policy == null || job.expectedChunks() < 1 || job.durationMs() < 1
+                            || job.mimeType() == null || job.mimeType().isBlank()) {
+                        throw new AudioAssemblyException("AUDIO_ASSEMBLY_INVALID_INPUT");
+                    }
+                    assembly = audioAssembly.assemble(job, policy, effectiveTraceId);
+                    if (assembly == null || assembly.reference() == null || assembly.mimeType() == null
+                            || assembly.mimeType().isBlank() || assembly.bytes() < 1) {
+                        throw new AudioAssemblyException("AUDIO_ASSEMBLY_OUTPUT_INVALID");
+                    }
+                } catch (AudioAssemblyException failure) {
+                    fail(sessionId, effectiveTraceId, AUDIO_ASSEMBLY, 0,
+                            safeCode(failure.code(), "AUDIO_ASSEMBLY_FAILED"),
+                            isRetryableAssemblyFailure(failure.code()), stageStartedAt,
+                            audioAssembly.hasRetryInputs(job, policy));
+                    return;
+                } catch (RuntimeException failure) {
+                    fail(sessionId, effectiveTraceId, AUDIO_ASSEMBLY, 0, "AUDIO_ASSEMBLY_FAILED", true,
+                            stageStartedAt, audioAssembly.hasRetryInputs(job, policy));
+                    return;
+                }
+                sessionStore.recordProcessingProgress(sessionId, AUDIO_ASSEMBLY, 33);
+                logStageSucceeded(sessionId, effectiveTraceId, AUDIO_ASSEMBLY, stageStartedAt);
+            } else {
+                assembly = audioAssembly.findAssembly(sessionId).orElse(null);
+                if (assembly == null) {
+                    fail(sessionId, effectiveTraceId, session.processingStage(), session.progressPercent(),
+                            "AUDIO_NOT_AVAILABLE", false, stageStartedAt, false);
+                    return;
+                }
             }
-            assembly = audioAssembly.assemble(job, policy, effectiveTraceId);
-            if (assembly == null || assembly.reference() == null || assembly.mimeType() == null
-                    || assembly.mimeType().isBlank() || assembly.bytes() < 1) {
-                throw new AudioAssemblyException("AUDIO_ASSEMBLY_OUTPUT_INVALID");
-            }
-        } catch (AudioAssemblyException failure) {
-            fail(sessionId, effectiveTraceId, AUDIO_ASSEMBLY, 0,
-                    safeCode(failure.code(), "AUDIO_ASSEMBLY_FAILED"), isRetryableAssemblyFailure(failure.code()),
-                    stageStartedAt);
-            return;
-        } catch (RuntimeException failure) {
-            fail(sessionId, effectiveTraceId, AUDIO_ASSEMBLY, 0, "AUDIO_ASSEMBLY_FAILED", true, stageStartedAt);
-            return;
-        }
-        sessionStore.recordProcessingProgress(sessionId, AUDIO_ASSEMBLY, 33);
-        logStageSucceeded(sessionId, effectiveTraceId, AUDIO_ASSEMBLY, stageStartedAt);
 
-        sessionStore.recordProcessingProgress(sessionId, TRANSCRIPTION, 34);
-        stageStartedAt = System.nanoTime();
-        logStageStarted(sessionId, effectiveTraceId, TRANSCRIPTION);
-        ProviderTranscriptionResponse providerResponse;
-        try {
-            TranscriptionCommand command = new TranscriptionCommand(
-                    assembly.reference(), assembly.mimeType(), null, job.durationMs());
-            providerResponse = transcriptionProvider.transcribeWithDiarization(command);
-            if (providerResponse == null) {
-                fail(sessionId, effectiveTraceId, TRANSCRIPTION, 33,
-                        "TRANSCRIPTION_INVALID_RESPONSE", false, stageStartedAt);
+            ProviderTranscriptionResponse providerResponse;
+            boolean resumingDiarization = DIARIZATION.equals(session.processingStage());
+            if (resumingDiarization) {
+                providerResponse = sessionStore.findTranscriptionResult(sessionId).orElse(null);
+                if (providerResponse == null) {
+                    fail(sessionId, effectiveTraceId, DIARIZATION, 66,
+                            "TRANSCRIPTION_RESULT_NOT_AVAILABLE", false, stageStartedAt);
+                    return;
+                }
+            } else {
+                sessionStore.recordProcessingProgress(sessionId, TRANSCRIPTION, 34);
+                stageStartedAt = System.nanoTime();
+                logStageStarted(sessionId, effectiveTraceId, TRANSCRIPTION);
+                try {
+                    try (var audio = audioAssembly.openAssembly(assembly)) {
+                        TranscriptionCommand command = new TranscriptionCommand(
+                                audio, assembly.bytes(), assembly.mimeType(), null, job.durationMs());
+                        providerResponse = transcriptionProvider.transcribeWithDiarization(command);
+                    } catch (java.io.IOException invalidStoredAudio) {
+                        fail(sessionId, effectiveTraceId, TRANSCRIPTION, 33,
+                                "TRANSCRIPTION_INVALID_AUDIO", false, stageStartedAt);
+                        return;
+                    }
+                    if (providerResponse == null) {
+                        fail(sessionId, effectiveTraceId, TRANSCRIPTION, 33,
+                                "TRANSCRIPTION_INVALID_RESPONSE", false, stageStartedAt);
+                        return;
+                    }
+                    sessionStore.saveTranscriptionResult(sessionId, providerResponse);
+                } catch (TranscriptionException failure) {
+                    String code = failure.code() == null ? "TRANSCRIPTION_FAILED" : "TRANSCRIPTION_" + failure.code();
+                    fail(sessionId, effectiveTraceId, TRANSCRIPTION, 33,
+                            safeCode(code, "TRANSCRIPTION_FAILED"), failure.retryable(), stageStartedAt);
+                    return;
+                } catch (RuntimeException failure) {
+                    fail(sessionId, effectiveTraceId, TRANSCRIPTION, 33, "TRANSCRIPTION_FAILED", false, stageStartedAt);
+                    return;
+                }
+                sessionStore.recordProcessingProgress(sessionId, TRANSCRIPTION, 66);
+                logStageSucceeded(sessionId, effectiveTraceId, TRANSCRIPTION, stageStartedAt);
+            }
+
+            sessionStore.recordProcessingProgress(sessionId, DIARIZATION, 67);
+            stageStartedAt = System.nanoTime();
+            logStageStarted(sessionId, effectiveTraceId, DIARIZATION);
+            TranscriptResult normalized;
+            try {
+                normalized = diarizationAdapter.normalize(providerResponse, job.durationMs());
+                validateResult(normalized, job.durationMs());
+            } catch (IllegalArgumentException invalidResult) {
+                fail(sessionId, effectiveTraceId, DIARIZATION, 66,
+                        "DIARIZATION_INVALID_RESULT", false, stageStartedAt);
+                return;
+            } catch (RuntimeException failure) {
+                fail(sessionId, effectiveTraceId, DIARIZATION, 66, "DIARIZATION_FAILED", true, stageStartedAt);
                 return;
             }
-        } catch (TranscriptionException failure) {
-            String code = failure.code() == null ? "TRANSCRIPTION_FAILED" : "TRANSCRIPTION_" + failure.code();
-            fail(sessionId, effectiveTraceId, TRANSCRIPTION, 33,
-                    safeCode(code, "TRANSCRIPTION_FAILED"), failure.retryable(), stageStartedAt);
-            return;
-        } catch (RuntimeException failure) {
-            fail(sessionId, effectiveTraceId, TRANSCRIPTION, 33, "TRANSCRIPTION_FAILED", false, stageStartedAt);
-            return;
+            try {
+                sessionStore.saveDiarizationResult(sessionId, normalized.speakers(), normalized.segments());
+                sessionStore.removeTranscriptionResult(sessionId);
+            } catch (RuntimeException saveFailure) {
+                fail(sessionId, effectiveTraceId, DIARIZATION, 66,
+                        "DIARIZATION_RESULT_SAVE_FAILED", false, stageStartedAt);
+                return;
+            }
+            logStageSucceeded(sessionId, effectiveTraceId, DIARIZATION, stageStartedAt);
         }
-        sessionStore.recordProcessingProgress(sessionId, TRANSCRIPTION, 66);
-        logStageSucceeded(sessionId, effectiveTraceId, TRANSCRIPTION, stageStartedAt);
-
-        sessionStore.recordProcessingProgress(sessionId, DIARIZATION, 67);
-        stageStartedAt = System.nanoTime();
-        logStageStarted(sessionId, effectiveTraceId, DIARIZATION);
-        TranscriptResult normalized;
-        try {
-            normalized = diarizationAdapter.normalize(providerResponse, job.durationMs());
-            validateResult(normalized, job.durationMs());
-        } catch (IllegalArgumentException invalidResult) {
-            fail(sessionId, effectiveTraceId, DIARIZATION, 66,
-                    "DIARIZATION_INVALID_RESULT", false, stageStartedAt);
-            return;
-        } catch (RuntimeException failure) {
-            fail(sessionId, effectiveTraceId, DIARIZATION, 66, "DIARIZATION_FAILED", false, stageStartedAt);
-            return;
-        }
-        try {
-            sessionStore.saveDiarizationResult(sessionId, normalized.speakers(), normalized.segments());
-        } catch (RuntimeException saveFailure) {
-            fail(sessionId, effectiveTraceId, DIARIZATION, 66,
-                    "DIARIZATION_RESULT_SAVE_FAILED", false, stageStartedAt);
-            return;
-        }
-        logStageSucceeded(sessionId, effectiveTraceId, DIARIZATION, stageStartedAt);
 
         sessionStore.recordProcessingProgress(sessionId, MINUTES_GENERATION, 100);
         stageStartedAt = System.nanoTime();
@@ -159,17 +206,52 @@ public class ProcessingPipeline {
                     "MINUTES_RESULT_SAVE_FAILED", false, stageStartedAt);
             return;
         }
+        try {
+            audioAssembly.deleteAudio(sessionId);
+        } catch (RuntimeException cleanupFailure) {
+            LOGGER.atWarn().addKeyValue("sessionId", sessionId).addKeyValue("traceId", effectiveTraceId)
+                    .addKeyValue("stage", MINUTES_GENERATION).addKeyValue("errorCode", "AUDIO_CLEANUP_FAILED")
+                    .log("Private Audio cleanup will be retried by expiry cleanup.");
+            try {
+                audioAssembly.retainAudioUntil(sessionId, clock.instant().plusSeconds(24 * 60 * 60));
+            } catch (RuntimeException expiryFailure) {
+                LOGGER.atError().addKeyValue("sessionId", sessionId).addKeyValue("traceId", effectiveTraceId)
+                        .addKeyValue("stage", MINUTES_GENERATION).addKeyValue("errorCode", "AUDIO_CLEANUP_FAILED")
+                        .log("Private Audio cleanup scheduling failed.");
+            }
+        }
         logStageSucceeded(sessionId, effectiveTraceId, MINUTES_GENERATION, stageStartedAt);
     }
 
     private void fail(String sessionId, String traceId, String stage, int lastCompletedProgress,
             String errorCode, boolean retryable, long stageStartedAt) {
+        fail(sessionId, traceId, stage, lastCompletedProgress, errorCode, retryable, stageStartedAt,
+                !AUDIO_ASSEMBLY.equals(stage));
+    }
+
+    private void fail(String sessionId, String traceId, String stage, int lastCompletedProgress,
+            String errorCode, boolean retryable, long stageStartedAt, boolean retryInputAvailable) {
         String safeErrorCode = safeCode(errorCode, "PROCESSING_FAILED");
-        ProcessingFailure failure = new ProcessingFailure(stage, safeErrorCode, retryable);
+        boolean audioAvailable = !AUDIO_ASSEMBLY.equals(stage);
+        boolean hasRetryInput = retryInputAvailable && retryable;
+        Instant failedAt = clock.instant();
+        Instant expiresAt = failedAt.plusSeconds(24 * 60 * 60);
+        try {
+            audioAssembly.retainAudioUntil(sessionId, expiresAt);
+        } catch (RuntimeException retentionFailure) {
+            audioAvailable = false;
+            hasRetryInput = false;
+            safeErrorCode = "AUDIO_STORAGE_FAILED";
+            retryable = false;
+            expiresAt = null;
+        }
+        ProcessingFailure failure = new ProcessingFailure(stage, safeErrorCode, retryable, audioAvailable,
+                expiresAt, false, hasRetryInput);
         sessionStore.failProcessing(sessionId, failure.stage(), lastCompletedProgress,
-                failure.errorCode(), failure.retryable());
+                failure.errorCode(), failure.retryable(), failure.audioAvailable(), failure.retryInputAvailable(),
+                failure.audioExpiresAt());
         FailureContext context = FailureContext.from(sessionId, stage, traceId, safeErrorCode, retryable,
-                java.time.Instant.now()).orElse(null);
+                failedAt).orElse(null);
         if (context != null) {
             failureContextReporter.report(context, LOGGER);
         } else {

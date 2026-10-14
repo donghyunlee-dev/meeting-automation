@@ -15,6 +15,7 @@ import com.meetingautomation.api.processing.ProcessingJobQueue;
 import com.meetingautomation.api.processing.ProcessingJobRunner;
 import com.meetingautomation.api.processing.AudioAssemblyUseCase;
 import com.meetingautomation.api.audio.AudioAssemblyStorage;
+import com.meetingautomation.api.audio.TestPrivateAudioStorage;
 import com.meetingautomation.minutes.GroundedMinutesResult;
 import com.meetingautomation.minutes.MinutesCommand;
 import com.meetingautomation.minutes.MinutesGenerationProvider;
@@ -76,6 +77,9 @@ class ProcessingStartApiTests {
     private MeetingSessionStore sessionStore;
 
     @Autowired
+    private TestPrivateAudioStorage privateAudioStorage;
+
+    @Autowired
     private ControllableProcessingQueue processingExecutor;
 
     @Autowired
@@ -107,6 +111,7 @@ class ProcessingStartApiTests {
     @BeforeEach
     void createSessionAndResetQueue() throws IOException {
         sessionStore.remove(SESSION_ID);
+        privateAudioStorage.clearSession(SESSION_ID);
         deleteRecursively(AUDIO_ROOT);
         Files.createDirectories(AUDIO_ROOT);
         processingExecutor.reset();
@@ -152,8 +157,7 @@ class ProcessingStartApiTests {
 
     @Test
     void storageFailureLeavesSessionCreatedAtItsOriginalVersion() throws Exception {
-        deleteRecursively(AUDIO_ROOT);
-        Files.writeString(AUDIO_ROOT, "regular file blocks the audio storage root");
+        privateAudioStorage.failNextStore();
 
         upload("0", new byte[] {16, 17}, "storage-failure")
                 .andExpect(status().isInternalServerError())

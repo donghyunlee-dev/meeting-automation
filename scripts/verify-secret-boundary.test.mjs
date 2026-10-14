@@ -17,7 +17,7 @@ EMAIL_OAUTH_REFRESH_TOKEN=
 EMAIL_SENDER_ADDRESS=
 NOTIFICATION_PROVIDER=SLACK
 ALLOWED_ORIGINS=http://localhost:5173
-TEMP_AUDIO_DIR=<absolute-local-temp-directory>
+PRIVATE_AUDIO_S3_BUCKET=<private-bucket-name>
 OPENAI_API_KEY=
 SLACK_MEETING_WEBHOOK_URL=
 SLACK_ADMIN_WEBHOOK_URL=
@@ -80,6 +80,17 @@ test('requires the documented non-secret backend settings', () => {
   assert.equal(result.valid, false);
   assert.ok(result.issues.some(issue => issue.file === 'backend/.env.example'
     && issue.key === 'DOCUMENT_SETTINGS_DIR'
+    && issue.code === 'MISSING_REQUIRED_KEY'));
+});
+
+test('requires a private object storage bucket and no local Audio persistence setting', () => {
+  const missingBucket = inspectEnvSamples(validFrontend,
+    validBackend.replace('PRIVATE_AUDIO_S3_BUCKET=<private-bucket-name>\n', ''));
+
+  assert.equal(inspectEnvSamples(validFrontend, validBackend).valid, true);
+  assert.equal(missingBucket.valid, false);
+  assert.ok(missingBucket.issues.some(issue => issue.file === 'backend/.env.example'
+    && issue.key === 'PRIVATE_AUDIO_S3_BUCKET'
     && issue.code === 'MISSING_REQUIRED_KEY'));
 });
 

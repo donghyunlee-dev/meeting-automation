@@ -15,14 +15,14 @@ public final class AudioChunkService {
 
     private final MeetingSessionStore sessionStore;
     private final MeetingSessionService meetingSessionService;
-    private final AudioChunkFileStore fileStore;
+    private final PrivateAudioStoragePort storage;
 
     public AudioChunkService(MeetingSessionStore sessionStore,
             MeetingSessionService meetingSessionService,
-            AudioChunkFileStore fileStore) {
+            PrivateAudioStoragePort storage) {
         this.sessionStore = sessionStore;
         this.meetingSessionService = meetingSessionService;
-        this.fileStore = fileStore;
+        this.storage = storage;
     }
 
     public AudioChunkUploadResponse upload(String sessionId, String rawSequence, String contentType,
@@ -52,8 +52,18 @@ public final class AudioChunkService {
             throw new AudioChunkInvalidException();
         }
 
-        fileStore.store(sessionId, sequence, mimeType, byteLength, sha256,
-                policy.maxChunkBytes(), body);
+        var prior = storage.listForSession(sessionId).stream()
+                .filter(object -> object.type() == PrivateAudioStoragePort.ObjectType.CHUNK
+                        && object.sequence() == sequence)
+                .findFirst();
+        if (prior.isPresent()) {
+            var object = prior.orElseThrow();
+            if (object.bytes() != byteLength || !object.sha256().equals(sha256)
+                    || !object.mimeType().equals(mimeType)) throw new AudioChunkConflictException();
+        } else {
+            storage.store(sessionId, PrivateAudioStoragePort.ObjectType.CHUNK, sequence, mimeType,
+                    null, body, byteLength, sha256);
+        }
         if ("CREATED".equals(session.status())) {
             sessionStore.transitionStatus(sessionId, "CREATED", "UPLOADING");
         }

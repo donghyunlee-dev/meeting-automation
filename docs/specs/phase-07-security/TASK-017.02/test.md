@@ -14,7 +14,7 @@
 | AUDIO-LIFE-08 | 유효한 Audio download | raw binary, 원 MIME, attachment disposition, 안전한 서버 파일명 | MockMvc byte/header assertion |
 | AUDIO-LIFE-09 | retryable assembly 실패와 intact source chunks | retry action 유지, download action 숨김 | API response + chunk inventory assertion |
 | AUDIO-LIFE-10 | 성공 download 뒤 `DOWNLOADED` finalize | meeting metadata와 safe failure/disposition 저장, `COMPLETED_WITH_WARNINGS` | Document Port capture |
-| AUDIO-LIFE-11 | `DISCARDED` finalize 및 TTL 자동 finalize | 실패 문서 기록, Audio/chunk 삭제, email/notification 호출 0회 | adapter interaction assertions |
+| AUDIO-LIFE-11 | `DISCARDED` finalize 및 Session이 살아 있는 동안 TTL 도달 | 실패 문서 기록, Audio/chunk 삭제, email/notification 호출 0회. Backend 재시작으로 Session이 없는 경우에는 문서 생성 없이 객체만 삭제 | adapter interaction assertions |
 | AUDIO-LIFE-12 | 성공 download 없이 `DOWNLOADED` finalize | 거절, Session/document 불변 | HTTP error + version assertion |
 | AUDIO-LIFE-13 | 동일 finalize key 재요청 | 최초 성공 결과 재사용, 문서 중복 생성 없음 | idempotency/document call count |
 | AUDIO-LIFE-14 | 중복 cleanup, 객체 없음, delete timeout | 멱등 처리 또는 cleanup-pending; object key/Audio 없는 로그 | object storage fake + log capture |
@@ -25,7 +25,7 @@
 | AUDIO-LIFE-19 | `MINUTES_GENERATION` retryable 실패 후 retry | 기존 Transcript/mapping 사용, STT와 diarization adapter 재호출 0회 | stage and adapter invocation assertions |
 | AUDIO-LIFE-20 | Failure Document Provider write 오류 후 새 finalize key로 재요청 | safe `DOCUMENT_FAILED`; Audio disposition 유지, externalSessionId로 문서 중복 없이 저장 재시도 | Document Port failure/retry test |
 | AUDIO-LIFE-21 | 두 retry 명령 동시 제출 또는 stale `If-Match` | Session 단위 한 실행만 접수; stale version은 412, 중복은 상태 충돌/동일 접수 결과 | concurrency and version tests |
-| AUDIO-LIFE-22 | Backend restart 뒤 storage expiry sweep | Session 복구 없이도 expiry metadata가 지난 app-owned Audio object를 제거 | adapter listing fake + fake clock |
+| AUDIO-LIFE-22 | Backend restart 뒤 storage expiry sweep | Session 복구/실패 문서 생성 없이 expiry metadata가 지난 app-owned Audio object를 제거 | adapter listing fake + fake clock |
 | AUDIO-LIFE-23 | Chunk durable write timeout/failure | API-007 성공 ACK가 없고 retry-safe storage error 반환 | storage adapter failure injection |
 
 모든 수용 기준을 AUDIO-LIFE-01~23에 연결한다. JSON API 오류는 공통 `{error}` envelope와 safe code/category/traceId를 검증한다.

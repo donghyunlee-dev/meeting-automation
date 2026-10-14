@@ -37,6 +37,10 @@ import com.meetingautomation.transcription.TranscriptionCommand;
 import com.meetingautomation.transcription.TranscriptionException;
 import com.meetingautomation.transcription.TranscriptionProvider;
 import java.nio.file.Path;
+import java.io.ByteArrayInputStream;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -62,13 +66,15 @@ class ProcessingPipelineTests {
     private final AdminIncidentNotifier incidentNotifier = mock(AdminIncidentNotifier.class);
     private final ProcessingPipeline pipeline = new ProcessingPipeline(
             sessionStore, audioAssembly, transcriptionProvider, normalizer, minutesUseCase,
-            new FailureContextReporter(incidentNotifier));
+            new FailureContextReporter(incidentNotifier),
+            Clock.fixed(Instant.parse("2026-10-14T00:00:00Z"), ZoneOffset.UTC));
 
     @BeforeEach
     void createProcessingSession() {
         sessionStore.remove(SESSION_ID);
         sessionStore.save(uploadingSession(), null, POLICY);
         sessionStore.startProcessing(SESSION_ID);
+        when(audioAssembly.openAssembly(any())).thenReturn(new ByteArrayInputStream(new byte[42]));
     }
 
     @Test
@@ -105,8 +111,11 @@ class ProcessingPipelineTests {
         assertThat(saved.minutes().toString()).doesNotContain("Grounded summary");
         assertThat(saved.toString()).doesNotContain("Grounded summary");
         assertThat(saved.processingFailure()).isNull();
+        verify(audioAssembly).deleteAudio(SESSION_ID);
         verify(transcriptionProvider).transcribeWithDiarization(org.mockito.ArgumentMatchers.argThat(command ->
-                command.audioReference().equals(AUDIO_REFERENCE)
+                command.audioReference() == null
+                        && command.audioStream() != null
+                        && command.audioBytes() == 42
                         && command.mimeType().equals("audio/webm")
                         && command.languageHint() == null
                         && command.meetingDurationMs() == JOB.durationMs()));
@@ -181,8 +190,41 @@ class ProcessingPipelineTests {
         assertThat(failed.progressPercent()).isEqualTo(33);
         assertThat(failed.processingFailure().errorCode()).isEqualTo("TRANSCRIPTION_PROCESSING_FAILED");
         assertThat(failed.processingFailure().retryable()).isTrue();
+        verify(audioAssembly).retainAudioUntil(SESSION_ID, Instant.parse("2026-10-15T00:00:00Z"));
         verify(normalizer, never()).normalize(any(), org.mockito.ArgumentMatchers.anyLong());
         verify(minutesProvider, never()).generateMinutes(any());
+    }
+
+    @Test
+    void diarizationRetryReusesPrivateTranscriptionResultWithoutCallingTranscriptionAgain() {
+        AudioAssemblyStorage.Assembly assembly = assembly();
+        ProviderTranscriptionResponse response = providerResponse();
+        TranscriptResult normalized = new TranscriptResult(
+                List.of(new Speaker("speaker_a", "Speaker A")),
+                List.of(new TranscriptSegment("seg_001", "speaker_a", 10, 200, "normalized text")));
+        when(audioAssembly.assemble(JOB, POLICY, TRACE_ID)).thenReturn(assembly);
+        when(audioAssembly.findAssembly(SESSION_ID)).thenReturn(java.util.Optional.of(assembly));
+        when(audioAssembly.openAssembly(any())).thenAnswer(ignored -> new ByteArrayInputStream(new byte[42]));
+        when(transcriptionProvider.transcribeWithDiarization(any(TranscriptionCommand.class))).thenReturn(response);
+        when(normalizer.normalize(response, JOB.durationMs()))
+                .thenThrow(new IllegalStateException("transient normalization boundary"))
+                .thenReturn(normalized);
+        when(minutesProvider.generateMinutes(any(MinutesCommand.class))).thenReturn(new GroundedMinutesResult(
+                "default.md", "1.0.0", List.of(), List.of(), List.of(), List.of(), List.of()));
+
+        pipeline.process(JOB, TRACE_ID);
+        MeetingSession failed = sessionStore.find(SESSION_ID).orElseThrow();
+        assertThat(failed.processingFailure().retryable()).isTrue();
+        assertThat(sessionStore.findTranscriptionResult(SESSION_ID)).contains(response);
+        sessionStore.startProcessingRetry(SESSION_ID);
+
+        pipeline.process(JOB, TRACE_ID);
+
+        assertThat(sessionStore.find(SESSION_ID).orElseThrow().status()).isEqualTo("REVIEW");
+        verify(transcriptionProvider, org.mockito.Mockito.times(1))
+                .transcribeWithDiarization(any(TranscriptionCommand.class));
+        verify(normalizer, org.mockito.Mockito.times(2)).normalize(response, JOB.durationMs());
+        assertThat(sessionStore.findTranscriptionResult(SESSION_ID)).isEmpty();
     }
 
     @Test
@@ -322,7 +364,7 @@ class ProcessingPipelineTests {
     }
 
     private static AudioAssemblyStorage.Assembly assembly() {
-        return new AudioAssemblyStorage.Assembly(AUDIO_REFERENCE, "audio/webm", 42, "a".repeat(64));
+        return new AudioAssemblyStorage.Assembly(AUDIO_REFERENCE.toString(), "audio/webm", 42, "a".repeat(64));
     }
 
     private static ProviderTranscriptionResponse providerResponse() {

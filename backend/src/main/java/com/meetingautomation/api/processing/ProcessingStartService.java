@@ -1,6 +1,6 @@
 package com.meetingautomation.api.processing;
 
-import com.meetingautomation.api.audio.AudioChunkFileStore;
+import com.meetingautomation.api.audio.PrivateAudioStoragePort;
 import com.meetingautomation.api.audio.AudioSessionNotFoundException;
 import com.meetingautomation.api.error.ApiValidationException;
 import com.meetingautomation.api.idempotency.IdempotencyKeyConflictException;
@@ -19,18 +19,18 @@ import org.springframework.stereotype.Service;
 @Service
 public final class ProcessingStartService {
     private final MeetingSessionStore sessionStore;
-    private final AudioChunkFileStore chunkStore;
+    private final PrivateAudioStoragePort audioStorage;
     private final ProcessingJobQueue queue;
     private final int maxMeetingDurationMinutes;
     private final ConcurrentMap<RequestKey, RequestRecord> requests = new ConcurrentHashMap<>();
 
     public ProcessingStartService(
             MeetingSessionStore sessionStore,
-            AudioChunkFileStore chunkStore,
+            PrivateAudioStoragePort audioStorage,
             ProcessingJobQueue queue,
             @Value("${MAX_MEETING_DURATION_MINUTES:60}") int maxMeetingDurationMinutes) {
         this.sessionStore = sessionStore;
-        this.chunkStore = chunkStore;
+        this.audioStorage = audioStorage;
         this.queue = queue;
         this.maxMeetingDurationMinutes = maxMeetingDurationMinutes;
     }
@@ -57,9 +57,12 @@ public final class ProcessingStartService {
         validateCompletedChunks(sessionId, command.expectedChunks(), policy);
 
         MeetingSession processing = sessionStore.startProcessing(sessionId);
+            ProcessingJob job = new ProcessingJob(sessionId, command.expectedChunks(), command.durationMs(), command.mimeType());
+            sessionStore.registerProcessingJob(job);
         try {
-            queue.enqueue(new ProcessingJob(sessionId, command.expectedChunks(), command.durationMs(), command.mimeType()));
+                queue.enqueue(job);
         } catch (RuntimeException queueFailure) {
+                sessionStore.removeProcessingJob(sessionId);
             sessionStore.rollbackProcessingStart(sessionId, processing.version(), session);
             throw queueFailure;
         }
@@ -111,10 +114,13 @@ public final class ProcessingStartService {
     }
 
     private void validateCompletedChunks(String sessionId, int expectedChunks, UploadPolicy policy) {
-        List<AudioChunkFileStore.CompletedChunk> chunks = chunkStore.completedChunks(sessionId);
+        List<PrivateAudioStoragePort.StoredObject> chunks = audioStorage.listForSession(sessionId).stream()
+                .filter(object -> object.type() == PrivateAudioStoragePort.ObjectType.CHUNK)
+                .sorted(java.util.Comparator.comparingInt(PrivateAudioStoragePort.StoredObject::sequence))
+                .toList();
         if (chunks.size() != expectedChunks) throw new AudioChunksIncompleteException();
         for (int sequence = 0; sequence < expectedChunks; sequence++) {
-            AudioChunkFileStore.CompletedChunk chunk = chunks.get(sequence);
+            PrivateAudioStoragePort.StoredObject chunk = chunks.get(sequence);
             if (chunk.sequence() != sequence || chunk.bytes() < 1 || chunk.bytes() > policy.maxChunkBytes()) {
                 throw new AudioChunksIncompleteException();
             }

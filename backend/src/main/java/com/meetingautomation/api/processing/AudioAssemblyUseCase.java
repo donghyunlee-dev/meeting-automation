@@ -54,6 +54,39 @@ public final class AudioAssemblyUseCase {
         }
     }
 
+    /** True only when the complete, ordered, metadata-valid source chunk set remains available. */
+    public boolean hasRetryInputs(ProcessingJob job, UploadPolicy policy) {
+        try {
+            validateJob(job, policy);
+            long maximumBytes = Math.multiplyExact((long) job.expectedChunks(), policy.maxChunkBytes());
+            validateChunks(storage.chunks(job.sessionId()), job.expectedChunks(),
+                    normalizeMimeType(job.mimeType()), policy.maxChunkBytes(), maximumBytes);
+            return true;
+        } catch (RuntimeException invalidOrUnavailable) {
+            return false;
+        }
+    }
+
+    public InputStream openAssembly(AudioAssemblyStorage.Assembly assembly) {
+        try {
+            return storage.openAssembly(assembly);
+        } catch (RuntimeException failure) {
+            throw new AudioAssemblyException("AUDIO_STORAGE_FAILED");
+        }
+    }
+
+    public void retainAudioUntil(String sessionId, java.time.Instant expiresAt) {
+        storage.setSessionExpiry(sessionId, expiresAt);
+    }
+
+    public void deleteAudio(String sessionId) {
+        storage.deleteAllAudio(sessionId);
+    }
+
+    public java.util.Optional<AudioAssemblyStorage.Assembly> findAssembly(String sessionId) {
+        return storage.findAssembly(sessionId);
+    }
+
     private AudioAssemblyStorage.Assembly assembleWhileLocked(ProcessingJob job, UploadPolicy policy,
             String traceId) {
         String mimeType = normalizeMimeType(job.mimeType());
