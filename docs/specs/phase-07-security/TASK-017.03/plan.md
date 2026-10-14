@@ -43,4 +43,4 @@
 
 ## 검증 접근
 
-Automated component/client tests use the repository's discovered frontend package scripts and existing test libraries. The current checkout has no frontend manifest, so no test command is invented. Manual checks cover browser-native download behavior on Android Chrome and iOS Safari, saving confirmation, background/foreground expiry refresh, keyboard/screen reader, and 360px viewport.
+Automated component/client tests use the repository's discovered frontend package scripts and existing test libraries. The discovered `frontend/package.json` exposes `npm run test`, `npm run lint`, and `npm run build`; run focused Vitest specs for changed Processing components and clients. Manual checks cover browser-native download behavior on Android Chrome and iOS Safari, saving confirmation, background/foreground expiry refresh, keyboard/screen reader, and 360px viewport.
