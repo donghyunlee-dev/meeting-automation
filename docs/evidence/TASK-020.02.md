@@ -4,7 +4,7 @@
 
 - Issue: [#74](https://github.com/donghyunlee-dev/meeting-automation/issues/74)
 - PR: [#159](https://github.com/donghyunlee-dev/meeting-automation/pull/159)
-- Tested code revision: `dfe586a7bd1272075304655eaaf429e7f4339082`
+- Tested code/test revision: `b552f6b8884931ece3077bacfdcdfaa5dfc0d855` (published PR head)
 - Fixtures: synthetic API responses and fictional meeting, participant, provider, and error data only
 - Environment: no local service, provider account, real meeting, deployed environment, or physical device was used
 
@@ -16,6 +16,7 @@
 | `npm exec -- vitest run src/MeetingHistory.test.tsx` | 1 file, 8 passed |
 | `npm exec -- vitest run src/NewMeetingPage.test.tsx src/SettingsPage.test.tsx` | 2 files, 15 passed |
 | `npm exec -- vitest run src/App.test.tsx src/ProcessingPage.test.tsx src/ReviewSpeakerPage.test.tsx src/SharePage.test.tsx src/CompletePage.test.tsx` | 5 files, 141 passed |
+| `npm exec -- vitest run src/CompletePage.test.tsx src/ReviewSpeakerPage.test.tsx -t "ASYNC-GET-RETRY"` | 2 files, 2 passed / 50 skipped; both new GET recovery regressions passed on the published head |
 | TASK-020.02 12-file selector in [`test.md`](../specs/phase-09-release/TASK-020.02/test.md) | 10 files passed, 2 had no matching tests; 30 passed, 153 excluded by selector |
 | Changed-file ESLint | Passed |
 | `npm exec -- tsc --project tsconfig.app.json --noEmit --pretty false` | Passed |

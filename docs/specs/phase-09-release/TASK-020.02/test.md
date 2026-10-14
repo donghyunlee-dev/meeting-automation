@@ -26,7 +26,7 @@
 
 ## 실행 결과
 
-TASK-020.02 코드 revision `dfe586a7bd1272075304655eaaf429e7f4339082`에서 아래 직접 영향 focused 검증을 실행했다. 실제 provider/account/meeting/device 및 배포 환경 QA는 사용자가 서비스 설정 후 수행하도록 보류했다.
+TASK-020.02 코드/test revision `b552f6b8884931ece3077bacfdcdfaa5dfc0d855`에서 아래 직접 영향 focused 검증을 실행했다. 실제 provider/account/meeting/device 및 배포 환경 QA는 사용자가 서비스 설정 후 수행하도록 보류했다.
 
 | 명령 | 결과 |
 |---|---|
@@ -34,6 +34,7 @@ TASK-020.02 코드 revision `dfe586a7bd1272075304655eaaf429e7f4339082`에서 아
 | `npm exec -- vitest run src/ProcessingPage.test.tsx -t "ASYNC-GET-RETRY|shows safe Korean stage copy and only actions allowed|keeps actions hidden when API-010 metadata says retry or assembled audio is unavailable"` | 1 file, 3 passed / 7 skipped |
 | `npm exec -- vitest run src/NewMeetingPage.test.tsx src/SettingsPage.test.tsx` | 2 files, 15 passed |
 | `npm exec -- vitest run src/App.test.tsx src/ProcessingPage.test.tsx src/ReviewSpeakerPage.test.tsx src/SharePage.test.tsx src/CompletePage.test.tsx` | 5 files, 141 passed |
+| `npm exec -- vitest run src/CompletePage.test.tsx src/ReviewSpeakerPage.test.tsx -t "ASYNC-GET-RETRY"` | 2 files, 2 passed / 50 skipped; both new GET recovery regressions passed on the published head |
 | Issue-focused 12-file selector run (명령 아래 참조) | 10 files passed, 2 skipped; 30 passed / 153 skipped |
 | Changed-file ESLint across TASK-020.02 frontend source/tests | Passed |
 | `npm exec -- tsc --project tsconfig.app.json --noEmit --pretty false` | Passed |
