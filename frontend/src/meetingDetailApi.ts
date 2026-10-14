@@ -1,4 +1,6 @@
-﻿export type MeetingDetail = {
+﻿import { normalizeApiError, type SafeApiError } from './lib/api/normalizeApiError';
+
+export type MeetingDetail = {
   documentId: string;
   title: string;
   meetingAt: string;
@@ -15,8 +17,11 @@
 };
 
 export class MeetingDetailApiError extends Error {
-  constructor(readonly code: 'MEETING_NOT_FOUND' | 'MEETING_DETAIL_FAILED') {
-    super(code === 'MEETING_NOT_FOUND' ? '회의 기록을 찾을 수 없습니다.' : '회의 상세를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.');
+  readonly code: string;
+
+  constructor(code: 'MEETING_NOT_FOUND' | 'MEETING_DETAIL_FAILED', readonly safe: SafeApiError = normalizeApiError({ error: { code } }, code === 'MEETING_NOT_FOUND' ? 404 : undefined)) {
+    super(safe.message);
+    this.code = code;
     this.name = 'MeetingDetailApiError';
   }
 }
@@ -43,8 +48,12 @@ export async function getMeetingDetail(documentId: string): Promise<MeetingDetai
     const body: unknown = await response.json();
     const code = body && typeof body === 'object' && 'error' in body
       && (body.error as { code?: unknown } | null)?.code === 'MEETING_NOT_FOUND' ? 'MEETING_NOT_FOUND' : null;
-    if (response.status === 404 && code === 'MEETING_NOT_FOUND') throw new MeetingDetailApiError('MEETING_NOT_FOUND');
-    if (!response.ok || !body || typeof body !== 'object' || !('data' in body)) throw new MeetingDetailApiError('MEETING_DETAIL_FAILED');
+    if (response.status === 404 && code === 'MEETING_NOT_FOUND') {
+      throw new MeetingDetailApiError('MEETING_NOT_FOUND', normalizeApiError(body, response.status));
+    }
+    if (!response.ok || !body || typeof body !== 'object' || !('data' in body)) {
+      throw new MeetingDetailApiError('MEETING_DETAIL_FAILED', normalizeApiError(body, response.status));
+    }
     const data = (body as { data?: unknown }).data;
     if (!isMeetingDetail(data)) throw new MeetingDetailApiError('MEETING_DETAIL_FAILED');
     return data;

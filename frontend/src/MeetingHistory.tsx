@@ -1,9 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router';
-import { listMeetings, type MeetingSummary } from './meetingListApi';
+import { AsyncState } from './components/async-state/AsyncState';
+import { normalizeApiError, type SafeApiError } from './lib/api/normalizeApiError';
+import { listMeetings, MeetingListApiError, type MeetingSummary } from './meetingListApi';
 import { filterMeetings, groupMeetingsByLocalMonth, hasInvalidDateRange, type MeetingFilters } from './meetingFilters';
 
-type ListState = 'loading' | 'ready' | 'error';
+type ListResult =
+  | { status: 'loading' }
+  | { status: 'ready'; data: MeetingSummary[]; loadedAttempt: number; warning?: SafeApiError }
+  | { status: 'error'; error: SafeApiError };
 
 function formatMeetingDate(value: string): string {
   const date = new Date(value);
@@ -35,38 +40,44 @@ function MeetingRows({ meetings, showParticipantNames, linkRows = false }: { mee
 }
 
 function MeetingList({ limit, emptyMessage, enableFilters = false }: { limit?: number; emptyMessage: string; enableFilters?: boolean }) {
-  const [meetings, setMeetings] = useState<MeetingSummary[]>([]);
-  const [state, setState] = useState<ListState>('loading');
+  const [result, setResult] = useState<ListResult>({ status: 'loading' });
   const [attempt, setAttempt] = useState(0);
   const [filters, setFilters] = useState<MeetingFilters>({ query: '', from: '', to: '' });
+  const retry = () => setAttempt((value) => value + 1);
 
   useEffect(() => {
     let active = true;
     void listMeetings(limit).then((items) => {
       if (!active) return;
-      setMeetings(items);
-      setState('ready');
-    }).catch(() => {
-      if (active) setState('error');
+      setResult({ status: 'ready', data: items, loadedAttempt: attempt });
+    }).catch((reason: unknown) => {
+      if (!active) return;
+      const safeError = reason instanceof MeetingListApiError ? reason.safe : normalizeApiError(null);
+      setResult((current) => current.status === 'ready'
+        ? { status: 'ready', data: current.data, loadedAttempt: attempt, warning: safeError }
+        : { status: 'error', error: safeError });
     });
     return () => { active = false; };
   }, [limit, attempt]);
 
-  const visibleMeetings = useMemo(() => (enableFilters ? filterMeetings(meetings, filters) : meetings).slice(0, limit ?? 100), [enableFilters, filters, limit, meetings]);
+  const refreshing = result.status === 'ready' && result.loadedAttempt < attempt;
 
-  if (state === 'loading') return <div className="state-card loading" role="status"><span className="spinner" aria-hidden="true" />회의 목록을 불러오는 중…</div>;
-  if (state === 'error') return (
-    <div className="state-card error-card" role="alert">
-      <p>회의 목록을 불러오지 못했습니다. 연결을 확인한 뒤 다시 시도해 주세요.</p>
-      <button className="button button-secondary" type="button" onClick={() => { setState('loading'); setAttempt((value) => value + 1); }}>다시 시도</button>
-    </div>
-  );
-  if (meetings.length === 0) return <div className="state-card empty-card"><p>{emptyMessage}</p></div>;
-  if (!enableFilters) return <MeetingRows meetings={visibleMeetings} showParticipantNames={limit === undefined} />;
+  const visibleMeetings = useMemo(() => result.status === 'ready'
+    ? (enableFilters ? filterMeetings(result.data, filters) : result.data).slice(0, limit ?? 100)
+    : [], [enableFilters, filters, limit, result]);
+
+  if (result.status === 'loading') return <AsyncState state={{ status: 'loading', label: '회의 목록을 불러오는 중…' }} renderReady={() => null} />;
+  if (result.status === 'error') return <AsyncState state={{ status: 'error', title: '회의 목록을 불러오지 못했습니다.', error: result.error, onRetry: retry }} renderReady={() => null} />;
+  if (result.data.length === 0) return <AsyncState state={{
+    status: 'empty', title: emptyMessage,
+    action: limit === undefined ? <Link className="button button-primary" to="/meetings/new">새 회의 시작</Link> : undefined,
+  }} renderReady={() => null} />;
+  if (!enableFilters) return <AsyncState state={{ status: 'ready', data: visibleMeetings, refreshing, warning: result.warning, onRetry: retry }} renderReady={(items) => <MeetingRows meetings={items} showParticipantNames={limit === undefined} />} />;
   const invalidRange = hasInvalidDateRange(filters.from, filters.to);
   const reset = () => setFilters({ query: '', from: '', to: '' });
   return (
-    <>
+    <AsyncState state={{ status: 'ready', data: visibleMeetings, refreshing, warning: result.warning, onRetry: retry }} renderReady={(items) => <>
+      <button className="button button-secondary meeting-list-refresh" type="button" onClick={retry} disabled={refreshing}>회의 목록 새로고침</button>
       <form className="meeting-filters" aria-label="회의 필터" onSubmit={(event) => event.preventDefault()}>
         <label>회의 검색<input type="search" aria-label="회의 검색" value={filters.query} onChange={(event) => setFilters((current) => ({ ...current, query: event.target.value }))} placeholder="회의명 또는 참석자" /></label>
         <label>시작일<input type="date" aria-label="시작일" value={filters.from} onChange={(event) => setFilters((current) => ({ ...current, from: event.target.value }))} aria-invalid={invalidRange} aria-describedby={invalidRange ? 'meeting-date-error' : undefined} /></label>
@@ -74,15 +85,15 @@ function MeetingList({ limit, emptyMessage, enableFilters = false }: { limit?: n
         {invalidRange && <p id="meeting-date-error" className="field-error" role="alert">시작일은 종료일보다 늦을 수 없습니다. 날짜 범위는 적용하지 않았습니다.</p>}
         <button className="button button-secondary" type="button" onClick={reset}>필터 초기화</button>
       </form>
-      {visibleMeetings.length === 0 ? (
+      {items.length === 0 ? (
         <div className="state-card empty-card"><p>검색 결과가 없습니다.</p><button className="button button-secondary" type="button" onClick={reset}>필터 초기화</button></div>
-      ) : groupMeetingsByLocalMonth(visibleMeetings).map((group) => (
+      ) : groupMeetingsByLocalMonth(items).map((group) => (
         <section className="meeting-month-group" aria-labelledby={`month-${group.key}`} key={group.key}>
           <h2 id={`month-${group.key}`}>{group.label}</h2>
           <MeetingRows meetings={group.meetings} showParticipantNames linkRows />
         </section>
       ))}
-    </>
+    </>} />
   );
 }
 

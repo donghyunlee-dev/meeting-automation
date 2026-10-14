@@ -1,3 +1,5 @@
+﻿import { normalizeApiError, type SafeApiError } from './lib/api/normalizeApiError';
+
 export type MeetingParticipantSummary = { id: string; name: string };
 export type MeetingSummary = {
   documentId: string;
@@ -8,10 +10,11 @@ export type MeetingSummary = {
 };
 
 export class MeetingListApiError extends Error {
-  readonly code = 'MEETING_LIST_FAILED';
+  readonly code: string;
 
-  constructor() {
-    super('회의 목록을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.');
+  constructor(readonly safe: SafeApiError) {
+    super(safe.message);
+    this.code = safe.code;
     this.name = 'MeetingListApiError';
   }
 }
@@ -50,12 +53,16 @@ async function requestMeetingList(url: string): Promise<MeetingSummary[]> {
   try {
     const response = await fetch(url, { headers: { Accept: 'application/json' } });
     const body: unknown = await response.json();
-    if (!response.ok || typeof body !== 'object' || body === null || !('data' in body)) throw new MeetingListApiError();
+    if (!response.ok || typeof body !== 'object' || body === null || !('data' in body)) {
+      throw new MeetingListApiError(normalizeApiError(body, response.status));
+    }
     const data = (body as { data?: { items?: unknown } }).data;
-    if (!data || !Array.isArray(data.items) || !data.items.every(isMeetingSummary)) throw new MeetingListApiError();
+    if (!data || !Array.isArray(data.items) || !data.items.every(isMeetingSummary)) {
+      throw new MeetingListApiError(normalizeApiError({ error: { code: 'MEETING_LIST_FAILED' } }, response.status));
+    }
     return data.items;
   } catch (error) {
     if (error instanceof MeetingListApiError) throw error;
-    throw new MeetingListApiError();
+    throw new MeetingListApiError(normalizeApiError({ error: { code: 'NETWORK_ERROR' } }));
   }
 }
