@@ -3,6 +3,7 @@ package com.meetingautomation.api.session;
 import com.meetingautomation.document.Speaker;
 import com.meetingautomation.document.StructuredMinutes;
 import com.meetingautomation.document.TranscriptSegment;
+import java.time.Instant;
 import java.util.List;
 
 public record MeetingSession(
@@ -16,8 +17,10 @@ public record MeetingSession(
         List<Speaker> speakers,
         List<TranscriptSegment> transcript,
         ProcessingFailure processingFailure,
-        StructuredMinutes minutes) {
+        StructuredMinutes minutes,
+        Instant createdAt) {
     public MeetingSession {
+        if (createdAt == null) throw new IllegalArgumentException("Meeting session creation time is required.");
         if (progressPercent < 0 || progressPercent > 100) {
             throw new IllegalArgumentException("Meeting session progress is invalid.");
         }
@@ -25,17 +28,24 @@ public record MeetingSession(
         transcript = List.copyOf(transcript);
     }
 
+    public MeetingSession(String sessionId, int version, String status, long documentConnectionVersion,
+            Meeting meeting, String processingStage, int progressPercent, List<Speaker> speakers,
+            List<TranscriptSegment> transcript, ProcessingFailure processingFailure, StructuredMinutes minutes) {
+        this(sessionId, version, status, documentConnectionVersion, meeting, processingStage, progressPercent,
+                speakers, transcript, processingFailure, minutes, Instant.now());
+    }
+
     public MeetingSession(String sessionId, int version, String status,
             long documentConnectionVersion, Meeting meeting, String processingStage, int progressPercent,
             List<Speaker> speakers, List<TranscriptSegment> transcript, ProcessingFailure processingFailure) {
         this(sessionId, version, status, documentConnectionVersion, meeting, processingStage, progressPercent,
-                speakers, transcript, processingFailure, null);
+                speakers, transcript, processingFailure, null, Instant.now());
     }
 
     public MeetingSession(String sessionId, int version, String status,
             long documentConnectionVersion, Meeting meeting) {
         this(sessionId, version, status, documentConnectionVersion, meeting,
-                null, 0, List.of(), List.of(), null, null);
+                null, 0, List.of(), List.of(), null, null, Instant.now());
     }
 
     public MeetingSession withParticipantReferences(List<ParticipantReference> references) {
@@ -43,14 +53,14 @@ public record MeetingSession(
                 meeting.participantIds(),
                 meeting.timezone(), references);
         return new MeetingSession(sessionId, version, status, documentConnectionVersion, updatedMeeting,
-                processingStage, progressPercent, speakers, transcript, processingFailure, minutes);
+                processingStage, progressPercent, speakers, transcript, processingFailure, minutes, createdAt);
     }
 
     public MeetingSession withTemplateVersion(String templateVersion) {
         Meeting updatedMeeting = new Meeting(meeting.title(), meeting.templateId(), templateVersion,
                 meeting.participantIds(), meeting.timezone(), meeting.participantReferences());
         return new MeetingSession(sessionId, version, status, documentConnectionVersion, updatedMeeting,
-                processingStage, progressPercent, speakers, transcript, processingFailure, minutes);
+                processingStage, progressPercent, speakers, transcript, processingFailure, minutes, createdAt);
     }
 
     @Override

@@ -331,6 +331,7 @@ class DocumentSwitchUseCaseTests {
             return new TransferManifest(fingerprint, records, List.of());
         }
         @Override public TransferRecord exportMeeting(String id) { throw new AssertionError("Empty target has no meetings"); }
+        @Override public MeetingDocumentRef publishMeeting(TransferRecord meeting) { throw new UnsupportedOperationException(); }
         @Override public Participant importParticipant(TransferRecord record, String sourceFingerprint) {
             participantImports++;
             String id = "target-person";

@@ -4,7 +4,11 @@
 
 ## 자동화 검증
 
-Backend 구현 시 JUnit 5로 API/application/provider 경계를 검증한다. 실제 실행 명령은 repository의 Backend build 설정 및 TASK-001.05 결과에 따라 확정한다. 설계 단계에서는 테스트를 실행하지 않는다.
+Backend 구현 시 JUnit 5로 API/application/provider 경계를 검증한다. Java 25와 Gradle Wrapper를 사용해 아래 변경 경로와 직접 영향받는 API-010/connection/codec 회귀만 선택한다.
+
+```powershell
+.\gradlew.bat test --tests com.meetingautomation.MeetingSessionPublishApiTests --tests com.meetingautomation.MeetingSessionStatusApiTests --tests com.meetingautomation.document.DocumentConnectionGateTests --tests com.meetingautomation.document.transfer.ProviderTransferPublishTests --tests com.meetingautomation.document.DocumentTransferAdapterTests --tests com.meetingautomation.SelectedDocumentProviderApiTests
+```
 
 | ID | 준비 및 입력 | 기대 결과 | 증거 |
 |---|---|---|---|
@@ -24,9 +28,12 @@ Backend 구현 시 JUnit 5로 API/application/provider 경계를 검증한다. �
 | PUB-DOC-04 | Provider lookup 실패/timeout | create로 fallback하지 않고 `DOCUMENT_FAILED`; downstream 0회 | Failure interaction test |
 | PUB-DOC-05 | Provider create 실패 | `DOCUMENT_FAILED`, 안전한 error만 API-010에 표시; Email/Notification 0회 | Failure/handoff test |
 | PUB-DOC-06 | Provider create 성공 뒤 결과 기록 | `DOCUMENT_SAVED`, documentId 및 유효 URL 기록; 이후 후속 전달 handoff | State/API-010 test |
+| PUB-DOC-07 | 표준 `TransferRecord` publish, 동일 externalSessionId 재발견, ambiguous create 결과 | metadata/본문 codec round-trip 확인; 유일 문서 참조 재사용; create 최대 1회 | `ProviderTransferPublishTests` |
+| PUB-DOC-08 | API-001에 meeting date가 없고 Session이 retry됨 | 최초 `createdAt`으로 동일 timezone-aware `meetingAt`; worker retry가 시각을 바꾸지 않음 | publish snapshot test |
+| PUB-CONN-01 | connection switch 중 API-015 요청 또는 provider write 진행 | 요청 차단; lookup/create/readback 전체에서 gate write lease 유지 후 성공·실패 모두 해제 | publish API/gate test |
 | PUB-SEC-01 | Provider가 credential을 포함한 원문 오류 반환 | response/log에 authorization, token, 원문 본문, Minutes/Transcript 없음 | Redaction assertion/log capture |
 
-모든 acceptance criterion은 PUB-API-01~08 및 PUB-DOC-01~06에서 확인한다. 같은 Session ID metadata를 기준으로 기존 문서 재발견이 가능해야 한다.
+모든 acceptance criterion은 PUB-API-01~10, PUB-DOC-01~08, PUB-CONN-01, PUB-SEC-01에서 확인한다. 같은 Session ID metadata를 기준으로 기존 문서 재발견이 가능해야 한다.
 
 ## 수동 API QA
 

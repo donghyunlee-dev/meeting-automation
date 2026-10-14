@@ -2,6 +2,8 @@
 
 > 📌 v1.9.0 변경 계약: TASK-022.04/.05의 공통 문서 codec과 활성 connection snapshot을 사용한다. 전환 lock 중 Publish를 차단하며 export/import와 같은 metadata/본문 round-trip 계약을 따른다. 이전으로 전달을 재발송하지 않는다. 상세 기준은 [문서 연결·이전 설계](../../../product/document-setup.md)다. 아래의 과거 기준과 충돌하면 이 변경 계약을 우선 적용한다.
 
+> 구현 보정 (2026-10-14): API-001은 meeting date를 받지 않으므로 Session 최초 생성 시각을 저장해 `meetingAt`을 구성한다. Publish는 `DocumentTransferPort.publishMeeting(TransferRecord)` native operation으로 연결하고, transfer/import 및 transferKey 생성과 분리한다.
+
 ## 기준
 
 - PRD v1.7.0, 2026-10-05
@@ -20,7 +22,8 @@ Email/Notification 구현은 각각 TASK-011.01/TASK-012.01이 소유한다. 이
 
 - API-015 request DTO/controller: payload/header/body 검증과 `202` 공통 envelope
 - Publish use case/Session aggregate: state/action/version 조건 검사, idempotency fingerprint, 동시 접수 보호
-- Document publish worker/orchestrator: immutable snapshot, metadata 및 provider 조회/생성 순서
+- Document publish worker/orchestrator: immutable Session snapshot, captured `createdAt`, active connection snapshot 및 gate write lease
+- Native provider publish operation: standard `TransferPageCodec` manifest lookup, create, readback verification, and ambiguous-outcome reconciliation by `externalSessionId`
 - Session/API-010 response mapper: publish 상태, document reference, 안전한 오류 결과
 - Backend unit/integration test fixtures: provider fake 및 concurrency/replay 증거
 
@@ -33,7 +36,7 @@ Email/Notification 구현은 각각 TASK-011.01/TASK-012.01이 소유한다. 이
 1. API/session/provider 경계의 현재 구현과 공통 response/error/idempotency helper를 확인하고 변경 지점을 기록한다.
 2. API-015 validation 및 Session 상태/version/idempotency 결과의 실패 테스트를 먼저 작성해 기존 구현의 누락을 확인한다.
 3. API acceptance/replay/conflict 동작을 최소 구현하고 202 envelope 및 atomic transition을 연결한다.
-4. Publish snapshot에서 provider command/metadata를 만들고 기존 문서 lookup 우선, 부재 시 create를 구현한다.
+4. 최초 생성 `createdAt`을 Meeting timezone으로 바꿔 common `TransferRecord`를 만들고, `externalSessionId` lookup 후 native `publishMeeting` create/readback/reconciliation을 구현한다.
 5. Document ref 저장과 `DOCUMENT_SAVED`/`DOCUMENT_FAILED` 전이를 API-010에 연결한다. 실패 시 downstream delivery가 시작되지 않도록 보장한다.
 6. 같은 Session 다른 key 및 동시 요청/Provider lookup ambiguity 사례의 회귀 검증을 보완한다.
 7. Backend 지정 검증 명령과 수동 API QA를 수행하고 비민감 evidence를 Issue #44에 기록한다.

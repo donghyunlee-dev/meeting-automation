@@ -24,6 +24,9 @@ public final class MeetingSessionStore {
     private final Map<String, MinutesRegenerationBackup> minutesRegenerationBackups = new ConcurrentHashMap<>();
     private final Map<String, MeetingSessionStatusResponse.LastOperation> lastOperations = new ConcurrentHashMap<>();
     private final Map<String, AcceptedReviewConfirmation> acceptedReviewConfirmations = new java.util.HashMap<>();
+    private final Map<String, AcceptedPublish> acceptedPublishes = new java.util.HashMap<>();
+    private final Map<String, PublishSnapshot> publishSnapshots = new ConcurrentHashMap<>();
+    private final Map<String, MeetingSession> publishPreAcceptance = new ConcurrentHashMap<>();
     private final ReentrantLock[] sessionLockStripes = createSessionLockStripes();
 
     public <T> T withSessionLock(String sessionId, Supplier<T> operation) {
@@ -75,6 +78,9 @@ public final class MeetingSessionStore {
                 lastOperations.remove(sessionId);
                 acceptedReviewConfirmations.entrySet().removeIf(entry ->
                         entry.getValue().fingerprint().sessionId().equals(sessionId));
+                acceptedPublishes.entrySet().removeIf(entry -> entry.getValue().fingerprint().sessionId().equals(sessionId));
+                publishSnapshots.remove(sessionId);
+                publishPreAcceptance.remove(sessionId);
             }
             if (registration != null) registration.close();
             return removed != null;
@@ -127,7 +133,7 @@ public final class MeetingSessionStore {
         MeetingSession confirmed = new MeetingSession(current.sessionId(), Math.addExact(current.version(), 1),
                 "CONFIRMED", current.documentConnectionVersion(), current.meeting(), current.processingStage(),
                 current.progressPercent(), current.speakers(), current.transcript(),
-                current.processingFailure(), current.minutes());
+                current.processingFailure(), current.minutes(), current.createdAt());
         ReviewConfirmationResponse response = ReviewConfirmationResponse.confirmed(confirmed);
         sessions.put(sessionId, confirmed);
         acceptedReviewConfirmations.put(idempotencyKey,
@@ -138,6 +144,90 @@ public final class MeetingSessionStore {
     private record AcceptedReviewConfirmation(
             ReviewConfirmationService.ReviewConfirmationFingerprint fingerprint,
             ReviewConfirmationResponse response) { }
+
+    public synchronized PublishAcceptance acceptPublish(String sessionId, int expectedVersion, String key,
+            PublishFingerprint fingerprint, java.util.List<String> recipients, boolean notificationEnabled) {
+        AcceptedPublish prior = acceptedPublishes.get(key);
+        if (prior != null) {
+            if (!prior.fingerprint().equals(fingerprint))
+                throw new com.meetingautomation.api.idempotency.IdempotencyKeyConflictException();
+            return new PublishAcceptance(prior.response(), null, false);
+        }
+        MeetingSession current = sessions.get(sessionId);
+        if (current == null) throw new com.meetingautomation.api.audio.AudioSessionNotFoundException();
+        if (!("CONFIRMED".equals(current.status()) || "DOCUMENT_FAILED".equals(current.status())))
+            throw new SessionStateConflictException();
+        if (current.version() != expectedVersion) throw new SessionVersionConflictException();
+        MeetingSession publishing = copy(current, Math.addExact(current.version(), 1), "PUBLISHING",
+                current.processingStage(), current.progressPercent(), current.speakers(), current.transcript(),
+                current.processingFailure());
+        sessions.put(sessionId, publishing);
+        publishPreAcceptance.put(sessionId, current);
+        PublishSnapshot snapshot = new PublishSnapshot(java.util.List.copyOf(recipients), notificationEnabled, null, null);
+        publishSnapshots.put(sessionId, snapshot);
+        PublishResponse response = PublishResponse.accepted(sessionId);
+        acceptedPublishes.put(key, new AcceptedPublish(fingerprint, response));
+        return new PublishAcceptance(response, publishing, true);
+    }
+
+    public synchronized PublishResponse replayPublish(String key, PublishFingerprint fingerprint) {
+        AcceptedPublish prior = acceptedPublishes.get(key);
+        if (prior == null) return null;
+        if (!prior.fingerprint().equals(fingerprint))
+            throw new com.meetingautomation.api.idempotency.IdempotencyKeyConflictException();
+        return prior.response();
+    }
+
+    public synchronized void rollbackPublish(String sessionId, String key) {
+        AcceptedPublish accepted = acceptedPublishes.get(key);
+        if (accepted != null && accepted.fingerprint().sessionId().equals(sessionId)) acceptedPublishes.remove(key);
+        MeetingSession current = sessions.get(sessionId);
+        if (current != null && "PUBLISHING".equals(current.status())) {
+            MeetingSession prior = publishPreAcceptance.remove(sessionId);
+            sessions.put(sessionId, prior == null ? current : prior);
+        }
+        publishSnapshots.remove(sessionId);
+    }
+
+    public synchronized MeetingSession completePublish(String sessionId, com.meetingautomation.document.MeetingDocumentRef ref) {
+        MeetingSession current = requirePublishing(sessionId);
+        MeetingSession updated = copy(current, Math.addExact(current.version(), 1), "DOCUMENT_SAVED",
+                current.processingStage(), current.progressPercent(), current.speakers(), current.transcript(), null);
+        sessions.put(sessionId, updated);
+        publishPreAcceptance.remove(sessionId);
+        PublishSnapshot prior = publishSnapshots.get(sessionId);
+        publishSnapshots.put(sessionId, new PublishSnapshot(prior.recipients(), prior.notificationEnabled(), ref, null));
+        return updated;
+    }
+
+    public synchronized MeetingSession failPublish(String sessionId) {
+        MeetingSession current = requirePublishing(sessionId);
+        MeetingSession updated = copy(current, Math.addExact(current.version(), 1), "DOCUMENT_FAILED",
+                current.processingStage(), current.progressPercent(), current.speakers(), current.transcript(), null);
+        sessions.put(sessionId, updated);
+        publishPreAcceptance.remove(sessionId);
+        PublishSnapshot prior = publishSnapshots.get(sessionId);
+        publishSnapshots.put(sessionId, new PublishSnapshot(prior.recipients(), prior.notificationEnabled(), null,
+                "DOCUMENT_FAILURE"));
+        return updated;
+    }
+
+    public PublishSnapshot findPublishSnapshot(String sessionId) { return publishSnapshots.get(sessionId); }
+
+    private MeetingSession requirePublishing(String sessionId) {
+        MeetingSession current = sessions.get(sessionId);
+        if (current == null || !"PUBLISHING".equals(current.status())) throw new SessionStateConflictException();
+        return current;
+    }
+
+    public record PublishFingerprint(String sessionId, int expectedVersion, java.util.List<String> recipients,
+            boolean notificationEnabled) { public PublishFingerprint { recipients = java.util.List.copyOf(recipients); } }
+    public record PublishAcceptance(PublishResponse response, MeetingSession session, boolean newlyAccepted) { }
+    public record PublishSnapshot(java.util.List<String> recipients, boolean notificationEnabled,
+            com.meetingautomation.document.MeetingDocumentRef document, String errorCode) {
+        public PublishSnapshot { recipients = java.util.List.copyOf(recipients); }
+    }
+    private record AcceptedPublish(PublishFingerprint fingerprint, PublishResponse response) { }
 
     public Optional<MeetingSessionStatusResponse.LastOperation> findLastOperation(String sessionId) {
         return Optional.ofNullable(lastOperations.get(sessionId));
@@ -188,7 +278,7 @@ public final class MeetingSessionStore {
                 current.meeting().participantReferences());
         MeetingSession updated = new MeetingSession(current.sessionId(), Math.addExact(current.version(), 1),
                 "REVIEW", current.documentConnectionVersion(), updatedMeeting, "DRAFT_READY", 100,
-                current.speakers(), current.transcript(), null, replacementMinutes);
+                current.speakers(), current.transcript(), null, replacementMinutes, current.createdAt());
         minutesRegenerationBackups.remove(sessionId);
         sessions.put(sessionId, updated);
         lastOperations.put(sessionId, new MeetingSessionStatusResponse.LastOperation(
@@ -202,7 +292,7 @@ public final class MeetingSessionStore {
         MinutesRegenerationBackup backup = minutesRegenerationBackups.get(sessionId);
         MeetingSession updated = new MeetingSession(current.sessionId(), Math.addExact(current.version(), 1),
                 "REVIEW", current.documentConnectionVersion(), backup.meeting(), "DRAFT_READY", 100,
-                current.speakers(), current.transcript(), null, backup.minutes());
+                current.speakers(), current.transcript(), null, backup.minutes(), current.createdAt());
         minutesRegenerationBackups.remove(sessionId);
         sessions.put(sessionId, updated);
         lastOperations.put(sessionId, new MeetingSessionStatusResponse.LastOperation(
@@ -384,7 +474,8 @@ public final class MeetingSessionStore {
             String processingStage, int progressPercent, java.util.List<Speaker> speakers,
             java.util.List<TranscriptSegment> transcript, ProcessingFailure failure, StructuredMinutes minutes) {
         return new MeetingSession(current.sessionId(), version, status, current.documentConnectionVersion(),
-                current.meeting(), processingStage, progressPercent, speakers, transcript, failure, minutes);
+                current.meeting(), processingStage, progressPercent, speakers, transcript, failure, minutes,
+                current.createdAt());
     }
 }
 

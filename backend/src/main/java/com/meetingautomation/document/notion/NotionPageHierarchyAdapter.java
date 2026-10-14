@@ -50,6 +50,7 @@ public final class NotionPageHierarchyAdapter implements ParticipantCreationProv
     @Override public TransferRecord exportMeeting(String id) { return transfer.exportMeeting(id); }
     @Override public Participant importParticipant(TransferRecord r, String fingerprint) { return transfer.importParticipant(r, fingerprint); }
     @Override public MeetingDocumentRef importMeeting(TransferRecord r, Map<String,String> map, String fingerprint) { return transfer.importMeeting(r, map, fingerprint); }
+    @Override public MeetingDocumentRef publishMeeting(TransferRecord meeting) { return transfer.publishMeeting(meeting); }
 
     private JsonNode transferRequest(String path, Object body) {
         try {

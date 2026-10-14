@@ -15,7 +15,7 @@ public final class MeetingSessionStatusService {
         return sessionStore.withSessionLock(sessionId, () -> {
             MeetingSession session = sessionStore.find(sessionId).orElseThrow(AudioSessionNotFoundException::new);
             return MeetingSessionStatusResponse.from(session,
-                    sessionStore.findLastOperation(sessionId).orElse(null));
+                    sessionStore.findLastOperation(sessionId).orElse(null), sessionStore.findPublishSnapshot(sessionId));
         });
     }
 }
