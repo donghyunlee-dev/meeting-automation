@@ -37,4 +37,4 @@ Participant roster와 Delivery response가 FE selection/results의 input이므�
 
 ## Project commands
 
-PRD/기초 TASK-001.02가 제공하는 Frontend scripts는 `npm run test`, `npm run lint`, `npm run build`다. Backend project baseline은 Java 21/Gradle이며 root/path와 wrapper command는 구현 당시 repository structure에서 확인한다. 자동 검증 대상 및 수동 절차는 [test.md](./test.md)에 고정한다. 설계 단계에서는 실행하지 않는다.
+PRD/기초 TASK-001.02가 제공하는 Frontend scripts는 `npm run test -- --run <changed-test-file>`, `npm run lint`, `npm run build`다. Backend baseline은 PRD DEC-004의 Java 25와 저장소 Gradle Wrapper를 따른다. Backend 검증은 변경 동작과 직접 영향받는 호출자에 한정한 `test --tests <fully.qualified.TestClass>` selector를 사용한다. 자동 검증 범위는 [test.md](./test.md)에 고정하며, 서비스 시작이나 별도 수동 QA pass는 task-local 완료 조건에 포함하지 않는다. 설계 단계에서는 실행하지 않는다.

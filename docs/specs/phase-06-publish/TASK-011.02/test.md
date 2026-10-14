@@ -4,7 +4,7 @@
 
 ## 자동화 검증
 
-Frontend 명령은 `npm run test`, `npm run lint`, `npm run build`다. Backend는 Java 21/Gradle wrapper 위치를 project layout에서 확인한 뒤 JUnit 5 및 build를 실행한다. Gmail/Document Provider 호출은 mock/fake를 사용한다. 설계 단계에서는 tests를 실행하지 않는다.
+Frontend는 변경된 API/component 테스트 파일만 `npm run test -- --run <changed-test-file>`로 선택한다. `npm run lint`와 `npm run build`는 변경 코드에 필요한 경우에만 실행한다. Backend는 Java 25 및 Windows Gradle Wrapper를 사용하고 변경 동작과 직접 영향받는 호출자 테스트만 `test --tests <fully.qualified.TestClass>`로 선택한다. Backend 전체 suite, `clean build`, local service 또는 task-local 별도 QA pass는 실행하지 않는다. Gmail/Document Provider 호출은 contract/unit 테스트의 mock/fake로 검증하며, 설계 단계에서는 실행하지 않는다.
 
 | ID | 준비 및 입력 | 기대 결과 | 증거 |
 |---|---|---|---|
@@ -28,16 +28,13 @@ Frontend 명령은 `npm run test`, `npm run lint`, `npm run build`다. Backend�
 | EMAIL-SHARE-18 | page with multiple addresses/status updates, keyboard and 360px width | checkbox accessible name, textual/live result, no horizontal overflow | Accessibility/browser test |
 | EMAIL-SHARE-19 | API responses/log captures/delivery history | full recipient email, OAuth/authorization secret, body/provider raw errors absent from delivery projection/logs | PII redaction assertion |
 
-## 통합 및 수동 QA
+## 통합 contract/component 검증
 
-- New Meeting에서 네 명 roster를 선택하고 두 명만 SCR-007 Email checkbox에 남겨 API-015 body ID와 일치하는지 확인한다.
-- Mock Gmail을 사용해 success/failure가 다른 두 recipient 결과가 API-010 및 UI에 별도 표시되는지 확인한다.
-- 모든 Email checkbox를 해제하고 Publish해 document save는 계속되고 Gmail API 호출은 없는지 확인한다.
-- API-003 error 및 missing email fixture에서 화면 선택 내용이 보존되고 없는 주소를 추정해 보내지 않는지 확인한다.
-- Email 성공 문구가 API accepted send만 나타내고 inbox/열람 결과를 주장하지 않는지 확인한다.
-- Email retryable 상태에서도 본 task에서 자동 또는 직접 resend하지 않고 TASK-013.02 소유 UI 연결만 안내하는지 확인한다.
-- Keyboard-only, screen reader status update, mobile width와 개인정보 미노출을 확인한다.
+- API/Publish 테스트에서 roster subset 검증, 선택한 수신자만 전송, 빈 선택의 Email 호출 0건, Document 결과 보존을 확인한다.
+- API-010 직렬화 및 UI 테스트에서 recipient별 상태, retryable, Email 외 채널 독립성, 이메일 주소 및 Provider 원문 미노출을 확인한다.
+- 컴포넌트 테스트에서 API-003 로딩/실패와 ID fallback, 선택 상태 유지, keyboard 접근 가능한 checkbox label 및 텍스트/live status를 확인한다.
+- 성공 문구는 Provider send 요청 수락을 나타내며 수신함 도착/열람을 주장하지 않는다. 이 작업은 자동 재전송이나 API-016 호출을 추가하지 않는다.
 
 ## 완료 증거
 
-Actual FE/Backend command output, API-010 sample without PII, mixed result browser capture, empty-recipient result 및 redaction evidence를 Issue #47에 기록한다. Gmail live email은 별도 승인받은 test mailbox/recipient만 사용한다.
+정확한 선택 테스트 명령 및 결과, API-010 sample without PII, mixed/empty recipient assertion과 redaction 증거를 `docs/evidence/TASK-011.02/verification.md` 및 Issue #47에 기록한다.

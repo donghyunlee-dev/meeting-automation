@@ -29,5 +29,5 @@
 ## 통합 및 완료 확인
 
 - [ ] Document save→email handoff and API-010 delivery results end-to-end with mocked Gmail and ParticipantProvider. 결과: selected IDs only, message delivery only after document ref exists.
-- [ ] FE `npm run test`, `npm run lint`, `npm run build`; Backend Java21/Gradle unit/build commands from actual wrapper path run. 결과: command output/evidence on Issue #47.
-- [ ] Manual QA records recipient list, sent/failed partial outcomes, empty selection, no sensitive response/log data, and Email completion indicator accuracy.
+- [ ] FE 변경 동작 테스트 파일을 `npm run test -- --run <changed-test-file>`로 선택해 실행하고, lint/build가 변경 검증에 필요한 경우에만 실행한다. Backend는 Java 25와 Windows Gradle Wrapper로 변경 코드 및 직접 영향받는 테스트만 `test --tests <fully.qualified.TestClass>` selector로 실행한다. 전체 Backend suite, `clean build`, local service, 별도 acceptance/QA pass는 실행하지 않는다. 결과: 정확한 command/output을 evidence에 기록한다.
+- [ ] 자동화 contract/component 테스트로 roster 제한, sent/failed 부분 결과, 빈 선택, 민감 응답 필드 부재와 Email 상태 문구를 검증한다. 결과: Issue #47 및 task evidence에 재현 가능한 결과를 기록한다.
