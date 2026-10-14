@@ -20,6 +20,8 @@
 
 Backend 검증 전 `java -version`과 `./gradlew.bat --version`의 JVM이 모두 Java 25인지 확인한다. Windows 프로세스의 `JAVA_HOME`이 오래된 JDK(예: 17)를 가리키면 해당 터미널 프로세스만 설치된 JDK 25로 맞춘 뒤 Wrapper 버전을 재확인한다. 시스템 전체 환경을 불필요하게 변경하지 않는다.
 
+Frontend 검증 전 `frontend/package.json`의 `engines.node`와 `node --version`을 대조한다. 현재 범위는 Node `>=22.12.0 <23`이다. 기본 실행기가 범위 밖이면 해당 명령 프로세스에서만 지원 버전을 선택하고, 설치·전환이 불가능하면 검증 결과에 버전 차이를 명시한다. 테스트와 build가 우연히 실행된 것만으로 지원 버전 준수라고 간주하지 않는다.
+
 ## 3시간 작업 창 운영
 
 | 경과 | 작업 |

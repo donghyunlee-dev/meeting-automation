@@ -1407,7 +1407,7 @@ describe('Review speaker selection', () => {
     const speakerSelect = await screen.findByRole('combobox', { name: 'Speaker A 참가자' }) as HTMLSelectElement;
     fireEvent.change(speakerSelect, { target: { value: 'p1' } });
     fireEvent.click(within(screen.getByRole('navigation', { name: '주요 메뉴' })).getByRole('link', { name: '설정' }));
-    await screen.findByText('설정');
+    await screen.findByRole('heading', { name: '설정' });
     expect(screen.getByTestId('current-path').textContent).toBe('/settings');
     fireEvent.click(screen.getByRole('button', { name: 'Review로 돌아가기' }));
     await waitFor(() => expect((screen.getByRole('combobox', { name: 'Speaker A 참가자' }) as HTMLSelectElement).value).toBe('p1'));

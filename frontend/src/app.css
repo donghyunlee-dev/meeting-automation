@@ -408,6 +408,25 @@ button:disabled { cursor: not-allowed; opacity: .6; }
 .meeting-month-group > h2 { margin: 0 0 12px; color: #344054; font-size: 17px; }
 .meeting-summary-row h3 a { color: inherit; text-decoration: none; }
 .meeting-summary-row h3 a:hover { color: #175cd3; text-decoration: underline; }
+.settings-page { display: grid; align-content: start; gap: 16px; width: min(100%, 820px); min-width: 0; margin: 0 auto; padding: 32px 22px max(34px, env(safe-area-inset-bottom)); overflow-wrap: anywhere; }
+.settings-heading h1 { margin: 0; color: #182230; font-size: clamp(28px, 6vw, 36px); letter-spacing: -.04em; }
+.settings-heading > p:last-child { margin: 8px 0 0; color: #667085; line-height: 1.6; }
+.settings-card { display: grid; gap: 8px; min-width: 0; border: 1px solid #e5e9ef; border-radius: 14px; padding: 18px; background: #fff; }
+.settings-card h2 { margin: 0; color: #202b3b; font-size: 18px; }
+.settings-card p { margin: 0; color: #596578; font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; }
+.settings-card .button { display: inline-flex; min-height: 44px; width: fit-content; align-items: center; text-decoration: none; }
+.settings-card [role="alert"] { display: grid; justify-items: start; gap: 10px; }
+.settings-status[data-state="unreachable"], .settings-status[data-state="root-inaccessible"], .settings-status[data-state="not-configured"] { color: #b54708; }
+.settings-status[data-state="available"] { color: #067647; }
+.settings-links { display: flex; flex-wrap: wrap; gap: 18px; padding: 4px 2px; }
+.settings-links a { min-height: 44px; display: inline-flex; align-items: center; color: #344054; font-weight: 650; }
+.settings-note { font-size: 12px !important; color: #667085 !important; }
+@media (max-width: 420px) {
+  .settings-page { padding-right: 18px; padding-left: 18px; }
+  .settings-card { padding: 15px; }
+  .settings-card .button { width: 100%; justify-content: center; }
+}
+
 .meeting-detail-page { display: grid; align-content: start; gap: 18px; width: min(100%, 820px); min-width: 0; margin: 0 auto; padding: 36px 24px 56px; overflow-wrap: anywhere; }
 .meeting-detail-back { color: #475467; font-size: 14px; font-weight: 650; text-decoration: none; }
 .meeting-detail-heading h1 { margin: 4px 0 10px; color: #182230; font-size: clamp(26px, 6vw, 36px); letter-spacing: -.04em; }
