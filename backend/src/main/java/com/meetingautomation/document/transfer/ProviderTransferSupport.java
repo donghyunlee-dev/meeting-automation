@@ -11,6 +11,7 @@ public abstract class ProviderTransferSupport implements DocumentTransferPort {
     protected abstract DocumentStructure structure();
     protected abstract List<String> children(String root);
     protected abstract TransferRecord read(String id);
+    protected TransferRecord readMeeting(String id) { return read(id); }
     protected abstract String create(String parent, TransferRecord record);
 
     @Override public TransferManifest readManifest() {
@@ -47,7 +48,7 @@ public abstract class ProviderTransferSupport implements DocumentTransferPort {
         }
         return List.copyOf(meetings);
     }
-    @Override public TransferRecord exportMeeting(String sourceDocumentId) { TransferRecord r = read(sourceDocumentId); if (r.participant() != null) throw invalid(); return r; }
+    @Override public TransferRecord exportMeeting(String sourceDocumentId) { TransferRecord r = readMeeting(sourceDocumentId); if (r.participant() != null) throw invalid(); return r; }
     @Override public Participant importParticipant(TransferRecord record, String sourceConnectionFingerprint) {
         if (record.participant() == null) throw invalid(); TransferRecord target = target(record, Map.of(), sourceConnectionFingerprint);
         TransferRecord existing = find(target); if (existing != null) return existing.participant();

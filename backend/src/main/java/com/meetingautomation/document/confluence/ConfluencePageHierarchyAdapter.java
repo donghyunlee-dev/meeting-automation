@@ -53,11 +53,16 @@ public final class ConfluencePageHierarchyAdapter implements ParticipantCreation
         @Override protected DocumentStructure structure() { return discoverStructure(configuredRootId); }
         @Override protected List<String> children(String root) { return transferChildren(root); }
         @Override protected TransferRecord read(String id) { return readTransferPage(id, pages); }
+        @Override protected TransferRecord readMeeting(String id) { return readTransferPage(id, pages, true); }
         @Override protected String create(String parent, TransferRecord record) { return createTransferPage(parent, record, pages); }
     };
     @Override public TransferManifest readManifest() { return transfer.readManifest(); }
     @Override public List<TransferRecord> listMeetingRecords() { return transfer.listMeetingRecords(); }
-    @Override public TransferRecord exportMeeting(String id) { return transfer.exportMeeting(id); }
+    @Override public TransferRecord exportMeeting(String id) {
+        try { return transfer.exportMeeting(id); }
+        catch (DocumentProviderException failure) { throw failure; }
+        catch (RuntimeException unsafeProviderFailure) { throw DocumentProviderException.documentFailed(false, unsafeProviderFailure); }
+    }
     @Override public Participant importParticipant(TransferRecord r, String fingerprint) { return transfer.importParticipant(r, fingerprint); }
     @Override public MeetingDocumentRef importMeeting(TransferRecord r, Map<String,String> map, String fingerprint) { return transfer.importMeeting(r, map, fingerprint); }
     @Override public MeetingDocumentRef publishMeeting(TransferRecord meeting) { return transfer.publishMeeting(meeting); }
@@ -79,8 +84,18 @@ public final class ConfluencePageHierarchyAdapter implements ParticipantCreation
         return children;
     }
     private TransferRecord readTransferPage(String id, TransferPageCodec mapper) {
+        return readTransferPage(id, mapper, false);
+    }
+
+    private TransferRecord readTransferPage(String id, TransferPageCodec mapper, boolean meetingRead) {
         if (!isNumericId(id)) throw transferInvalid();
-        JsonNode page = parseBody(get(baseUri.resolve("/wiki/api/v2/pages/" + encodePathSegment(id) + "?body-format=storage")));
+        JsonNode page;
+        try {
+            page = parseBody(get(baseUri.resolve("/wiki/api/v2/pages/" + encodePathSegment(id) + "?body-format=storage")));
+        } catch (ConfluenceApiFailure failure) {
+            if (meetingRead && failure.statusCode() == 404) throw DocumentProviderException.meetingNotFound();
+            throw failure;
+        }
         if (!id.equals(transferText(page.get("id")))) throw transferInvalid();
         JsonNode version = page.path("version").path("number"); if (!version.isIntegralNumber() || version.longValue() <= 0) throw transferInvalid();
         List<TransferPageCodec.Block> blocks = storageBlocks(transferText(page.path("body").path("storage").get("value")));

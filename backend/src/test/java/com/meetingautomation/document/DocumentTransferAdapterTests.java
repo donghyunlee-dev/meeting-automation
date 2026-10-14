@@ -65,6 +65,23 @@ class DocumentTransferAdapterTests {
         }
     }
 
+    @ParameterizedTest @ValueSource(booleans = {true, false})
+    void detailExportMapsOnlyExplicitProviderPageNotFoundToMeetingNotFound(boolean notion) {
+        Fixture missing = new Fixture(notion, 0, "page-not-found");
+        DocumentProviderException notFound = assertThrows(DocumentProviderException.class,
+                () -> missing.port.exportMeeting("2000"));
+        assertEquals("MEETING_NOT_FOUND", notFound.code());
+        assertEquals(404, notFound.statusCode());
+        missing.server.verify();
+
+        Fixture forbidden = new Fixture(notion, 0, "page-forbidden");
+        DocumentProviderException denied = assertThrows(DocumentProviderException.class,
+                () -> forbidden.port.exportMeeting("2000"));
+        assertEquals("DOCUMENT_FAILED", denied.code());
+        assertEquals(502, denied.statusCode());
+        forbidden.server.verify();
+    }
+
     @Test
     void notionManifestIgnoresBootstrapSentinelsInMeetingAndParticipantContainers() {
         Fixture f = new Fixture(true, 0, "bootstrap-marker");
@@ -381,6 +398,14 @@ class DocumentTransferAdapterTests {
                     response = "{}";
                 } else {
                     String[] parts = path.split("/"); String id = parts[parts.length - 1];
+                    if (("page-not-found".equals(defect) || "page-forbidden".equals(defect))
+                            && (path.endsWith("/pages/2000") || path.endsWith("/pages/2000?body-format=storage"))) {
+                        int status = "page-not-found".equals(defect) ? 404 : 403;
+                        return org.springframework.test.web.client.response.MockRestResponseCreators.withStatus(
+                                org.springframework.http.HttpStatusCode.valueOf(status))
+                                .body("provider-private-error").contentType(MediaType.APPLICATION_JSON)
+                                .createResponse(request);
+                    }
                     if (path.endsWith("children")) {
                         id = parts[parts.length - 2];
                         int start = query.contains("cursor=") ? Integer.parseInt(query.substring(query.indexOf("cursor=") + 7).replace("opaque cursor/", "")) : 0;

@@ -43,17 +43,26 @@ public final class NotionPageHierarchyAdapter implements ParticipantCreationProv
         @Override protected DocumentStructure structure() { return discoverStructure(configuredRootId); }
         @Override protected List<String> children(String root) { return transferChildren(root); }
         @Override protected TransferRecord read(String id) { return readTransferPage(id, pages); }
+        @Override protected TransferRecord readMeeting(String id) { return readTransferPage(id, pages, true); }
         @Override protected String create(String parent, TransferRecord record) { return createTransferPage(parent, record, pages); }
     };
 
     @Override public TransferManifest readManifest() { return transfer.readManifest(); }
     @Override public List<TransferRecord> listMeetingRecords() { return transfer.listMeetingRecords(); }
-    @Override public TransferRecord exportMeeting(String id) { return transfer.exportMeeting(id); }
+    @Override public TransferRecord exportMeeting(String id) {
+        try { return transfer.exportMeeting(id); }
+        catch (DocumentProviderException failure) { throw failure; }
+        catch (RuntimeException unsafeProviderFailure) { throw DocumentProviderException.documentFailed(false, unsafeProviderFailure); }
+    }
     @Override public Participant importParticipant(TransferRecord r, String fingerprint) { return transfer.importParticipant(r, fingerprint); }
     @Override public MeetingDocumentRef importMeeting(TransferRecord r, Map<String,String> map, String fingerprint) { return transfer.importMeeting(r, map, fingerprint); }
     @Override public MeetingDocumentRef publishMeeting(TransferRecord meeting) { return transfer.publishMeeting(meeting); }
 
     private JsonNode transferRequest(String path, Object body) {
+        return transferRequest(path, body, false);
+    }
+
+    private JsonNode transferRequest(String path, Object body, boolean meetingRead) {
         try {
             java.net.URI uri = java.net.URI.create(API_BASE_URL + path);
             var request = body == null ? restClient.get().uri(uri) : restClient.post().uri(uri).body(JSON_MAPPER.writeValueAsString(body));
@@ -61,7 +70,12 @@ public final class NotionPageHierarchyAdapter implements ParticipantCreationProv
                 headers.setBearerAuth(token); headers.set("Notion-Version", API_VERSION);
                 headers.setContentType(org.springframework.http.MediaType.APPLICATION_JSON);
             }).exchange((req, res) -> {
-                if (res.getStatusCode().isError()) throw DocumentProviderException.documentFailed(false);
+                if (res.getStatusCode().isError()) {
+                    if (meetingRead && res.getStatusCode().value() == 404) {
+                        throw DocumentProviderException.meetingNotFound();
+                    }
+                    throw DocumentProviderException.documentFailed(false);
+                }
                 return StreamUtils.copyToString(res.getBody(), StandardCharsets.UTF_8);
             });
             JsonNode parsed = JSON_MAPPER.readTree(response);
@@ -104,7 +118,11 @@ public final class NotionPageHierarchyAdapter implements ParticipantCreationProv
         return BOOTSTRAP_SENTINEL.matcher(content).matches();
     }
     private TransferRecord readTransferPage(String id, TransferPageCodec mapper) {
-        JsonNode page = transferRequest("/v1/pages/" + encodeId(id), null);
+        return readTransferPage(id, mapper, false);
+    }
+
+    private TransferRecord readTransferPage(String id, TransferPageCodec mapper, boolean meetingRead) {
+        JsonNode page = transferRequest("/v1/pages/" + encodeId(id), null, meetingRead);
         if (!id.equals(transferText(page.get("id")))) throw transferInvalid();
         String revision = transferText(page.get("last_edited_time"));
         List<TransferPageCodec.Block> blocks = new ArrayList<>();
