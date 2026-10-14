@@ -29,8 +29,15 @@ API-010 결과 렌더링을 먼저 검증해 Retry 가능 여부/summary가 단�
 5. Row 단위 single-flight API-016 action을 구현한다. 결과: 클릭마다 한 key/한 Delivery며 202는 PENDING 접수로만 처리된다.
 6. API-010 polling, response-loss same-key reconciliation, stale version guard를 연결한다. 결과: 기존 retry 결과를 재사용하며 신규 retry는 명시 클릭만 만든다.
 7. 409/404/validation 오류, retryable false, Provider ambiguous outcome 메시지를 구현한다. 결과: 성공 추정/자동 재호출/불필요한 duplicate가 없다.
-8. 모바일·keyboard·screen reader/browser QA와 실제 Frontend test command를 확인해 Issue #51에 기록한다.
+8. 변경 컴포넌트의 keyboard/live-region/360px 레이아웃 검사를 포함한 focused Frontend 테스트와 lint/build를 실행하고 정확한 명령 및 결과를 Issue #51에 기록한다. 프로젝트 검증 정책에 따라 local service나 별도 Browser QA pass를 시작하지 않는다.
 
 ## 검증 접근
 
-Frontend unit/component/API mock tests로 summary selector, Delivery row eligibility, idempotency key lifecycle, polling/state reconciliation을 확인한다. Browser QA에서 route 진입/복귀, 접근성, 360px 폭, 링크 동작을 검증한다. 실제 Gmail/Slack 전송은 수행하지 않는다.
+Frontend unit/component/API mock tests로 summary selector, Delivery row eligibility, idempotency key lifecycle, polling/state reconciliation, 접근 가능한 DOM 및 360px breakpoint를 확인한다. local service/Browser QA pass를 시작하지 않으며 실제 Gmail/Slack 전송은 수행하지 않는다. Frontend 검증은 저장소 package 명령으로 변경 파일 테스트, lint, build만 실행한다.
+
+## 구현 검증 결과 (2026-10-14)
+
+- `frontend`에서 `npm run test -- --run src/CompletePage.test.tsx src/publishApi.test.ts src/SharePage.test.tsx`: 3개 test files, 35 tests passed. A(version 40)→B(version 1) 세션 전환과 B Delivery 재시도 경로도 검증했다.
+- `frontend`에서 `npx eslint src/CompletePage.tsx src/CompletePage.test.tsx src/publishApi.ts src/publishApi.test.ts src/App.tsx src/SharePage.tsx`: 통과.
+- `frontend`에서 `npm run build`: `tsc -b` 및 Vite production build 통과.
+- `git diff --check`: 통과. 별도 local service/Browser QA는 실행하지 않았다.

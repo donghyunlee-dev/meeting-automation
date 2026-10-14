@@ -60,3 +60,10 @@ SCR-008은 API-010에 저장된 `document` 참조가 있을 때 보여준다. Do
 - [구현 계획](./plan.md)
 - [작업 목록](./tasks.md)
 - [검증 계획](./test.md)
+
+## 구현 검증 기록
+
+- Frontend 구현: `/meetings/:sessionId/complete` 결과 화면과 Share 결과 화면의 진입 링크, API-010 독립 문서/Email/Slack 행, 안전한 문서 URL, participant 이름/ID fallback, 행별 API-016 재시도를 연결했다.
+- 접근성/개인정보: 버튼 accessible name과 키보드 포커스, polite live region, 이메일 주소 미표시, 420px 이하 레이아웃 규칙을 확인했다. API-010 결과 갱신은 focus를 직접 이동시키지 않는다.
+- 세션 전환 시 API-010 version guard, Delivery state, retry key를 세션 단위로 초기화하며 이전 세션의 늦은 응답을 무시한다.
+- 정확한 명령 및 결과는 `plan.md`, `tasks.md`, `test.md`의 2026-10-14 실행 기록을 참조한다.

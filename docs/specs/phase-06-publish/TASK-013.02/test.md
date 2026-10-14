@@ -4,7 +4,7 @@
 
 ## 자동화 검증
 
-구현 시 기존 Frontend package의 component/API test 명령을 사용한다. 현재 저장소 문서 workspace에는 `frontend/` 코드/package가 없어 정확한 명령은 구현 때 확인해 기록한다. API-010/API-016은 mock response로 검증하고 실제 이메일/Slack 전달은 하지 않는다.
+`frontend/package.json`의 Vitest, ESLint, TypeScript/Vite 명령을 사용한다. API-010/API-016은 mock response로 검증하고 실제 이메일/Slack 전달은 하지 않는다. 변경 파일의 focused component/API tests와 lint/build만 실행한다. 검증은 DOM accessibility/keyboard assertion과 CSS breakpoint 검사로 제한하며 local service나 별도 Browser QA pass를 시작하지 않는다.
 
 | ID | 준비 및 입력 | 기대 결과 | 증거 |
 |---|---|---|---|
@@ -25,16 +25,28 @@
 | COMPLETE-15 | API-016 409/404 또는 API-010 polling 404 | 안전 안내 및 최신 상태 재조회; 다른 row/문서 결과는 보존 | Error recovery test |
 | COMPLETE-16 | polling 중 더 오래된 API-010 응답이 늦게 도착 | 최신 Session/Delivery state를 덮지 않음 | Stale response test |
 | COMPLETE-17 | API payload, screen, log 검사 | 전체 이메일, webhook URL, OAuth/Secret, Provider raw body가 없음 | Privacy/redaction test |
-| COMPLETE-18 | 360px, keyboard-only, screen reader 확인 | row/status/Retry/link 접근 가능; focus가 polling으로 이동하지 않음 | Browser accessibility test |
+| COMPLETE-18 | 360px breakpoint, keyboard-only interaction, live-region DOM 확인 | row/status/Retry/link 접근 가능; focus가 polling으로 이동하지 않음 | Focused component/accessibility test |
+| COMPLETE-19 | 다른 `sessionId`로 이동, 두 번째 세션 version이 더 낮음 | 두 번째 세션 데이터/Delivery만 렌더링하고 Retry 경로도 해당 세션 사용 | Session navigation/version isolation test |
 
-## 수동/Browser QA
+## 자동화된 화면 접근성 검증
 
-- Document saved + Email mixed outcomes + Slack result의 mock state를 주입해 SCR-008 row/요약을 확인한다.
-- retryable failure 한 건만 재시도해 API-016 URL에 해당 deliveryId만 포함되고 이후 API-010에서 해당 행만 바뀌는지 확인한다.
-- `retryable=false` ambiguous outcome에는 Retry가 없고 안전한 중복 방지 안내가 있는지 확인한다.
-- API-016 응답 유실 뒤 같은 UI interaction을 복구해 동일 Idempotency-Key가 유지되는지 확인한다.
-- invalid document URL, 이름 lookup 실패, no Delivery, all failed, in-progress 상태를 모바일 폭/키보드/화면 읽기 프로그램에서 확인한다.
+- Component tests에서 Document saved + Email mixed outcomes + Slack result의 mock state와 summary/row를 확인한다.
+- Component/API tests에서 retryable failure 한 건만 API-016을 호출하고 이후 API-010에서 해당 행만 바뀌는지 확인한다.
+- `retryable=false` outcome에는 Retry가 없고 안전한 중복 방지 안내가 있는지 DOM에서 확인한다.
+- API-016 응답 유실 뒤 같은 interaction의 Idempotency-Key 보존 및 polling 재조정을 확인한다.
+- invalid document URL, 이름 lookup 실패, no Delivery, all failed, in-progress, keyboard/live-region 접근성을 focused tests에서 검증한다. 별도 browser/service QA는 수행하지 않는다.
 
 ## 완료 증거
 
-Frontend test 명령과 결과, Browser QA, keyboard/screen reader/mobile 결과, API-016 단건 action 및 민감정보 가림 증거를 Issue #51에 기록한다. 실제 Gmail/Slack 메시지를 보내지 않는다.
+Frontend focused test/lint/build 명령과 결과, DOM accessibility/keyboard/360px breakpoint assertions, API-016 단건 action 및 민감정보 가림 증거를 Issue #51에 기록한다. local service/Browser QA pass와 실제 Gmail/Slack 메시지 전송은 수행하지 않는다.
+
+## 실행 결과 (2026-10-14)
+
+| 명령 (working directory: `frontend`) | 결과 |
+|---|---|
+| `npm run test -- --run src/CompletePage.test.tsx src/publishApi.test.ts src/SharePage.test.tsx` | PASS — 3 test files, 35 tests |
+| `npx eslint src/CompletePage.tsx src/CompletePage.test.tsx src/publishApi.ts src/publishApi.test.ts src/App.tsx src/SharePage.tsx` | PASS |
+| `npm run build` | PASS — TypeScript check and Vite production build |
+| `git diff --check` (repository root) | PASS |
+
+Component/API mock tests cover mixed/all-sent/all-failed/no-delivery summaries; safe and missing document links; participant ID fallback and email privacy; retry eligibility and 202 polling; accessible button focus/name/live status; response-loss key reuse; and A(version 40)→B(version 1) navigation with destination-session retry routing. CSS applies a 420px responsive layout; tests assert keyboard-accessible DOM. Repository policy prohibits local service/Browser QA, so no real provider delivery or rendered-device check was run.

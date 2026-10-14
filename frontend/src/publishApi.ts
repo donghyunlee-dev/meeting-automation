@@ -131,6 +131,21 @@ export async function publishSession(
   }
 }
 
+export type DeliveryRetryAcceptance = { deliveryId: string; status: 'PENDING' };
+
+export async function retryDelivery(sessionId: string, deliveryId: string, idempotencyKey: string): Promise<DeliveryRetryAcceptance> {
+  const { response, body } = await request(`/api/v1/meeting-sessions/${encodeURIComponent(sessionId)}/deliveries/${encodeURIComponent(deliveryId)}/retry`, {
+    method: 'POST', headers: { 'Idempotency-Key': idempotencyKey },
+  });
+  try {
+    const data = parseData(body);
+    if (response.status !== 202 || data.deliveryId !== deliveryId || data.status !== 'PENDING') throw new Error('invalid');
+    return { deliveryId, status: 'PENDING' };
+  } catch {
+    throw new PublishApiError('INVALID_RESPONSE', response.status, [], true);
+  }
+}
+
 export async function getPublishSnapshot(sessionId: string, signal?: AbortSignal): Promise<PublishSnapshot> {
   let response: Response;
   try {
