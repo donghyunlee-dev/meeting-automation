@@ -59,7 +59,7 @@ Document 저장 단계는 다음 순서를 따른다.
 - API-015가 202를 반환한 뒤 처리 실패하므로 Provider 오류는 접수 API 응답으로 동기 반환하지 않는다. API-010이 최종 상태와 문서 결과를 제공한다.
 - Provider 조회 결과가 일시 오류이면 생성으로 우회하지 않는다. 중복 방지를 보장할 수 없으므로 단계 실패 처리한다.
 - 기존 문서 참조가 발견되면 새 문서 생성 없이 그 참조를 기록한다.
-- API-010과 공통 성공 envelope를 유지하고 task-specific 확장은 문서 결과 및 publish 오류처럼 필요한 경우에만 추가한다. Secret, Authorization, 원 Provider 오류 본문, Minutes/Transcript를 오류에 복사하지 않는다.
+- API-010 GET은 `DOCUMENT_SAVED`에서만 `data.document:{documentId,documentUrl}`를 포함한다. 저장 전과 `DOCUMENT_FAILED`에서는 `data.document`를 생략하며, Provider 오류 원문이나 별도 publish 오류 필드는 노출하지 않는다. API-015의 202 응답은 `{sessionId,status}`를 유지한다.
 
 ## 완료 기준
 
@@ -67,7 +67,7 @@ Document 저장 단계는 다음 순서를 따른다.
 - stale version, 잘못된 상태, 잘못된 요청, key 충돌은 각각 명세된 오류이며 상태/document 기록을 변경하지 않는다.
 - Provider 조회 결과 재사용, 조회 후 생성, Provider 오류 및 조회 불능 사례가 검증된다.
 - Session당 여러 key/동시 요청에서도 DocumentProvider create는 최대 한 번의 논리적 문서로 수렴한다.
-- 저장 성공 때 `documentId`와 유효 `documentUrl`이 API-010 결과에 노출되고 저장 실패 시 Email/Notification 호출은 없다.
+- 저장 성공 때 `data.document.documentId`와 유효 `data.document.documentUrl`이 API-010 결과에 노출되고, 저장 전·실패에는 `data.document`가 없다. 저장 실패 시 Email/Notification 호출은 없다.
 - 네 문서와 PRD 추적 행이 master에 게시되고 원격 확인된다.
 
 ## 연결 문서

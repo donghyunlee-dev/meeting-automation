@@ -86,6 +86,9 @@ class MeetingSessionPublishApiTests {
 
     @Test
     void validPublishReturns202AndAtomicallyQueuesOneWorkerForSameKeyReplay() throws Exception {
+        mockMvc.perform(get(SESSION_URL, SESSION_ID)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.document").doesNotExist())
+                .andExpect(jsonPath("$.data.publish").doesNotExist());
         String first = mockMvc.perform(publish(SESSION_ID, "7", "publish-once", REQUEST))
                 .andExpect(status().isAccepted())
                 .andExpect(jsonPath("$.data.sessionId").value(SESSION_ID))
@@ -97,6 +100,8 @@ class MeetingSessionPublishApiTests {
         assertThat(accepted.version()).isEqualTo(8);
         assertThat(workerExecutor.pendingCount()).isEqualTo(1);
         assertThat(FakePublishProvider.PUBLISH_CALLS.get()).isZero();
+        mockMvc.perform(get(SESSION_URL, SESSION_ID)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.document").doesNotExist());
 
         String replay = mockMvc.perform(publish(SESSION_ID, "7", "publish-once", REQUEST))
                 .andExpect(status().isAccepted())
@@ -114,8 +119,9 @@ class MeetingSessionPublishApiTests {
         assertThat(sessionStore.findPublishSnapshot(SESSION_ID).recipients()).containsExactly("pt_ada");
         assertThat(sessionStore.findPublishSnapshot(SESSION_ID).notificationEnabled()).isTrue();
         mockMvc.perform(get(SESSION_URL, SESSION_ID)).andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.publish.documentId").value("doc_publish"))
-                .andExpect(jsonPath("$.data.publish.documentUrl").value("https://docs.example/doc_publish"));
+                .andExpect(jsonPath("$.data.document.documentId").value("doc_publish"))
+                .andExpect(jsonPath("$.data.document.documentUrl").value("https://docs.example/doc_publish"))
+                .andExpect(jsonPath("$.data.publish").doesNotExist());
         try (var switchLease = gate.beginSwitch(globalSettingsStore.read().version())) {
             assertThat(switchLease).isNotNull();
         }
@@ -214,7 +220,8 @@ class MeetingSessionPublishApiTests {
         assertThat(sessionStore.findPublishSnapshot(SESSION_ID).errorCode()).isEqualTo("DOCUMENT_FAILURE");
         mockMvc.perform(get(SESSION_URL, SESSION_ID)).andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.allowedActions[0]").value("PUBLISH"))
-                .andExpect(jsonPath("$.data.publish.errorCode").value("DOCUMENT_FAILURE"));
+                .andExpect(jsonPath("$.data.document").doesNotExist())
+                .andExpect(jsonPath("$.data.publish").doesNotExist());
         assertThat(mockMvc.perform(publish(SESSION_ID, "7", "publish-fail-first", REQUEST))
                 .andExpect(status().isAccepted()).andReturn().getResponse().getContentAsString()).isEqualTo(first);
         assertThat(workerExecutor.pendingCount()).isZero();

@@ -23,7 +23,7 @@ public record MeetingSessionStatusResponse(Data data) {
             StructuredMinutes minutes,
             List<String> allowedActions,
             @JsonInclude(JsonInclude.Include.NON_NULL) LastOperation lastOperation,
-            @JsonInclude(JsonInclude.Include.NON_NULL) Publish publish) {
+            @JsonInclude(JsonInclude.Include.NON_NULL) Document document) {
         public Data {
             speakers = List.copyOf(speakers);
             transcript = List.copyOf(transcript);
@@ -34,7 +34,7 @@ public record MeetingSessionStatusResponse(Data data) {
     public record LastOperation(String type, String outcome, String requestedTemplateId,
             @JsonInclude(JsonInclude.Include.NON_NULL) String errorCode) { }
 
-    public record Publish(String documentId, String documentUrl, String errorCode) { }
+    public record Document(String documentId, String documentUrl) { }
 
     public record Meeting(List<String> participantIds) {
         public Meeting {
@@ -94,13 +94,13 @@ public record MeetingSessionStatusResponse(Data data) {
         List<String> allowedActions = reviewReady ? REVIEW_ACTIONS
                 : ("CONFIRMED".equals(session.status()) || "DOCUMENT_FAILED".equals(session.status()))
                         ? PUBLISH_ACTIONS : List.of();
-        Publish publish = publishSnapshot == null ? null : new Publish(
-                publishSnapshot.document() == null ? null : publishSnapshot.document().documentId(),
-                publishSnapshot.document() == null ? null : publishSnapshot.document().documentUrl(),
-                publishSnapshot.errorCode());
+        Document document = "DOCUMENT_SAVED".equals(session.status()) && publishSnapshot != null
+                && publishSnapshot.document() != null
+                        ? new Document(publishSnapshot.document().documentId(), publishSnapshot.document().documentUrl())
+                        : null;
         return new MeetingSessionStatusResponse(new Data(session.sessionId(), session.version(), session.status(),
                 new Meeting(session.meeting().participantIds()), processing, speakers, transcript, minutes,
-                allowedActions, reviewReady ? lastOperation : null, publish));
+                allowedActions, reviewReady ? lastOperation : null, document));
     }
 }
 

@@ -22,18 +22,20 @@ Backend 구현 시 JUnit 5로 API/application/provider 경계를 검증한다. J
 | PUB-API-08 | recipient ID가 Session roster 밖이거나 중복됨 | HTTP 400 `VALIDATION_FAILED`; provider 호출 0회 | Roster/body validation test |
 | PUB-API-09 | 문서 저장 실패 상태, 새 key 및 최신 If-Match | API-015 접수 202, version +1, 문서 조회 단계 다시 시작 | Document retry acceptance test |
 | PUB-API-10 | 이전 실패 요청과 같은 key로 재전송 | 최초 202 replay만 수행, 새 worker 실행 없음 | Failed request replay test |
-| PUB-DOC-01 | Provider lookup가 기존 ref 반환 | ref 재사용, create 0회, API-010에 documentId/URL | Provider fake interaction test |
+| PUB-DOC-01 | Provider lookup가 기존 ref 반환 | ref 재사용, create 0회, API-010 `data.document`에 documentId/URL | Provider fake interaction test |
 | PUB-DOC-02 | Provider lookup가 empty 반환 | metadata `externalSessionId=sessionId`인 command로 create 1회 | Command/interaction test |
 | PUB-DOC-03 | 같은 Session, 서로 다른 key의 동시 요청 | 원자적 state gate로 한 작업만 채택; 논리적 Meeting 1개 | Concurrency test |
 | PUB-DOC-04 | Provider lookup 실패/timeout | create로 fallback하지 않고 `DOCUMENT_FAILED`; downstream 0회 | Failure interaction test |
-| PUB-DOC-05 | Provider create 실패 | `DOCUMENT_FAILED`, 안전한 error만 API-010에 표시; Email/Notification 0회 | Failure/handoff test |
-| PUB-DOC-06 | Provider create 성공 뒤 결과 기록 | `DOCUMENT_SAVED`, documentId 및 유효 URL 기록; 이후 후속 전달 handoff | State/API-010 test |
+| PUB-DOC-05 | Provider create 실패 | `DOCUMENT_FAILED`, API-010 `data.document` 생략; Email/Notification 0회 | Failure/handoff test |
+| PUB-DOC-06 | Provider create 성공 뒤 결과 기록 | `DOCUMENT_SAVED`, API-010 `data.document:{documentId,documentUrl}`; 이후 후속 전달 handoff | State/API-010 test |
 | PUB-DOC-07 | 표준 `TransferRecord` publish, 동일 externalSessionId 재발견, ambiguous create 결과 | metadata/본문 codec round-trip 확인; 유일 문서 참조 재사용; create 최대 1회 | `ProviderTransferPublishTests` |
 | PUB-DOC-08 | API-001에 meeting date가 없고 Session이 retry됨 | 최초 `createdAt`으로 동일 timezone-aware `meetingAt`; worker retry가 시각을 바꾸지 않음 | publish snapshot test |
 | PUB-CONN-01 | connection switch 중 API-015 요청 또는 provider write 진행 | 요청 차단; lookup/create/readback 전체에서 gate write lease 유지 후 성공·실패 모두 해제 | publish API/gate test |
 | PUB-SEC-01 | Provider가 credential을 포함한 원문 오류 반환 | response/log에 authorization, token, 원문 본문, Minutes/Transcript 없음 | Redaction assertion/log capture |
 
-모든 acceptance criterion은 PUB-API-01~10, PUB-DOC-01~08, PUB-CONN-01, PUB-SEC-01에서 확인한다. 같은 Session ID metadata를 기준으로 기존 문서 재발견이 가능해야 한다.
+| PUB-DOC-09 | 저장 전 또는 `DOCUMENT_FAILED` 상태 조회 | API-010에 `data.document`와 비계약 `publish` wrapper 모두 없음; 성공 때만 `data.document` 반환 | Publish API status assertions |
+
+모든 acceptance criterion은 PUB-API-01~10, PUB-DOC-01~09, PUB-CONN-01, PUB-SEC-01에서 확인한다. 같은 Session ID metadata를 기준으로 기존 문서 재발견이 가능해야 한다.
 
 ## 수동 API QA
 
