@@ -4,7 +4,7 @@
 
 ## 자동화 검증
 
-Backend 구현 시 Java 21/Gradle의 JUnit 5 검증을 사용한다. Exact build commands는 Backend project setup을 확인한 뒤 고정한다. OAuth/Gmail network calls는 stub/fake로 대체하고 실제 Gmail 계정을 자동화 test에서 사용하지 않는다. 설계 단계에서는 tests를 실행하지 않는다.
+Backend 구현 시 PRD `DEC-004`와 `AGENTS.md`에 정의된 Java 25/Gradle Wrapper의 JUnit 5 검증을 사용한다. Windows에서는 `backend/gradlew.bat test --tests <fully.qualified.TestClass>`로 변경된 동작과 직접 영향받는 계약 테스트만 선택한다. 전체 Backend suite나 `clean build`는 task-local 검증에 사용하지 않는다. OAuth/Gmail network calls는 stub/fake로 대체하고 실제 Gmail 계정을 자동화 test에서 사용하지 않는다.
 
 | ID | 준비 및 입력 | 기대 결과 | 증거 |
 |---|---|---|---|
