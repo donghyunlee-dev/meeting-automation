@@ -2,11 +2,14 @@ package com.meetingautomation.api.audio;
 
 import java.io.InputStream;
 import java.time.Instant;
+import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 
 /** Provider-neutral boundary for private, durable Audio objects. Handles are opaque and never API values. */
 public interface PrivateAudioStoragePort {
+    Duration TEMPORARY_LEASE = Duration.ofHours(24);
+
     StoredObject store(String sessionId, ObjectType type, int sequence, String mimeType, Instant expiresAt,
             InputStream body, long bytes, String sha256);
 

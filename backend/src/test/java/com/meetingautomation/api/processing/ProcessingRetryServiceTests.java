@@ -25,7 +25,7 @@ class ProcessingRetryServiceTests {
     private static final Instant NOW = Instant.parse("2026-10-14T00:00:00Z");
 
     @Test
-    void retriesAllowedStageOnceAndClearsObjectExpiryForActiveLease() throws Exception {
+    void retriesAllowedStageOnceAndRenewsObjectLeaseForActiveProcessing() throws Exception {
         Fixture fixture = new Fixture(NOW.plusSeconds(3600));
 
         ProcessingStartResponse first = fixture.service.retry(SESSION, "\"3\"", "retry-one");
@@ -36,7 +36,7 @@ class ProcessingRetryServiceTests {
         assertThat(fixture.queue).containsExactly(fixture.job);
         assertThat(fixture.sessions.find(SESSION).orElseThrow().status()).isEqualTo("PROCESSING");
         assertThat(fixture.storage.listForSession(SESSION)).allSatisfy(object ->
-                assertThat(object.expiresAt()).isNull());
+                assertThat(object.expiresAt()).isEqualTo(NOW.plusSeconds(24 * 60 * 60)));
     }
 
     @Test

@@ -42,7 +42,7 @@ PRD v1.8.1 (2026-10-06), `TASK-017.02`, `DEC-020`, `FR-027`, `FR-028`, `NFR-006`
 - 미종료 Audio는 마지막 변환 실패 후 24시간에 접근 불가해진다. Session이 메모리에 남아 있으면 만료 처리기가 `DISCARDED` 실패 문서를 저장하고 `COMPLETED_WITH_WARNINGS`로 종료한 뒤 Audio/chunk를 제거한다. Document 저장 실패 시 객체는 만료 상태로 유지해 다음 sweep에서 finalization을 재시도한다. 사용자가 finalize를 재요청할 때는 새 Idempotency-Key를 사용하고 provider `externalSessionId` 멱등성으로 중복 문서를 막는다. Backend 재시작 뒤에는 기존 V1 계약대로 Session을 복구하지 않으므로 만료 처리기는 남은 Audio/chunk만 삭제하고 실패 문서를 만들지 않는다. 해당 Session의 API 조회는 `SESSION_NOT_FOUND`다.
 - 만료 시각은 UTC instant로 저장한다. API는 만료 시각이 지났으면 처리기가 파일을 지우기 전이라도 retry/download를 거부한다. 정리기는 적어도 1분 주기로 기한을 확인하고 삭제를 재수행한다. active retry는 만료 sweep에서 제외한다. 삭제는 idempotent다.
 - Session과 job은 메모리 전용이다. Backend 재시작/재배포 뒤 Session 복구 및 Audio retry/download를 보장하지 않는다. Session이 사라지면 기존 API의 `SESSION_NOT_FOUND`를 반환한다.
-- expiry metadata는 객체와 함께 durable하게 저장해 Backend 재시작 뒤에도 cleanup scheduler가 세션 메모리와 독립적으로 만료 객체를 제거한다. 명시 retry 중인 객체는 lease/expiry를 갱신해 처리 종료 전 삭제하지 않고, retry 실패 시 새 실패시각+24h로 재설정한다.
+- 업로드 chunk와 assembled 객체에는 write 시점부터 24시간의 durable 임시 만료를 둔다. 이는 처리를 시작하지 않은 업로드 및 Session을 잃은 재시작 잔여 객체를 정리한다. Session이 메모리에 있고 `PROCESSING` 중이면 sweep은 입력 객체를 삭제하지 않는다. 성공 시 즉시 삭제하고 terminal failure 시 실패 시각+24h로 만료를 설정한다. 재시작 후 Session이 없으면 저장된 만료 metadata를 기준으로 삭제한다.
 - Storage I/O 실패 또는 객체의 무결성 불일치는 `AUDIO_STORAGE_FAILED`로 안전하게 반환한다. 부분 upload는 객체 확정 전 정리하고 실패한 object 삭제는 cleanup-pending으로 재시도한다. object key, Audio bytes, Transcript, Secret 없이 `sessionId`, `traceId`, stage, safe error code, cleanup outcome만 로그에 남긴다.
 
 ## API 계약
@@ -73,7 +73,7 @@ PRD v1.8.1 (2026-10-06), `TASK-017.02`, `DEC-020`, `FR-027`, `FR-028`, `NFR-006`
 - 사용자는 변환 실패 후 화면에서 재시도를 직접 요청한다.
 - 실패가 반복되면 사용자는 원본 Audio를 다운로드하거나 변환 실패로 마무리한다.
 - 실패 Meeting 문서에는 Audio 다운로드/변환 실패를 기록하되 Email/Slack은 참석자에게 보내지 않는다.
-- Processing 실패의 필요한 retry input 및 검증된 assembled Audio 보존 기간은 마지막 실패로부터 최대 24시간이며, 각 명시 재시도 실패 뒤 기한을 다시 계산한다.
+- 처리되지 않은 chunk/assembled 객체는 저장 시점부터 24시간 안에 정리한다. Processing 중인 Session의 입력은 sweep에서 보호하고, Processing 실패의 필요한 retry input 및 검증된 assembled Audio 보존 기간은 마지막 실패로부터 최대 24시간이며, 각 명시 재시도 실패 뒤 기한을 다시 계산한다.
 - 사용자는 Audio를 실패 후 재시도/다운로드를 위해 private object storage에 최대 24시간 보관하는 방식을 승인했다. 구체 storage provider는 adapter/configuration 경계에 두며 public access를 사용하지 않는다.
 - 사용자 결정은 Issue #61에 기록했다.
 

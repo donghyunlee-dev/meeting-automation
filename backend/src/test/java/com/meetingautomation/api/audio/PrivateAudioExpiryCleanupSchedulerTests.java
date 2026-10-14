@@ -32,7 +32,7 @@ class PrivateAudioExpiryCleanupSchedulerTests {
     private static final Instant NOW = Instant.parse("2026-10-14T00:00:00Z");
 
     @Test
-    void sweepDeletesOnlyObjectsReportedExpiredAndContinuesAfterDeleteFailure() {
+    void sweepDeletesExpiredObjectsWhenSessionIsMissingAfterRestartAndContinuesAfterDeleteFailure() {
         var expired = new PrivateAudioStoragePort.StoredObject("opaque-1", "ms_one",
                 PrivateAudioStoragePort.ObjectType.CHUNK, 0, "audio/webm", 1, "a".repeat(64), NOW);
         var alsoExpired = new PrivateAudioStoragePort.StoredObject("opaque-2", "ms_two",
@@ -40,7 +40,8 @@ class PrivateAudioExpiryCleanupSchedulerTests {
         FakeStorage storage = new FakeStorage(List.of(expired, alsoExpired));
         storage.failDeleteFor = "opaque-1";
 
-        new PrivateAudioExpiryCleanupScheduler(storage, Clock.fixed(NOW, ZoneOffset.UTC)).sweep();
+        new PrivateAudioExpiryCleanupScheduler(storage, Clock.fixed(NOW, ZoneOffset.UTC), Optional.empty(),
+                Optional.of(new MeetingSessionStore())).sweep();
 
         assertThat(storage.requestedExpiryCutoff).isEqualTo(NOW);
         assertThat(storage.deleted).containsExactly("opaque-1", "opaque-2");
@@ -57,6 +58,24 @@ class PrivateAudioExpiryCleanupSchedulerTests {
 
         assertThat(storage.deleted).isEmpty();
         assertThat(storage.find("opaque-active").orElseThrow().expiresAt()).isNull();
+    }
+
+    @Test
+    void sweepPreservesExpiredObjectsWhileTheInMemorySessionIsProcessing() {
+        var expiredSnapshot = new PrivateAudioStoragePort.StoredObject("opaque-processing", "ms_processing",
+                PrivateAudioStoragePort.ObjectType.ASSEMBLED, -1, "audio/webm", 1, "d".repeat(64), NOW);
+        FakeStorage storage = new FakeStorage(List.of(expiredSnapshot));
+        MeetingSessionStore sessions = new MeetingSessionStore();
+        sessions.save(new MeetingSession("ms_processing", 1, "UPLOADING", 1,
+                new MeetingSession.Meeting("Synthetic", "default.md", List.of("p1"), "UTC")), null);
+        sessions.startProcessing("ms_processing");
+
+        new PrivateAudioExpiryCleanupScheduler(storage, Clock.fixed(NOW, ZoneOffset.UTC), Optional.empty(),
+                Optional.of(sessions)).sweep();
+
+        assertThat(sessions.find("ms_processing").orElseThrow().status()).isEqualTo("PROCESSING");
+        assertThat(storage.deleted).isEmpty();
+        assertThat(storage.find("opaque-processing")).isPresent();
     }
 
     @Test

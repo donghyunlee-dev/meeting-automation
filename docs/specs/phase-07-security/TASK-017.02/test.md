@@ -27,8 +27,10 @@
 | AUDIO-LIFE-21 | 두 retry 명령 동시 제출 또는 stale `If-Match` | Session 단위 한 실행만 접수; stale version은 412, 중복은 상태 충돌/동일 접수 결과 | concurrency and version tests |
 | AUDIO-LIFE-22 | Backend restart 뒤 storage expiry sweep | Session 복구/실패 문서 생성 없이 expiry metadata가 지난 app-owned Audio object를 제거 | adapter listing fake + fake clock |
 | AUDIO-LIFE-23 | Chunk durable write timeout/failure | API-007 성공 ACK가 없고 retry-safe storage error 반환 | storage adapter failure injection |
+| AUDIO-LIFE-24 | 처리 시작 없이 업로드한 chunk가 24시간을 초과 | Session이 메모리에 남아 있어도 expired chunk를 정리하고 재업로드/처리 action이 Audio 부재를 안전하게 반환 | fake clock + cleanup scheduler |
+| AUDIO-LIFE-25 | 만료 metadata가 지난 object와 active `PROCESSING` Session | 현재 처리에 필요한 chunk/assembled Audio를 삭제하지 않고 terminal 결과 뒤 정리 | fake clock + processing/session and storage assertions |
 
-모든 수용 기준을 AUDIO-LIFE-01~23에 연결한다. JSON API 오류는 공통 `{error}` envelope와 safe code/category/traceId를 검증한다.
+모든 수용 기준을 AUDIO-LIFE-01~25에 연결한다. JSON API 오류는 공통 `{error}` envelope와 safe code/category/traceId를 검증한다.
 
 ## 수동 QA
 

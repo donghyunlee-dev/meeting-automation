@@ -197,6 +197,23 @@ class ProcessingStartApiTests {
     }
 
     @Test
+    void expiredChunkCannotStartProcessingEvenBeforeTheCleanupSweepRuns() throws Exception {
+        upload("0", new byte[] {8, 9}, "expired-upload").andExpect(status().isOk());
+        var chunk = privateAudioStorage.listForSession(SESSION_ID).stream()
+                .filter(object -> object.type() == com.meetingautomation.api.audio.PrivateAudioStoragePort.ObjectType.CHUNK)
+                .findFirst().orElseThrow();
+        privateAudioStorage.extendExpiry(chunk.objectId(), java.time.Instant.now().minusSeconds(1));
+
+        mockMvc.perform(process("expired-start-key", "{\"expectedChunks\":1,\"durationMs\":15000,"
+                        + "\"mimeType\":\"audio/webm\"}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error.code").value("AUDIO_CHUNKS_INCOMPLETE"));
+
+        assertThat(processingExecutor.acceptedCount()).isZero();
+        assertThat(sessionStore.find(SESSION_ID).orElseThrow().status()).isEqualTo("UPLOADING");
+    }
+
+    @Test
     void api009InitialProcessingInvokesAssemblyTranscriptionAndDiarizationInOrder() throws Exception {
         byte[] syntheticPayload = {8, 9};
         upload("0", syntheticPayload, "positive-control-upload").andExpect(status().isOk());

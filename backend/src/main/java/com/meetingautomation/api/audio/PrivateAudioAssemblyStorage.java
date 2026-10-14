@@ -6,6 +6,7 @@ import java.io.OutputStream;
 import java.io.SequenceInputStream;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.time.Clock;
 import java.util.Comparator;
 import java.util.Enumeration;
 import java.util.Iterator;
@@ -17,11 +18,17 @@ import java.util.concurrent.ConcurrentMap;
 /** Private object-store implementation of chunk assembly. Audio bytes are never buffered in process memory. */
 public final class PrivateAudioAssemblyStorage implements AudioAssemblyStorage {
     private final PrivateAudioStoragePort storage;
+    private final Clock clock;
     private final ConcurrentMap<String, PartDigest> parts = new ConcurrentHashMap<>();
 
     public PrivateAudioAssemblyStorage(PrivateAudioStoragePort storage) {
+        this(storage, Clock.systemUTC());
+    }
+
+    PrivateAudioAssemblyStorage(PrivateAudioStoragePort storage, Clock clock) {
         if (storage == null) throw new IllegalArgumentException("Private audio storage is required.");
         this.storage = storage;
+        this.clock = clock;
     }
 
     @Override
@@ -70,7 +77,8 @@ public final class PrivateAudioAssemblyStorage implements AudioAssemblyStorage {
             };
             PrivateAudioStoragePort.StoredObject stored;
             try (SequenceInputStream content = new SequenceInputStream(inputs)) {
-                stored = storage.store(sessionId, PrivateAudioStoragePort.ObjectType.ASSEMBLED, -1, mimeType, null,
+                stored = storage.store(sessionId, PrivateAudioStoragePort.ObjectType.ASSEMBLED, -1, mimeType,
+                        clock.instant().plus(PrivateAudioStoragePort.TEMPORARY_LEASE),
                         content, bytes, sha256);
             }
             parts.remove(sessionId, part);

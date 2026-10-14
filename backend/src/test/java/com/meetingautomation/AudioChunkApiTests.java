@@ -104,6 +104,7 @@ class AudioChunkApiTests {
     @Test
     void validBinaryChunkIsStoredAndReturnsApi007Acknowledgement() throws Exception {
         byte[] audio = new byte[] {0, 1, 2, 13, 10, (byte) 0xff};
+        java.time.Instant beforeUpload = java.time.Instant.now();
 
         mockMvc.perform(upload(SESSION_ID, "0", audio, "audio/webm", "audio-upload-1"))
                 .andExpect(status().isOk())
@@ -111,6 +112,12 @@ class AudioChunkApiTests {
                 .andExpect(jsonPath("$.data.received").value(true));
 
         org.assertj.core.api.Assertions.assertThat(chunkContentFiles(audio)).hasSize(1);
+        java.time.Instant afterUpload = java.time.Instant.now();
+        org.assertj.core.api.Assertions.assertThat(audioStorage.listForSession(SESSION_ID))
+                .filteredOn(object -> object.type() == PrivateAudioStoragePort.ObjectType.CHUNK)
+                .singleElement()
+                .satisfies(object -> org.assertj.core.api.Assertions.assertThat(object.expiresAt())
+                        .isAfter(beforeUpload).isBefore(afterUpload.plusSeconds(24 * 60 * 60 + 1L)));
     }
 
     @Test

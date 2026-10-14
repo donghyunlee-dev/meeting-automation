@@ -17,6 +17,7 @@ import org.junit.jupiter.api.Test;
 
 class PrivateAudioAssemblyStorageTests {
     private static final int LARGE_BYTES = 16 * 1024 * 1024;
+    private static final Instant NOW = Instant.parse("2026-10-14T00:00:00Z");
 
     @Test
     void assemblesPrivateChunksIntoOpaqueDurableHandleAndCanReopenStream() throws Exception {
@@ -27,7 +28,8 @@ class PrivateAudioAssemblyStorageTests {
                 new ByteArrayInputStream(first), first.length, sha256(first));
         objectStore.store("ms_synthetic", PrivateAudioStoragePort.ObjectType.CHUNK, 1, "audio/webm", null,
                 new ByteArrayInputStream(second), second.length, sha256(second));
-        PrivateAudioAssemblyStorage storage = new PrivateAudioAssemblyStorage(objectStore);
+        PrivateAudioAssemblyStorage storage = new PrivateAudioAssemblyStorage(objectStore,
+                java.time.Clock.fixed(NOW, java.time.ZoneOffset.UTC));
 
         AudioAssemblyStorage.Assembly assembly;
         try (var output = storage.createPart("ms_synthetic")) {
@@ -44,7 +46,7 @@ class PrivateAudioAssemblyStorageTests {
         assertThat(objectStore.listForSession("ms_synthetic"))
                 .filteredOn(object -> object.type() == PrivateAudioStoragePort.ObjectType.ASSEMBLED)
                 .singleElement()
-                .satisfies(object -> assertThat(object.expiresAt()).isNull());
+                .satisfies(object -> assertThat(object.expiresAt()).isEqualTo(NOW.plusSeconds(24 * 60 * 60)));
     }
 
     @Test

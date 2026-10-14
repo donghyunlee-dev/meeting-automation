@@ -67,7 +67,9 @@ public final class ProcessingRetryService {
             } else if (audio.findAssembly(sessionId).isEmpty()) {
                 throw new AudioNotAvailableException();
             }
-            audio.retainAudioUntil(sessionId, null);
+            java.time.Instant renewedExpiry = clock.instant().plus(
+                    com.meetingautomation.api.audio.PrivateAudioStoragePort.TEMPORARY_LEASE);
+            audio.retainAudioUntil(sessionId, renewedExpiry);
             MeetingSession retrying = sessions.startProcessingRetry(sessionId);
             try {
                 queue.enqueue(job);

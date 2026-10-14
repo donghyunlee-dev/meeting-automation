@@ -107,7 +107,7 @@ configuration/
 2. Publish는 먼저 Document를 생성하거나 같은 Session ID의 기존 문서를 찾아 재사용한다.
 3. Document 저장 성공 뒤 Email 수신자별 delivery와 선택적 Slack notification을 실행한다. 두 채널 결과는 서로 독립적이다.
 4. 완료 상태와 실패한 개별 delivery를 기록한다. 재시도는 실패한 단계만 수행한다.
-5. 성공 시 Audio 객체는 Review 진입 때 삭제한다. 처리 실패 시 필요한 chunks/Audio 객체를 idle 기준 마지막 실패 뒤 최대 24시간 보존하고, 명시 retry가 실행 중일 때는 만료 sweep을 멈춘다. 재시도 실패 때 만료를 갱신한다. 명시적 실패 종료 또는 만료 후 객체를 삭제한다. 만료 시 Session이 메모리에 있으면 `DISCARDED` 실패 문서로 마무리하지만, Backend 재시작 뒤 Session이 없는 경우에는 객체만 삭제한다. Transcript/Minutes 본문은 일반 로그나 Admin Slack으로 내보내지 않는다.
+5. 업로드 chunk와 처리 중 생성된 assembled Audio에는 write 시점부터 24시간의 durable 임시 만료를 설정해 abandoned upload와 재시작 잔여 객체를 정리한다. 성공 시 Audio 객체는 Review 진입 때 삭제한다. 처리 실패 시 필요한 chunks/Audio 객체를 마지막 실패 뒤 최대 24시간 보존하고, 메모리에 있는 `PROCESSING` Session의 입력은 만료 sweep이 삭제하지 않는다. 명시 retry가 다시 실패하면 만료를 갱신한다. 명시적 실패 종료 또는 만료 후 객체를 삭제한다. 만료 시 Session이 메모리에 있으면 `DISCARDED` 실패 문서로 마무리하지만, Backend 재시작 뒤 Session이 없는 경우에는 객체만 삭제한다. Transcript/Minutes 본문은 일반 로그나 Admin Slack으로 내보내지 않는다.
 6. 변환 실패 종료 시 회의 메타데이터와 실패 요약만 Meeting 문서에 기록한다. Email/Slack을 참석자에게 전달하지 않는다. 정상 변환 회의는 기존 Confirm/Publish 흐름을 따른다.
 
 ## 세션 상태 및 동시성
