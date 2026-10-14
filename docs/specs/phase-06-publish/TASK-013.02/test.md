@@ -26,6 +26,7 @@
 | COMPLETE-16 | polling 중 더 오래된 API-010 응답이 늦게 도착 | 최신 Session/Delivery state를 덮지 않음 | Stale response test |
 | COMPLETE-17 | API payload, screen, log 검사 | 전체 이메일, webhook URL, OAuth/Secret, Provider raw body가 없음 | Privacy/redaction test |
 | COMPLETE-18 | 360px breakpoint, keyboard-only interaction, live-region DOM 확인 | row/status/Retry/link 접근 가능; focus가 polling으로 이동하지 않음 | Focused component/accessibility test |
+| COMPLETE-19 | 다른 `sessionId`로 이동, 두 번째 세션 version이 더 낮음 | 두 번째 세션 데이터/Delivery만 렌더링하고 Retry 경로도 해당 세션 사용 | Session navigation/version isolation test |
 
 ## 자동화된 화면 접근성 검증
 
@@ -43,9 +44,9 @@ Frontend focused test/lint/build 명령과 결과, DOM accessibility/keyboard/36
 
 | 명령 (working directory: `frontend`) | 결과 |
 |---|---|
-| `npm run test -- --run src/CompletePage.test.tsx src/publishApi.test.ts src/SharePage.test.tsx` | PASS — 3 test files, 34 tests |
+| `npm run test -- --run src/CompletePage.test.tsx src/publishApi.test.ts src/SharePage.test.tsx` | PASS — 3 test files, 35 tests |
 | `npx eslint src/CompletePage.tsx src/CompletePage.test.tsx src/publishApi.ts src/publishApi.test.ts src/App.tsx src/SharePage.tsx` | PASS |
 | `npm run build` | PASS — TypeScript check and Vite production build |
 | `git diff --check` (repository root) | PASS |
 
-Component/API mock tests cover mixed/all-sent/all-failed/no-delivery summaries; safe and missing document links; participant ID fallback and email privacy; retry eligibility and 202 polling; accessible button focus/name/live status; and response-loss key reuse. CSS applies a 420px responsive layout; tests assert keyboard-accessible DOM. Repository policy prohibits local service/Browser QA, so no real provider delivery or rendered-device check was run.
+Component/API mock tests cover mixed/all-sent/all-failed/no-delivery summaries; safe and missing document links; participant ID fallback and email privacy; retry eligibility and 202 polling; accessible button focus/name/live status; response-loss key reuse; and A(version 40)→B(version 1) navigation with destination-session retry routing. CSS applies a 420px responsive layout; tests assert keyboard-accessible DOM. Repository policy prohibits local service/Browser QA, so no real provider delivery or rendered-device check was run.

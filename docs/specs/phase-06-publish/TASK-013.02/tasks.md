@@ -39,7 +39,7 @@
 - [x] SCR-008 route와 API-010 기반 Document/Email/Slack 렌더링을 구현했다. Share 화면에서 Complete 결과로 이동할 수 있다.
 - [x] retryable FAILED 행 전용 API-016 action, 클릭별 key, 응답 유실 시 같은 key 보존/재조정, API-010 polling을 구현했다.
 - [x] accessible Retry 이름/status live region, participant ID fallback, 이메일 숨김, HTTP(S) URL 검증, 모바일 CSS를 구현했다.
-- [x] `npm run test -- --run src/CompletePage.test.tsx src/publishApi.test.ts src/SharePage.test.tsx` (frontend): 34 passed.
+- [x] `npm run test -- --run src/CompletePage.test.tsx src/publishApi.test.ts src/SharePage.test.tsx` (frontend): 35 passed, including descending-version session navigation and destination session retry routing.
 - [x] `npx eslint src/CompletePage.tsx src/CompletePage.test.tsx src/publishApi.ts src/publishApi.test.ts src/App.tsx src/SharePage.tsx` (frontend): passed.
 - [x] `npm run build` (frontend): TypeScript and Vite build passed.
 - [x] `git diff --check`: passed. local service/Browser QA는 실행하지 않았다.

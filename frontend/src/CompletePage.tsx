@@ -47,10 +47,18 @@ export function CompletePage() {
   const retryKeysRef = useRef(new Map<string, { key: string; accepted: boolean }>());
   const snapshotRef = useRef<PublishSnapshot | null>(null);
   const requestSequence = useRef(0);
+  const activeSessionIdRef = useRef(sessionId);
 
   const applySnapshot = useCallback((next: PublishSnapshot) => {
+    if (next.sessionId !== activeSessionIdRef.current) return snapshotRef.current;
     const current = snapshotRef.current;
-    if (current && next.version < current.version) return current;
+    if (current?.sessionId === next.sessionId && next.version < current.version) return current;
+    if (current?.sessionId !== next.sessionId) {
+      snapshotRef.current = null;
+      busyRef.current.clear();
+      retryKeysRef.current.clear();
+      setBusyRows(new Set());
+    }
     snapshotRef.current = next;
     for (const delivery of next.deliveries ?? []) {
       const retryAttempt = delivery.deliveryId ? retryKeysRef.current.get(delivery.deliveryId) : undefined;
@@ -64,24 +72,31 @@ export function CompletePage() {
   const refresh = useCallback(async () => {
     const sequence = ++requestSequence.current;
     const next = await getPublishSnapshot(sessionId);
-    if (sequence !== requestSequence.current) return snapshotRef.current;
+    if (sequence !== requestSequence.current || sessionId !== activeSessionIdRef.current || next.sessionId !== sessionId) return snapshotRef.current;
     return applySnapshot(next);
   }, [applySnapshot, sessionId]);
 
   useEffect(() => {
     let active = true;
+    requestSequence.current += 1;
+    activeSessionIdRef.current = sessionId;
+    snapshotRef.current = null;
+    busyRef.current.clear();
+    retryKeysRef.current.clear();
     Promise.allSettled([getPublishSnapshot(sessionId), listParticipants()]).then(([snapshotResult, participantResult]) => {
       if (!active) return;
       if (snapshotResult.status === 'fulfilled') applySnapshot(snapshotResult.value);
       else setError(snapshotResult.reason instanceof PublishApiError && snapshotResult.reason.status === 404
         ? '회의를 찾을 수 없습니다.' : '회의 결과를 불러오지 못했습니다. 다시 시도해 주세요.');
       if (participantResult.status === 'fulfilled') setParticipants(participantResult.value);
+      else setParticipants([]);
       setLoadedSessionId(sessionId);
     });
     return () => { active = false; };
   }, [applySnapshot, sessionId]);
 
-  const hasPending = Boolean(snapshot?.deliveries?.some(({ status }) => status === 'PENDING' || status === 'SENDING'));
+  const viewSnapshot = snapshot?.sessionId === sessionId ? snapshot : null;
+  const hasPending = Boolean(viewSnapshot?.deliveries?.some(({ status }) => status === 'PENDING' || status === 'SENDING'));
   const loading = loadedSessionId !== sessionId || reloadLoading;
   useEffect(() => {
     if (!hasPending && busyRows.size === 0) return;
@@ -143,12 +158,12 @@ export function CompletePage() {
   }
 
   if (loading) return <main className="share-page"><p role="status">회의 결과를 불러오는 중…</p></main>;
-  if (!snapshot) return <main className="share-page"><h1>회의 결과</h1><p role="alert">{error || '회의 결과를 불러오지 못했습니다.'}</p><button type="button" className="button button-secondary" onClick={() => { setReloadLoading(true); setError(''); void refresh().catch(() => setError('회의 결과를 불러오지 못했습니다. 다시 시도해 주세요.')).finally(() => setReloadLoading(false)); }}>다시 시도</button></main>;
+  if (!viewSnapshot) return <main className="share-page"><h1>회의 결과</h1><p role="alert">{error || '회의 결과를 불러오지 못했습니다.'}</p><button type="button" className="button button-secondary" onClick={() => { setReloadLoading(true); setError(''); void refresh().catch(() => setError('회의 결과를 불러오지 못했습니다. 다시 시도해 주세요.')).finally(() => setReloadLoading(false)); }}>다시 시도</button></main>;
 
   const people = new Map(participants.map((participant) => [participant.id, participant]));
-  const emailRows = (snapshot.deliveries ?? []).filter((delivery) => delivery.channel === 'EMAIL');
-  const notificationRows = (snapshot.deliveries ?? []).filter((delivery) => delivery.channel === 'NOTIFICATION');
-  const documentUrl = safeDocumentUrl(snapshot.document?.documentUrl);
+  const emailRows = (viewSnapshot.deliveries ?? []).filter((delivery) => delivery.channel === 'EMAIL');
+  const notificationRows = (viewSnapshot.deliveries ?? []).filter((delivery) => delivery.channel === 'NOTIFICATION');
+  const documentUrl = safeDocumentUrl(viewSnapshot.document?.documentUrl);
   const rows = (items: PublishDelivery[], kind: 'email' | 'notification') => items.map((delivery, index) => {
     const key = delivery.deliveryId ?? `${kind}-${index}`;
     const recipient = delivery.recipientParticipantId ? people.get(delivery.recipientParticipantId) : undefined;
@@ -169,8 +184,8 @@ export function CompletePage() {
   return <main className="share-page complete-page">
     <header className="topbar"><Link className="brand" to="/" aria-label="Meeting Automation 홈">M</Link><div><p className="eyebrow">MEETING AUTOMATION</p><h1>회의 결과</h1></div></header>
     <section className="share-result-card" aria-labelledby="complete-summary" aria-live="polite">
-      <h2 id="complete-summary">{summaryLabel(snapshot)}</h2>
-      <p>{snapshot.document ? '문서 저장 완료' : '문서 저장 결과를 확인할 수 없습니다.'}</p>
+      <h2 id="complete-summary">{summaryLabel(viewSnapshot)}</h2>
+      <p>{viewSnapshot.document ? '문서 저장 완료' : '문서 저장 결과를 확인할 수 없습니다.'}</p>
       {documentUrl ? <a href={documentUrl} target="_blank" rel="noopener noreferrer">저장된 회의록 열기<span className="visually-hidden"> (새 탭)</span></a>
         : <p>문서 링크를 확인할 수 없습니다.</p>}
     </section>

@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { MemoryRouter, Route, Routes } from 'react-router';
+import { MemoryRouter, Route, Routes, useNavigate } from 'react-router';
 import { CompletePage } from './CompletePage';
 
 function response(data: unknown, status = 200): Response {
@@ -14,6 +14,11 @@ function renderComplete(fetchMock: ReturnType<typeof vi.fn>) {
   return render(<MemoryRouter initialEntries={['/meetings/s1/complete']}>
     <Routes><Route path="/meetings/:sessionId/complete" element={<CompletePage />} /></Routes>
   </MemoryRouter>);
+}
+
+function SwitchToOtherSession() {
+  const navigate = useNavigate();
+  return <button type="button" onClick={() => navigate('/meetings/session-B/complete')}>다른 회의 열기</button>;
 }
 
 describe('CompletePage', () => {
@@ -134,5 +139,37 @@ describe('CompletePage', () => {
     const retryCalls = fetchMock.mock.calls.filter(([url]) => String(url).includes('/deliveries/d4/retry')) as unknown as [RequestInfo | URL, RequestInit][];
     expect(retryCalls).toHaveLength(2);
     expect(new Headers(retryCalls[0][1].headers).get('Idempotency-Key')).toBe(new Headers(retryCalls[1][1].headers).get('Idempotency-Key'));
+  }, 8_000);
+
+  it('resets API-010 version state on session navigation and retries only the destination session delivery', async () => {
+    let sessionBReads = 0;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const path = new URL(String(input)).pathname;
+      if (path.endsWith('/participants')) return response({ items: [] });
+      if (path.endsWith('/deliveries/dB/retry')) return response({ deliveryId: 'dB', status: 'PENDING' }, 202);
+      if (path.endsWith('/meeting-sessions/session-A')) return response({ sessionId: 'session-A', version: 40, status: 'DOCUMENT_SAVED', allowedActions: [],
+        document: { documentId: 'docA' }, deliveries: [{ deliveryId: 'dA', channel: 'EMAIL', recipientParticipantId: 'recipient-A', status: 'FAILED', retryable: true }] });
+      if (path.endsWith('/meeting-sessions/session-B')) {
+        sessionBReads += 1;
+        return response({ sessionId: 'session-B', version: sessionBReads === 1 ? 1 : 2, status: 'DOCUMENT_SAVED', allowedActions: [],
+          document: { documentId: 'docB' }, deliveries: [{ deliveryId: 'dB', channel: 'EMAIL', recipientParticipantId: 'recipient-B', status: sessionBReads === 1 ? 'FAILED' : 'PENDING', retryable: sessionBReads === 1 }] });
+      }
+      throw new Error(`Unexpected request: ${path}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<MemoryRouter initialEntries={['/meetings/session-A/complete']}><Routes>
+      <Route path="/meetings/:sessionId/complete" element={<><CompletePage /><SwitchToOtherSession /></>} />
+    </Routes></MemoryRouter>);
+
+    expect(await screen.findByRole('button', { name: /Retry.*recipient-A/ })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '다른 회의 열기' }));
+    expect(await screen.findByRole('button', { name: /Retry.*recipient-B/ })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Retry.*recipient-A/ })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /Retry.*recipient-B/ }));
+    await waitFor(() => expect(screen.queryByRole('button', { name: /Retry.*recipient-B/ })).toBeNull());
+
+    const retryRequest = fetchMock.mock.calls.find(([url]) => String(url).includes('/deliveries/dB/retry')) as unknown as [RequestInfo | URL, RequestInit];
+    expect(String(retryRequest[0])).toContain('/meeting-sessions/session-B/deliveries/dB/retry');
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/session-A/deliveries/'))).toBe(false);
   }, 8_000);
 });

@@ -37,7 +37,7 @@ Frontend unit/component/API mock tests로 summary selector, Delivery row eligibi
 
 ## 구현 검증 결과 (2026-10-14)
 
-- `frontend`에서 `npm run test -- --run src/CompletePage.test.tsx src/publishApi.test.ts src/SharePage.test.tsx`: 3개 test files, 34 tests passed.
+- `frontend`에서 `npm run test -- --run src/CompletePage.test.tsx src/publishApi.test.ts src/SharePage.test.tsx`: 3개 test files, 35 tests passed. A(version 40)→B(version 1) 세션 전환과 B Delivery 재시도 경로도 검증했다.
 - `frontend`에서 `npx eslint src/CompletePage.tsx src/CompletePage.test.tsx src/publishApi.ts src/publishApi.test.ts src/App.tsx src/SharePage.tsx`: 통과.
 - `frontend`에서 `npm run build`: `tsc -b` 및 Vite production build 통과.
 - `git diff --check`: 통과. 별도 local service/Browser QA는 실행하지 않았다.
