@@ -501,6 +501,7 @@ describe('Participants settings', () => {
     installFetchMock(fetchMock);
     renderParticipantsApp();
     expect((await screen.findByRole('alert')).textContent).toMatch(/불러오지 못했습니다/);
+    expect(screen.getByRole('heading', { name: '참석자 목록을 불러오지 못했습니다.' })).toBeTruthy();
     expect(screen.queryByText(/private provider details/)).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: '다시 시도' }));
     expect(await screen.findByText('Ada Lovelace')).toBeTruthy();

@@ -80,6 +80,29 @@ describe('Home recent meetings', () => {
 });
 
 describe('Meetings page', () => {
+  it('ASYNC-STALE / ASYNC-GET-RETRY preserves loaded meetings and retries only after the user asks', async () => {
+    const fetchMock = vi.fn<(input: RequestInfo | URL) => Promise<Response>>(() => Promise.resolve(response({ data: { items: meetings.slice(0, 2) } })))
+      .mockResolvedValueOnce(response({ data: { items: meetings.slice(0, 2) } }))
+      .mockResolvedValueOnce(response({ error: { code: 'PROVIDER_FAILURE', message: 'token=private-provider-secret' } }, 502))
+      .mockResolvedValueOnce(response({ data: { items: meetings.slice(0, 3) } }));
+    vi.stubGlobal('fetch', fetchMock);
+    render(<MemoryRouter initialEntries={['/meetings']}><Routes><Route path="/meetings" element={<MeetingsPage />} /></Routes></MemoryRouter>);
+
+    expect(await screen.findByRole('link', { name: /Meeting 1/i })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '회의 목록 새로고침' }));
+
+    expect(await screen.findByRole('status')).toBeTruthy();
+    expect(screen.getByRole('link', { name: /Meeting 1/i })).toBeTruthy();
+    expect(screen.getByRole('link', { name: /Meeting 2/i })).toBeTruthy();
+    expect(screen.getByText('새로고침하지 못했습니다. 기존 내용을 유지합니다.')).toBeTruthy();
+    expect(document.body.textContent).not.toContain('private-provider-secret');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    fireEvent.click(screen.getByRole('button', { name: '다시 시도' }));
+    expect(await screen.findByRole('link', { name: /Meeting 3/i })).toBeTruthy();
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
   it('deduplicates StrictMode effect replay by query key while keeping Home and Meetings requests independent', async () => {
     const pendingResponses: Array<{ url: string; resolve: (value: Response) => void }> = [];
     const fetchMock = vi.fn<(input: RequestInfo | URL) => Promise<Response>>((input) => new Promise((resolve) => {

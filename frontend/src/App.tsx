@@ -18,6 +18,8 @@ import { CompletePage } from './CompletePage';
 import { getSetupSnapshot } from './documentSetupApi';
 import { browserMediaAdapter } from './browserMediaAdapter';
 import { RecordingController, type MediaRecorderAdapter, type RecordingSnapshot } from './recordingController';
+import { AsyncState } from './components/async-state/AsyncState';
+import { normalizeApiError } from './lib/api/normalizeApiError';
 import { ChunkRecorderAdapter } from './chunkRecorderAdapter';
 import { ChunkRepository } from './chunkRepository';
 import { getReceivedAudioStatus, putAudioChunk } from './audioUploadApi';
@@ -261,13 +263,21 @@ function ParticipantsPage() {
 
         {notice && <p className="notice" role="status">{notice}</p>}
 
-        {viewState === 'loading' && <div className="state-card loading" role="status"><span className="spinner" aria-hidden="true" />참석자 목록을 불러오는 중…</div>}
+        {viewState === 'loading' && <AsyncState state={{ status: 'loading', label: '참석자 목록을 불러오는 중…' }} renderReady={() => null} />}
 
-        {viewState === 'error' && <div className="state-card error-card" role="alert"><p>{listError}</p><button className="button button-secondary" type="button" onClick={() => void refreshParticipants()}>다시 시도</button></div>}
+        {viewState === 'error' && <AsyncState state={{
+          status: 'error', title: '참석자 목록을 불러오지 못했습니다.',
+          error: normalizeApiError({ error: { code: 'PARTICIPANT_LIST_FAILED' } }),
+          description: listError, onRetry: () => void refreshParticipants(), retryLabel: '다시 시도',
+        }} renderReady={() => null} />}
 
-        {viewState === 'ready' && participants.length === 0 && <div className="state-card empty-card"><div className="empty-icon" aria-hidden="true">◎</div><h3>등록된 참석자가 없습니다</h3><p>참석자를 추가하면 회의에서 선택할 수 있습니다.</p><button className="button button-primary" type="button" onClick={(event) => openCreate(event.currentTarget)}>참석자 추가</button></div>}
+        {viewState === 'ready' && participants.length === 0 && <AsyncState state={{
+          status: 'empty', title: '등록된 참석자가 없습니다.',
+          description: '참석자를 추가하면 회의에서 선택할 수 있습니다.',
+          action: <button className="button button-primary" type="button" onClick={(event) => openCreate(event.currentTarget)}>참석자 추가</button>,
+        }} renderReady={() => null} />}
 
-        {viewState === 'ready' && participants.length > 0 && <>
+        {viewState === 'ready' && participants.length > 0 && <AsyncState state={{ status: 'ready', data: participants }} renderReady={() => <>
           <label className="search-field">
             <span aria-hidden="true" className="search-icon">⌕</span>
             <span className="visually-hidden">참석자 검색</span>
@@ -285,7 +295,7 @@ function ParticipantsPage() {
               </article>)}
             </div>
           </>}
-        </>}
+        </>} />}
 
         {form && <div className="form-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !submitting) closeForm(); }}>
           <section ref={dialogRef} className="participant-form-panel" role="dialog" aria-modal="true" aria-labelledby="form-title" onKeyDown={handleDialogKeyDown} style={{ maxHeight: `calc(${viewportHeight}px - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 24px)`, overflowY: 'auto' }}>

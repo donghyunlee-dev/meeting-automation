@@ -8,6 +8,8 @@ import { ReviewTranscriptDrawer } from './ReviewTranscriptDrawer';
 import { MinutesRegenerationControl } from './MinutesRegenerationControl';
 import { getMinutesRegenerationSnapshot, type MinutesRegenerationSnapshot } from './minutesRegenerationApi';
 import { ProcessingPoller } from './processingPoller';
+import { AsyncState } from './components/async-state/AsyncState';
+import { normalizeApiError } from './lib/api/normalizeApiError';
 
 type Resource<T> = { status: 'loading' | 'ready' | 'error'; data?: T };
 type ReviewResource = Resource<Awaited<ReturnType<typeof getReviewSession>>> & { requestSessionId: string };
@@ -622,10 +624,14 @@ export function ReviewSpeakerPage({ drafts, onInitialize, onChange, onCommit, on
         <p>최신 회의 상태를 확인해 주세요.</p>
         <Link className="button button-primary" to={`/meetings/${encodeURIComponent(sessionId)}/processing`}>처리 상태 확인</Link>
       </section>}
-      {reviewHasError && (!reviewFailure || reviewFailure.sessionId !== sessionId || reviewFailure.code === 'OTHER') && <section className="review-speaker-message" role="alert">
-        <p>회의 화자 정보를 불러오지 못했습니다. 다시 시도해 주세요.</p>
-        <button className="button button-secondary" type="button" onClick={() => void loadReview()}>회의 정보 다시 불러오기</button>
-      </section>}
+      {reviewHasError && (!reviewFailure || reviewFailure.sessionId !== sessionId || reviewFailure.code === 'OTHER') && <AsyncState state={{
+        status: 'error',
+        title: '회의 화자 정보를 불러오지 못했습니다.',
+        error: normalizeApiError({ error: { code: 'REQUEST_FAILED' } }),
+        description: '회의 화자 정보를 불러오지 못했습니다. 다시 시도해 주세요.',
+        onRetry: () => void loadReview(),
+        retryLabel: '회의 정보 다시 불러오기',
+      }} renderReady={() => null} />}
 
       {currentReview && <>
         <div className="review-save-controls">
@@ -672,14 +678,19 @@ export function ReviewSpeakerPage({ drafts, onInitialize, onChange, onCommit, on
             {providerReady && <button className="button button-secondary" type="button" disabled={retryingRoster || participants.status === 'loading'} onClick={() => void loadRoster()}>참석자 목록 새로고침</button>}
           </div>
         </div>
-        {participants.status === 'loading' && <p role="status">참석자 목록을 불러오는 중입니다.</p>}
-        {participants.status === 'error' && <div className="review-speaker-message" role="alert">
-          <p>참석자 목록을 불러오지 못했습니다. 기존 선택은 유지됩니다.</p>
-          <button className="button button-secondary" type="button" disabled={retryingRoster} onClick={() => void loadRoster()}>{retryingRoster ? '불러오는 중…' : '참석자 목록 다시 불러오기'}</button>
-        </div>}
+        {participants.status === 'loading' && <AsyncState state={{ status: 'loading', label: '참석자 목록을 불러오는 중입니다.' }} renderReady={() => null} />}
+        {participants.status === 'error' && <AsyncState state={{
+          status: 'error', title: '참석자 목록을 불러오지 못했습니다.',
+          error: normalizeApiError({ error: { code: 'REQUEST_FAILED' } }),
+          description: '참석자 목록을 불러오지 못했습니다. 기존 선택은 유지됩니다.',
+          onRetry: () => void loadRoster(), retryLabel: retryingRoster ? '불러오는 중…' : '참석자 목록 다시 불러오기',
+        }} renderReady={() => null} />}
         {needsSettings && <div className="review-speaker-message" role="status"><p>문서 서비스를 연결하면 화자를 참석자와 연결할 수 있습니다.</p><Link className="button button-primary" to="/settings" state={{ from: location.pathname }}>문서 설정 열기</Link></div>}
         {config.status === 'error' && <div className="review-speaker-message" role="alert"><p>문서 연결 상태를 확인할 수 없습니다. 기존 선택은 유지됩니다.</p><button className="button button-secondary" type="button" onClick={() => void loadConfig()}>설정 상태 다시 확인</button></div>}
-        {participants.status === 'ready' && participants.data?.length === 0 && <div className="review-speaker-message" role="status"><p>선택할 참석자가 없습니다. 참석자를 먼저 추가해 주세요.</p><Link className="button button-secondary" to="/settings/participants" state={{ from: location.pathname }}>참석자 관리</Link></div>}
+        {participants.status === 'ready' && participants.data?.length === 0 && <AsyncState state={{
+          status: 'empty', title: '선택할 참석자가 없습니다.', description: '참석자를 먼저 추가해 주세요.',
+          action: <Link className="button button-secondary" to="/settings/participants" state={{ from: location.pathname }}>참석자 관리</Link>,
+        }} renderReady={() => null} />}
         {currentReview.speakers.length === 0 && <p role="status">감지된 화자가 없습니다.</p>}
         <div className="review-speaker-list">
           {currentReview.speakers.map((speaker) => {

@@ -1,5 +1,7 @@
 ﻿import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router';
+import { AsyncState } from './components/async-state/AsyncState';
+import { normalizeApiError } from './lib/api/normalizeApiError';
 import { getMeetingDetail, MeetingDetailApiError, type MeetingDetail } from './meetingDetailApi';
 
 function formatDate(value: string): string {
@@ -107,14 +109,15 @@ export function MeetingDetailPage() {
   const currentStatus = result.documentId === documentId ? result.status : 'loading';
   const detail = result.documentId === documentId ? result.detail ?? null : null;
   const error = result.documentId === documentId ? result.error ?? null : null;
-  if (currentStatus === 'loading') return <main className="meeting-detail-page"><div className="state-card loading" role="status"><span className="spinner" aria-hidden="true" />회의 상세를 불러오는 중…</div></main>;
-  if (error?.code === 'MEETING_NOT_FOUND') return <main className="meeting-detail-page"><section className="state-card empty-card"><h1>회의 기록을 찾을 수 없습니다.</h1><p>삭제되었거나 더 이상 접근할 수 없는 회의입니다.</p><Link className="button button-secondary" to="/meetings">회의록 목록으로</Link></section></main>;
-  if (error || !detail) return <main className="meeting-detail-page"><section className="state-card error-card" role="alert"><p>회의 상세를 불러오지 못했습니다. 연결을 확인한 뒤 다시 시도해 주세요.</p><button className="button button-secondary" type="button" onClick={() => { setResult({ documentId, status: 'loading' }); setAttempt((value) => value + 1); }}>다시 시도</button><Link to="/meetings">회의록 목록으로</Link></section></main>;
+  if (currentStatus === 'loading') return <main className="meeting-detail-page"><AsyncState state={{ status: 'loading', label: '회의 상세를 불러오는 중…' }} renderReady={() => null} /></main>;
+  if (error?.safe.kind === 'not-found') return <main className="meeting-detail-page"><AsyncState state={{ status: 'error', title: '회의 기록을 찾을 수 없습니다.', error: error.safe, description: '삭제되었거나 더 이상 접근할 수 없는 회의입니다.', action: <Link className="button button-secondary" to="/meetings">회의록 목록으로</Link> }} renderReady={() => null} /></main>;
+  if (error || !detail) return <main className="meeting-detail-page"><AsyncState state={{ status: 'error', title: '회의 상세를 불러오지 못했습니다.', error: error?.safe ?? normalizeApiError(null), onRetry: () => { setResult({ documentId, status: 'loading' }); setAttempt((value) => value + 1); }, action: <Link to="/meetings">회의록 목록으로</Link> }} renderReady={() => null} /></main>;
 
-  const externalUrl = safeExternalUrl(detail.documentUrl);
-  const participantNames = new Map(detail.participants.map(({ id, name }) => [id, name]));
-  const minutes = detail.minutes;
-  return (
+  return <AsyncState state={{ status: 'ready', data: detail }} renderReady={(detail) => {
+    const externalUrl = safeExternalUrl(detail.documentUrl);
+    const participantNames = new Map(detail.participants.map(({ id, name }) => [id, name]));
+    const minutes = detail.minutes;
+    return (
     <main className="meeting-detail-page">
       <Link className="meeting-detail-back" to="/meetings">← 회의록 목록</Link>
       <header className="meeting-detail-heading"><p className="eyebrow">MEETING HISTORY</p><h1>{detail.title}</h1><p>{formatDate(detail.meetingAt)}</p><p>{detail.participants.length ? detail.participants.map(({ name }) => name).join(', ') : '참석자 정보 없음'}</p></header>
@@ -127,5 +130,6 @@ export function MeetingDetailPage() {
       <div className="meeting-detail-actions"><button ref={transcriptTrigger} className="button button-secondary" type="button" onClick={() => setShowTranscript(true)}>Transcript 보기</button>{externalUrl && <a className="button button-primary" href={externalUrl} target="_blank" rel="noopener noreferrer">Notion/Confluence에서 열기</a>}</div>
       {showTranscript && <TranscriptDrawer detail={detail} onClose={closeTranscript} />}
     </main>
-  );
+    );
+  }} />;
 }

@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link } from 'react-router';
+import { AsyncState } from './components/async-state/AsyncState';
+import { normalizeApiError } from './lib/api/normalizeApiError';
 import type { Participant } from './participantsApi';
 import { MeetingParticipantSelector } from './MeetingParticipantSelector';
 import {
@@ -30,6 +32,7 @@ const QUERY_MESSAGES = {
   templates: 'Template 목록을 불러오지 못했습니다. 다시 시도해 주세요.',
   participants: '참석자 목록을 불러오지 못했습니다. 다시 시도해 주세요.',
 };
+const SAFE_QUERY_ERROR = normalizeApiError({ error: { code: 'REQUEST_FAILED' } });
 
 export function NewMeetingPage({ onSubmit }: { onSubmit: (attempt: MeetingSessionAttempt) => void | Promise<void> }) {
   const [config, setConfig] = useState<Resource<DocumentAppConfig>>({ status: 'loading' });
@@ -207,17 +210,21 @@ export function NewMeetingPage({ onSubmit }: { onSubmit: (attempt: MeetingSessio
 
         <section className="meeting-resource" aria-labelledby="timezone-label">
           <h2 id="timezone-label">회사 시간대</h2>
-          {config.status === 'loading' && <p className="meeting-query-state" role="status">회사 시간대를 불러오는 중…</p>}
-          {config.status === 'error' && <div className="meeting-query-error" role="alert"><p>{QUERY_MESSAGES.config}</p><button className="button button-secondary" type="button" onClick={() => void loadConfig()} disabled={configLoading}>회사 시간대 다시 시도</button></div>}
-          {config.status === 'ready' && <p className="meeting-timezone">{config.data.company.timezone}</p>}
+          {config.status === 'loading' && !config.data && <AsyncState state={{ status: 'loading', label: '회사 시간대를 불러오는 중…' }} renderReady={() => null} />}
+          {config.status === 'error' && (config.data
+            ? <AsyncState state={{ status: 'ready', data: config.data, warning: SAFE_QUERY_ERROR, onRetry: () => void loadConfig(), retryLabel: '회사 시간대 다시 시도' }} renderReady={() => null} />
+            : <AsyncState state={{ status: 'error', title: '회사 시간대 조회에 실패했습니다.', error: SAFE_QUERY_ERROR, description: QUERY_MESSAGES.config, onRetry: () => void loadConfig(), retryLabel: '회사 시간대 다시 시도' }} renderReady={() => null} />)}
+          {config.data && <p className="meeting-timezone">{config.data.company.timezone}</p>}
           {config.status === 'ready' && (config.data.setup?.status !== 'READY' || !config.data.setup.canCreateMeeting) && <p className="meeting-query-error" role="alert">Document connection setup or switching must finish before a meeting can start. <Link to="/setup/document">Open document settings</Link></p>}
         </section>
 
         <div className="meeting-field">
           <label htmlFor="meeting-template">Template</label>
-          {templates.status === 'loading' && <p className="meeting-query-state" role="status">Template 목록을 불러오는 중…</p>}
-          {templates.status === 'error' && <div className="meeting-query-error" role="alert"><p>{QUERY_MESSAGES.templates}</p><button className="button button-secondary" type="button" onClick={() => void loadTemplates()} disabled={templatesLoading}>Template 목록 다시 시도</button></div>}
-          {templates.status === 'ready' && availableTemplates.length === 0 && <p className="meeting-empty-state">사용 가능한 Template이 없습니다. 나중에 다시 시도해 주세요.</p>}
+          {templates.status === 'loading' && !templates.data && <AsyncState state={{ status: 'loading', label: 'Template 목록을 불러오는 중…' }} renderReady={() => null} />}
+          {templates.status === 'error' && (templates.data
+            ? <AsyncState state={{ status: 'ready', data: templates.data, warning: SAFE_QUERY_ERROR, onRetry: () => void loadTemplates(), retryLabel: 'Template 목록 다시 시도' }} renderReady={() => null} />
+            : <AsyncState state={{ status: 'error', title: 'Template 목록 조회에 실패했습니다.', error: SAFE_QUERY_ERROR, description: QUERY_MESSAGES.templates, onRetry: () => void loadTemplates(), retryLabel: 'Template 목록 다시 시도' }} renderReady={() => null} />)}
+          {templates.status === 'ready' && availableTemplates.length === 0 && <AsyncState state={{ status: 'empty', title: '사용 가능한 Template이 없습니다.', description: '나중에 다시 확인해 주세요.' }} renderReady={() => null} />}
           <select id="meeting-template" value={templateId} onChange={(event) => setTemplateId(event.target.value)} disabled={templates.status !== 'ready' || availableTemplates.length === 0} aria-invalid={templateError} aria-describedby={templateError ? 'meeting-template-error' : undefined}>
             <option value="">Template 선택</option>
             {availableTemplates.map((template) => <option value={template.id} key={template.id}>{template.name}</option>)}
@@ -227,9 +234,11 @@ export function NewMeetingPage({ onSubmit }: { onSubmit: (attempt: MeetingSessio
 
         <section className="meeting-field participant-selection" aria-labelledby="participant-label">
           <h2 id="participant-label">참석자</h2>
-          {participants.status === 'loading' && <p className="meeting-query-state" role="status">참석자 목록을 불러오는 중…</p>}
-          {participants.status === 'error' && <div className="meeting-query-error" role="alert"><p>{QUERY_MESSAGES.participants}</p><button className="button button-secondary" type="button" onClick={() => void loadParticipants()} disabled={participantsLoading}>참석자 목록 다시 시도</button></div>}
-          {participants.status === 'ready' && availableParticipants.length === 0 && <p className="meeting-empty-state">참석자가 없습니다. <Link to="/settings/participants">참석자 관리에서 목록을 준비해 주세요.</Link></p>}
+          {participants.status === 'loading' && !participants.data && <AsyncState state={{ status: 'loading', label: '참석자 목록을 불러오는 중…' }} renderReady={() => null} />}
+          {participants.status === 'error' && (participants.data
+            ? <AsyncState state={{ status: 'ready', data: participants.data, warning: SAFE_QUERY_ERROR, onRetry: () => void loadParticipants(), retryLabel: '참석자 목록 다시 시도' }} renderReady={() => null} />
+            : <AsyncState state={{ status: 'error', title: '참석자 목록을 불러오지 못했습니다.', error: SAFE_QUERY_ERROR, description: QUERY_MESSAGES.participants, onRetry: () => void loadParticipants(), retryLabel: '참석자 목록 다시 시도' }} renderReady={() => null} />)}
+          {participants.status === 'ready' && availableParticipants.length === 0 && <AsyncState state={{ status: 'empty', title: '참석자가 없습니다.', action: <Link to="/settings/participants">참석자 관리에서 목록을 준비해 주세요.</Link> }} renderReady={() => null} />}
 
           <MeetingParticipantSelector
             participants={availableParticipants}

@@ -4,6 +4,8 @@ import { getDocumentAppConfig, listMeetingParticipants, type DocumentAppConfig }
 import type { Participant } from './participantsApi';
 import { PublishApiError, confirmReview, createIdempotencyKey, getPublishSnapshot, publishSession, type PublishSnapshot, type ValidationIssue } from './publishApi';
 import type { ReviewSession } from './reviewApi';
+import { AsyncState } from './components/async-state/AsyncState';
+import { normalizeApiError } from './lib/api/normalizeApiError';
 
 type Resource<T> = { status: 'loading' | 'ready' | 'error'; data?: T };
 type RouteState = {
@@ -339,9 +341,13 @@ export function SharePage() {
   return <main className="share-page">
     <header className="review-speaker-heading"><p className="eyebrow">SHARE</p><h1>회의록 공유</h1>
       <p>Review를 확인한 뒤 문서 저장과 공유를 시작합니다.</p></header>
-    {config.status === 'loading' && <p role="status">문서 설정을 확인하고 있습니다.</p>}
-    {config.status === 'error' && <section className="review-speaker-message" role="alert"><p>문서 설정을 확인하지 못했습니다.</p>
-      <button className="button button-secondary" type="button" onClick={loadResources}>설정 다시 확인</button></section>}
+    {config.status === 'loading' && <AsyncState state={{ status: 'loading', label: '문서 설정을 확인하고 있습니다.' }} renderReady={() => null} />}
+    {config.status === 'error' && <AsyncState state={{
+      status: 'error', title: '문서 설정을 확인하지 못했습니다.',
+      error: normalizeApiError({ error: { code: 'REQUEST_FAILED' } }),
+      description: '문서 설정을 확인하지 못했습니다. 기존 설정은 유지됩니다.',
+      onRetry: loadResources, retryLabel: '설정 다시 확인',
+    }} renderReady={() => null} />}
     {config.status === 'ready' && !providerReady && <section className="review-speaker-message" role="status">
       <h2>문서 서비스를 연결해 주세요</h2><p>문서 저장을 위해 Settings에서 사용할 서비스를 설정해야 합니다.</p>
       <Link className="button button-primary" to="/settings" state={providerSettingsState}>문서 설정 열기</Link>
@@ -350,8 +356,13 @@ export function SharePage() {
       <h2>문서 저장</h2><p>{providerLabel(config.data?.document?.provider)}</p>
       <p>{config.data?.document?.rootUrl ?? '연결 준비 완료'}</p><p>문서 서비스가 준비되었습니다.</p>
     </section>}
-    {participants.status === 'loading' && <p role="status">참석자 정보를 불러오는 중입니다. 회의 roster는 유지됩니다.</p>}
-    {participants.status === 'error' && <section role="alert"><p>참석자 목록을 불러오지 못했습니다. 기존 선택은 유지됩니다.</p><button type="button" onClick={loadResources}>참석자 다시 불러오기</button></section>}
+    {participants.status === 'loading' && <AsyncState state={{ status: 'loading', label: '참석자 정보를 불러오는 중입니다. 회의 roster는 유지됩니다.' }} renderReady={() => null} />}
+    {participants.status === 'error' && <AsyncState state={{
+      status: 'error', title: '참석자 목록을 불러오지 못했습니다.',
+      error: normalizeApiError({ error: { code: 'REQUEST_FAILED' } }),
+      description: '기존 선택은 유지됩니다.',
+      onRetry: loadResources, retryLabel: '참석자 다시 불러오기',
+    }} renderReady={() => null} />}
     {rosterIds.length > 0 && <fieldset className="share-channel-card" disabled={busy}>
       <legend>Email 수신자</legend>
       {rosterIds.map((participantId) => {

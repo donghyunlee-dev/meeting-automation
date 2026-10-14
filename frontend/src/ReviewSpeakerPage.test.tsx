@@ -128,6 +128,30 @@ describe('Review minutes and transcript', () => {
     vi.unstubAllGlobals();
   });
 
+  it('ASYNC-GET-RETRY uses the shared safe error state and retries only the review GET', async () => {
+    let fail = true;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = new URL(String(input)).pathname;
+      if (path.endsWith('/meeting-sessions/review-minutes') && init?.method !== 'PUT') {
+        if (fail) throw new Error('private provider diagnostic');
+        return apiResponse({ data: reviewData });
+      }
+      if (path.endsWith('/templates')) return apiResponse({ data: { items: [{ id: 'weekly', name: 'Weekly', version: '4' }] } });
+      if (path.endsWith('/app-config')) return apiResponse({ data: { company: { id: 'c1', name: 'Example', timezone: 'UTC' }, document: { provider: 'NOTION', configured: true, connectionVersion: 1 } } });
+      if (path.endsWith('/participants')) return apiResponse({ data: { items: [{ id: 'p1', name: 'Ada', email: 'private@example.test' }] } });
+      throw new Error(`Unexpected request: ${path}`);
+    });
+    renderReview(fetchMock);
+
+    expect(await screen.findByRole('alert')).toBeTruthy();
+    expect(screen.getByRole('heading', { name: '회의 화자 정보를 불러오지 못했습니다.' })).toBeTruthy();
+    expect(document.body.textContent).not.toContain('private provider diagnostic');
+    fail = false;
+    fireEvent.click(screen.getByRole('button', { name: '회의 정보 다시 불러오기' }));
+    expect(await screen.findByText('현재 요약')).toBeTruthy();
+    expect(fetchMock.mock.calls.filter(([input, init]) => new URL(String(input)).pathname.endsWith('/meeting-sessions/review-minutes') && init?.method === 'PUT')).toHaveLength(0);
+  });
+
   it('keeps the Share action disabled while a speaker mapping draft is unsaved', async () => {
     renderReview(mockApiFetch(), { drafts: { 'review-minutes': { 'speaker-a': null } } });
 
