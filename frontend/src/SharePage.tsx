@@ -104,6 +104,16 @@ export function SharePage() {
   const documentUrl = safeDocumentUrl(snapshot?.document?.documentUrl);
   const documentSaved = Boolean(snapshot?.document?.documentId);
   const retryAllowed = snapshot?.status === 'DOCUMENT_FAILED' && snapshot.allowedActions.includes('PUBLISH');
+  const carriedMappingDirty = Boolean(snapshot?.status === 'REVIEW' && carriedState.speakerDrafts
+    && Object.entries(carriedState.speakerDrafts).some(([speakerId, participantId]) => {
+      const currentSpeaker = snapshot.review?.speakers.find((speaker) => speaker.speakerId === speakerId);
+      return !currentSpeaker || currentSpeaker.participantId !== (participantId ?? null);
+    }));
+  const carriedMinutesDirty = Boolean(snapshot?.status === 'REVIEW' && Object.prototype.hasOwnProperty.call(carriedState, 'minutesDraft')
+    && JSON.stringify(carriedState.minutesDraft) !== JSON.stringify(snapshot.review?.minutes));
+  const carriedReviewIsStale = Boolean(snapshot?.status === 'REVIEW' && carriedState.review
+    && (carriedState.review.version !== snapshot.review?.version || carriedState.review.sessionId !== snapshot.sessionId));
+  const shareBlockedByDraft = snapshot?.status === 'REVIEW' && (!snapshot.review || carriedMappingDirty || carriedMinutesDirty || carriedReviewIsStale);
 
   const acceptSnapshot = useCallback((next: PublishSnapshot) => {
     if (next.sessionId !== sessionId) return false;
@@ -237,7 +247,7 @@ export function SharePage() {
   }
 
   async function submit() {
-    if (busy || confirmInFlight.current || !providerReady || !snapshot) return;
+    if (busy || confirmInFlight.current || !providerReady || !snapshot || shareBlockedByDraft) return;
     if (snapshot.status !== 'REVIEW' || !snapshot.allowedActions.includes('CONFIRM')) return;
     confirmInFlight.current = true;
     setBusy(true);
@@ -280,7 +290,7 @@ export function SharePage() {
   }
 
   const providerSettingsState = { returnTo: location.pathname, returnState: settingsState };
-  const canSubmit = providerReady && snapshot?.status === 'REVIEW' && snapshot.allowedActions.includes('CONFIRM') && !busy;
+  const canSubmit = providerReady && snapshot?.status === 'REVIEW' && snapshot.allowedActions.includes('CONFIRM') && !shareBlockedByDraft && !busy;
 
   return <main className="share-page">
     <header className="review-speaker-heading"><p className="eyebrow">SHARE</p><h1>회의록 공유</h1>
@@ -338,6 +348,10 @@ export function SharePage() {
     {snapshot?.status === 'CONFIRMED' && snapshot.allowedActions.includes('PUBLISH') && <section className="review-speaker-message" role="status">
       <p>Review 확인이 완료되었습니다. Publish 요청 결과를 API-010에서 확인했습니다.</p>
       <button className="button button-primary" type="button" disabled={busy} onClick={() => void retryConfirmedPublish()}>문서 저장을 시도</button>
+    </section>}
+    {shareBlockedByDraft && <section className="review-speaker-message" role="alert" aria-live="assertive">
+      <p>화자 매핑 또는 회의록을 저장한 뒤 공유하세요.</p>
+      <Link className="button button-secondary" to={reviewPath} state={settingsState}>Review에서 변경사항 저장하기</Link>
     </section>}
     <div className="share-actions">
       <button className="button button-primary" type="button" disabled={!canSubmit} onClick={() => void submit()}>

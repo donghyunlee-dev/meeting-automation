@@ -64,6 +64,21 @@ describe('publish API', () => {
     });
   });
 
+  it('retains current Review mappings and Minutes from API-010 for the Share dirty-draft guard', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => response({
+      sessionId: 'session-1', version: 13, status: 'REVIEW', meeting: { participantIds: ['p1'] },
+      speakers: [{ speakerId: 'speaker-a', label: 'Speaker A', participantId: 'p1' }], transcript: [],
+      minutes: { templateId: 'weekly', templateVersion: '3', summary: 'Server minutes', discussionPoints: [], decisions: [], actionItems: [], followUps: [] },
+      allowedActions: ['CONFIRM'],
+    })));
+
+    const snapshot = await getPublishSnapshot('session-1');
+
+    expect(snapshot.review?.speakers).toEqual([{ speakerId: 'speaker-a', label: 'Speaker A', participantId: 'p1' }]);
+    expect(snapshot.review?.minutes?.summary).toBe('Server minutes');
+    expect(snapshot.version).toBe(snapshot.review?.version);
+  });
+
   it('marks a network-lost confirm response as uncertain for API-010 reconciliation', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('private transport detail'); }));
 

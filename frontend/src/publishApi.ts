@@ -1,3 +1,5 @@
+import { parseReviewSessionData, type ReviewSession } from './reviewApi';
+
 export type PublishStatus = 'REVIEW' | 'CONFIRMED' | 'PUBLISHING' | 'DOCUMENT_SAVED' | 'DELIVERING'
   | 'COMPLETED' | 'COMPLETED_WITH_WARNINGS' | 'DOCUMENT_FAILED' | 'PROCESSING_FAILED';
 export type ValidationIssue = { path: string; code: string };
@@ -6,6 +8,7 @@ export type PublishSnapshot = {
   version: number;
   status: PublishStatus;
   allowedActions: string[];
+  review?: ReviewSession;
   document?: { documentId?: string; documentUrl?: string | null };
 };
 
@@ -111,11 +114,13 @@ export async function getPublishSnapshot(sessionId: string, signal?: AbortSignal
       ...(typeof documentRaw.documentUrl === 'string' || documentRaw.documentUrl === null
         ? { documentUrl: documentRaw.documentUrl as string | null } : {}),
     } : undefined;
+    const review = raw.status === 'REVIEW' ? parseReviewSessionData(raw, sessionId, response.status) : undefined;
     return {
       sessionId,
       version: raw.version,
       status: raw.status as PublishStatus,
       allowedActions: Array.isArray(raw.allowedActions) ? raw.allowedActions.filter((action): action is string => typeof action === 'string') : [],
+      ...(review ? { review } : {}),
       ...(document ? { document } : {}),
     };
   } catch {
