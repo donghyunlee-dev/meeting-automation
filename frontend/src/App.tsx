@@ -28,6 +28,7 @@ import { ProcessingPage } from './ProcessingPage';
 import { ReviewSpeakerPage } from './ReviewSpeakerPage';
 import type { ReviewSpeaker, StructuredMinutes } from './reviewApi';
 import type { MinutesSaveState } from './ReviewMinutesEditor';
+import { HomePage, MeetingsPage } from './MeetingHistory';
 
 type ViewState = 'loading' | 'ready' | 'error';
 type FormState = { mode: 'create' } | { mode: 'edit'; participant: Participant };
@@ -298,22 +299,6 @@ function ParticipantsPage() {
           </section>
         </div>}
       </section>
-    </main>
-  );
-}
-
-function HomePage() {
-  return (
-    <main className="home-page">
-      <div className="home-content">
-        <p className="eyebrow">MEETING AUTOMATION</p>
-        <h1>Meeting Automation</h1>
-        <div className="home-message">
-          <h2>회의를 시작할까요?</h2>
-          <p>회의 내용을 녹음하고 자동으로 정리합니다.</p>
-        </div>
-        <Link className="button button-primary home-cta" to="/meetings/new">새 회의 시작</Link>
-      </div>
     </main>
   );
 }
@@ -600,6 +585,7 @@ export function App({ onNewMeetingSubmit = () => undefined, onMinutesSave, minut
         <Route path="/setup/document" element={<DocumentSetupWizard />} />
         <Route path="/settings" element={<DocumentSetupWizard settings />} />
         <Route path="/settings/document" element={<DocumentSetupWizard settings />} />
+        <Route path="/meetings" element={<MeetingsPage />} />
         <Route path="/meetings/new" element={<SetupGate><NewMeetingRoute onCreated={(session) => { setCreatedSession(session); saveRecordingSession(session); setRecordingState('Ready'); }} onSubmitted={onNewMeetingSubmit} /></SetupGate>} />
         <Route path="/meetings/:sessionId/recording" element={<MeetingRecordingRoute session={createdSession} setState={setRecordingState} mediaAdapter={mediaAdapter} />} />
         <Route path="/meetings/:sessionId/processing" element={<ProcessingPage />} />

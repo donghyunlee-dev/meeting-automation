@@ -18,14 +18,12 @@
 | SCR009-STATUS-OMISSION | Meeting item을 Home/Meetings에 렌더링 | 상태/진행/완료/활성 badge 없음 | DOM assertion |
 | SCR001-SCR009-A11Y | 키보드 tab 및 accessibility query | CTA, 전체 보기, retry에 접근 가능한 이름과 focus | component/a11y assertions |
 
-## 수동 QA
+## User handoff (not a development gate)
 
-- 모바일 폭 360 CSS px에서 Home과 Meetings 목록을 열어 가로 overflow가 없는지 확인한다.
-- Home 5개와 전체 목록 최대 100개를 비교해 API 순서가 유지되는지 확인한다.
-- 새 회의 시작 및 Bottom Navigation이 기존 route 동작을 유지하는지 확인한다.
-- API 오류 시 Secret, Provider 원문, 이메일 주소가 안내 문구에 노출되지 않는지 확인한다.
+- After local setup, the user verifies meeting creation, processing, review/save/share, and the Home and `/meetings` lists.
+- Real Provider accounts, microphone/device, meeting-room use, and manual 360px viewport checks remain user validation; they are not completion evidence for this task.
 
 ## 릴리스 확인
 
 - 프로젝트 정의 FE unit/component/router tests와 lint/build를 실행하고 Evidence 문서에 결과를 남긴다.
-- 실제 API로 개발 환경 smoke check를 하되 민감 회의 내용이나 계정 Secret을 캡처에 포함하지 않는다.
+- Real API, Provider, and device smoke checks happen after handoff. Development gates are fixture-based focused tests, lint/build, exact-head review, and applicable CI.
