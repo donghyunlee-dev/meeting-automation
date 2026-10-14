@@ -33,6 +33,137 @@ function renderShare(fetchMock: ReturnType<typeof vi.fn>, state: Record<string, 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 describe('Share page', () => {
+  it('limits email recipients to API-010 roster IDs and excludes extra API-003 records', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const path = new URL(String(input)).pathname;
+      if (path.endsWith('/app-config')) return response({ company: { id: 'c1', name: 'Example', timezone: 'UTC' }, document: { provider: 'NOTION', configured: true, connectionVersion: 2 } });
+      if (path.endsWith('/participants')) return response({ items: [
+        { id: 'p1', name: 'Ada', email: 'ada@example.test' },
+        { id: 'p2', name: 'Lin', email: 'lin@example.test' },
+        { id: 'p3', name: 'Outside roster', email: 'outside@example.test' },
+      ] });
+      if (path.endsWith('/meeting-sessions/session-1')) return response({ ...reviewState });
+      throw new Error(`Unexpected request: ${path}`);
+    });
+    renderShare(fetchMock, {});
+
+    expect(await screen.findByRole('checkbox', { name: /Ada/ })).toBeTruthy();
+    expect(screen.getByRole('checkbox', { name: /Lin/ })).toBeTruthy();
+    expect(screen.queryByText('Outside roster')).toBeNull();
+    expect((screen.getByRole('checkbox', { name: /Ada/ }) as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByRole('checkbox', { name: /Lin/ }) as HTMLInputElement).checked).toBe(true);
+  });
+
+  it('keeps API-010 roster IDs selectable with ID labels when participant metadata fails', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const path = new URL(String(input)).pathname;
+      if (path.endsWith('/app-config')) return response({ company: { id: 'c1', name: 'Example', timezone: 'UTC' }, document: { provider: 'NOTION', configured: true, connectionVersion: 2 } });
+      if (path.endsWith('/participants')) return response({ error: { code: 'PARTICIPANT_LIST_FAILED' } }, 503);
+      if (path.endsWith('/meeting-sessions/session-1')) return response({ ...reviewState });
+      throw new Error(`Unexpected request: ${path}`);
+    });
+    renderShare(fetchMock, { emailRecipientParticipantIds: ['p2'] });
+
+    expect(await screen.findByRole('alert')).toBeTruthy();
+    expect(screen.getByText(/참석자 목록을 불러오지 못했습니다/)).toBeTruthy();
+    expect((screen.getByRole('checkbox', { name: 'p1' }) as HTMLInputElement).checked).toBe(false);
+    expect((screen.getByRole('checkbox', { name: 'p2' }) as HTMLInputElement).checked).toBe(true);
+  });
+
+  it('sends only selected API-010 roster IDs and notification preference from Share', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const path = new URL(String(input)).pathname;
+      if (path.endsWith('/app-config')) return response({ company: { id: 'c1', name: 'Example', timezone: 'UTC' }, document: { provider: 'NOTION', configured: true, connectionVersion: 2 } });
+      if (path.endsWith('/participants')) return response({ items: [
+        { id: 'p1', name: 'Ada', email: 'ada@example.test' },
+        { id: 'p2', name: 'Lin', email: 'lin@example.test' },
+        { id: 'p3', name: 'Outside roster', email: 'outside@example.test' },
+      ] });
+      if (path.endsWith('/confirm')) return response({ status: 'CONFIRMED', version: 6 });
+      if (path.endsWith('/publish')) return response({ sessionId: 'session-1', status: 'PUBLISHING' }, 202);
+      if (path.endsWith('/meeting-sessions/session-1')) return response({ ...reviewState });
+      throw new Error(`Unexpected request: ${path}`);
+    });
+    renderShare(fetchMock, { emailRecipientParticipantIds: ['p1', 'p3'], notificationEnabled: false });
+
+    fireEvent.click(await screen.findByRole('button', { name: '저장하고 공유' }));
+    await screen.findByText('문서 저장 중입니다. 저장 결과를 확인하고 있습니다.');
+
+    const [, init] = fetchMock.mock.calls.find(([url]) => String(url).endsWith('/publish')) as unknown as [RequestInfo | URL, RequestInit];
+    expect(JSON.parse(String(init.body))).toEqual({ emailRecipientParticipantIds: ['p1'], notificationEnabled: false });
+    expect(String(init.body)).not.toContain('ada@example.test');
+    expect(String(init.body)).not.toContain('outside@example.test');
+  });
+
+  it('preserves an explicit empty email selection through settings navigation', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const path = new URL(String(input)).pathname;
+      if (path.endsWith('/app-config')) return response({ company: { id: 'c1', name: 'Example', timezone: 'UTC' }, document: { provider: null, configured: false } });
+      if (path.endsWith('/participants')) return response({ items: [{ id: 'p1', name: 'Ada', email: 'ada@example.test' }] });
+      if (path.endsWith('/meeting-sessions/session-1')) return response({ ...reviewState });
+      throw new Error(`Unexpected request: ${path}`);
+    });
+    renderShare(fetchMock, { emailRecipientParticipantIds: [] });
+
+    expect((await screen.findByRole('checkbox', { name: /Ada/ }) as HTMLInputElement).checked).toBe(false);
+    fireEvent.click(screen.getByRole('link', { name: '문서 설정 열기' }));
+
+    const state = JSON.parse(screen.getByTestId('location-state').textContent ?? '{}');
+    expect(state.returnState.emailRecipientParticipantIds).toEqual([]);
+  });
+
+  it('shows independent email delivery states without claiming inbox delivery or offering resend', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const path = new URL(String(input)).pathname;
+      if (path.endsWith('/app-config')) return response({ company: { id: 'c1', name: 'Example', timezone: 'UTC' }, document: { provider: 'NOTION', configured: true, connectionVersion: 2 } });
+      if (path.endsWith('/participants')) return response({ items: [
+        { id: 'p1', name: 'Ada', email: 'ada@example.test' }, { id: 'p2', name: 'Lin', email: 'lin@example.test' },
+        { id: 'p3', name: 'Jo', email: 'jo@example.test' }, { id: 'p4', name: 'Noor', email: 'noor@example.test' },
+      ] });
+      if (path.endsWith('/meeting-sessions/session-1')) return response({
+        ...reviewState, meeting: { participantIds: ['p1', 'p2', 'p3', 'p4'] }, status: 'DELIVERING', version: 8, allowedActions: [],
+        deliveries: [
+          { deliveryId: 'd0', channel: 'EMAIL', recipientParticipantId: 'p3', status: 'PENDING', retryable: false },
+          { deliveryId: 'd1', channel: 'EMAIL', recipientParticipantId: 'p1', status: 'SENT', retryable: false },
+          { deliveryId: 'd2', channel: 'EMAIL', recipientParticipantId: 'p2', status: 'FAILED', retryable: true, errorCode: 'EMAIL_FAILED' },
+          { deliveryId: 'd3', channel: 'EMAIL', recipientParticipantId: 'p4', status: 'SENDING', retryable: false },
+        ],
+      });
+      throw new Error(`Unexpected request: ${path}`);
+    });
+    renderShare(fetchMock, {});
+
+    expect(await screen.findByText(/전송 요청 수락 \(SENT\)/)).toBeTruthy();
+    expect(screen.getByText(/전송 실패 \(FAILED\)/)).toBeTruthy();
+    expect(screen.getByText(/대기 중 \(PENDING\)/)).toBeTruthy();
+    expect(screen.getByText(/전송 중 \(SENDING\)/)).toBeTruthy();
+    expect(screen.getByText('나중에 재시도할 수 있습니다.')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /재전송|다시 보내기/ })).toBeNull();
+    expect(screen.queryByText(/받은편지함|수신함/)).toBeNull();
+  });
+
+  it('resumes polling when Share opens with a saved document and pending Email delivery', async () => {
+    let statusReads = 0;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const path = new URL(String(input)).pathname;
+      if (path.endsWith('/app-config')) return response({ company: { id: 'c1', name: 'Example', timezone: 'UTC' }, document: { provider: 'NOTION', configured: true, connectionVersion: 2 } });
+      if (path.endsWith('/participants')) return response({ items: [{ id: 'p2', name: 'Lin', email: 'lin@example.test' }] });
+      if (path.endsWith('/meeting-sessions/session-1')) {
+        statusReads += 1;
+        return response({ sessionId: 'session-1', version: statusReads === 1 ? 9 : 10, status: 'DOCUMENT_SAVED', allowedActions: [],
+          meeting: { participantIds: ['p2'] }, document: { documentId: 'doc-1', documentUrl: 'https://docs.example/doc-1' },
+          deliveries: [{ deliveryId: 'd1', channel: 'EMAIL', recipientParticipantId: 'p2',
+            status: statusReads === 1 ? 'PENDING' : 'SENT', retryable: false }] });
+      }
+      throw new Error(`Unexpected request: ${path}`);
+    });
+    renderShare(fetchMock, {});
+
+    expect(await screen.findByText(/대기 중 \(PENDING\)/)).toBeTruthy();
+    expect(await screen.findByText(/전송 요청 수락 \(SENT\)/, {}, { timeout: 4_000 })).toBeTruthy();
+    expect(statusReads).toBe(2);
+  });
+
   it('blocks confirmation when the Document provider is unconfigured and preserves user choices for Settings recovery', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const path = new URL(String(input)).pathname;
@@ -111,7 +242,7 @@ describe('Share page', () => {
     expect(fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/publish'))).toHaveLength(1);
   });
 
-  it('ignores a lower-version poll snapshot and keeps polling for the latest document result', async () => {
+  it('ignores stale snapshots, polls pending Email results, and stops after the latest result', async () => {
     let statusReads = 0;
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const path = new URL(String(input)).pathname;
@@ -124,7 +255,12 @@ describe('Share page', () => {
         if (statusReads === 1) return response({ ...reviewState });
         if (statusReads === 2) return response({ sessionId: 'session-1', version: 8, status: 'PUBLISHING', allowedActions: [] });
         if (statusReads === 3) return response({ sessionId: 'session-1', version: 7, status: 'PUBLISHING', allowedActions: [] });
-        return response({ sessionId: 'session-1', version: 9, status: 'DOCUMENT_SAVED', allowedActions: [], document: { documentId: 'doc-1', documentUrl: 'https://docs.example/latest' } });
+        if (statusReads === 4) return response({ sessionId: 'session-1', version: 9, status: 'DOCUMENT_SAVED', allowedActions: [],
+          document: { documentId: 'doc-1', documentUrl: 'https://docs.example/latest' }, meeting: { participantIds: ['p2'] },
+          deliveries: [{ deliveryId: 'd1', channel: 'EMAIL', recipientParticipantId: 'p2', status: 'PENDING', retryable: false }] });
+        return response({ sessionId: 'session-1', version: 10, status: 'DOCUMENT_SAVED', allowedActions: [],
+          document: { documentId: 'doc-1', documentUrl: 'https://docs.example/latest' }, meeting: { participantIds: ['p2'] },
+          deliveries: [{ deliveryId: 'd1', channel: 'EMAIL', recipientParticipantId: 'p2', status: 'SENT', retryable: false }] });
       }
       throw new Error(`Unexpected request: ${path}`);
     });
@@ -134,8 +270,10 @@ describe('Share page', () => {
 
     const documentLink = await screen.findByRole('link', { name: /저장된 회의록 열기/ }, { timeout: 4_000 });
     expect(documentLink.getAttribute('href')).toBe('https://docs.example/latest');
-    expect(statusReads).toBeGreaterThanOrEqual(4);
-  });
+    expect(await screen.findByText(/전송 요청 수락 \(SENT\)/, {}, { timeout: 4_000 })).toBeTruthy();
+    await new Promise((resolve) => setTimeout(resolve, 4_500));
+    expect(statusReads).toBe(5);
+  }, 12_000);
 
   it('does not expose a document link for an unsafe document URL', async () => {
     let statusReads = 0;

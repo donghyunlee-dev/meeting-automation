@@ -68,8 +68,14 @@ function providerLabel(provider: string | undefined): string {
   return '문서 서비스';
 }
 
-function isPending(status: PublishSnapshot['status']): boolean {
-  return status === 'PUBLISHING' || status === 'DOCUMENT_SAVED' || status === 'DELIVERING';
+function hasPendingEmailDeliveries(snapshot: PublishSnapshot): boolean {
+  return snapshot.deliveries?.some((delivery) => delivery.channel === 'EMAIL'
+    && (delivery.status === 'PENDING' || delivery.status === 'SENDING')) ?? false;
+}
+
+function isPending(snapshot: PublishSnapshot): boolean {
+  return snapshot.status === 'PUBLISHING' || snapshot.status === 'DELIVERING'
+    || (snapshot.status === 'DOCUMENT_SAVED' && hasPendingEmailDeliveries(snapshot));
 }
 
 export function SharePage() {
@@ -121,6 +127,13 @@ export function SharePage() {
     if (previous?.sessionId === next.sessionId && next.version < previous.version) return false;
     latestSnapshot.current = next;
     setSnapshot(next);
+    if (next.meeting?.participantIds) {
+      const roster = new Set(next.meeting.participantIds);
+      const hasExistingSelection = initializedRecipients.current;
+      setSelectedRecipients((current) => hasExistingSelection
+        ? current.filter((id) => roster.has(id)) : [...roster]);
+      initializedRecipients.current = true;
+    }
     return true;
   }, [sessionId]);
 
@@ -143,21 +156,21 @@ export function SharePage() {
     });
     void listMeetingParticipants().then((data) => {
       setParticipants({ status: 'ready', data });
-      if (!initializedRecipients.current) {
-        initializedRecipients.current = true;
-        setSelectedRecipients(data.map(({ id }) => id));
-      }
     }).catch(() => setParticipants((current) => ({ status: 'error', data: current.data })));
   }, []);
 
   useEffect(() => {
     loadResources();
     const controller = new AbortController();
-    void refreshStatus(controller.signal).catch(() => setMessage('회의 상태를 불러오지 못했습니다. 다시 확인해 주세요.'));
+    void refreshStatus(controller.signal).then((latest) => {
+      if (latest) setPolling(isPending(latest));
+    }).catch(() => setMessage('회의 상태를 불러오지 못했습니다. 다시 확인해 주세요.'));
     const onFocus = () => {
       if (document.visibilityState === 'hidden') return;
       loadResources();
-      void refreshStatus().catch(() => setMessage('회의 상태를 새로고침하지 못했습니다. 다시 확인해 주세요.'));
+      void refreshStatus().then((latest) => {
+        if (latest) setPolling(isPending(latest));
+      }).catch(() => setMessage('회의 상태를 새로고침하지 못했습니다. 다시 확인해 주세요.'));
     };
     window.addEventListener('focus', onFocus);
     document.addEventListener('visibilitychange', onFocus);
@@ -184,7 +197,7 @@ export function SharePage() {
           if (polling) timer = setTimeout(poll, 1000);
           return;
         }
-        if (isPending(next.status)) {
+        if (isPending(next)) {
           const delays = [1000, 2000, 4000, 8000, 10_000];
           timer = setTimeout(poll, delays[Math.min(attempts++, delays.length - 1)]);
         }
@@ -212,7 +225,9 @@ export function SharePage() {
     setBusy(true);
     setMessage('문서 저장 요청을 보내고 있습니다.');
     try {
-      await publishSession(sessionId, version, withFreshKey(), selectedRecipients, notificationEnabled);
+      const rosterIds = snapshot?.meeting?.participantIds ?? [];
+      const roster = new Set(rosterIds);
+      await publishSession(sessionId, version, withFreshKey(), selectedRecipients.filter((id) => roster.has(id)), notificationEnabled);
       setPolling(true);
       setMessage('문서 저장 중입니다. 저장 결과를 확인하고 있습니다.');
     } catch (error) {
@@ -221,7 +236,7 @@ export function SharePage() {
         setPolling(true);
       } else {
         setMessage(errorMessage(error));
-        try { const latest = await refreshStatus(); if (latest) setPolling(isPending(latest.status)); } catch { /* safe status message remains */ }
+        try { const latest = await refreshStatus(); if (latest) setPolling(isPending(latest)); } catch { /* safe status message remains */ }
       }
     } finally {
       publishInFlight.current = false;
@@ -291,6 +306,17 @@ export function SharePage() {
 
   const providerSettingsState = { returnTo: location.pathname, returnState: settingsState };
   const canSubmit = providerReady && snapshot?.status === 'REVIEW' && snapshot.allowedActions.includes('CONFIRM') && !shareBlockedByDraft && !busy;
+  const rosterIds = snapshot?.meeting?.participantIds ?? [];
+  const participantsById = new Map((participants.data ?? []).map((participant) => [participant.id, participant]));
+  const emailDeliveries = (snapshot?.deliveries ?? []).filter((delivery) => delivery.channel === 'EMAIL');
+
+  function deliveryStatusLabel(status: string): string {
+    if (status === 'PENDING') return '대기 중 (PENDING)';
+    if (status === 'SENDING') return '전송 중 (SENDING)';
+    if (status === 'SENT') return '전송 요청 수락 (SENT)';
+    if (status === 'FAILED') return '전송 실패 (FAILED)';
+    return '상태 확인 필요';
+  }
 
   return <main className="share-page">
     <header className="review-speaker-heading"><p className="eyebrow">SHARE</p><h1>회의록 공유</h1>
@@ -306,17 +332,23 @@ export function SharePage() {
       <h2>문서 저장</h2><p>{providerLabel(config.data?.document?.provider)}</p>
       <p>{config.data?.document?.rootUrl ?? '연결 준비 완료'}</p><p>문서 서비스가 준비되었습니다.</p>
     </section>}
-    {participants.status === 'loading' && <p role="status">참석자 목록을 불러오는 중입니다.</p>}
-    {participants.status === 'error' && <section role="alert"><p>참석자 목록을 불러오지 못했습니다.</p><button type="button" onClick={loadResources}>참석자 다시 불러오기</button></section>}
-    {participants.status === 'ready' && <fieldset className="share-channel-card" disabled={busy}>
+    {participants.status === 'loading' && <p role="status">참석자 정보를 불러오는 중입니다. 회의 roster는 유지됩니다.</p>}
+    {participants.status === 'error' && <section role="alert"><p>참석자 목록을 불러오지 못했습니다. 기존 선택은 유지됩니다.</p><button type="button" onClick={loadResources}>참석자 다시 불러오기</button></section>}
+    {rosterIds.length > 0 && <fieldset className="share-channel-card" disabled={busy}>
       <legend>Email 수신자</legend>
-      {participants.data?.length ? participants.data.map((participant) => <label className="share-recipient" key={participant.id}>
-        <input type="checkbox" checked={selectedRecipients.includes(participant.id)}
+      {rosterIds.map((participantId) => {
+        const participant = participantsById.get(participantId);
+        const label = participant?.name || participantId;
+        return <label className="share-recipient" key={participantId}>
+        <input type="checkbox" aria-label={participant ? `${participant.name} ${participant.email}` : participantId}
+          checked={selectedRecipients.includes(participantId)}
           onChange={(event) => setSelectedRecipients((current) => event.target.checked
-            ? [...current, participant.id] : current.filter((id) => id !== participant.id))} />
-        <span>{participant.name}<small>{participant.email}</small></span>
-      </label>) : <p role="status">Email 수신자를 선택할 수 없습니다.</p>}
+            ? [...current, participantId] : current.filter((id) => id !== participantId))} />
+        <span>{label}{participant?.email && <small>{participant.email}</small>}</span>
+      </label>;
+      })}
     </fieldset>}
+    {snapshot && rosterIds.length === 0 && <p role="status">회의 참석자 roster 정보를 확인할 수 없습니다. Email 수신자를 선택할 수 없습니다.</p>}
     <fieldset className="share-channel-card" disabled={busy}><legend>Notification</legend>
       <label className="share-recipient"><input type="checkbox" aria-label="Slack 알림 사용" checked={notificationEnabled}
         onChange={(event) => setNotificationEnabled(event.target.checked)} /><span>Slack 알림 사용</span></label>
@@ -335,8 +367,23 @@ export function SharePage() {
       <h2>문서 저장 완료</h2>
       {documentUrl ? <a href={documentUrl} target="_blank" rel="noopener noreferrer">저장된 회의록 열기<span className="visually-hidden"> (새 탭)</span></a>
         : <p role="status">문서 저장은 완료되었습니다. 문서 링크를 확인할 수 없어 상태를 새로고침해 주세요.</p>}
-      {['DELIVERING', 'DOCUMENT_SAVED'].includes(snapshot?.status ?? '') && <p role="status">선택한 공유 채널의 전달 상태를 확인하고 있습니다.</p>}
+      {(snapshot?.status === 'DELIVERING' || (snapshot?.status === 'DOCUMENT_SAVED' && hasPendingEmailDeliveries(snapshot)))
+        && <p role="status">선택한 공유 채널의 전달 상태를 확인하고 있습니다.</p>}
       {(snapshot?.status === 'COMPLETED' || snapshot?.status === 'COMPLETED_WITH_WARNINGS') && <p role="status">문서 저장이 완료되었습니다. 채널별 결과는 상태 확인에서 갱신됩니다.</p>}
+    </section>}
+    {emailDeliveries.length > 0 && <section className="share-result-card" aria-label="Email 전달 결과" role="status" aria-live="polite">
+      <h2>Email 전달 결과</h2>
+      <ul>{emailDeliveries.map((delivery, index) => {
+        const participantId = delivery.recipientParticipantId;
+        const participant = participantId ? participantsById.get(participantId) : undefined;
+        const recipientLabel = participant?.name || participantId || '참석자';
+        return <li key={delivery.deliveryId ?? `${participantId ?? 'email'}-${index}`}>
+          <span>{recipientLabel}: {deliveryStatusLabel(delivery.status)}</span>
+          {delivery.status === 'SENT' && <p>Email 서비스가 전송 요청을 수락했습니다.</p>}
+          {delivery.status === 'FAILED' && delivery.errorCode && <p>오류 코드: {delivery.errorCode}</p>}
+          {delivery.status === 'FAILED' && delivery.retryable === true && <p>나중에 재시도할 수 있습니다.</p>}
+        </li>;
+      })}</ul>
     </section>}
     {snapshot?.status === 'DOCUMENT_FAILED' && <section className="review-speaker-message" role="alert">
       <h2>문서를 저장하지 못했습니다</h2><p>문서 설정을 확인한 뒤 최신 상태에서 다시 시도해 주세요.</p>
@@ -358,7 +405,7 @@ export function SharePage() {
         {busy ? '처리 중…' : '저장하고 공유'}
       </button>
       <button className="button button-secondary" type="button" disabled={busy} onClick={() => {
-        void refreshStatus().then((latest) => { if (latest) setPolling(isPending(latest.status)); })
+        void refreshStatus().then((latest) => { if (latest) setPolling(isPending(latest)); })
           .catch((error) => setMessage(errorMessage(error)));
       }}>회의 상태 새로고침</button>
       <Link className="button button-secondary" to={reviewPath} state={settingsState}>Review로 돌아가기</Link>

@@ -23,11 +23,13 @@ public record MeetingSessionStatusResponse(Data data) {
             StructuredMinutes minutes,
             List<String> allowedActions,
             @JsonInclude(JsonInclude.Include.NON_NULL) LastOperation lastOperation,
-            @JsonInclude(JsonInclude.Include.NON_NULL) Document document) {
+            @JsonInclude(JsonInclude.Include.NON_NULL) Document document,
+            @JsonInclude(JsonInclude.Include.NON_NULL) List<Delivery> deliveries) {
         public Data {
             speakers = List.copyOf(speakers);
             transcript = List.copyOf(transcript);
             allowedActions = List.copyOf(allowedActions);
+            if (deliveries != null) deliveries = List.copyOf(deliveries);
         }
     }
 
@@ -35,6 +37,11 @@ public record MeetingSessionStatusResponse(Data data) {
             @JsonInclude(JsonInclude.Include.NON_NULL) String errorCode) { }
 
     public record Document(String documentId, String documentUrl) { }
+
+    public record Delivery(String deliveryId, String channel, String recipientParticipantId, String status,
+            int attemptCount, boolean retryable,
+            @JsonInclude(JsonInclude.Include.NON_NULL) Instant lastAttemptAt,
+            @JsonInclude(JsonInclude.Include.NON_NULL) String errorCode) { }
 
     public record Meeting(List<String> participantIds) {
         public Meeting {
@@ -98,9 +105,15 @@ public record MeetingSessionStatusResponse(Data data) {
                 && publishSnapshot.document() != null
                         ? new Document(publishSnapshot.document().documentId(), publishSnapshot.document().documentUrl())
                         : null;
+        List<Delivery> deliveries = publishSnapshot == null || "DOCUMENT_FAILED".equals(session.status()) ? null
+                : publishSnapshot.deliveries().stream()
+                .map(delivery -> new Delivery(delivery.deliveryId(), delivery.channel(),
+                        delivery.recipientParticipantId(), delivery.status(), delivery.attemptCount(),
+                        delivery.retryable(), delivery.lastAttemptAt(), delivery.errorCode()))
+                .toList();
         return new MeetingSessionStatusResponse(new Data(session.sessionId(), session.version(), session.status(),
                 new Meeting(session.meeting().participantIds()), processing, speakers, transcript, minutes,
-                allowedActions, reviewReady ? lastOperation : null, document));
+                allowedActions, reviewReady ? lastOperation : null, document, deliveries));
     }
 }
 

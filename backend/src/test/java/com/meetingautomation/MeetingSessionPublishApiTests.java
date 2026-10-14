@@ -2,6 +2,10 @@ package com.meetingautomation;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -17,6 +21,7 @@ import com.meetingautomation.document.ProviderHealth;
 import com.meetingautomation.document.MeetingDocumentRef;
 import com.meetingautomation.document.DocumentStructureProvider;
 import com.meetingautomation.document.Participant;
+import com.meetingautomation.document.ParticipantListingProvider;
 import com.meetingautomation.document.StructuredMinutes;
 import com.meetingautomation.document.TranscriptSegment;
 import com.meetingautomation.document.transfer.DocumentTransferPort;
@@ -25,6 +30,9 @@ import com.meetingautomation.document.transfer.TransferManifest;
 import com.meetingautomation.document.transfer.TransferCodec;
 import com.meetingautomation.document.settings.DocumentProviderFactory;
 import com.meetingautomation.document.settings.GlobalSettingsStore;
+import com.meetingautomation.email.EmailProvider;
+import com.meetingautomation.email.MeetingEmailCommand;
+import com.meetingautomation.email.RecipientDeliveryResult;
 import java.time.LocalDate;
 import java.time.Instant;
 import java.util.List;
@@ -64,6 +72,7 @@ class MeetingSessionPublishApiTests {
     @Autowired private DocumentConnectionGate gate;
 
     @MockitoBean private DocumentProviderFactory providerFactory;
+    @MockitoBean private EmailProvider emailProvider;
 
     @BeforeEach
     void saveConfirmedSessionAndResetQueue() {
@@ -71,6 +80,11 @@ class MeetingSessionPublishApiTests {
         workerExecutor.reset();
         FakePublishProvider.PUBLISH_CALLS.set(0);
         when(providerFactory.create(any())).thenReturn(new FakePublishProvider());
+        when(emailProvider.sendMeetingEmail(any())).thenAnswer(invocation -> {
+            MeetingEmailCommand command = invocation.getArgument(0);
+            return command.recipients().stream().map(recipient ->
+                    RecipientDeliveryResult.sent(recipient.participantId())).toList();
+        });
         sessionStore.save(new MeetingSession(SESSION_ID, 7, "CONFIRMED", 1,
                 new MeetingSession.Meeting("Planning", "default.md", "1.0.0", List.of("pt_ada", "pt_grace"),
                         "Asia/Seoul", List.of(new MeetingSession.ParticipantReference("pt_ada", "Ada"),
@@ -88,6 +102,8 @@ class MeetingSessionPublishApiTests {
     void validPublishReturns202AndAtomicallyQueuesOneWorkerForSameKeyReplay() throws Exception {
         mockMvc.perform(get(SESSION_URL, SESSION_ID)).andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.document").doesNotExist())
+                .andExpect(jsonPath("$.data.meeting.participantIds[0]").value("pt_ada"))
+                .andExpect(jsonPath("$.data.deliveries").doesNotExist())
                 .andExpect(jsonPath("$.data.publish").doesNotExist());
         String first = mockMvc.perform(publish(SESSION_ID, "7", "publish-once", REQUEST))
                 .andExpect(status().isAccepted())
@@ -115,16 +131,128 @@ class MeetingSessionPublishApiTests {
         workerExecutor.drain();
         assertThat(FakePublishProvider.PUBLISH_CALLS.get()).isEqualTo(1);
         assertThat(sessionStore.find(SESSION_ID).orElseThrow().status()).isEqualTo("DOCUMENT_SAVED");
+        assertThat(sessionStore.find(SESSION_ID).orElseThrow().version()).isEqualTo(11);
         assertThat(sessionStore.findPublishSnapshot(SESSION_ID).document().documentId()).isEqualTo("doc_publish");
         assertThat(sessionStore.findPublishSnapshot(SESSION_ID).recipients()).containsExactly("pt_ada");
         assertThat(sessionStore.findPublishSnapshot(SESSION_ID).notificationEnabled()).isTrue();
+        org.mockito.ArgumentCaptor<MeetingEmailCommand> emailCommand =
+                org.mockito.ArgumentCaptor.forClass(MeetingEmailCommand.class);
+        verify(emailProvider).sendMeetingEmail(emailCommand.capture());
+        assertThat(emailCommand.getValue().subject()).isEqualTo("Meeting minutes: Planning");
+        assertThat(emailCommand.getValue().textBody()).isEqualTo("Summary\n\nhttps://docs.example/doc_publish");
+        assertThat(emailCommand.getValue().documentUrl()).isEqualTo("https://docs.example/doc_publish");
+        assertThat(emailCommand.getValue().recipients()).containsExactly(
+                new MeetingEmailCommand.Recipient("pt_ada", "ada@example.com"));
         mockMvc.perform(get(SESSION_URL, SESSION_ID)).andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.document.documentId").value("doc_publish"))
                 .andExpect(jsonPath("$.data.document.documentUrl").value("https://docs.example/doc_publish"))
+                .andExpect(jsonPath("$.data.deliveries[0].channel").value("EMAIL"))
+                .andExpect(jsonPath("$.data.deliveries[0].recipientParticipantId").value("pt_ada"))
+                .andExpect(jsonPath("$.data.deliveries[0].status").value("SENT"))
+                .andExpect(jsonPath("$.data.deliveries[0].retryable").value(false))
+                .andExpect(jsonPath("$.data.deliveries[0].email").doesNotExist())
+                .andExpect(jsonPath("$.data.deliveries[0].providerMessageId").doesNotExist())
                 .andExpect(jsonPath("$.data.publish").doesNotExist());
         try (var switchLease = gate.beginSwitch(globalSettingsStore.read().version())) {
             assertThat(switchLease).isNotNull();
         }
+    }
+
+    @Test
+    void emptyRecipientSelectionSavesDocumentWithoutCallingEmailProvider() throws Exception {
+        mockMvc.perform(publish(SESSION_ID, "7", "publish-empty-email",
+                        "{\"emailRecipientParticipantIds\":[],\"notificationEnabled\":false}"))
+                .andExpect(status().isAccepted());
+        workerExecutor.drain();
+
+        verify(emailProvider, never()).sendMeetingEmail(any());
+        assertThat(sessionStore.find(SESSION_ID).orElseThrow().status()).isEqualTo("DOCUMENT_SAVED");
+        assertThat(sessionStore.find(SESSION_ID).orElseThrow().version()).isEqualTo(9);
+        assertThat(sessionStore.findPublishSnapshot(SESSION_ID).recipients()).isEmpty();
+        mockMvc.perform(get(SESSION_URL, SESSION_ID)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.document.documentId").value("doc_publish"))
+                .andExpect(jsonPath("$.data.deliveries").isArray())
+                .andExpect(jsonPath("$.data.deliveries").isEmpty());
+    }
+
+    @Test
+    void participantLookupFailureKeepsDocumentSavedAndDoesNotCountAnEmailAttempt() throws Exception {
+        when(providerFactory.create(any())).thenReturn(new FakePublishProvider(false, true));
+        mockMvc.perform(publish(SESSION_ID, "7", "publish-list-error", REQUEST)).andExpect(status().isAccepted());
+
+        workerExecutor.drain();
+
+        verify(emailProvider, never()).sendMeetingEmail(any());
+        assertThat(sessionStore.find(SESSION_ID).orElseThrow().status()).isEqualTo("DOCUMENT_SAVED");
+        assertThat(sessionStore.find(SESSION_ID).orElseThrow().version()).isEqualTo(10);
+        mockMvc.perform(get(SESSION_URL, SESSION_ID)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.document.documentId").value("doc_publish"))
+                .andExpect(jsonPath("$.data.deliveries[0].status").value("FAILED"))
+                .andExpect(jsonPath("$.data.deliveries[0].attemptCount").value(0))
+                .andExpect(jsonPath("$.data.deliveries[0].retryable").value(true))
+                .andExpect(jsonPath("$.data.deliveries[0].errorCode").value("EMAIL_FAILED"));
+    }
+
+    @Test
+    void ambiguousEmailProviderExceptionIsNotMarkedSafeToRetry() throws Exception {
+        doThrow(new IllegalStateException("provider timeout detail")).when(emailProvider).sendMeetingEmail(any());
+        mockMvc.perform(publish(SESSION_ID, "7", "publish-email-ambiguous", REQUEST)).andExpect(status().isAccepted());
+
+        workerExecutor.drain();
+
+        assertThat(sessionStore.find(SESSION_ID).orElseThrow().status()).isEqualTo("DOCUMENT_SAVED");
+        assertThat(sessionStore.find(SESSION_ID).orElseThrow().version()).isEqualTo(11);
+        String response = mockMvc.perform(get(SESSION_URL, SESSION_ID)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.deliveries[0].status").value("FAILED"))
+                .andExpect(jsonPath("$.data.deliveries[0].retryable").value(false))
+                .andExpect(jsonPath("$.data.deliveries[0].errorCode").value("EMAIL_FAILED"))
+                .andReturn().getResponse().getContentAsString();
+        assertThat(response).doesNotContain("provider timeout detail");
+    }
+
+    @Test
+    void mixedEmailResultsRemainIndependentAndDoNotExposeAddressesInStatus() throws Exception {
+        doAnswer(invocation -> {
+            MeetingEmailCommand command = invocation.getArgument(0);
+            return command.recipients().stream().map(recipient -> recipient.participantId().equals("pt_ada")
+                    ? RecipientDeliveryResult.sent(recipient.participantId())
+                    : RecipientDeliveryResult.failed(recipient.participantId(), true)).toList();
+        }).when(emailProvider).sendMeetingEmail(any());
+        mockMvc.perform(publish(SESSION_ID, "7", "publish-email-mixed",
+                        "{\"emailRecipientParticipantIds\":[\"pt_ada\",\"pt_grace\"],\"notificationEnabled\":false}"))
+                .andExpect(status().isAccepted());
+
+        workerExecutor.drain();
+
+        String response = mockMvc.perform(get(SESSION_URL, SESSION_ID)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.deliveries[0].recipientParticipantId").value("pt_ada"))
+                .andExpect(jsonPath("$.data.deliveries[0].status").value("SENT"))
+                .andExpect(jsonPath("$.data.deliveries[1].recipientParticipantId").value("pt_grace"))
+                .andExpect(jsonPath("$.data.deliveries[1].status").value("FAILED"))
+                .andExpect(jsonPath("$.data.deliveries[1].retryable").value(true))
+                .andReturn().getResponse().getContentAsString();
+        assertThat(response).doesNotContain("ada@example.com", "grace@example.com");
+    }
+
+    @Test
+    void missingRecipientEmailFailsOnlyThatRecipientWithoutCallingProviderForIt() throws Exception {
+        when(providerFactory.create(any())).thenReturn(new FakePublishProvider(false, false, "pt_ada"));
+        mockMvc.perform(publish(SESSION_ID, "7", "publish-email-missing-address",
+                        "{\"emailRecipientParticipantIds\":[\"pt_ada\",\"pt_grace\"],\"notificationEnabled\":false}"))
+                .andExpect(status().isAccepted());
+
+        workerExecutor.drain();
+
+        org.mockito.ArgumentCaptor<MeetingEmailCommand> command = org.mockito.ArgumentCaptor.forClass(MeetingEmailCommand.class);
+        verify(emailProvider).sendMeetingEmail(command.capture());
+        assertThat(command.getValue().recipients()).containsExactly(
+                new MeetingEmailCommand.Recipient("pt_grace", "grace@example.com"));
+        mockMvc.perform(get(SESSION_URL, SESSION_ID)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.deliveries[0].status").value("FAILED"))
+                .andExpect(jsonPath("$.data.deliveries[0].attemptCount").value(0))
+                .andExpect(jsonPath("$.data.deliveries[0].retryable").value(true))
+                .andExpect(jsonPath("$.data.deliveries[1].status").value("SENT"))
+                .andExpect(jsonPath("$.data.deliveries[1].attemptCount").value(1));
     }
 
     @Test
@@ -221,6 +349,7 @@ class MeetingSessionPublishApiTests {
         mockMvc.perform(get(SESSION_URL, SESSION_ID)).andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.allowedActions[0]").value("PUBLISH"))
                 .andExpect(jsonPath("$.data.document").doesNotExist())
+                .andExpect(jsonPath("$.data.deliveries").doesNotExist())
                 .andExpect(jsonPath("$.data.publish").doesNotExist());
         assertThat(mockMvc.perform(publish(SESSION_ID, "7", "publish-fail-first", REQUEST))
                 .andExpect(status().isAccepted()).andReturn().getResponse().getContentAsString()).isEqualTo(first);
@@ -284,13 +413,32 @@ class MeetingSessionPublishApiTests {
         void drain() { Runnable task; while ((task = queued.poll()) != null) task.run(); }
     }
 
-    static final class FakePublishProvider implements DocumentStructureProvider, DocumentTransferPort {
+    static final class FakePublishProvider implements ParticipantListingProvider, DocumentTransferPort {
         private static final java.util.concurrent.atomic.AtomicInteger PUBLISH_CALLS = new java.util.concurrent.atomic.AtomicInteger();
         private final boolean fail;
-        FakePublishProvider() { this(false); }
-        FakePublishProvider(boolean fail) { this.fail = fail; }
+        private final boolean failParticipantList;
+        private final String missingEmailParticipantId;
+        FakePublishProvider() { this(false, false, null); }
+        FakePublishProvider(boolean fail) { this(fail, false, null); }
+        FakePublishProvider(boolean fail, boolean failParticipantList) {
+            this(fail, failParticipantList, null);
+        }
+        FakePublishProvider(boolean fail, boolean failParticipantList, String missingEmailParticipantId) {
+            this.fail = fail;
+            this.failParticipantList = failParticipantList;
+            this.missingEmailParticipantId = missingEmailParticipantId;
+        }
         @Override public ProviderHealth validateConnection() { return null; }
         @Override public DocumentStructure discoverStructure(String rootId) { return null; }
+        @Override public DocumentStructure discoverParticipantStructure(String rootId) {
+            return new DocumentStructure(rootId, "meetings", "participants");
+        }
+        @Override public List<Participant> listParticipants(String participantsPageId) {
+            assertThat(participantsPageId).isEqualTo("participants");
+            if (failParticipantList) throw com.meetingautomation.document.DocumentProviderException.participantListFailed(true);
+            return List.of(new Participant("pt_ada", "Ada", "pt_ada".equals(missingEmailParticipantId) ? null : "ada@example.com"),
+                    new Participant("pt_grace", "Grace", "grace@example.com"));
+        }
         @Override public TransferManifest readManifest() { return new TransferManifest("sha256:" + "0".repeat(64), List.of(), List.of()); }
         @Override public TransferRecord exportMeeting(String sourceDocumentId) { return null; }
         @Override public Participant importParticipant(TransferRecord record, String sourceConnectionFingerprint) { return null; }

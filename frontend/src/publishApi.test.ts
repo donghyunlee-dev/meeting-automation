@@ -55,12 +55,32 @@ describe('publish API', () => {
   it('reads full publish status and document reference from API-010', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => response({
       sessionId: 'session-1', version: 13, status: 'DELIVERING', allowedActions: [],
+      meeting: { participantIds: ['p1', 'p2'] },
+      deliveries: [
+        { deliveryId: 'd1', channel: 'EMAIL', recipientParticipantId: 'p1', status: 'SENT', retryable: false },
+        { deliveryId: 'd2', channel: 'EMAIL', recipientParticipantId: 'p2', status: 'FAILED', retryable: true, errorCode: 'EMAIL_FAILED' },
+      ],
       document: { documentId: 'doc-1', documentUrl: 'https://docs.example/doc-1' },
     })));
 
     await expect(getPublishSnapshot('session-1', new AbortController().signal)).resolves.toEqual({
       sessionId: 'session-1', version: 13, status: 'DELIVERING', allowedActions: [],
+      meeting: { participantIds: ['p1', 'p2'] },
+      deliveries: [
+        { deliveryId: 'd1', channel: 'EMAIL', recipientParticipantId: 'p1', status: 'SENT', retryable: false },
+        { deliveryId: 'd2', channel: 'EMAIL', recipientParticipantId: 'p2', status: 'FAILED', retryable: true, errorCode: 'EMAIL_FAILED' },
+      ],
       document: { documentId: 'doc-1', documentUrl: 'https://docs.example/doc-1' },
+    });
+  });
+
+  it('accepts older API-010 snapshots without optional recipient fields', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => response({
+      sessionId: 'session-1', version: 13, status: 'DELIVERING', allowedActions: [],
+    })));
+
+    await expect(getPublishSnapshot('session-1')).resolves.toMatchObject({
+      sessionId: 'session-1', version: 13, status: 'DELIVERING', allowedActions: [],
     });
   });
 
