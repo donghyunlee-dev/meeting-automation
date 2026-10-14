@@ -4,7 +4,7 @@
 
 ## 자동화 검증
 
-구현 시 Java 21/Gradle JUnit 5 및 Backend wrapper에 정의된 명령을 사용한다. 현재 설계 workspace에는 Backend 소스/build wrapper가 없으므로 구현 단계에서 실제 명령을 확인해 Issue에 기록한다. Provider 요청은 fake로 대체하며 실 Email/Slack 전송을 하지 않는다.
+Java 25와 Backend Gradle Wrapper의 JUnit 5를 사용한다. 변경 코드와 직접 영향이 있는 테스트만 `./gradlew.bat test --tests <changed test FQCN> [--tests <affected caller test FQCN> ...]`로 실행하고, 전체 Backend suite는 실행하지 않는다. 별도 컴파일 확인이 필요하면 선택 테스트를 다시 실행하는 대신 `compileJava` 또는 `compileTestJava`를 사용한다. Provider 요청은 fake로 대체하며 실제 Email/Slack 전송을 하지 않는다.
 
 | ID | 준비 및 입력 | 기대 결과 | 증거 |
 |---|---|---|---|

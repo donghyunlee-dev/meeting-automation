@@ -26,4 +26,4 @@
 
 - [ ] 정상/실패/mixed channel/중복 key/동시 요청을 포함한 Backend 테스트 증거를 기록한다.
 - [ ] API-016은 선택한 단일 row만 재시도하고 Email·Slack 다른 row와 Document 결과는 유지되는지 확인한다.
-- [ ] Java 21/Gradle의 실제 Backend 명령과 Issue #50 증거를 기록한다.
+- [ ] Java 25/Gradle Wrapper로 변경 및 직접 영향 테스트만 `test --tests <FQCN>` 선택 실행하고, 실제 명령과 Issue #50 증거를 기록한다. 전체 Backend 테스트 suite는 실행하지 않는다.

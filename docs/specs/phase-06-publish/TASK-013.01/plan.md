@@ -30,7 +30,7 @@ Retry endpoint는 기존 Delivery 상태를 재사용하고 중복 Provider 부�
 5. API-016 response/error envelope 및 API-010 조회를 연결한다. 결과: 202는 PENDING 접수만 뜻하고 현재 상태는 API-010에서 읽는다.
 6. Pre-send correctable rejection, explicit 429와 ambiguous send 5xx/timeout의 `retryable` 분류 테스트를 Provider contract에 맞춘다.
 7. privacy/secret redaction 및 process-memory 경계를 검증한다. 결과: 주소, OAuth/Slack secret, 원문 오류가 Delivery에 남지 않는다.
-8. Backend Java 21/Gradle 검증 명령과 결과를 Issue #50에 기록한다. 저장소 구현 경로에서 실제 명령을 확인하고 임의 명령을 만들지 않는다.
+8. Java 25와 Gradle Wrapper로 변경 코드 및 직접 영향 범위의 JUnit 테스트만 실행하고, 정확한 `./gradlew.bat test --tests <changed test FQCN> [--tests <affected caller test FQCN> ...]` 명령과 결과를 Issue #50에 기록한다. 전체 Backend 테스트 suite는 실행하지 않는다.
 
 ## 오류 및 상태 응답
 
