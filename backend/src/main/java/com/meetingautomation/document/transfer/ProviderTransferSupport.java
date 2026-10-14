@@ -22,6 +22,31 @@ public abstract class ProviderTransferSupport implements DocumentTransferPort {
         return new TransferManifest(fingerprint, participants, meetings.stream().map(m -> new TransferManifest.Entry(m.sourceDocumentId(), m.sourceRevision(), codec.canonicalDigest(m),
                 m.marker().transfer() == null ? codec.transferKey(fingerprint, m.sourceDocumentId()) : m.marker().transfer().transferKey(), m.marker().externalSessionId(), m.marker().participantIds())).toList());
     }
+    @Override public List<TransferRecord> listMeetingRecords() {
+        DocumentStructure structure = structure();
+        Set<String> participantIds = new HashSet<>();
+        Set<String> meetingIds = new HashSet<>();
+        Set<String> sessions = new HashSet<>();
+        Set<String> keys = new HashSet<>();
+        for (String id : children(structure.participantsPageId())) {
+            if (id == null || !participantIds.add(id)) throw invalid();
+            TransferRecord participant = read(id);
+            if (participant == null || participant.participant() == null) throw invalid();
+            validateTransfer(participant, keys);
+        }
+        List<TransferRecord> meetings = new ArrayList<>();
+        for (String id : children(structure.meetingsPageId())) {
+            if (id == null || participantIds.contains(id)) throw invalid();
+            if (!meetingIds.add(id)) continue;
+            TransferRecord meeting = read(id);
+            if (meeting == null || meeting.participant() != null || meeting.marker() == null
+                    || !sessions.add(meeting.marker().externalSessionId())) throw invalid();
+            TransferPageCodec.validateReferences(meeting, participantIds);
+            validateTransfer(meeting, keys);
+            meetings.add(meeting);
+        }
+        return List.copyOf(meetings);
+    }
     @Override public TransferRecord exportMeeting(String sourceDocumentId) { TransferRecord r = read(sourceDocumentId); if (r.participant() != null) throw invalid(); return r; }
     @Override public Participant importParticipant(TransferRecord record, String sourceConnectionFingerprint) {
         if (record.participant() == null) throw invalid(); TransferRecord target = target(record, Map.of(), sourceConnectionFingerprint);

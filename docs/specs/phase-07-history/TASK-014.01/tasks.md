@@ -4,23 +4,23 @@
 
 ## 사전 조건
 
-- Backend Java 21 / Gradle 기반 프로젝트에서 진행한다.
+- Backend는 PRD DEC-004 기준 Java 25와 Gradle Wrapper를 사용한다.
 - `TASK-002.01` 표준 DocumentProvider 계약과 선택된 Provider Adapter, `TASK-010.02` Meeting 저장 형식이 준비되어 있어야 한다.
-- 이 계획은 문서 설계 산출물이다. 구현 시 저장소에 설정된 Gradle test/build 절차와 테스트 우선 순서를 따른다.
+- 구현 테스트는 변경 및 직접 영향 코드에 한정해 `test --tests <FQCN>`으로 실행한다. 전체 Backend suite, `clean build`, 로컬 서비스 및 별도 수동 acceptance/QA는 실행하지 않는다.
 
 ## 구현 단계
 
-- [ ] API-017 service/controller 테스트를 먼저 작성한다: 기본 limit, 1/100 경계, 잘못된 형식·범위, 빈 결과, 최신순·동률 정렬, limit 적용을 검증한다. 초기 실패가 계약 차이 때문인지 확인한다.
-- [ ] Adapter 테스트를 작성한다: Provider child cursor pagination, 페이지 사이 최신 문서 선택, 중복 ID 제거, participant 이름/순서 매핑, metadata 및 페이지 오류를 검증한다.
-- [ ] Controller query 검증과 service 정렬/limit을 구현한다. 공통 응답 envelope와 표준 오류 코드를 재사용한다.
-- [ ] 선택된 Adapter의 MeetingSummary 목록 조립을 완성한다. participant roster는 요청당 한 번 조회해 ID map을 사용하고, 필수 데이터 오류는 표준 Provider 오류로 변환한다.
-- [ ] HTTP 통합 테스트를 작성/연결해 정상·빈 목록·Provider 실패의 200/200/502 계약과 민감 데이터 비노출을 확인한다.
-- [ ] Backend 관련 단위 및 통합 테스트와 빌드를 실행하고 `docs/evidence/TASK-014.01.md`에 명령, 환경, 결과를 비민감 정보로 기록한다.
+- [x] API-017 service/controller 테스트를 먼저 작성하고 실패를 확인했다. 기본 limit, 범위 오류, 빈 결과, 최신순·동률 기준, 정렬 후 limit, ID 중복, 부분 결과 차단, 민감 데이터 비노출을 검증한다.
+- [x] TASK-022.04 문서 codec의 Adapter 계약 테스트를 재사용해 Notion/Confluence 전체 child cursor pagination 및 metadata 검증을 확인한다. history 전용 목록 operation은 반복 meeting ID를 dedupe하고 기존 strict manifest는 중복을 거부한다.
+- [x] 활성 global connection에서 선택된 Provider의 history 목록 operation으로 decoded records를 받고 metadata/roster를 조립한다. 실제 meetingAt 내림차순과 documentId 오름차순 tie-break 후 limit을 적용한다.
+- [x] API-017 Controller와 공통 `{data:{items}}` envelope, 표준 validation/provider 오류 응답을 연결했다.
+- [x] HTTP 테스트로 정상·빈 목록·Provider/필수 metadata 오류와 민감 데이터 비노출을 확인했다.
+- [x] Java 25 focused tests 44개와 `git diff --check`를 실행했다. 정확한 명령 및 범위는 [검증 계획](./test.md)에 기록했다.
 
 ## 완료 확인
 
-- 모든 단계의 테스트 결과가 [검증 계획](./test.md)에 기록되어 있다.
+- 구현 결과 및 focused 테스트 결과가 [검증 계획](./test.md)에 기록되어 있다.
 - `git diff --check` 및 변경 파일 검토가 통과한다.
 - API-017 및 Data/DocumentProvider 계약과 구현 DTO가 일치한다.
 
-- [ ] TASK-022의 후속 실제 소비자 검증을 수행하고 [검증 계획](./test.md)에 결과를 남긴다: 이 작업은 TASK-022.06에서 계약 fixture로만 검증한 실제 API-017을 연결한다. 이전된 target 문서를 조회하고 전환 전 source 목록/cache를 재사용하지 않으며 참석자 참조가 target roster와 일치하는지 실제 요청으로 검증한다.
+- TASK-022 전환 후 실제 소비자 검증은 별도 로컬 서비스/수동 acceptance를 금지하는 저장소 정책에 따라 이 focused 구현 단계에서 수행하지 않는다. 자동화 검증은 활성 connection resolver 및 두 provider의 TASK-022.04 codec pagination 계약을 확인한다.

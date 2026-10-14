@@ -43,6 +43,28 @@ class DocumentTransferAdapterTests {
         }
     }
 
+    @ParameterizedTest @ValueSource(booleans = {true, false})
+    void historyListDeduplicatesMeetingIdsAcrossPagesButStrictManifestStillRejectsThem(boolean notion) {
+        Fixture f = new Fixture(notion, 101, "duplicate-meeting");
+
+        List<TransferRecord> records = f.port.listMeetingRecords();
+
+        assertEquals(101, records.size());
+        assertEquals(1, records.stream().filter(record -> record.sourceDocumentId().equals("2000")).count());
+        assertEquals(1, f.recordReads.get("2000"));
+        assertThrows(TransferCodec.ValidationException.class, f.port::readManifest);
+        f.server.verify();
+    }
+
+    @ParameterizedTest @ValueSource(booleans = {true, false})
+    void historyListStillRejectsCrossRootIdCollisionAndInvalidRosterReference(boolean notion) {
+        for (String defect : List.of("cross-root-collision", "reference")) {
+            Fixture f = new Fixture(notion, 1, defect);
+            assertThrows(TransferCodec.ValidationException.class, f.port::listMeetingRecords, defect);
+            f.server.verify();
+        }
+    }
+
     @Test
     void notionManifestIgnoresBootstrapSentinelsInMeetingAndParticipantContainers() {
         Fixture f = new Fixture(true, 0, "bootstrap-marker");
@@ -313,6 +335,7 @@ class DocumentTransferAdapterTests {
         final boolean notion; final int count; final String defect;
         final MockRestServiceServer server; final DocumentTransferPort port; final ParticipantCreationProvider creating; final ParticipantUpdatingProvider updating;
         final Set<String> requested = new HashSet<>(); final Map<String, String> saved = new LinkedHashMap<>();
+        final Map<String, Integer> recordReads = new HashMap<>();
         String createdBody; int nextId = 9000; int creates; int mutations;
         Fixture(boolean notion, int count, String defect) {
             this.notion = notion; this.count = count; this.defect = defect;
@@ -366,6 +389,8 @@ class DocumentTransferAdapterTests {
                             String kind = id.equals("2") ? "meetings" : "participants"; requested.add(kind + ":" + start);
                             List<Object> children = new ArrayList<>();
                             for (int i = start; i < Math.min(start + 100, count); i++) children.add(child(Integer.toString((id.equals("2") ? 2000 : 1000) + i), id.equals("2") ? "Synthetic meeting" : "Ada"));
+                            if ("duplicate-meeting".equals(defect) && id.equals("2") && start == 100) children.add(child("2000", "Synthetic meeting"));
+                            if ("cross-root-collision".equals(defect) && id.equals("2") && start == 0) children.add(child("1000", "Synthetic meeting"));
                             if (notion && start == 0 && "bootstrap-marker".equals(defect)) {
                                 children.add(block("paragraph", "meeting-automation/bootstrap/qa_operation/" + (id.equals("2") ? "MEETINGS" : "PARTICIPANTS")));
                             }
@@ -432,6 +457,7 @@ class DocumentTransferAdapterTests {
             return children(ordinary(id), null);
         }
         String page(String id) {
+            if (!Set.of("1", "2", "3").contains(id)) recordReads.merge(id, 1, Integer::sum);
             if ("page".equals(defect) && id.equals("1000")) return "{}";
             String title = id.startsWith("1") ? "Ada" : "Synthetic meeting";
             if ("legacy-prefixed-participant-title".equals(defect) && id.equals("1000")) title = "Participant: Ada";
