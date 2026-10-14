@@ -73,9 +73,14 @@ function hasPendingEmailDeliveries(snapshot: PublishSnapshot): boolean {
     && (delivery.status === 'PENDING' || delivery.status === 'SENDING')) ?? false;
 }
 
+function hasPendingNotificationDelivery(snapshot: PublishSnapshot): boolean {
+  return snapshot.deliveries?.some((delivery) => delivery.channel === 'NOTIFICATION'
+    && (delivery.status === 'PENDING' || delivery.status === 'SENDING')) ?? false;
+}
+
 function isPending(snapshot: PublishSnapshot): boolean {
   return snapshot.status === 'PUBLISHING' || snapshot.status === 'DELIVERING'
-    || (snapshot.status === 'DOCUMENT_SAVED' && hasPendingEmailDeliveries(snapshot));
+    || (snapshot.status === 'DOCUMENT_SAVED' && (hasPendingEmailDeliveries(snapshot) || hasPendingNotificationDelivery(snapshot)));
 }
 
 export function SharePage() {
@@ -107,6 +112,10 @@ export function SharePage() {
   };
   const providerReady = config.status === 'ready' && Boolean(config.data?.document?.provider)
     && config.data?.document?.configured === true;
+  const notificationConfigKnown = config.status === 'ready' && config.data?.notification !== undefined;
+  const notificationConfig = config.data?.notification;
+  const notificationReady = Boolean(notificationConfig?.provider) && notificationConfig?.configured === true;
+  const notificationNeedsSetup = notificationConfigKnown && !notificationReady;
   const documentUrl = safeDocumentUrl(snapshot?.document?.documentUrl);
   const documentSaved = Boolean(snapshot?.document?.documentId);
   const retryAllowed = snapshot?.status === 'DOCUMENT_FAILED' && snapshot.allowedActions.includes('PUBLISH');
@@ -305,10 +314,12 @@ export function SharePage() {
   }
 
   const providerSettingsState = { returnTo: location.pathname, returnState: settingsState };
+  const notificationSettingsState = { returnTo: location.pathname, returnState: settingsState, section: 'notification' };
   const canSubmit = providerReady && snapshot?.status === 'REVIEW' && snapshot.allowedActions.includes('CONFIRM') && !shareBlockedByDraft && !busy;
   const rosterIds = snapshot?.meeting?.participantIds ?? [];
   const participantsById = new Map((participants.data ?? []).map((participant) => [participant.id, participant]));
   const emailDeliveries = (snapshot?.deliveries ?? []).filter((delivery) => delivery.channel === 'EMAIL');
+  const notificationDeliveries = (snapshot?.deliveries ?? []).filter((delivery) => delivery.channel === 'NOTIFICATION');
 
   function deliveryStatusLabel(status: string): string {
     if (status === 'PENDING') return '대기 중 (PENDING)';
@@ -316,6 +327,13 @@ export function SharePage() {
     if (status === 'SENT') return '전송 요청 수락 (SENT)';
     if (status === 'FAILED') return '전송 실패 (FAILED)';
     return '상태 확인 필요';
+  }
+
+  function notificationStatusLabel(status: string): string {
+    if (status === 'PENDING' || status === 'SENDING') return `Slack 알림 전송 중 (${status})`;
+    if (status === 'SENT') return 'Slack 요청 수락 (SENT)';
+    if (status === 'FAILED') return 'Slack 알림 전송 실패 (FAILED)';
+    return 'Slack 알림 상태 확인 필요';
   }
 
   return <main className="share-page">
@@ -353,6 +371,10 @@ export function SharePage() {
       <label className="share-recipient"><input type="checkbox" aria-label="Slack 알림 사용" checked={notificationEnabled}
         onChange={(event) => setNotificationEnabled(event.target.checked)} /><span>Slack 알림 사용</span></label>
     </fieldset>
+    {notificationNeedsSetup && <section className="review-speaker-message" role="status" aria-label="Slack 설정 안내">
+      <p>Slack 알림이 설정되지 않았습니다. Settings에서 연결하면 알림을 전송할 수 있습니다. 선택은 그대로 유지됩니다.</p>
+      <Link className="button button-secondary" to="/settings" state={notificationSettingsState}>Slack 설정 열기</Link>
+    </section>}
     {issues.length > 0 && <section className="review-speaker-message" role="alert" aria-live="assertive">
       <h2>Review 확인이 필요합니다</h2><ul>{issues.map((issue, index) => <li key={`${issue.path}-${index}`}>
         <Link to={{ pathname: reviewPath, hash: issueAnchor(issue, carriedState.review?.speakers) }} state={{ ...settingsState, validationIssues: issues }}>
@@ -384,6 +406,17 @@ export function SharePage() {
           {delivery.status === 'FAILED' && delivery.retryable === true && <p>나중에 재시도할 수 있습니다.</p>}
         </li>;
       })}</ul>
+    </section>}
+    {notificationDeliveries.length > 0 && <section className="share-result-card" aria-label="Slack 알림 결과" role="status" aria-live="polite">
+      <h2>Slack 알림 결과</h2>
+      <ul>{notificationDeliveries.map((delivery, index) => <li key={delivery.deliveryId ?? `notification-${index}`}>
+        <span>{notificationStatusLabel(delivery.status)}</span>
+        {delivery.status === 'SENT' && <p>Slack에서 알림 요청을 수락했습니다.</p>}
+        {delivery.status === 'FAILED' && <p>Slack 알림을 보내지 못했습니다. 원인을 확인한 뒤 설정을 확인해 주세요.</p>}
+        {delivery.status === 'FAILED' && delivery.retryable === true && <p>나중에 다시 시도할 수 있습니다.</p>}
+        {delivery.status === 'FAILED' && delivery.retryable === false && <p>다시 시도할 수 없습니다.</p>}
+        {delivery.status === 'FAILED' && delivery.errorCode && <p>오류 코드: {delivery.errorCode}</p>}
+      </li>)}</ul>
     </section>}
     {snapshot?.status === 'DOCUMENT_FAILED' && <section className="review-speaker-message" role="alert">
       <h2>문서를 저장하지 못했습니다</h2><p>문서 설정을 확인한 뒤 최신 상태에서 다시 시도해 주세요.</p>

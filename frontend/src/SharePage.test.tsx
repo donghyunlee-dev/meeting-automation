@@ -112,6 +112,56 @@ describe('Share page', () => {
     expect(state.returnState.emailRecipientParticipantIds).toEqual([]);
   });
 
+  it('shows Slack setup guidance without changing the selected notification preference', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const path = new URL(String(input)).pathname;
+      if (path.endsWith('/app-config')) return response({ company: { id: 'c1', name: 'Example', timezone: 'UTC' },
+        document: { provider: 'NOTION', configured: true, connectionVersion: 2 },
+        notification: { provider: null, configured: false } });
+      if (path.endsWith('/participants')) return response({ items: [] });
+      if (path.endsWith('/meeting-sessions/session-1')) return response({ ...reviewState });
+      throw new Error(`Unexpected request: ${path}`);
+    });
+    renderShare(fetchMock, { emailRecipientParticipantIds: ['p2'], notificationEnabled: true });
+
+    expect(await screen.findByText(/Slack 알림.*설정되지 않았습니다/)).toBeTruthy();
+    expect((screen.getByRole('checkbox', { name: 'Slack 알림 사용' }) as HTMLInputElement).checked).toBe(true);
+    fireEvent.click(screen.getByRole('link', { name: 'Slack 설정 열기' }));
+    const settings = JSON.parse(screen.getByTestId('location-state').textContent ?? '{}');
+    expect(settings.returnTo).toBe('/meetings/session-1/share');
+    expect(settings.returnState.notificationEnabled).toBe(true);
+    expect(settings.returnState.emailRecipientParticipantIds).toEqual(['p2']);
+  });
+
+  it('shows Notification deliveries independently and resumes API-010 polling without changing Email rows', async () => {
+    let statusReads = 0;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const path = new URL(String(input)).pathname;
+      if (path.endsWith('/app-config')) return response({ company: { id: 'c1', name: 'Example', timezone: 'UTC' },
+        document: { provider: 'NOTION', configured: true, connectionVersion: 2 },
+        notification: { provider: 'SLACK', configured: true } });
+      if (path.endsWith('/participants')) return response({ items: [{ id: 'p2', name: 'Lin', email: 'lin@example.test' }] });
+      if (path.endsWith('/meeting-sessions/session-1')) {
+        statusReads += 1;
+        return response({ sessionId: 'session-1', version: statusReads === 1 ? 9 : 10, status: 'DOCUMENT_SAVED', allowedActions: [],
+          meeting: { participantIds: ['p2'] }, document: { documentId: 'doc-1', documentUrl: 'https://docs.example/doc-1' },
+          deliveries: [
+            { deliveryId: 'email-1', channel: 'EMAIL', recipientParticipantId: 'p2', status: 'SENT', retryable: false },
+            { deliveryId: 'notification-1', channel: 'NOTIFICATION', status: statusReads === 1 ? 'PENDING' : 'FAILED', retryable: true, errorCode: 'NOTIFICATION_FAILED' },
+          ] });
+      }
+      throw new Error(`Unexpected request: ${path}`);
+    });
+    renderShare(fetchMock, { emailRecipientParticipantIds: ['p2'], notificationEnabled: true });
+
+    expect(await screen.findByText(/Slack.*전송 중.*PENDING/)).toBeTruthy();
+    expect(await screen.findByText(/Slack.*전송 실패.*FAILED/, {}, { timeout: 4_000 })).toBeTruthy();
+    expect(screen.getByText(/다시 시도할 수 있습니다/)).toBeTruthy();
+    expect(screen.getByText(/Lin:.*SENT/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Slack.*다시 보내기/ })).toBeNull();
+    expect(statusReads).toBe(2);
+  });
+
   it('shows independent email delivery states without claiming inbox delivery or offering resend', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const path = new URL(String(input)).pathname;
