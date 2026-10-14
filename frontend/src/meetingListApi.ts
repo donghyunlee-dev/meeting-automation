@@ -16,6 +16,8 @@ export class MeetingListApiError extends Error {
   }
 }
 
+const pendingMeetingLists = new Map<string, Promise<MeetingSummary[]>>();
+
 function baseUrl(): string {
   return (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080').replace(/\/$/, '');
 }
@@ -31,10 +33,22 @@ function isMeetingSummary(value: unknown): value is MeetingSummary {
     && (typeof item.documentUrl === 'string' || item.documentUrl === null);
 }
 
-export async function listMeetings(limit?: number): Promise<MeetingSummary[]> {
+export function listMeetings(limit?: number): Promise<MeetingSummary[]> {
   const query = limit === undefined ? '' : `?limit=${encodeURIComponent(String(limit))}`;
+  const url = `${baseUrl()}/api/v1/meetings${query}`;
+  const pending = pendingMeetingLists.get(url);
+  if (pending) return pending;
+
+  const request = requestMeetingList(url).finally(() => {
+    if (pendingMeetingLists.get(url) === request) pendingMeetingLists.delete(url);
+  });
+  pendingMeetingLists.set(url, request);
+  return request;
+}
+
+async function requestMeetingList(url: string): Promise<MeetingSummary[]> {
   try {
-    const response = await fetch(`${baseUrl()}/api/v1/meetings${query}`, { headers: { Accept: 'application/json' } });
+    const response = await fetch(url, { headers: { Accept: 'application/json' } });
     const body: unknown = await response.json();
     if (!response.ok || typeof body !== 'object' || body === null || !('data' in body)) throw new MeetingListApiError();
     const data = (body as { data?: { items?: unknown } }).data;

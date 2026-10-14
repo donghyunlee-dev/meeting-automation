@@ -23,6 +23,27 @@ describe('listMeetings', () => {
     expect(String(fetchMock.mock.calls[0]?.[0])).toBe('http://localhost:8080/api/v1/meetings');
   });
 
+  it('shares only pending requests with the same limit and refetches after they settle', async () => {
+    const pendingResponses = new Map<string, (value: Response) => void>();
+    const fetchMock = vi.fn<(input: RequestInfo | URL) => Promise<Response>>((input) => new Promise((resolve) => {
+      pendingResponses.set(String(input), resolve);
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const firstHomeRequest = listMeetings(5);
+    const duplicateHomeRequest = listMeetings(5);
+    const fullListRequest = listMeetings();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    pendingResponses.forEach((resolve) => resolve(new Response(JSON.stringify({ data: { items: [] } }), { status: 200 })));
+    await Promise.all([firstHomeRequest, duplicateHomeRequest, fullListRequest]);
+    const afterSettledHomeRequest = listMeetings(5);
+    pendingResponses.get('http://localhost:8080/api/v1/meetings?limit=5')?.(new Response(JSON.stringify({ data: { items: [] } }), { status: 200 }));
+    await afterSettledHomeRequest;
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
   it('returns a safe error without exposing provider response details', async () => {
     const fetchMock = vi.fn<(input: RequestInfo | URL) => Promise<Response>>(async () => new Response(JSON.stringify({ error: { code: 'PROVIDER_FAILURE', message: 'secret provider payload' } }), { status: 502 }));
     vi.stubGlobal('fetch', fetchMock);

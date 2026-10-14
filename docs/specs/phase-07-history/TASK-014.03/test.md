@@ -13,6 +13,7 @@
 | SCR001-ERROR-RETRY | API 502 후 retry click | 원문 오류 없이 안내 표시, 동일 `limit=5` GET 한 번 재요청 | Home interaction test |
 | SCR001-ALL-MEETINGS | 전체 보기 action | `/meetings` route로 이동 | Router test |
 | SCR009-DEFAULT-LIMIT | Meetings route 진입 | API-017 기본 최대 100 요청 및 결과 렌더링 | API hook/page test |
+| REQUEST-DEDUPE-STRICTMODE | StrictMode effect replay with same pending limit, then simultaneous Home (5) and Meetings (default 100) requests | One in-flight GET per key; different limit keys remain independent; settled requests can retry | API/component test |
 | SCR009-EMPTY | 빈 `items` | 화면 empty 안내와 Bottom Navigation 표시 | Page component test |
 | SCR009-LOADING-ERROR | pending, 502, retry | Loading 및 safe Provider error 상태; retry가 GET 재호출 | Page interaction test |
 | SCR009-STATUS-OMISSION | Meeting item을 Home/Meetings에 렌더링 | 상태/진행/완료/활성 badge 없음 | DOM assertion |

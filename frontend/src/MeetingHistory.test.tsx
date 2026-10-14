@@ -1,5 +1,6 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { StrictMode } from 'react';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { HomePage, MeetingsPage } from './MeetingHistory';
 import type { MeetingSummary } from './meetingListApi';
@@ -67,16 +68,39 @@ describe('Home recent meetings', () => {
     expect(String(fetchMock.mock.calls[1]?.[0])).toContain('limit=5');
   });
 
-  it('announces the loading state while the list request is pending', () => {
-    vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(() => undefined)));
+  it('announces the loading state while the list request is pending', async () => {
+    let resolveFetch: ((value: Response) => void) | undefined;
+    vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>((resolve) => { resolveFetch = resolve; })));
     render(<MemoryRouter><HomePage /></MemoryRouter>);
 
     expect(screen.getByRole('heading', { name: '최근 회의' })).toBeTruthy();
     expect(screen.getByRole('status').textContent).toContain('회의 목록');
+    await act(async () => { resolveFetch?.(response({ data: { items: [] } })); });
   });
 });
 
 describe('Meetings page', () => {
+  it('deduplicates StrictMode effect replay by query key while keeping Home and Meetings requests independent', async () => {
+    const pendingResponses: Array<{ url: string; resolve: (value: Response) => void }> = [];
+    const fetchMock = vi.fn<(input: RequestInfo | URL) => Promise<Response>>((input) => new Promise((resolve) => {
+      pendingResponses.push({ url: String(input), resolve });
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+    render(<StrictMode><MemoryRouter><HomePage /><MeetingsPage /></MemoryRouter></StrictMode>);
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    const requestedUrls = fetchMock.mock.calls.map(([input]) => String(input));
+    expect(requestedUrls).toHaveLength(2);
+    expect(requestedUrls.filter((url) => url.endsWith('/meetings?limit=5'))).toHaveLength(1);
+    expect(requestedUrls.filter((url) => url.endsWith('/meetings'))).toHaveLength(1);
+
+    await act(async () => {
+      pendingResponses.forEach(({ resolve }) => resolve(response({ data: { items: [] } })));
+    });
+    expect(await screen.findByText(/최근 회의가 없습니다/)).toBeTruthy();
+    expect(await screen.findByText(/회의 기록이 없습니다/)).toBeTruthy();
+  });
+
   it('requests the API default of 100 and renders summaries in the API-provided order', async () => {
     const orderedMeetings = [meetings[1]!, meetings[0]!, meetings[2]!];
     const fetchMock = installListFetch(orderedMeetings);
