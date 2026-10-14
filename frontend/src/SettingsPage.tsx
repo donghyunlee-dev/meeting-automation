@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router';
+import { AsyncState } from './components/async-state/AsyncState';
+import { normalizeApiError } from './lib/api/normalizeApiError';
 import { getAppConfig, getIntegrationHealth, selectSettingsSummary, type AppConfig, type IntegrationHealth, type IntegrationState } from './settingsApi';
 
 type QueryState<T> = { status: 'loading' | 'ready' | 'error'; data: T | null };
+const SAFE_SETTINGS_QUERY_ERROR = normalizeApiError({ error: { code: 'REQUEST_FAILED' } });
 
 const stateCopy: Record<IntegrationState, string> = {
   'not-selected': '문서 서비스를 선택해 연결할 수 있습니다.',
@@ -20,7 +23,15 @@ function ProviderStatus({ state, configuredLabel = '설정됨' }: { state: Integ
 }
 
 function StaleHealthNotice({ onRetry }: { onRetry: () => void }) {
-  return <div className="settings-refresh-warning"><p role="alert">연결 상태 갱신에 실패했습니다. 이전에 불러온 상태를 표시하고 있습니다.</p><button className="button button-secondary" type="button" onClick={onRetry}>연결 상태 다시 확인</button></div>;
+  return <AsyncState state={{ status: 'ready', data: null, warning: SAFE_SETTINGS_QUERY_ERROR, onRetry, retryLabel: '연결 상태 다시 확인' }} renderReady={() => null} />;
+}
+
+function SettingsQueryLoading({ label }: { label: string }) {
+  return <AsyncState state={{ status: 'loading', label }} renderReady={() => null} />;
+}
+
+function SettingsQueryError({ title, description, retryLabel, onRetry }: { title: string; description: string; retryLabel: string; onRetry: () => void }) {
+  return <AsyncState state={{ status: 'error', title, error: SAFE_SETTINGS_QUERY_ERROR, description, retryLabel, onRetry }} renderReady={() => null} />;
 }
 
 export function SettingsPage() {
@@ -66,31 +77,32 @@ export function SettingsPage() {
 
   return <main className="settings-page">
     <header className="settings-heading"><p className="eyebrow">SETTINGS</p><h1>설정</h1><p>회사 정보와 연결 서비스의 공개 상태를 확인합니다.</p></header>
-    {bothQueriesFailed && <section role="alert" className="settings-card"><p>설정과 연결 상태를 불러오지 못했습니다. 오류 세부 정보는 표시하지 않습니다.</p><button className="button button-secondary" type="button" onClick={() => { void refreshConfig(); void refreshHealth(); }}>전체 설정 다시 불러오기</button></section>}
+    {bothQueriesFailed && <SettingsQueryError title="설정과 연결 상태를 불러오지 못했습니다." description="오류 세부 정보는 표시하지 않습니다." retryLabel="전체 설정 다시 불러오기" onRetry={() => { void refreshConfig(); void refreshHealth(); }} />}
     <section className="settings-card" aria-labelledby="settings-company-heading">
       <h2 id="settings-company-heading">회사</h2>
-      {config.data ? <><p>{config.data.company.name}</p><p>시간대: {config.data.company.timezone}</p></> : <p role="status">{config.status === 'loading' ? '공개 설정을 불러오는 중…' : '회사 정보를 불러오지 못했습니다.'}</p>}
-      {config.status === 'error' && !bothQueriesFailed && <div role="alert"><p>공개 설정을 불러오지 못했습니다. Provider 오류 세부 정보는 표시하지 않습니다.</p><button className="button button-secondary" type="button" onClick={() => void refreshConfig()}>공개 설정 다시 불러오기</button></div>}
+      {config.data ? <><p>{config.data.company.name}</p><p>시간대: {config.data.company.timezone}</p>{config.status === 'error' && <AsyncState state={{ status: 'ready', data: config.data, warning: SAFE_SETTINGS_QUERY_ERROR, onRetry: () => void refreshConfig(), retryLabel: '공개 설정 다시 불러오기' }} renderReady={() => null} />}</> : config.status === 'loading'
+        ? <SettingsQueryLoading label="공개 설정을 불러오는 중…" />
+        : !bothQueriesFailed && <SettingsQueryError title="공개 설정을 불러오지 못했습니다." description="Provider 오류 세부 정보는 표시하지 않습니다." retryLabel="공개 설정 다시 불러오기" onRetry={() => void refreshConfig()} />}
     </section>
     <section className="settings-card" aria-labelledby="settings-document-heading">
       <h2 id="settings-document-heading">문서 서비스</h2>
-      {health.status === 'loading' && !health.data && <p role="status">연결 상태를 불러오는 중…</p>}
-      {health.status === 'error' && !health.data && !bothQueriesFailed && <div role="alert"><p>문서 연결 상태를 불러오지 못했습니다.</p><button className="button button-secondary" type="button" onClick={() => void refreshHealth()}>연결 상태 다시 확인</button></div>}
+      {health.status === 'loading' && !health.data && <SettingsQueryLoading label="연결 상태를 불러오는 중…" />}
+      {health.status === 'error' && !health.data && !bothQueriesFailed && <SettingsQueryError title="문서 연결 상태를 불러오지 못했습니다." description="연결 상태 조회를 다시 시도할 수 있습니다." retryLabel="연결 상태 다시 확인" onRetry={() => void refreshHealth()} />}
       {summary && <><p>{documentName}</p><ProviderStatus state={summary.document.state} configuredLabel="연결 상태 확인됨" /><Link className="button button-secondary" to="/settings/document">문서 연결 설정 열기</Link></>}
       {health.status === 'error' && health.data && <StaleHealthNotice onRetry={() => void refreshHealth()} />}
     </section>
     <section className="settings-card" aria-labelledby="settings-email-heading">
       <h2 id="settings-email-heading">이메일</h2>
-      {health.status === 'loading' && !health.data && <p role="status">연결 상태를 불러오는 중…</p>}
+      {health.status === 'loading' && !health.data && <SettingsQueryLoading label="연결 상태를 불러오는 중…" />}
       {summary && <><p>{emailStatus === 'not-configured' ? '이메일 서비스가 설정되지 않았습니다.' : '이메일 서비스'}</p><ProviderStatus state={emailStatus ?? 'health-unknown'} configuredLabel="설정 연결 확인됨" /></>}
-      {health.status === 'error' && !health.data && !bothQueriesFailed && <div role="alert"><p>이메일 연결 상태를 불러오지 못했습니다.</p><button className="button button-secondary" type="button" onClick={() => void refreshHealth()}>연결 상태 다시 확인</button></div>}
+      {health.status === 'error' && !health.data && !bothQueriesFailed && <SettingsQueryError title="이메일 연결 상태를 불러오지 못했습니다." description="Provider 오류 세부 정보는 표시하지 않습니다." retryLabel="연결 상태 다시 확인" onRetry={() => void refreshHealth()} />}
       {health.status === 'error' && health.data && <StaleHealthNotice onRetry={() => void refreshHealth()} />}
     </section>
     <section className="settings-card" aria-labelledby="settings-notification-heading">
       <h2 id="settings-notification-heading">알림</h2>
-      {health.status === 'loading' && !health.data && <p role="status">연결 상태를 불러오는 중…</p>}
+      {health.status === 'loading' && !health.data && <SettingsQueryLoading label="연결 상태를 불러오는 중…" />}
       {summary && <><p>{notificationName}</p><ProviderStatus state={notificationStatus ?? 'health-unknown'} configuredLabel="공개 상태 확인됨" /><p className="settings-note">연결 상태는 실제 이메일 또는 Slack 메시지 전달 성공을 보장하지 않습니다.</p></>}
-      {health.status === 'error' && !health.data && !bothQueriesFailed && <div role="alert"><p>알림 연결 상태를 불러오지 못했습니다.</p><button className="button button-secondary" type="button" onClick={() => void refreshHealth()}>연결 상태 다시 확인</button></div>}
+      {health.status === 'error' && !health.data && !bothQueriesFailed && <SettingsQueryError title="알림 연결 상태를 불러오지 못했습니다." description="Provider 오류 세부 정보는 표시하지 않습니다." retryLabel="연결 상태 다시 확인" onRetry={() => void refreshHealth()} />}
       {health.status === 'error' && health.data && <StaleHealthNotice onRetry={() => void refreshHealth()} />}
     </section>
     {config.status === 'ready' && health.status === 'ready' && <button className="button button-secondary" type="button" onClick={() => { void refreshConfig(); void refreshHealth(); }}>모든 공개 상태 새로고침</button>}

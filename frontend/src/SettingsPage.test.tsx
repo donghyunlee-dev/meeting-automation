@@ -81,17 +81,17 @@ describe('Settings page', () => {
     const documentSection = screen.getByRole('region', { name: '문서 서비스' });
     const emailSection = screen.getByRole('region', { name: '이메일' });
     const notificationSection = screen.getByRole('region', { name: '알림' });
-    await within(documentSection).findByText('연결 상태 갱신에 실패했습니다. 이전에 불러온 상태를 표시하고 있습니다.');
+    await within(documentSection).findByText('새로고침하지 못했습니다. 기존 내용을 유지합니다.');
 
     for (const section of [documentSection, emailSection, notificationSection]) {
-      expect(within(section).getByRole('alert').textContent).toContain('이전');
+      expect(within(section).getByRole('status').textContent).toContain('기존 내용을 유지합니다.');
       expect(within(section).getByRole('button', { name: '연결 상태 다시 확인' })).toBeTruthy();
     }
     expect(healthCalls).toBe(2);
     fireEvent.click(within(notificationSection).getByRole('button', { name: '연결 상태 다시 확인' }));
     expect(await within(notificationSection).findByText('공개 상태 확인됨')).toBeTruthy();
     for (const section of [documentSection, emailSection, notificationSection]) {
-      await waitFor(() => expect(within(section).queryByRole('alert')).toBeNull());
+      await waitFor(() => expect(within(section).queryByText('새로고침하지 못했습니다. 기존 내용을 유지합니다.')).toBeNull());
     }
     expect(healthCalls).toBe(3);
   });
@@ -116,6 +116,7 @@ describe('Settings page', () => {
     render(<MemoryRouter><SettingsPage /></MemoryRouter>);
 
     const retry = await screen.findByRole('button', { name: '전체 설정 다시 불러오기' });
+    expect(screen.getByRole('heading', { name: '설정과 연결 상태를 불러오지 못했습니다.' })).toBeTruthy();
     expect(screen.getAllByRole('button')).toHaveLength(1);
     expect(document.body.textContent).not.toContain('raw-provider-secret');
     fireEvent.click(retry);

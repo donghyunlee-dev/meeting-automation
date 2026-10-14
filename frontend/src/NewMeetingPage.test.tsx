@@ -94,6 +94,7 @@ describe('New Meeting input and selection', () => {
     renderPage();
     fireEvent.change(await screen.findByLabelText('회의 제목'), { target: { value: '  계획 회의  ' } });
     expect((await screen.findByRole('alert')).textContent).toMatch(/참석자 목록/);
+    expect(screen.getByRole('heading', { name: '참석자 목록을 불러오지 못했습니다.' })).toBeTruthy();
     expect(screen.getByRole('button', { name: '참석자 목록 다시 시도' })).toBeTruthy();
     failParticipants = false;
     fireEvent.click(screen.getByRole('button', { name: '참석자 목록 다시 시도' }));
