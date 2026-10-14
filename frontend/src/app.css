@@ -115,7 +115,7 @@ button:disabled { cursor: not-allowed; opacity: .6; }
 .bottom-navigation a span { font-size: 21px; line-height: 1.1; }
 .bottom-navigation a[aria-current='page'] { color: #5267d9; }
 .topbar { display: flex; align-items: center; gap: 13px; height: 76px; padding: 0 max(24px, calc((100vw - 1120px) / 2)); background: #fff; border-bottom: 1px solid #e8ebef; }
-.brand { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 12px; color: white; background: #5267d9; text-decoration: none; font-weight: 700; }
+.brand { display: grid; place-items: center; width: 44px; height: 44px; flex: 0 0 44px; border-radius: 12px; color: white; background: #5267d9; text-decoration: none; font-weight: 700; }
 .topbar h1 { margin: 1px 0 0; font-size: 17px; line-height: 1.2; font-weight: 650; }
 .complete-page { width: min(100%, 640px); margin: 0 auto; padding: 0 16px 96px; overflow-wrap: anywhere; }
 .share-page { width: min(100%, 640px); margin: 0 auto; padding: 0 16px; overflow-wrap: anywhere; }
@@ -148,7 +148,7 @@ button:disabled { cursor: not-allowed; opacity: .6; }
 .page-description, .form-description { margin: 0; color: #697586; font-size: 14px; }
 .button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-width: 44px; min-height: 44px; border: 1px solid transparent; border-radius: 10px; padding: 0 17px; font-size: 13px; font-weight: 650; transition: background-color .15s ease, border-color .15s ease, transform .15s ease; }
 .button:active { transform: translateY(1px); }
-.button-primary { color: #fff; background: #5267d9; box-shadow: 0 2px 5px #5267d926; }
+.button-primary { min-height: 52px; color: #fff; background: #5267d9; box-shadow: 0 2px 5px #5267d926; }
 .button-primary:hover { background: #4357c5; }
 .button-secondary { border-color: #dce1e8; color: #344054; background: #fff; }
 .button-secondary:hover { background: #f8f9fb; border-color: #b9c1cd; }
