@@ -83,7 +83,18 @@ public final class FailureContext {
     }
 
     private static IncidentType classify(String stage, String errorCode) {
-        if (stage == null || errorCode == null) return null;
+        if (errorCode == null) return null;
+        if (stage == null) {
+            if (AUDIO_ASSEMBLY_CODES.contains(errorCode) || TRANSCRIPTION_CODES.contains(errorCode)
+                    || DIARIZATION_CODES.contains(errorCode) || MINUTES_CODES.contains(errorCode))
+                return IncidentType.PROCESSING_FAILURE;
+            return switch (errorCode) {
+                case "DOCUMENT_FAILED", "PARTICIPANT_LIST_FAILED" -> IncidentType.DOCUMENT_FAILURE;
+                case "EMAIL_FAILED" -> IncidentType.EMAIL_FAILURE;
+                case "NOTIFICATION_FAILED" -> IncidentType.NOTIFICATION_FAILURE;
+                default -> null;
+            };
+        }
         return switch (stage) {
             case "AUDIO_ASSEMBLY" -> AUDIO_ASSEMBLY_CODES.contains(errorCode) ? IncidentType.PROCESSING_FAILURE : null;
             case "TRANSCRIPTION" -> TRANSCRIPTION_CODES.contains(errorCode) ? IncidentType.PROCESSING_FAILURE : null;
