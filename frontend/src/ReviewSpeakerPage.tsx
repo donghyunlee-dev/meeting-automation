@@ -139,6 +139,23 @@ export function ReviewSpeakerPage({ drafts, onInitialize, onChange, onCommit, on
     return true;
   }, [applySnapshot]);
 
+  const reconcileTerminalRegenerationSnapshot = useCallback((snapshot: MinutesRegenerationSnapshot): boolean => {
+    const operation = snapshot.lastOperation;
+    if (snapshot.status !== 'REVIEW' || snapshot.sessionId !== activeSessionId.current || !snapshot.review
+      || snapshot.review.sessionId !== snapshot.sessionId || snapshot.review.version !== snapshot.version
+      || operation?.type !== 'MINUTES_REGENERATION' || !['SUCCEEDED', 'FAILED'].includes(operation.outcome)
+      || typeof operation.requestedTemplateId !== 'string' || operation.requestedTemplateId.length === 0
+      || snapshot.review.lastOperation?.type !== operation.type
+      || snapshot.review.lastOperation.outcome !== operation.outcome
+      || snapshot.review.lastOperation.requestedTemplateId !== operation.requestedTemplateId) return false;
+
+    if (!applyRegenerationSnapshot(snapshot.review, true)) return false;
+    setRegenerationResumeMessage({ sessionId: snapshot.sessionId, message: operation.outcome === 'SUCCEEDED'
+      ? 'Minutes 재생성이 완료되어 최신 회의 정보를 표시합니다.'
+      : '재생성에 실패해 이전 회의록을 복구했습니다. 최신 회의 정보를 표시합니다.' });
+    return true;
+  }, [applyRegenerationSnapshot]);
+
   const loadRoster = useCallback(async () => {
     setRetryingRoster(true);
     setParticipants((current) => ({ status: 'loading', data: current.data }));
@@ -175,13 +192,7 @@ export function ReviewSpeakerPage({ drafts, onInitialize, onChange, onCommit, on
           }
           return;
         }
-        if (snapshot.status === 'REVIEW' && snapshot.review && snapshot.lastOperation?.type === 'MINUTES_REGENERATION') {
-          const outcome = snapshot.lastOperation.outcome;
-          if (applyRegenerationSnapshot(snapshot.review, true)) {
-            setRegenerationResumeMessage({ sessionId, message: outcome === 'SUCCEEDED'
-              ? 'Minutes 재생성이 완료되어 최신 회의 정보를 표시합니다.'
-              : '재생성에 실패해 이전 회의록을 복구했습니다. 최신 회의 정보를 표시합니다.' });
-          }
+        if (snapshot.status === 'REVIEW' && reconcileTerminalRegenerationSnapshot(snapshot)) {
           setRegenerationResume(null);
           return;
         }
@@ -197,7 +208,7 @@ export function ReviewSpeakerPage({ drafts, onInitialize, onChange, onCommit, on
     });
     poller.start();
     return () => poller.stop();
-  }, [applyRegenerationSnapshot, recordReviewFailure, regenerationResume?.sessionId, sessionId]);
+  }, [reconcileTerminalRegenerationSnapshot, recordReviewFailure, regenerationResume?.sessionId, sessionId]);
 
   const loadConfig = useCallback(async () => {
     setConfig((current) => ({ status: 'loading', data: current.data }));
@@ -223,6 +234,8 @@ export function ReviewSpeakerPage({ drafts, onInitialize, onChange, onCommit, on
             setRegenerationResume({ sessionId, progress: snapshot.processing.progressPercent ?? null });
             return;
           }
+          if (active && generation === reviewRequestGeneration.current && snapshot.status === 'REVIEW'
+            && reconcileTerminalRegenerationSnapshot(snapshot)) return;
           if (active && generation === reviewRequestGeneration.current) recordReviewFailure(sessionId, error);
         }).catch(() => {
           if (active && generation === reviewRequestGeneration.current) recordReviewFailure(sessionId, error);
@@ -242,7 +255,7 @@ export function ReviewSpeakerPage({ drafts, onInitialize, onChange, onCommit, on
       if (active) setConfig((current) => ({ status: 'error', data: current.data }));
     });
     return () => { active = false; statusController.abort(); reviewRequestGeneration.current += 1; };
-  }, [applySnapshot, onInitialize, recordReviewFailure, sessionId]);
+  }, [applySnapshot, onInitialize, reconcileTerminalRegenerationSnapshot, recordReviewFailure, sessionId]);
 
   const currentReview = review.requestSessionId === sessionId && review.data?.sessionId === sessionId ? review.data : undefined;
   const reviewIsLoading = review.requestSessionId !== sessionId || review.status === 'loading';

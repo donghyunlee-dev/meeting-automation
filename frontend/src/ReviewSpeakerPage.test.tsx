@@ -846,4 +846,41 @@ describe('Review minutes and transcript', () => {
     expect(statusReads).toBe(3);
     expect(fetchMock.mock.calls.some(([input, init]) => String(input).endsWith('/minutes/regenerate') || init?.method === 'PUT')).toBe(false);
   });
+
+  it('applies a correlated terminal API-010 REVIEW snapshot when the initial Review read races with completion', async () => {
+    const terminal = {
+      ...reviewData,
+      version: 8,
+      speakers: [{ speakerId: 'speaker-b', label: 'Speaker B', participantId: 'p1' }],
+      transcript: [{ segmentId: 'terminal-segment', speakerId: 'speaker-b', startMs: 3000, endMs: 5000, text: 'Terminal transcript' }],
+      minutes: { ...reviewData.minutes, templateId: 'project', templateVersion: '2', summary: 'Terminal regenerated Minutes' },
+      allowedActions: ['UPDATE_SPEAKER_MAPPING'],
+      lastOperation: { type: 'MINUTES_REGENERATION', outcome: 'SUCCEEDED', requestedTemplateId: 'project' },
+    };
+    let reviewReads = 0;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input));
+      if (url.pathname === '/api/v1/meeting-sessions/review-minutes') {
+        reviewReads += 1;
+        if (reviewReads === 1) return apiResponse({ data: {
+          sessionId: 'review-minutes', version: 7, status: 'PROCESSING',
+          processing: { stage: 'DRAFT_REGENERATION', progressPercent: 100 }, allowedActions: [],
+        } });
+        return apiResponse({ data: { ...terminal, status: 'REVIEW' } });
+      }
+      if (url.pathname === '/api/v1/app-config') return apiResponse({ data: {
+        company: { id: 'company-1', name: 'Example', timezone: 'Asia/Seoul' },
+        document: { provider: 'NOTION', configured: true, connectionVersion: 2, rootUrl: 'https://notion.example' },
+      } });
+      if (url.pathname === '/api/v1/participants') return apiResponse({ data: { items: [{ id: 'p1', name: 'Ada Lovelace', email: 'private@example.com' }] } });
+      throw new Error(`Unexpected request: ${url.pathname}`);
+    });
+    renderReview(fetchMock);
+
+    expect(await screen.findByLabelText('회의 요약')).toHaveProperty('value', 'Terminal regenerated Minutes');
+    expect(screen.getByText('Terminal transcript')).toBeTruthy();
+    expect(screen.getByLabelText('Speaker B 참가자')).toBeTruthy();
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(reviewReads).toBe(2);
+  });
 });
