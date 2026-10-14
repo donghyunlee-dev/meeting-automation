@@ -18,10 +18,8 @@ import java.util.List;
 import java.util.Optional;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Component;
 
 /** Filesystem adapter for ordered chunk access and atomically published assembled audio. */
-@Component
 public final class AudioAssemblyFileStore implements AudioAssemblyStorage {
     private static final int BUFFER_SIZE = 8192;
 
@@ -126,7 +124,7 @@ public final class AudioAssemblyFileStore implements AudioAssemblyStorage {
             if (actual.bytes() != metadata.bytes() || !actual.sha256().equals(metadata.sha256())) {
                 throw new IOException("Published assembly does not match metadata.");
             }
-            return Optional.of(new Assembly(audioFile.toAbsolutePath().normalize(), metadata.mimeType(),
+            return Optional.of(new Assembly(audioFile.toAbsolutePath().normalize().toString(), metadata.mimeType(),
                     metadata.bytes(), metadata.sha256()));
         } catch (IOException | SecurityException failure) {
             throw new AudioAssemblyStorageException();
@@ -151,6 +149,32 @@ public final class AudioAssemblyFileStore implements AudioAssemblyStorage {
     @Override
     public void deleteSourceChunks(String sessionId) {
         chunkStore.deleteAssemblySources(sessionId);
+    }
+
+    @Override
+    public InputStream openAssembly(Assembly assembly) {
+        if (assembly == null || assembly.reference() == null) throw new AudioAssemblyStorageException();
+        try {
+            Path file = Path.of(assembly.reference());
+            verifyRegularFile(file);
+            return Files.newInputStream(file, LinkOption.NOFOLLOW_LINKS);
+        } catch (IOException | SecurityException failure) {
+            throw new AudioAssemblyStorageException();
+        }
+    }
+
+    @Override
+    public void deleteAssembly(String sessionId) {
+        Path directory = assembledDirectory(sessionId);
+        try {
+            if (!existsOrThrowIfMissing(root)) return;
+            verifyDirectory(root);
+            if (!existsOrThrowIfMissing(directory)) return;
+            verifyDirectory(directory);
+            deleteTree(directory);
+        } catch (IOException | SecurityException failure) {
+            throw new AudioAssemblyStorageException();
+        }
     }
 
     private void ensureRootAndSession(Path sessionDirectory) throws IOException {

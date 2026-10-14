@@ -7,20 +7,23 @@ import org.springframework.stereotype.Service;
 @Service
 public final class AudioUploadStatusService {
     private final MeetingSessionStore sessionStore;
-    private final AudioChunkFileStore fileStore;
+    private final PrivateAudioStoragePort storage;
 
-    public AudioUploadStatusService(MeetingSessionStore sessionStore, AudioChunkFileStore fileStore) {
+    public AudioUploadStatusService(MeetingSessionStore sessionStore, PrivateAudioStoragePort storage) {
         this.sessionStore = sessionStore;
-        this.fileStore = fileStore;
+        this.storage = storage;
     }
 
     public AudioUploadStatusResponse getStatus(String sessionId) {
         sessionStore.find(sessionId).orElseThrow(AudioSessionNotFoundException::new);
-        List<AudioChunkFileStore.CompletedChunk> chunks = fileStore.completedChunks(sessionId);
-        List<Integer> sequences = chunks.stream().map(AudioChunkFileStore.CompletedChunk::sequence).toList();
+        List<PrivateAudioStoragePort.StoredObject> chunks = storage.listForSession(sessionId).stream()
+                .filter(object -> object.type() == PrivateAudioStoragePort.ObjectType.CHUNK)
+                .sorted(java.util.Comparator.comparingInt(PrivateAudioStoragePort.StoredObject::sequence))
+                .toList();
+        List<Integer> sequences = chunks.stream().map(PrivateAudioStoragePort.StoredObject::sequence).toList();
         long totalBytes = 0;
         try {
-            for (AudioChunkFileStore.CompletedChunk chunk : chunks) {
+            for (PrivateAudioStoragePort.StoredObject chunk : chunks) {
                 totalBytes = Math.addExact(totalBytes, chunk.bytes());
             }
         } catch (ArithmeticException overflow) {

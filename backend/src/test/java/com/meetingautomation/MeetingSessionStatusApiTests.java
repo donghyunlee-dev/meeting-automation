@@ -148,7 +148,8 @@ class MeetingSessionStatusApiTests {
                 .andExpect(jsonPath("$.data.speakers").isEmpty())
                 .andExpect(jsonPath("$.data.transcript").isEmpty())
                 .andExpect(jsonPath("$.data.minutes").value(Matchers.nullValue()))
-                .andExpect(jsonPath("$.data.allowedActions").isEmpty())
+                .andExpect(jsonPath("$.data.allowedActions.length()").value(1))
+                .andExpect(jsonPath("$.data.allowedActions[0]").value("FINALIZE_PROCESSING_FAILURE"))
                 .andExpect(jsonPath("$.data.lastOperation").doesNotExist())
                 .andReturn().getResponse().getContentAsString();
 
@@ -156,6 +157,35 @@ class MeetingSessionStatusApiTests {
                 "private-provider-detail-sentinel");
         assertThat(statusService.get(SESSION_ID).toString()).doesNotContain("private-transcript-sentinel",
                 "private-minutes-sentinel", "private-provider-detail-sentinel");
+    }
+
+    @Test
+    void processingFailureExposesOnlyActionsAllowedByRetryabilityAndAudioExpiry() throws Exception {
+        java.time.Instant expiry = java.time.Instant.now().plusSeconds(3600);
+        sessionStore.save(new MeetingSession(SESSION_ID, 10, "PROCESSING_FAILED", 1,
+                new MeetingSession.Meeting("Planning", "default.md", List.of("participant-1"), "Asia/Seoul"),
+                "TRANSCRIPTION", 34, List.of(), List.of(),
+                new ProcessingFailure("TRANSCRIPTION", "TRANSCRIPTION_FAILED", true, true, expiry, false, true)), null);
+
+        mockMvc.perform(get(STATUS_URL, SESSION_ID))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.processing.audioAvailable").value(true))
+                .andExpect(jsonPath("$.data.processing.audioExpiresAt").value(expiry.toString()))
+                .andExpect(jsonPath("$.data.allowedActions").isArray())
+                .andExpect(jsonPath("$.data.allowedActions.length()").value(3))
+                .andExpect(jsonPath("$.data.allowedActions[0]").value("RETRY_PROCESSING"))
+                .andExpect(jsonPath("$.data.allowedActions[1]").value("DOWNLOAD_AUDIO"))
+                .andExpect(jsonPath("$.data.allowedActions[2]").value("FINALIZE_PROCESSING_FAILURE"));
+
+        sessionStore.save(new MeetingSession(SESSION_ID, 11, "PROCESSING_FAILED", 1,
+                new MeetingSession.Meeting("Planning", "default.md", List.of("participant-1"), "Asia/Seoul"),
+                "TRANSCRIPTION", 34, List.of(), List.of(),
+                new ProcessingFailure("TRANSCRIPTION", "TRANSCRIPTION_FAILED", false, true, expiry, false, false)), null);
+        mockMvc.perform(get(STATUS_URL, SESSION_ID))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.allowedActions.length()").value(2))
+                .andExpect(jsonPath("$.data.allowedActions[0]").value("DOWNLOAD_AUDIO"))
+                .andExpect(jsonPath("$.data.allowedActions[1]").value("FINALIZE_PROCESSING_FAILURE"));
     }
 
     @Test

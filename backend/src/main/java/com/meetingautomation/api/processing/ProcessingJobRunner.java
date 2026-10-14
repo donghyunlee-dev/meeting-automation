@@ -5,6 +5,7 @@ import com.meetingautomation.api.session.MeetingSessionStore;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.UUID;
+import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -39,9 +40,12 @@ public class ProcessingJobRunner {
                     logSkipped(sessionId, traceId, "SESSION_NOT_FOUND");
                     return false;
                 }
-                if (!"PROCESSING".equals(session.status())
-                        || !"AUDIO_ASSEMBLY".equals(session.processingStage())
-                        || session.progressPercent() != 0) {
+                boolean initial = "AUDIO_ASSEMBLY".equals(session.processingStage())
+                        && session.progressPercent() == 0;
+                boolean retry = session.processingFailure() == null
+                        && Set.of("TRANSCRIPTION", "DIARIZATION", "MINUTES_GENERATION")
+                                .contains(session.processingStage());
+                if (!"PROCESSING".equals(session.status()) || !(initial || retry)) {
                     activeJobs.remove(sessionId);
                     logSkipped(sessionId, traceId, "DUPLICATE_DELIVERY");
                     return false;

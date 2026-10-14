@@ -107,7 +107,10 @@ EMAIL_OAUTH_REFRESH_TOKEN=<secret>
 EMAIL_SENDER_ADDRESS=<authorized-gmail-address>
 NOTIFICATION_PROVIDER=SLACK
 ALLOWED_ORIGINS=http://localhost:5173
-TEMP_AUDIO_DIR=<absolute-local-temp-directory>
+PRIVATE_AUDIO_S3_BUCKET=<required-private-bucket-name>
+PRIVATE_AUDIO_S3_REGION=us-east-1
+PRIVATE_AUDIO_S3_ENDPOINT=<optional-s3-compatible-endpoint>
+PRIVATE_AUDIO_S3_PREFIX=meeting-audio
 ```
 
 Secret 설정 이름의 예:
@@ -122,7 +125,11 @@ SLACK_ADMIN_WEBHOOK_URL
 
 로컬 Secret은 개인 개발 환경에만 보관한다. 실제 값을 Git에 commit하거나 문서, 로그, IDE 공유 설정, 화면 캡처에 넣지 않는다. 저장소의 `.gitignore`가 `.env.local` 및 secret 파일을 제외하는지 확인한다. 다른 개발자에게 전달할 설정 예시는 값이 없는 `.env.example`로 제공한다.
 
-Audio 처리에는 임시 디렉터리가 필요하다. `TEMP_AUDIO_DIR`를 OS 임시 경로 아래 개발 전용 디렉터리로 설정하고, 테스트 후 파일이 정리되는지 확인한다. 회사 실회의 녹음을 로컬 개발용으로 사용하지 않는다.
+### 비공개 Audio 객체 저장소
+
+Audio 업로드와 회의 처리를 사용하려면 `PRIVATE_AUDIO_S3_BUCKET`을 private access로 설정한 S3 bucket 이름으로 지정한다. `PRIVATE_AUDIO_S3_REGION`은 AWS region이며 미설정 시 `AWS_REGION` 또는 `us-east-1`을 사용한다. `PRIVATE_AUDIO_S3_ENDPOINT`는 비 AWS S3-compatible endpoint를 쓸 때만 지정하고, `PRIVATE_AUDIO_S3_PREFIX`는 선택 경로로 기본값이 `meeting-audio`다.
+
+인증은 AWS SDK default credentials chain을 사용한다. 배포에서는 bucket에 필요한 최소 권한을 부여한 service role을 우선 사용하고, 별도 키 방식이 필요하면 `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, 필요 시 `AWS_SESSION_TOKEN`을 secret 설정에 넣는다. `.env.example`에는 실제 bucket 값이나 credential을 기록하지 않는다. Bucket은 public access를 차단하고 Backend만 읽기/쓰기/삭제할 수 있어야 한다. Audio는 Backend filesystem에 영속 저장하지 않는다.
 
 ## IntelliJ IDEA 설정
 

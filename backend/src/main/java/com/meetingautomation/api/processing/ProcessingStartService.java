@@ -1,6 +1,6 @@
 package com.meetingautomation.api.processing;
 
-import com.meetingautomation.api.audio.AudioChunkFileStore;
+import com.meetingautomation.api.audio.PrivateAudioStoragePort;
 import com.meetingautomation.api.audio.AudioSessionNotFoundException;
 import com.meetingautomation.api.error.ApiValidationException;
 import com.meetingautomation.api.idempotency.IdempotencyKeyConflictException;
@@ -10,29 +10,40 @@ import com.meetingautomation.api.session.SessionStateConflictException;
 import com.meetingautomation.api.session.UploadPolicy;
 import java.util.List;
 import java.util.Locale;
+import java.time.Clock;
+import java.time.Instant;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import tools.jackson.databind.JsonNode;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 @Service
 public final class ProcessingStartService {
     private final MeetingSessionStore sessionStore;
-    private final AudioChunkFileStore chunkStore;
+    private final PrivateAudioStoragePort audioStorage;
     private final ProcessingJobQueue queue;
     private final int maxMeetingDurationMinutes;
+    private final Clock clock;
     private final ConcurrentMap<RequestKey, RequestRecord> requests = new ConcurrentHashMap<>();
 
+    @Autowired
     public ProcessingStartService(
             MeetingSessionStore sessionStore,
-            AudioChunkFileStore chunkStore,
+            PrivateAudioStoragePort audioStorage,
             ProcessingJobQueue queue,
             @Value("${MAX_MEETING_DURATION_MINUTES:60}") int maxMeetingDurationMinutes) {
+        this(sessionStore, audioStorage, queue, maxMeetingDurationMinutes, Clock.systemUTC());
+    }
+
+    ProcessingStartService(MeetingSessionStore sessionStore, PrivateAudioStoragePort audioStorage,
+            ProcessingJobQueue queue, int maxMeetingDurationMinutes, Clock clock) {
         this.sessionStore = sessionStore;
-        this.chunkStore = chunkStore;
+        this.audioStorage = audioStorage;
         this.queue = queue;
         this.maxMeetingDurationMinutes = maxMeetingDurationMinutes;
+        this.clock = clock;
     }
 
     public ProcessingStartResponse start(String sessionId, String idempotencyKey, ProcessingStartRequest request) {
@@ -57,9 +68,12 @@ public final class ProcessingStartService {
         validateCompletedChunks(sessionId, command.expectedChunks(), policy);
 
         MeetingSession processing = sessionStore.startProcessing(sessionId);
+            ProcessingJob job = new ProcessingJob(sessionId, command.expectedChunks(), command.durationMs(), command.mimeType());
+            sessionStore.registerProcessingJob(job);
         try {
-            queue.enqueue(new ProcessingJob(sessionId, command.expectedChunks(), command.durationMs(), command.mimeType()));
+                queue.enqueue(job);
         } catch (RuntimeException queueFailure) {
+                sessionStore.removeProcessingJob(sessionId);
             sessionStore.rollbackProcessingStart(sessionId, processing.version(), session);
             throw queueFailure;
         }
@@ -111,11 +125,16 @@ public final class ProcessingStartService {
     }
 
     private void validateCompletedChunks(String sessionId, int expectedChunks, UploadPolicy policy) {
-        List<AudioChunkFileStore.CompletedChunk> chunks = chunkStore.completedChunks(sessionId);
+        List<PrivateAudioStoragePort.StoredObject> chunks = audioStorage.listForSession(sessionId).stream()
+                .filter(object -> object.type() == PrivateAudioStoragePort.ObjectType.CHUNK)
+                .sorted(java.util.Comparator.comparingInt(PrivateAudioStoragePort.StoredObject::sequence))
+                .toList();
         if (chunks.size() != expectedChunks) throw new AudioChunksIncompleteException();
+        Instant now = clock.instant();
         for (int sequence = 0; sequence < expectedChunks; sequence++) {
-            AudioChunkFileStore.CompletedChunk chunk = chunks.get(sequence);
-            if (chunk.sequence() != sequence || chunk.bytes() < 1 || chunk.bytes() > policy.maxChunkBytes()) {
+            PrivateAudioStoragePort.StoredObject chunk = chunks.get(sequence);
+            if (chunk.sequence() != sequence || chunk.bytes() < 1 || chunk.bytes() > policy.maxChunkBytes()
+                    || chunk.expiresAt() == null || !chunk.expiresAt().isAfter(now)) {
                 throw new AudioChunksIncompleteException();
             }
         }

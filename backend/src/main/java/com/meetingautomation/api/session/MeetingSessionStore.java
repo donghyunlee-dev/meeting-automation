@@ -5,6 +5,8 @@ import com.meetingautomation.document.DocumentConnectionGate;
 import com.meetingautomation.document.Speaker;
 import com.meetingautomation.document.StructuredMinutes;
 import com.meetingautomation.document.TranscriptSegment;
+import com.meetingautomation.api.processing.ProcessingJob;
+import com.meetingautomation.transcription.ProviderTranscriptionResponse;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -25,6 +27,9 @@ public final class MeetingSessionStore {
     private final Map<String, MeetingSessionStatusResponse.LastOperation> lastOperations = new ConcurrentHashMap<>();
     private final Map<String, AcceptedReviewConfirmation> acceptedReviewConfirmations = new java.util.HashMap<>();
     private final Map<String, AcceptedPublish> acceptedPublishes = new java.util.HashMap<>();
+    private final Map<String, ProcessingJob> processingJobs = new ConcurrentHashMap<>();
+    private final Map<String, ProviderTranscriptionResponse> completedTranscriptions = new ConcurrentHashMap<>();
+    private final Map<String, FailureFinalization> failureFinalizations = new ConcurrentHashMap<>();
     private final Map<String, PublishSnapshot> publishSnapshots = new ConcurrentHashMap<>();
     private final Map<String, PublishPreAcceptance> publishPreAcceptance = new ConcurrentHashMap<>();
     private final Map<DeliveryRetryKey, DeliveryRetryAcceptance> acceptedDeliveryRetries = new java.util.HashMap<>();
@@ -83,6 +88,9 @@ public final class MeetingSessionStore {
                 acceptedDeliveryRetries.entrySet().removeIf(entry -> entry.getKey().sessionId().equals(sessionId));
                 publishSnapshots.remove(sessionId);
                 publishPreAcceptance.remove(sessionId);
+                processingJobs.remove(sessionId);
+                completedTranscriptions.remove(sessionId);
+                failureFinalizations.remove(sessionId);
             }
             if (registration != null) registration.close();
             return removed != null;
@@ -90,6 +98,32 @@ public final class MeetingSessionStore {
     }
 
     public Set<String> sessionIds() { return Set.copyOf(sessions.keySet()); }
+
+    public void registerProcessingJob(ProcessingJob job) {
+        if (job == null || job.sessionId() == null) throw new IllegalArgumentException("Processing job is invalid.");
+        processingJobs.put(job.sessionId(), job);
+    }
+
+    public Optional<ProcessingJob> findProcessingJob(String sessionId) {
+        return Optional.ofNullable(processingJobs.get(sessionId));
+    }
+
+    public void removeProcessingJob(String sessionId) {
+        processingJobs.remove(sessionId);
+    }
+
+    public void saveTranscriptionResult(String sessionId, ProviderTranscriptionResponse response) {
+        if (response == null) throw new IllegalArgumentException("Transcription result is required.");
+        completedTranscriptions.put(sessionId, response);
+    }
+
+    public Optional<ProviderTranscriptionResponse> findTranscriptionResult(String sessionId) {
+        return Optional.ofNullable(completedTranscriptions.get(sessionId));
+    }
+
+    public void removeTranscriptionResult(String sessionId) {
+        completedTranscriptions.remove(sessionId);
+    }
 
     public int size() {
         return sessions.size();
@@ -579,6 +613,28 @@ public final class MeetingSessionStore {
         return previous;
     }
 
+    public synchronized MeetingSession startProcessingRetry(String sessionId) {
+        MeetingSession current = sessions.get(sessionId);
+        if (current == null) throw new com.meetingautomation.api.audio.AudioSessionNotFoundException();
+        if (!"PROCESSING_FAILED".equals(current.status()) || current.processingFailure() == null) {
+            throw new SessionStateConflictException();
+        }
+        MeetingSession retrying = copy(current, Math.addExact(current.version(), 1), "PROCESSING",
+                current.processingStage(), current.progressPercent(), current.speakers(), current.transcript(), null);
+        sessions.put(sessionId, retrying);
+        return retrying;
+    }
+
+    public synchronized MeetingSession rollbackProcessingRetry(
+            String sessionId, int expectedVersion, MeetingSession previous) {
+        MeetingSession current = sessions.get(sessionId);
+        if (current == null) throw new IllegalStateException("Session is no longer available.");
+        if (current.version() != expectedVersion || !"PROCESSING".equals(current.status())
+                || current.processingFailure() != null) throw new SessionStateConflictException();
+        sessions.put(sessionId, previous);
+        return previous;
+    }
+
     public synchronized MeetingSession recordProcessingProgress(String sessionId, String stage, int progressPercent) {
         MeetingSession current = requireProcessing(sessionId);
         if (stage == null || !stage.matches("[A-Z][A-Z0-9_]*")
@@ -625,12 +681,60 @@ public final class MeetingSessionStore {
 
     public synchronized MeetingSession failProcessing(
             String sessionId, String stage, int lastCompletedProgress, String errorCode, boolean retryable) {
+        return failProcessing(sessionId, stage, lastCompletedProgress, errorCode, retryable,
+                false, false, null);
+    }
+
+    public synchronized MeetingSession failProcessing(String sessionId, String stage, int lastCompletedProgress,
+            String errorCode, boolean retryable, boolean audioAvailable, boolean retryInputAvailable,
+            java.time.Instant audioExpiresAt) {
         MeetingSession current = requireProcessing(sessionId);
-        ProcessingFailure failure = new ProcessingFailure(stage, errorCode, retryable);
+        ProcessingFailure failure = new ProcessingFailure(stage, errorCode, retryable, audioAvailable,
+                audioExpiresAt, false, retryInputAvailable);
         MeetingSession updated = copy(current, Math.addExact(current.version(), 1), "PROCESSING_FAILED",
                 stage, lastCompletedProgress, current.speakers(), current.transcript(), failure);
         sessions.put(sessionId, updated);
         return updated;
+    }
+
+    public synchronized MeetingSession markAudioDownloadCompleted(String sessionId) {
+        MeetingSession current = sessions.get(sessionId);
+        if (current == null) throw new com.meetingautomation.api.audio.AudioSessionNotFoundException();
+        ProcessingFailure failure = current.processingFailure();
+        if (!"PROCESSING_FAILED".equals(current.status()) || failure == null || !failure.audioAvailable()) {
+            throw new SessionStateConflictException();
+        }
+        ProcessingFailure downloaded = new ProcessingFailure(failure.stage(), failure.errorCode(),
+                failure.retryable(), failure.audioAvailable(), failure.audioExpiresAt(), true,
+                failure.retryInputAvailable());
+        MeetingSession updated = copy(current, Math.addExact(current.version(), 1), current.status(),
+                current.processingStage(), current.progressPercent(), current.speakers(), current.transcript(),
+                downloaded);
+        sessions.put(sessionId, updated);
+        return updated;
+    }
+
+    public synchronized MeetingSession completeProcessingFailure(String sessionId, int expectedVersion,
+            FailureFinalization finalization) {
+        MeetingSession current = sessions.get(sessionId);
+        if (current == null) throw new com.meetingautomation.api.audio.AudioSessionNotFoundException();
+        if (!"PROCESSING_FAILED".equals(current.status()) || current.version() != expectedVersion
+                || current.processingFailure() == null || finalization == null) {
+            if (current.version() != expectedVersion) throw new SessionVersionConflictException();
+            throw new SessionStateConflictException();
+        }
+        ProcessingFailure old = current.processingFailure();
+        ProcessingFailure finalized = new ProcessingFailure(old.stage(), old.errorCode(), old.retryable(),
+                false, null, old.downloadCompleted(), false);
+        MeetingSession completed = copy(current, Math.addExact(current.version(), 1), "COMPLETED_WITH_WARNINGS",
+                current.processingStage(), current.progressPercent(), current.speakers(), current.transcript(), finalized);
+        sessions.put(sessionId, completed);
+        failureFinalizations.put(sessionId, finalization);
+        return completed;
+    }
+
+    public Optional<FailureFinalization> findFailureFinalization(String sessionId) {
+        return Optional.ofNullable(failureFinalizations.get(sessionId));
     }
 
     private MeetingSession requireProcessing(String sessionId) {

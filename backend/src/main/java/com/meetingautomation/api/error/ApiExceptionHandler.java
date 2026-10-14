@@ -9,6 +9,8 @@ import com.meetingautomation.api.audio.AudioChunkConflictException;
 import com.meetingautomation.api.audio.AudioChunkInvalidException;
 import com.meetingautomation.api.audio.AudioSessionNotFoundException;
 import com.meetingautomation.api.audio.AudioStorageException;
+import com.meetingautomation.api.audio.AudioNotAvailableException;
+import com.meetingautomation.api.processing.FailureDocumentWriteException;
 import com.meetingautomation.api.processing.AudioChunksIncompleteException;
 import com.meetingautomation.api.session.SessionStateConflictException;
 import com.meetingautomation.api.session.SessionVersionConflictException;
@@ -268,6 +270,20 @@ public class ApiExceptionHandler {
             AudioStorageException exception,
             HttpServletRequest request) {
         return internalError(request);
+    }
+
+    @ExceptionHandler(AudioNotAvailableException.class)
+    public ResponseEntity<ApiErrorResponse> handleAudioNotAvailable(
+            AudioNotAvailableException exception, HttpServletRequest request) {
+        return errorResponse(HttpStatus.CONFLICT, "AUDIO_NOT_AVAILABLE",
+                "다운로드할 수 있는 오디오가 없습니다.", "CONFLICT", false, request, Map.of());
+    }
+
+    @ExceptionHandler(FailureDocumentWriteException.class)
+    public ResponseEntity<ApiErrorResponse> handleFailureDocumentWrite(
+            FailureDocumentWriteException exception, HttpServletRequest request) {
+        return errorResponse(HttpStatus.SERVICE_UNAVAILABLE, "DOCUMENT_FAILED",
+                "실패 기록 문서를 저장하지 못했습니다. 다시 시도해 주세요.", "DOCUMENT_FAILURE", true, request, Map.of());
     }
 
     @ExceptionHandler(Exception.class)

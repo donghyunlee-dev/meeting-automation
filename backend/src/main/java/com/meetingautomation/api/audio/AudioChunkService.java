@@ -4,8 +4,11 @@ import com.meetingautomation.api.session.MeetingSessionService;
 import com.meetingautomation.api.session.MeetingSessionStore;
 import com.meetingautomation.api.session.UploadPolicy;
 import java.io.InputStream;
+import java.time.Clock;
+import java.time.Instant;
 import java.util.Locale;
 import java.util.regex.Pattern;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -15,14 +18,22 @@ public final class AudioChunkService {
 
     private final MeetingSessionStore sessionStore;
     private final MeetingSessionService meetingSessionService;
-    private final AudioChunkFileStore fileStore;
+    private final PrivateAudioStoragePort storage;
+    private final Clock clock;
 
+    @Autowired
     public AudioChunkService(MeetingSessionStore sessionStore,
             MeetingSessionService meetingSessionService,
-            AudioChunkFileStore fileStore) {
+            PrivateAudioStoragePort storage) {
+        this(sessionStore, meetingSessionService, storage, Clock.systemUTC());
+    }
+
+    AudioChunkService(MeetingSessionStore sessionStore, MeetingSessionService meetingSessionService,
+            PrivateAudioStoragePort storage, Clock clock) {
         this.sessionStore = sessionStore;
         this.meetingSessionService = meetingSessionService;
-        this.fileStore = fileStore;
+        this.storage = storage;
+        this.clock = clock;
     }
 
     public AudioChunkUploadResponse upload(String sessionId, String rawSequence, String contentType,
@@ -52,12 +63,28 @@ public final class AudioChunkService {
             throw new AudioChunkInvalidException();
         }
 
-        fileStore.store(sessionId, sequence, mimeType, byteLength, sha256,
-                policy.maxChunkBytes(), body);
+        Instant expiresAt = clock.instant().plus(PrivateAudioStoragePort.TEMPORARY_LEASE);
+        var prior = storage.listForSession(sessionId).stream()
+                .filter(object -> object.type() == PrivateAudioStoragePort.ObjectType.CHUNK
+                        && object.sequence() == sequence)
+                .findFirst();
+        if (prior.isPresent()) {
+            var object = prior.orElseThrow();
+            if (object.bytes() != byteLength || !object.sha256().equals(sha256)
+                    || !object.mimeType().equals(mimeType)) throw new AudioChunkConflictException();
+        } else {
+            storage.store(sessionId, PrivateAudioStoragePort.ObjectType.CHUNK, sequence, mimeType,
+                    expiresAt, body, byteLength, sha256);
+        }
+        renewUploadLease(sessionId, expiresAt);
         if ("CREATED".equals(session.status())) {
             sessionStore.transitionStatus(sessionId, "CREATED", "UPLOADING");
         }
         return new AudioChunkUploadResponse(new AudioChunkUploadResponse.Data(sequence, true));
+    }
+
+    private void renewUploadLease(String sessionId, Instant expiresAt) {
+        storage.listForSession(sessionId).forEach(object -> storage.extendExpiry(object.objectId(), expiresAt));
     }
 
     private static int parseSequence(String rawSequence) {
