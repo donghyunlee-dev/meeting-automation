@@ -2,6 +2,7 @@ package com.meetingautomation.api.session;
 
 import com.meetingautomation.document.DocumentProviderException;
 import com.meetingautomation.api.error.FailureContext;
+import com.meetingautomation.api.error.FailureContextReporter;
 import com.meetingautomation.document.DocumentStructureProvider;
 import com.meetingautomation.document.ParticipantListingProvider;
 import com.meetingautomation.document.Participant;
@@ -31,15 +32,17 @@ final class DeliveryRetryJobRunner {
     private final DocumentProviderFactory providerFactory;
     private final EmailProvider emailProvider;
     private final NotificationProvider notificationProvider;
+    private final FailureContextReporter failureContextReporter;
 
     DeliveryRetryJobRunner(MeetingSessionStore sessions, DocumentProviderResolver resolver,
             DocumentProviderFactory providerFactory, EmailProvider emailProvider,
-            NotificationProvider notificationProvider) {
+            NotificationProvider notificationProvider, FailureContextReporter failureContextReporter) {
         this.sessions = sessions;
         this.resolver = resolver;
         this.providerFactory = providerFactory;
         this.emailProvider = emailProvider;
         this.notificationProvider = notificationProvider;
+        this.failureContextReporter = failureContextReporter;
     }
 
     void run(String sessionId, String deliveryId) {
@@ -61,7 +64,7 @@ final class DeliveryRetryJobRunner {
             String code = errorCode(sessionId, deliveryId);
             String stage = "EMAIL_FAILED".equals(code) ? "EMAIL_DELIVERY" : "NOTIFICATION";
             FailureContext.from(sessionId, stage, traceId, code, false, java.time.Instant.now())
-                    .ifPresent(context -> context.logWarning(LOG));
+                    .ifPresent(context -> failureContextReporter.report(context, LOG));
         }
     }
 
@@ -141,7 +144,7 @@ final class DeliveryRetryJobRunner {
         if (!sent) {
             String stage = "EMAIL_FAILED".equals(code) ? "EMAIL_DELIVERY" : "NOTIFICATION";
             FailureContext.from(sessionId, stage, traceId, code, retryable, java.time.Instant.now())
-                    .ifPresent(context -> context.logWarning(LOG));
+                    .ifPresent(context -> failureContextReporter.report(context, LOG));
         }
         sessions.withSessionLock(sessionId, () -> {
             sessions.completeDeliveryRetry(sessionId, deliveryId, sent, retryable,

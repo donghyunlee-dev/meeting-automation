@@ -2,6 +2,7 @@ package com.meetingautomation.api.processing;
 
 import com.meetingautomation.api.audio.AudioAssemblyStorage;
 import com.meetingautomation.api.error.FailureContext;
+import com.meetingautomation.api.error.FailureContextReporter;
 import com.meetingautomation.api.session.MeetingSession;
 import com.meetingautomation.api.session.MeetingSessionStore;
 import com.meetingautomation.api.session.ProcessingFailure;
@@ -39,15 +40,17 @@ public class ProcessingPipeline {
     private final TranscriptionProvider transcriptionProvider;
     private final DiarizationResultAdapter diarizationAdapter;
     private final MinutesGenerationUseCase minutesGeneration;
+    private final FailureContextReporter failureContextReporter;
 
     public ProcessingPipeline(MeetingSessionStore sessionStore, AudioAssemblyUseCase audioAssembly,
             TranscriptionProvider transcriptionProvider, DiarizationResultAdapter diarizationAdapter,
-            MinutesGenerationUseCase minutesGeneration) {
+            MinutesGenerationUseCase minutesGeneration, FailureContextReporter failureContextReporter) {
         this.sessionStore = sessionStore;
         this.audioAssembly = audioAssembly;
         this.transcriptionProvider = transcriptionProvider;
         this.diarizationAdapter = diarizationAdapter;
         this.minutesGeneration = minutesGeneration;
+        this.failureContextReporter = failureContextReporter;
     }
 
     public void process(ProcessingJob job, String traceId) {
@@ -168,7 +171,7 @@ public class ProcessingPipeline {
         FailureContext context = FailureContext.from(sessionId, stage, traceId, safeErrorCode, retryable,
                 java.time.Instant.now()).orElse(null);
         if (context != null) {
-            context.logWarning(LOGGER);
+            failureContextReporter.report(context, LOGGER);
         } else {
             LOGGER.atWarn()
                     .addKeyValue("sessionId", sessionId)

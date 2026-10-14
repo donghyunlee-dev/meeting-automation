@@ -4,6 +4,7 @@ import com.meetingautomation.document.DocumentStructureProvider;
 import com.meetingautomation.document.MeetingDocumentRef;
 import com.meetingautomation.document.DocumentProviderException;
 import com.meetingautomation.api.error.FailureContext;
+import com.meetingautomation.api.error.FailureContextReporter;
 import com.meetingautomation.document.Participant;
 import com.meetingautomation.document.ParticipantListingProvider;
 import com.meetingautomation.document.ParticipantSummary;
@@ -35,10 +36,12 @@ final class PublishJobRunner {
     private final DocumentProviderFactory providers;
     private final EmailProvider emailProvider;
     private final NotificationProvider notificationProvider;
+    private final FailureContextReporter failureContextReporter;
     PublishJobRunner(MeetingSessionStore sessions, DocumentProviderFactory providers, EmailProvider emailProvider,
-            NotificationProvider notificationProvider) {
+            NotificationProvider notificationProvider, FailureContextReporter failureContextReporter) {
         this.sessions = sessions; this.providers = providers; this.emailProvider = emailProvider;
         this.notificationProvider = notificationProvider;
+        this.failureContextReporter = failureContextReporter;
     }
 
     void run(PublishJob job) {
@@ -67,7 +70,7 @@ final class PublishJobRunner {
             } catch (RuntimeException ignored) { }
             FailureContext.from(sessionId, "DOCUMENT_SAVE", traceId, "DOCUMENT_FAILED",
                     failure instanceof DocumentProviderException providerFailure && providerFailure.retryable(),
-                    java.time.Instant.now()).ifPresent(context -> context.logWarning(LOG));
+                    java.time.Instant.now()).ifPresent(context -> failureContextReporter.report(context, LOG));
         } finally {
             job.lease().close();
         }
@@ -96,7 +99,7 @@ final class PublishJobRunner {
         NotificationDelivery completed = outcome;
         if ("FAILED".equals(outcome.status())) {
             FailureContext.from(sessionId, "NOTIFICATION", traceId, "NOTIFICATION_FAILED", outcome.retryable(),
-                    java.time.Instant.now()).ifPresent(context -> context.logWarning(LOG));
+                    java.time.Instant.now()).ifPresent(context -> failureContextReporter.report(context, LOG));
         }
         sessions.withSessionLock(sessionId, () -> {
             sessions.completeNotificationDelivery(sessionId, completed);
@@ -213,7 +216,7 @@ final class PublishJobRunner {
     private void logEmailFailures(String sessionId, String traceId, java.util.List<EmailDelivery> deliveries) {
         deliveries.stream().filter(delivery -> "FAILED".equals(delivery.status())).forEach(delivery ->
                 FailureContext.from(sessionId, "EMAIL_DELIVERY", traceId, "EMAIL_FAILED", delivery.retryable(),
-                        java.time.Instant.now()).ifPresent(context -> context.logWarning(LOG)));
+                        java.time.Instant.now()).ifPresent(context -> failureContextReporter.report(context, LOG)));
     }
 
     private static TransferRecord toRecord(MeetingSession session) {

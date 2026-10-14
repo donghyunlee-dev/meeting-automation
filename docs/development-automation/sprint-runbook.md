@@ -16,6 +16,7 @@
 - Backend는 Java 25와 Gradle Wrapper를 사용한다. Windows 개발 검증은 `backend`에서 `./gradlew.bat test --tests <fully.qualified.TestClass>`로 변경 코드 및 직접 영향받는 테스트만 실행한다. 전체 Backend suite, `clean build`, 무관한 테스트는 개발자 검증에서 실행하지 않는다.
 - Frontend는 `frontend`에서 변경 영역의 Vitest 파일, ESLint 대상 파일, `npm run build`를 실행한다. 명령과 테스트 수는 PR 본문 및 SDD 결과와 일치시킨다.
 - task 완료에는 정확한 PR head의 테스트·review·필수 CI, merge, Issue 정리, evidence, PRD 갱신이 필요하다. 코드 push로 head가 바뀌면 이전 테스트/review 증거는 다시 확인할 때까지 무효다.
+- 완료 문서를 commit한 뒤 `workflow.mjs gate-finalize`를 `master` push 전에 실행한다. Gate는 `origin/master..HEAD`의 변경 파일을 확인하므로 push 후에는 차이가 없어 통과하지 않는다. Gate 통과 후 push하고 원격에 PRD/evidence가 있는지 확인한다.
 - Backend task 완료를 위해 로컬 서비스를 띄우거나 별도 acceptance/QA 담당자를 실행하지 않는다. 실 Provider/기기 테스트는 사용자에게 인계할 때 명확히 제외 범위를 적는다.
 
 Backend 검증 전 `java -version`과 `./gradlew.bat --version`의 JVM이 모두 Java 25인지 확인한다. Windows 프로세스의 `JAVA_HOME`이 오래된 JDK(예: 17)를 가리키면 해당 터미널 프로세스만 설치된 JDK 25로 맞춘 뒤 Wrapper 버전을 재확인한다. 시스템 전체 환경을 불필요하게 변경하지 않는다.

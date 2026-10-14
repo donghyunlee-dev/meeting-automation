@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -14,6 +15,7 @@ import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 import com.meetingautomation.api.audio.AudioAssemblyStorage;
+import com.meetingautomation.api.error.FailureContextReporter;
 import com.meetingautomation.api.session.MeetingSession;
 import com.meetingautomation.api.session.MeetingSessionStore;
 import com.meetingautomation.api.template.TemplateCatalog;
@@ -28,6 +30,7 @@ import com.meetingautomation.minutes.MinutesCommand;
 import com.meetingautomation.minutes.MinutesGenerationException;
 import com.meetingautomation.minutes.MinutesGenerationProvider;
 import com.meetingautomation.minutes.MinutesGenerationUseCase;
+import com.meetingautomation.notification.AdminIncidentNotifier;
 import com.meetingautomation.transcription.DiarizationResultAdapter;
 import com.meetingautomation.transcription.ProviderTranscriptionResponse;
 import com.meetingautomation.transcription.TranscriptionCommand;
@@ -39,6 +42,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.slf4j.LoggerFactory;
 import org.mockito.InOrder;
+import org.mockito.ArgumentCaptor;
 
 class ProcessingPipelineTests {
     private static final String SESSION_ID = "ms_processing-pipeline-test";
@@ -55,8 +59,10 @@ class ProcessingPipelineTests {
     private final MinutesGenerationUseCase minutesUseCase = new MinutesGenerationUseCase(
             new TemplateCatalog(new org.springframework.core.io.DefaultResourceLoader()),
             minutesProvider, new GroundedMinutesResultNormalizer());
+    private final AdminIncidentNotifier incidentNotifier = mock(AdminIncidentNotifier.class);
     private final ProcessingPipeline pipeline = new ProcessingPipeline(
-            sessionStore, audioAssembly, transcriptionProvider, normalizer, minutesUseCase);
+            sessionStore, audioAssembly, transcriptionProvider, normalizer, minutesUseCase,
+            new FailureContextReporter(incidentNotifier));
 
     @BeforeEach
     void createProcessingSession() {
@@ -138,6 +144,8 @@ class ProcessingPipelineTests {
     void assemblyFailureStopsLaterStagesAndStoresSafeFailureAtZeroProgress() {
         when(audioAssembly.assemble(JOB, POLICY, TRACE_ID))
                 .thenThrow(new AudioAssemblyException("AUDIO_ASSEMBLY_CHUNKS_INCOMPLETE"));
+        doThrow(new IllegalStateException("private webhook response"))
+                .when(incidentNotifier).notifyIncident(any());
 
         pipeline.process(JOB, TRACE_ID);
 
@@ -149,6 +157,11 @@ class ProcessingPipelineTests {
         assertThat(failed.processingFailure().retryable()).isFalse();
         assertThat(failed.speakers()).isEmpty();
         assertThat(failed.transcript()).isEmpty();
+        var reported = ArgumentCaptor.forClass(com.meetingautomation.api.error.FailureContext.class);
+        verify(incidentNotifier).notifyIncident(reported.capture());
+        assertThat(reported.getValue().errorCode()).isEqualTo("AUDIO_ASSEMBLY_CHUNKS_INCOMPLETE");
+        assertThat(reported.getValue().traceId()).isEqualTo(TRACE_ID);
+        assertThat(reported.getValue().retryable()).isFalse();
         verify(transcriptionProvider, never()).transcribeWithDiarization(any());
         verify(normalizer, never()).normalize(any(), org.mockito.ArgumentMatchers.anyLong());
         verify(minutesProvider, never()).generateMinutes(any());
