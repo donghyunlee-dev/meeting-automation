@@ -159,6 +159,27 @@ class MeetingSessionStatusApiTests {
     }
 
     @Test
+    void publishActionIsAvailableOnlyBeforePublishingOrAfterDocumentFailure() throws Exception {
+        for (String state : List.of("CONFIRMED", "DOCUMENT_FAILED")) {
+            sessionStore.save(new MeetingSession(SESSION_ID, 5, state, 1,
+                    new MeetingSession.Meeting("Planning", "default.md", "1.0.0", List.of("participant-1"),
+                            "Asia/Seoul", List.of()), null, 0, List.of(), List.of(), null,
+                    new StructuredMinutes("default.md", "1.0.0", "Summary", List.of(), List.of(), List.of(), List.of())), null);
+            mockMvc.perform(get(STATUS_URL, SESSION_ID)).andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.allowedActions[0]").value("PUBLISH"))
+                    .andExpect(jsonPath("$.data.allowedActions.length()").value(1));
+        }
+        for (String state : List.of("PUBLISHING", "DOCUMENT_SAVED")) {
+            sessionStore.save(new MeetingSession(SESSION_ID, 6, state, 1,
+                    new MeetingSession.Meeting("Planning", "default.md", "1.0.0", List.of("participant-1"),
+                            "Asia/Seoul", List.of()), null, 0, List.of(), List.of(), null,
+                    new StructuredMinutes("default.md", "1.0.0", "Summary", List.of(), List.of(), List.of(), List.of())), null);
+            mockMvc.perform(get(STATUS_URL, SESSION_ID)).andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.allowedActions").isEmpty());
+        }
+    }
+
+    @Test
     void repeatedGetReturnsTheSameSnapshotWithoutChangingSessionState() throws Exception {
         sessionStore.save(new MeetingSession(SESSION_ID, 4, "PROCESSING", 1,
                 new MeetingSession.Meeting("Planning", "default.md", List.of("participant-1"), "Asia/Seoul"),

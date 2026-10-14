@@ -428,6 +428,7 @@ class DocumentTransferServiceTests {
             return r.marker().transfer() == null ? CODEC.transferKey(fingerprint, r.sourceDocumentId()) : r.marker().transfer().transferKey();
         }
         @Override public TransferRecord exportMeeting(String id) { return meetings.get(id); }
+        @Override public MeetingDocumentRef publishMeeting(TransferRecord meeting) { throw new UnsupportedOperationException(); }
         @Override public Participant importParticipant(TransferRecord record, String sourceFingerprint) {
             createParticipantCalls++; writes.add("participant:" + record.sourceDocumentId());
             var imported = importedParticipant(record, sourceFingerprint, prefix + "-person", fingerprint);

@@ -33,6 +33,84 @@ public abstract class ProviderTransferSupport implements DocumentTransferPort {
         TransferRecord existing = find(target); TransferRecord result = existing == null ? verifiedCreate(structure().meetingsPageId(), target) : existing;
         return new MeetingDocumentRef(result.sourceDocumentId(), result.documentUrl());
     }
+    @Override public MeetingDocumentRef publishMeeting(TransferRecord meeting) {
+        validatePublishRecord(meeting);
+        TransferRecord existing = findByExternalSessionId(meeting.marker().externalSessionId());
+        if (existing != null) return verifiedPublishReference(meeting, existing);
+
+        String id;
+        try {
+            id = create(structure().meetingsPageId(), meeting);
+        } catch (RuntimeException ambiguousCreate) {
+            TransferRecord reconciled = reconcilePublish(meeting);
+            if (reconciled != null) return verifiedPublishReference(meeting, reconciled);
+            throw reconciliationRequired();
+        }
+
+        try {
+            return verifiedPublishReference(meeting, read(id));
+        } catch (RuntimeException unverifiedReadback) {
+            TransferRecord reconciled = reconcilePublish(meeting);
+            if (reconciled != null) return verifiedPublishReference(meeting, reconciled);
+            throw reconciliationRequired();
+        }
+    }
+
+    private void validatePublishRecord(TransferRecord meeting) {
+        if (meeting == null || meeting.participant() != null || meeting.marker() == null
+                || !"meeting-automation".equals(meeting.marker().format())
+                || !"meeting".equals(meeting.marker().recordType())
+                || !"1.0".equals(meeting.marker().schemaVersion())
+                || meeting.marker().transfer() != null
+                || meeting.marker().externalSessionId() == null || meeting.marker().externalSessionId().isBlank()
+                || meeting.marker().meetingAt() == null
+                || meeting.marker().templateId() == null || meeting.marker().templateId().isBlank()
+                || meeting.title() == null || meeting.title().isBlank() || meeting.minutes() == null) {
+            throw invalid();
+        }
+        try {
+            TransferPageCodec.validateReferences(meeting, new HashSet<>(meeting.marker().participantIds()));
+            codec.canonicalDigest(meeting);
+            pages.encode(meeting);
+        } catch (RuntimeException invalidRecord) {
+            throw invalid();
+        }
+    }
+
+    private TransferRecord findByExternalSessionId(String sessionId) {
+        TransferManifest manifest = readManifest();
+        List<TransferManifest.Entry> matches = manifest.meetings().stream()
+                .filter(entry -> sessionId.equals(entry.externalSessionId())).toList();
+        if (matches.size() > 1) throw conflict();
+        if (matches.isEmpty()) return null;
+        return exportMeeting(matches.getFirst().sourceDocumentId());
+    }
+
+    private TransferRecord reconcilePublish(TransferRecord expected) {
+        try {
+            TransferRecord actual = findByExternalSessionId(expected.marker().externalSessionId());
+            if (actual == null) return null;
+            verifiedPublishReference(expected, actual);
+            return actual;
+        } catch (RuntimeException unresolved) {
+            return null;
+        }
+    }
+
+    private MeetingDocumentRef verifiedPublishReference(TransferRecord expected, TransferRecord actual) {
+        if (actual == null || actual.sourceDocumentId() == null || actual.sourceDocumentId().isBlank()
+                || actual.documentUrl() == null || actual.documentUrl().isBlank()
+                || actual.marker() == null
+                || !expected.marker().externalSessionId().equals(actual.marker().externalSessionId())
+                || !codec.canonicalDigest(expected).equals(codec.canonicalDigest(actual))) {
+            throw conflict();
+        }
+        return new MeetingDocumentRef(actual.sourceDocumentId(), actual.documentUrl());
+    }
+
+    private static TransferAdapterException reconciliationRequired() {
+        return new TransferAdapterException(TransferAdapterException.Code.RECONCILIATION_REQUIRED);
+    }
     private void validateTransfer(TransferRecord r, Set<String> keys) {
         var t = r.marker().transfer(); if (t != null && (!keys.add(t.transferKey()) || !codec.canonicalDigest(r).equals(t.canonicalDigest())
                 || !codec.transferKey(t.sourceConnectionFingerprint(), t.sourceDocumentId()).equals(t.transferKey()))) throw conflict();

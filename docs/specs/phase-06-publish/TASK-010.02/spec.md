@@ -2,6 +2,8 @@
 
 > 📌 v1.9.0 변경 계약: TASK-022.04/.05의 공통 문서 codec과 활성 connection snapshot을 사용한다. 전환 lock 중 Publish를 차단하며 export/import와 같은 metadata/본문 round-trip 계약을 따른다. 이전으로 전달을 재발송하지 않는다. 상세 기준은 [문서 연결·이전 설계](../../../product/document-setup.md)다. 아래의 과거 기준과 충돌하면 이 변경 계약을 우선 적용한다.
 
+> 구현 보정 (2026-10-14): API-001 요청에는 Meeting date가 없으므로 Session 최초 생성 시각 `createdAt`을 저장하고, 그 instant를 Meeting timezone으로 변환해 `meetingAt`에 사용한다. Publish는 transfer/import 동작과 분리된 native `DocumentTransferPort.publishMeeting(TransferRecord)`이며, `TransferPageCodec` round-trip 및 active provider connection snapshot을 사용한다. transfer key나 import marker를 publish 용도로 만들지 않는다.
+
 ## 목표
 
 API-015가 `CONFIRMED` Session의 Meeting 문서를 생성하거나 동일 Session의 기존 문서를 재사용하도록 한다. Publish 접수는 비동기 `202 PUBLISHING`이며, Document 저장 실패는 `DOCUMENT_FAILED`로 기록하고 Email/Notification을 시작하지 않는다. 실패 후 새 key/current version으로 문서 단계 재시도를 허용한다. PRD v1.7.0 (2026-10-05), `FR-016`, `API-015`, `EXT-003`을 구체화한다. Issue [#44](https://github.com/donghyunlee-dev/meeting-automation/issues/44).
@@ -11,7 +13,7 @@ API-015가 `CONFIRMED` Session의 Meeting 문서를 생성하거나 동일 Sessi
 - API-015 경로, 공통 응답 envelope, `If-Match` 및 `Idempotency-Key` 검증
 - Session의 `CONFIRMED` 상태와 version을 확인하고 Publish를 한 번만 접수
 - 저장된 Session snapshot으로 `CreateMeetingCommand` 구성; `externalSessionId=sessionId`
-- `findMeetingBySessionId` 결과가 있으면 기존 참조 재사용, 없을 때만 `createMeeting`
+- active provider의 transfer manifest에서 `externalSessionId`로 기존 문서를 찾고, native `publishMeeting` operation으로 없을 때만 생성
 - Document 참조 저장, Session version 및 상태 전이, API-010 조회 결과 연결
 - 기존 오류 규약에 따른 Provider 실패 처리와 로그/응답 민감정보 제거
 
@@ -43,12 +45,12 @@ Accepted Session의 일관된 snapshot으로 Meeting title/date, Session roster,
 
 Document 저장 단계는 다음 순서를 따른다.
 
-1. `DocumentProvider.findMeetingBySessionId(sessionId)`를 호출한다.
-2. 기존 참조가 있으면 create를 건너뛰고 그 `documentId`/`documentUrl`을 채택한다.
-3. 없으면 `createMeeting(command)`를 호출한다. 생성과 metadata 기록 중 응답 유실/재실행이 발생해도 다음 시도는 같은 Session ID 조회를 우선한다.
+1. Session의 `documentConnectionVersion`으로 `DocumentConnectionGate` write lease를 획득하고, lease를 유지하며 현재 active provider의 transfer manifest를 조회한다.
+2. 같은 `externalSessionId`가 하나 있으면 export/readback으로 표준 codec 계약을 확인하고 그 `documentId`/`documentUrl`을 채택한다. 중복 marker나 손상된 참조는 생성으로 우회하지 않는다.
+3. 없으면 `DocumentTransferPort.publishMeeting(record)`가 `TransferPageCodec`을 통해 생성하고 즉시 export/readback으로 metadata와 본문 round-trip을 검증한다. 생성 결과가 모호하면 manifest를 다시 조회해 같은 Session 문서를 재발견하고 검증하며, 아직 확인할 수 없으면 실패한다.
 4. 성공 참조를 Session의 publish 결과에 기록하고 `DOCUMENT_SAVED`로 전이한다. 그 후 별도 후속 작업이 채널 전달을 시작한다.
 
-같은 Session의 서로 다른 Idempotency-Key, 동시 요청도 Session 상태/version의 원자적 조건 변경과 provider-side `externalSessionId` 조회를 함께 사용해 문서 하나만 채택한다. Memory-only V1에서 프로세스 재시작 복구를 보장하지 않지만 Provider에 이미 생성된 문서를 재접수/실행 시 재발견할 수 있어야 한다.
+같은 Session의 서로 다른 Idempotency-Key, 동시 요청도 Session 상태/version의 원자적 조건 변경과 provider-side `externalSessionId` 조회를 함께 사용해 문서 하나만 채택한다. write lease는 lookup/create/readback 전체에서 유지하고 성공·실패 모두 `finally`에서 해제한다. Memory-only V1에서 프로세스 재시작 복구를 보장하지 않지만 Provider에 이미 생성된 문서를 재접수/실행 시 재발견할 수 있어야 한다.
 
 ## 실패 및 경계 조건
 
@@ -57,7 +59,7 @@ Document 저장 단계는 다음 순서를 따른다.
 - API-015가 202를 반환한 뒤 처리 실패하므로 Provider 오류는 접수 API 응답으로 동기 반환하지 않는다. API-010이 최종 상태와 문서 결과를 제공한다.
 - Provider 조회 결과가 일시 오류이면 생성으로 우회하지 않는다. 중복 방지를 보장할 수 없으므로 단계 실패 처리한다.
 - 기존 문서 참조가 발견되면 새 문서 생성 없이 그 참조를 기록한다.
-- API-010과 공통 성공 envelope를 유지하고 task-specific 확장은 문서 결과 및 publish 오류처럼 필요한 경우에만 추가한다. Secret, Authorization, 원 Provider 오류 본문, Minutes/Transcript를 오류에 복사하지 않는다.
+- API-010 GET은 `DOCUMENT_SAVED`에서만 `data.document:{documentId,documentUrl}`를 포함한다. 저장 전과 `DOCUMENT_FAILED`에서는 `data.document`를 생략하며, Provider 오류 원문이나 별도 publish 오류 필드는 노출하지 않는다. API-015의 202 응답은 `{sessionId,status}`를 유지한다.
 
 ## 완료 기준
 
@@ -65,7 +67,7 @@ Document 저장 단계는 다음 순서를 따른다.
 - stale version, 잘못된 상태, 잘못된 요청, key 충돌은 각각 명세된 오류이며 상태/document 기록을 변경하지 않는다.
 - Provider 조회 결과 재사용, 조회 후 생성, Provider 오류 및 조회 불능 사례가 검증된다.
 - Session당 여러 key/동시 요청에서도 DocumentProvider create는 최대 한 번의 논리적 문서로 수렴한다.
-- 저장 성공 때 `documentId`와 유효 `documentUrl`이 API-010 결과에 노출되고 저장 실패 시 Email/Notification 호출은 없다.
+- 저장 성공 때 `data.document.documentId`와 유효 `data.document.documentUrl`이 API-010 결과에 노출되고, 저장 전·실패에는 `data.document`가 없다. 저장 실패 시 Email/Notification 호출은 없다.
 - 네 문서와 PRD 추적 행이 master에 게시되고 원격 확인된다.
 
 ## 연결 문서

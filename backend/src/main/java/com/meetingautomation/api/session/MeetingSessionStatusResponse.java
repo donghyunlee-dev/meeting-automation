@@ -10,6 +10,7 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 public record MeetingSessionStatusResponse(Data data) {
     private static final List<String> REVIEW_ACTIONS = List.of(
             "UPDATE_SPEAKER_MAPPING", "UPDATE_MINUTES", "REGENERATE_MINUTES", "CONFIRM");
+    private static final List<String> PUBLISH_ACTIONS = List.of("PUBLISH");
 
     public record Data(
             String sessionId,
@@ -21,7 +22,8 @@ public record MeetingSessionStatusResponse(Data data) {
             List<TranscriptView> transcript,
             StructuredMinutes minutes,
             List<String> allowedActions,
-            @JsonInclude(JsonInclude.Include.NON_NULL) LastOperation lastOperation) {
+            @JsonInclude(JsonInclude.Include.NON_NULL) LastOperation lastOperation,
+            @JsonInclude(JsonInclude.Include.NON_NULL) Document document) {
         public Data {
             speakers = List.copyOf(speakers);
             transcript = List.copyOf(transcript);
@@ -31,6 +33,8 @@ public record MeetingSessionStatusResponse(Data data) {
 
     public record LastOperation(String type, String outcome, String requestedTemplateId,
             @JsonInclude(JsonInclude.Include.NON_NULL) String errorCode) { }
+
+    public record Document(String documentId, String documentUrl) { }
 
     public record Meeting(List<String> participantIds) {
         public Meeting {
@@ -63,7 +67,8 @@ public record MeetingSessionStatusResponse(Data data) {
         }
     }
 
-    static MeetingSessionStatusResponse from(MeetingSession session, LastOperation lastOperation) {
+    static MeetingSessionStatusResponse from(MeetingSession session, LastOperation lastOperation,
+            MeetingSessionStore.PublishSnapshot publishSnapshot) {
         boolean failed = "PROCESSING_FAILED".equals(session.status());
         ProcessingFailure failure = failed ? session.processingFailure() : null;
         Processing processing = new Processing(session.processingStage(), session.progressPercent(),
@@ -86,10 +91,16 @@ public record MeetingSessionStatusResponse(Data data) {
                         .toList()
                 : List.of();
         StructuredMinutes minutes = reviewReady ? session.minutes() : null;
-        List<String> allowedActions = reviewReady ? REVIEW_ACTIONS : List.of();
+        List<String> allowedActions = reviewReady ? REVIEW_ACTIONS
+                : ("CONFIRMED".equals(session.status()) || "DOCUMENT_FAILED".equals(session.status()))
+                        ? PUBLISH_ACTIONS : List.of();
+        Document document = "DOCUMENT_SAVED".equals(session.status()) && publishSnapshot != null
+                && publishSnapshot.document() != null
+                        ? new Document(publishSnapshot.document().documentId(), publishSnapshot.document().documentUrl())
+                        : null;
         return new MeetingSessionStatusResponse(new Data(session.sessionId(), session.version(), session.status(),
                 new Meeting(session.meeting().participantIds()), processing, speakers, transcript, minutes,
-                allowedActions, reviewReady ? lastOperation : null));
+                allowedActions, reviewReady ? lastOperation : null, document));
     }
 }
 
