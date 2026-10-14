@@ -5,7 +5,7 @@
 ## 사전 확인
 
 - [ ] `NotificationProvider`, `ProviderHealth`, Delivery model, API-019 mapper와 Admin Slack incident 경로를 조사한다. 완료 증거: Meeting/Admin Webhook 분리 경계를 기록한다.
-- [ ] Spring HTTP client 규약, Secret 설정, application factory와 Java 21/Gradle build 경로를 확인한다. 완료 증거: 구현 파일과 명령 목록을 기록한다.
+- [ ] Spring HTTP client 규약, Secret 설정, application factory와 Java 25/Gradle build 경로를 확인한다. 완료 증거: 구현 파일과 명령 목록을 기록한다.
 - [ ] Slack webhook endpoint/error 규칙과 현재 `SLACK_MEETING_WEBHOOK_URL` 설정을 대조한다. 완료 증거: host/path/payload/result 계약을 기록한다.
 
 ## 구현 단계
@@ -19,7 +19,7 @@
 - [ ] 가장 최근 실제 Delivery 결과를 ProviderHealth reachable 관측값에 반영한다. 완료 결과: 아직 전송하지 않았거나 마지막 전송에 실패한 경우 reachable=true가 되지 않는다.
 - [ ] API-010 generic notification Delivery 및 Email 독립성 test를 TASK-012.02 계약 모의으로 검증한다.
 - [ ] Webhook URL/error body/title/content 가림과 Admin Slack 영향 없음 회귀 test를 실행한다.
-- [ ] Backend Java 21/Gradle test/build, 모의 검증, 별도 Slack 시험용 webhook 수동 결과를 Issue #48에 기록한다.
+- [ ] Record exact focused test commands/results in Issue #48. A live Slack post is optional only when a dedicated test webhook is explicitly available; it is not a task-local completion gate.
 
 ## 완료 확인
 
