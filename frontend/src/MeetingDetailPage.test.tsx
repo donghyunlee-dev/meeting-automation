@@ -64,6 +64,28 @@ describe('Meetings filters and detail', () => {
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Transcript' })).toBeNull());
   });
 
+  it('contains forward and reverse keyboard focus inside the transcript modal', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ok(detail)));
+    const backgroundButton = document.createElement('button');
+    backgroundButton.textContent = 'Background action';
+    document.body.append(backgroundButton);
+    try {
+      render(<MemoryRouter initialEntries={['/meetings/doc%2Fa']}><Routes><Route path="/meetings/:documentId" element={<MeetingDetailPage />} /></Routes></MemoryRouter>);
+      expect(await screen.findByText('Summary text')).toBeTruthy();
+      fireEvent.click(screen.getByRole('button', { name: 'Transcript 보기' }));
+      const closeButton = await screen.findByRole('button', { name: 'Transcript 닫기' });
+
+      backgroundButton.focus();
+      expect(fireEvent.keyDown(document, { key: 'Tab' })).toBe(false);
+      expect(document.activeElement).toBe(closeButton);
+
+      expect(fireEvent.keyDown(document, { key: 'Tab', shiftKey: true })).toBe(false);
+      expect(document.activeElement).toBe(closeButton);
+    } finally {
+      backgroundButton.remove();
+    }
+  });
+
   it('does not render unsafe external URLs and supports retry and not-found return', async () => {
     const fetchMock = vi.fn(async () => ok({ ...detail, documentUrl: 'javascript:alert(1)' }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ error: { code: 'PROVIDER_FAILURE', message: 'secret provider text' } }), { status: 502 }))

@@ -19,16 +19,46 @@ function safeExternalUrl(value: string | null): string | null {
 
 function TranscriptDrawer({ detail, onClose }: { detail: MeetingDetail; onClose: () => void }) {
   const closeRef = useRef<HTMLButtonElement>(null);
+  const dialogRef = useRef<HTMLElement>(null);
   useEffect(() => {
     closeRef.current?.focus();
-    const onKeyDown = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose(); };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        onClose();
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      const dialog = dialogRef.current;
+      if (!dialog) return;
+      const focusable = [...dialog.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      )];
+      if (focusable.length === 0) {
+        event.preventDefault();
+        dialog.focus();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const active = document.activeElement;
+      if (!dialog.contains(active)) {
+        event.preventDefault();
+        (event.shiftKey ? last : first).focus();
+      } else if (event.shiftKey && active === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && active === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
   }, [onClose]);
   const speakerNames = new Map(detail.participants.map(({ id, name }) => [id, name]));
   return (
     <div className="transcript-drawer-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <section className="transcript-drawer" role="dialog" aria-modal="true" aria-labelledby="transcript-title">
+      <section ref={dialogRef} className="transcript-drawer" role="dialog" aria-modal="true" aria-labelledby="transcript-title" tabIndex={-1}>
         <header className="transcript-drawer-header"><div><p className="eyebrow">회의 기록</p><h2 id="transcript-title">Transcript</h2></div><button ref={closeRef} className="icon-button" type="button" aria-label="Transcript 닫기" onClick={onClose}>×</button></header>
         <div className="transcript-drawer-list">
           {detail.transcript.length === 0 ? <p className="transcript-drawer-empty">Transcript가 없습니다.</p> : detail.transcript.map((segment) => (
