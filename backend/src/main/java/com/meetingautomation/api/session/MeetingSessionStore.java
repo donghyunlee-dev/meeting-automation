@@ -23,6 +23,7 @@ public final class MeetingSessionStore {
     private final Map<String, UploadPolicy> uploadPolicies = new ConcurrentHashMap<>();
     private final Map<String, MinutesRegenerationBackup> minutesRegenerationBackups = new ConcurrentHashMap<>();
     private final Map<String, MeetingSessionStatusResponse.LastOperation> lastOperations = new ConcurrentHashMap<>();
+    private final Map<String, AcceptedReviewConfirmation> acceptedReviewConfirmations = new java.util.HashMap<>();
     private final ReentrantLock[] sessionLockStripes = createSessionLockStripes();
 
     public <T> T withSessionLock(String sessionId, Supplier<T> operation) {
@@ -72,6 +73,8 @@ public final class MeetingSessionStore {
                 uploadPolicies.remove(sessionId);
                 minutesRegenerationBackups.remove(sessionId);
                 lastOperations.remove(sessionId);
+                acceptedReviewConfirmations.entrySet().removeIf(entry ->
+                        entry.getValue().fingerprint().sessionId().equals(sessionId));
             }
             if (registration != null) registration.close();
             return removed != null;
@@ -87,6 +90,54 @@ public final class MeetingSessionStore {
     public Optional<MeetingSession> find(String sessionId) {
         return Optional.ofNullable(sessions.get(sessionId));
     }
+
+    /** Confirms one valid Review snapshot and stores its idempotent response in the same commit boundary. */
+    public ReviewConfirmationResponse confirmReview(
+            String sessionId,
+            int expectedVersion,
+            String idempotencyKey,
+            ReviewConfirmationService.ReviewConfirmationFingerprint fingerprint,
+            ReviewConfirmationValidator validator) {
+        return withSessionLock(sessionId, () -> confirmReviewLocked(
+                sessionId, expectedVersion, idempotencyKey, fingerprint, validator));
+    }
+
+    private synchronized ReviewConfirmationResponse confirmReviewLocked(
+            String sessionId,
+            int expectedVersion,
+            String idempotencyKey,
+            ReviewConfirmationService.ReviewConfirmationFingerprint fingerprint,
+            ReviewConfirmationValidator validator) {
+        MeetingSession current = sessions.get(sessionId);
+        if (current == null) throw new com.meetingautomation.api.audio.AudioSessionNotFoundException();
+
+        AcceptedReviewConfirmation accepted = acceptedReviewConfirmations.get(idempotencyKey);
+        if (accepted != null) {
+            if (!accepted.fingerprint().equals(fingerprint)) {
+                throw new com.meetingautomation.api.idempotency.IdempotencyKeyConflictException();
+            }
+            return accepted.response();
+        }
+        if (!"REVIEW".equals(current.status())) throw new SessionStateConflictException();
+        if (current.version() != expectedVersion) throw new SessionVersionConflictException();
+
+        java.util.List<ReviewValidationIssue> issues = validator.validate(current);
+        if (!issues.isEmpty()) throw new ReviewValidationException(issues);
+
+        MeetingSession confirmed = new MeetingSession(current.sessionId(), Math.addExact(current.version(), 1),
+                "CONFIRMED", current.documentConnectionVersion(), current.meeting(), current.processingStage(),
+                current.progressPercent(), current.speakers(), current.transcript(),
+                current.processingFailure(), current.minutes());
+        ReviewConfirmationResponse response = ReviewConfirmationResponse.confirmed(confirmed);
+        sessions.put(sessionId, confirmed);
+        acceptedReviewConfirmations.put(idempotencyKey,
+                new AcceptedReviewConfirmation(fingerprint, response));
+        return response;
+    }
+
+    private record AcceptedReviewConfirmation(
+            ReviewConfirmationService.ReviewConfirmationFingerprint fingerprint,
+            ReviewConfirmationResponse response) { }
 
     public Optional<MeetingSessionStatusResponse.LastOperation> findLastOperation(String sessionId) {
         return Optional.ofNullable(lastOperations.get(sessionId));
