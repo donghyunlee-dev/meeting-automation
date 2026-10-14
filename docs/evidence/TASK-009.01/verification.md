@@ -20,7 +20,7 @@ Result: `BUILD SUCCESSFUL`; 9 regeneration tests and 5 API-010 status tests pass
 
 ## Review, CI, and local API QA
 
-Independent review examined exact head `869c0a65a8ecb16d1732b954b5813a2c5efdc98b` and found no blocking correctness, idempotency/version, rollback/fencing, API-010 compatibility, or redaction findings. GitHub does not permit the PR author account to submit an APPROVE review; the exact-head review was recorded as COMMENTED. There were no open review threads. Two test coverage gaps noted in the review were covered by the loopback QA below: storage failure behavior was exercised through provider failure rollback, and same-key conflict behavior was exercised for a changed Template.
+Independent review examined exact head `869c0a65a8ecb16d1732b954b5813a2c5efdc98b` and found no blocking correctness, idempotency/version, rollback/fencing, API-010 compatibility, or redaction findings. GitHub does not permit the PR author account to submit an APPROVE review; the exact-head review was recorded as COMMENTED. There were no open review threads. The review noted two non-blocking test coverage gaps: storage commit failure and reuse of the same idempotency key with a different valid If-Match were not individually represented in the developer tests. Loopback QA exercised provider-failure rollback and same-key/different-Template conflict behavior; it does not claim to cover storage commit failure or different-If-Match replay.
 
 GitHub Actions `Backend Validation` and `Validate Gradle Wrapper` both completed successfully for the exact PR head.
 
