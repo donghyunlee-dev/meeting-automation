@@ -29,6 +29,7 @@ import { ReviewSpeakerPage } from './ReviewSpeakerPage';
 import type { ReviewSpeaker, StructuredMinutes } from './reviewApi';
 import type { MinutesSaveState } from './ReviewMinutesEditor';
 import { HomePage, MeetingsPage } from './MeetingHistory';
+import { MeetingDetailPage } from './MeetingDetailPage';
 
 type ViewState = 'loading' | 'ready' | 'error';
 type FormState = { mode: 'create' } | { mode: 'edit'; participant: Participant };
@@ -587,6 +588,7 @@ export function App({ onNewMeetingSubmit = () => undefined, onMinutesSave, minut
         <Route path="/settings/document" element={<DocumentSetupWizard settings />} />
         <Route path="/meetings" element={<MeetingsPage />} />
         <Route path="/meetings/new" element={<SetupGate><NewMeetingRoute onCreated={(session) => { setCreatedSession(session); saveRecordingSession(session); setRecordingState('Ready'); }} onSubmitted={onNewMeetingSubmit} /></SetupGate>} />
+        <Route path="/meetings/:documentId" element={<MeetingDetailPage />} />
         <Route path="/meetings/:sessionId/recording" element={<MeetingRecordingRoute session={createdSession} setState={setRecordingState} mediaAdapter={mediaAdapter} />} />
         <Route path="/meetings/:sessionId/processing" element={<ProcessingPage />} />
         <Route path="/meetings/:sessionId/review" element={<ReviewSpeakerPage drafts={speakerDrafts} onInitialize={initializeSpeakerDraft} onChange={updateSpeakerDraft} onCommit={commitSpeakerMappings} onMinutesSave={onMinutesSave} minutesSaveState={minutesSaveState} />} />
