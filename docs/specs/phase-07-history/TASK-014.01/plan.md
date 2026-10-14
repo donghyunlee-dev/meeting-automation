@@ -30,9 +30,9 @@ API/backend 계약이 PRD와 선행 Provider port에서 이미 고정되어 있�
 
 ## 구현 결과
 
-- `GET /api/v1/meetings`는 resolver의 활성 global connection에서 TASK-022.04 `DocumentTransferPort`를 선택한다. 완전한 manifest를 읽고 문서 ID를 dedupe한 뒤 각 metadata record를 codec으로 해석한다.
+- `GET /api/v1/meetings`는 resolver의 활성 global connection에서 TASK-022.04 `DocumentTransferPort`를 선택하고 새 history 전용 `listMeetingRecords()` operation을 사용한다. 공유 provider support가 전체 child pagination을 codec으로 읽으며, meeting child ID만 dedupe한 decoded records를 반환한다. Strict migration `readManifest()` 의미는 유지한다.
 - 필수 meeting metadata 및 participant roster 참조가 누락되면 전체 요청을 `DOCUMENT_FAILED`로 실패시킨다. 모든 항목을 실제 `meetingAt` 최신순, 동률 `documentId` 오름차순으로 정렬한 뒤 limit을 적용한다.
-- Focused verification: Java 25, `./gradlew.bat test --tests com.meetingautomation.MeetingListApiTests --tests com.meetingautomation.document.DocumentTransferAdapterTests` (39 tests passed: 6 API and 33 adapter tests).
+- Focused verification: Java 25, `./gradlew.bat test --tests com.meetingautomation.MeetingListApiTests --tests com.meetingautomation.document.DocumentTransferAdapterTests` (43 tests passed: 6 API and 37 adapter tests).
 - 환경 확인: shell 기본 `JAVA_HOME`은 오래된 JDK 17 경로를 가리켰다. 설치된 JDK 25 (`C:\Program Files\Eclipse Adoptium\jdk-25.0.4.101-hotspot`)를 프로세스 환경에 설정하고 위 명령을 통과시켰다.
 
 ## 검증 및 인접 작업

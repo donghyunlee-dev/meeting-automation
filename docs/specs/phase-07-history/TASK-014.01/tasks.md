@@ -11,11 +11,11 @@
 ## 구현 단계
 
 - [x] API-017 service/controller 테스트를 먼저 작성하고 실패를 확인했다. 기본 limit, 범위 오류, 빈 결과, 최신순·동률 기준, 정렬 후 limit, ID 중복, 부분 결과 차단, 민감 데이터 비노출을 검증한다.
-- [x] TASK-022.04 문서 codec의 Adapter 계약 테스트를 재사용해 Notion/Confluence 전체 child cursor pagination 및 metadata 검증을 확인한다.
-- [x] 활성 global connection에서 선택된 Provider를 읽고, codec manifest 전체를 읽은 뒤 ID를 dedupe하고 metadata/roster를 조립한다. 실제 meetingAt 내림차순과 documentId 오름차순 tie-break 후 limit을 적용한다.
+- [x] TASK-022.04 문서 codec의 Adapter 계약 테스트를 재사용해 Notion/Confluence 전체 child cursor pagination 및 metadata 검증을 확인한다. history 전용 목록 operation은 반복 meeting ID를 dedupe하고 기존 strict manifest는 중복을 거부한다.
+- [x] 활성 global connection에서 선택된 Provider의 history 목록 operation으로 decoded records를 받고 metadata/roster를 조립한다. 실제 meetingAt 내림차순과 documentId 오름차순 tie-break 후 limit을 적용한다.
 - [x] API-017 Controller와 공통 `{data:{items}}` envelope, 표준 validation/provider 오류 응답을 연결했다.
 - [x] HTTP 테스트로 정상·빈 목록·Provider/필수 metadata 오류와 민감 데이터 비노출을 확인했다.
-- [x] Java 25 focused tests 39개와 `git diff --check`를 실행했다. 정확한 명령 및 범위는 [검증 계획](./test.md)에 기록했다.
+- [x] Java 25 focused tests 43개와 `git diff --check`를 실행했다. 정확한 명령 및 범위는 [검증 계획](./test.md)에 기록했다.
 
 ## 완료 확인
 

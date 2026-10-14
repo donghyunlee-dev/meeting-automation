@@ -77,8 +77,8 @@ class MeetingListApiTests {
                 .andExpect(jsonPath("$.data.items[0].documentUrl").value(org.hamcrest.Matchers.nullValue()))
                 .andExpect(jsonPath("$.data.items[1].documentId").value("doc-mid"))
                 .andExpect(jsonPath("$.data.items[1].documentUrl").value(org.hamcrest.Matchers.nullValue()));
-        assertThat(provider.readManifestCalls).isEqualTo(1);
-        assertThat(provider.exportedIds).containsExactlyInAnyOrder("doc-old", "doc-new", "doc-mid");
+        assertThat(provider.listMeetingCalls).isEqualTo(1);
+        assertThat(provider.readManifestCalls).isZero();
     }
 
     @Test
@@ -163,8 +163,8 @@ class MeetingListApiTests {
         private List<TransferRecord> records = List.of();
         private boolean failManifest;
         private int readManifestCalls;
-        private final java.util.ArrayList<String> exportedIds = new java.util.ArrayList<>();
-        void reset() { records = List.of(); failManifest = false; readManifestCalls = 0; exportedIds.clear(); }
+        private int listMeetingCalls;
+        void reset() { records = List.of(); failManifest = false; readManifestCalls = 0; listMeetingCalls = 0; }
         @Override public ProviderHealth validateConnection() { return null; }
         @Override public DocumentStructure discoverStructure(String rootId) { return null; }
         @Override public TransferManifest readManifest() {
@@ -174,8 +174,13 @@ class MeetingListApiTests {
                     new TransferManifest.Entry(record.sourceDocumentId(), record.sourceRevision(), "digest", "key",
                             record.marker().externalSessionId(), record.marker().participantIds())).toList());
         }
+        @Override public List<TransferRecord> listMeetingRecords() {
+            listMeetingCalls++;
+            if (failManifest) throw com.meetingautomation.document.DocumentProviderException.documentFailed(true);
+            return records.stream().collect(java.util.stream.Collectors.toMap(TransferRecord::sourceDocumentId,
+                    record -> record, (first, duplicate) -> first, java.util.LinkedHashMap::new)).values().stream().toList();
+        }
         @Override public TransferRecord exportMeeting(String sourceDocumentId) {
-            exportedIds.add(sourceDocumentId);
             return records.stream().filter(record -> record.sourceDocumentId().equals(sourceDocumentId)).findFirst().orElse(null);
         }
         @Override public Participant importParticipant(TransferRecord record, String sourceConnectionFingerprint) { return null; }

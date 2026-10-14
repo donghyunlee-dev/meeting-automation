@@ -5,7 +5,6 @@ import com.meetingautomation.document.DocumentProviderResolver;
 import com.meetingautomation.document.DocumentStructureProvider;
 import com.meetingautomation.document.ParticipantSummary;
 import com.meetingautomation.document.transfer.DocumentTransferPort;
-import com.meetingautomation.document.transfer.TransferManifest;
 import com.meetingautomation.document.transfer.TransferRecord;
 import com.meetingautomation.api.error.ApiValidationException;
 import java.net.URI;
@@ -38,21 +37,10 @@ public final class MeetingListService {
         }
 
         try {
-            TransferManifest manifest = transfer.readManifest();
-            List<String> ids = manifest.meetings().stream().map(entry -> {
-                if (entry == null || entry.sourceDocumentId() == null || entry.sourceDocumentId().isBlank()) {
-                    throw DocumentProviderException.documentFailed(false);
-                }
-                return entry.sourceDocumentId();
-            }).distinct().toList();
-            List<MeetingListResponse.Item> items = new ArrayList<>(ids.size());
-            for (String id : ids) {
-                TransferRecord record = transfer.exportMeeting(id);
-                if (record == null || !id.equals(record.sourceDocumentId())) {
-                    throw DocumentProviderException.documentFailed(false);
-                }
-                items.add(toItem(record));
-            }
+            List<TransferRecord> records = transfer.listMeetingRecords();
+            if (records == null) throw DocumentProviderException.documentFailed(false);
+            List<MeetingListResponse.Item> items = new ArrayList<>(records.size());
+            for (TransferRecord record : records) items.add(toItem(record));
             items.sort(Comparator.comparing((MeetingListResponse.Item item) -> item.meetingAt().toInstant())
                     .reversed().thenComparing(MeetingListResponse.Item::documentId));
             return List.copyOf(items.subList(0, Math.min(limit, items.size())));
