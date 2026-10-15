@@ -17,10 +17,12 @@ function publicBuildSecurityPlugin(): Plugin {
 }
 
 export default defineConfig(({ mode }) => {
-  const loadedEnvironment = loadEnv(mode, '.', 'VITE_');
+  const publicEnvironmentPrefix = 'VITE_API_BASE_URL';
+  const loadedEnvironment = loadEnv(mode, '.', publicEnvironmentPrefix);
   assertAllowedPublicViteEnvironment(loadedEnvironment);
 
   return {
+    envPrefix: publicEnvironmentPrefix,
     plugins: [react(), publicBuildSecurityPlugin()],
   };
 });
