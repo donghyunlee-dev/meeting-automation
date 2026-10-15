@@ -878,7 +878,10 @@ describe('Recording route', () => {
         events.push('API-008');
         return response({ data: { receivedSequences: [], receivedChunks: 0, totalBytes: 0 } });
       }
-      if (path.endsWith('/audio/chunks/0')) {
+      if (path.endsWith('/audio/chunks/0/upload-grant')) {
+        return response({ data: { pathname: `audio/${session.sessionId}/chunks/0`, clientPayload: 'signed-grant' } });
+      }
+      if (path.endsWith('/audio/chunks/0/confirm')) {
         events.push('API-007');
         return response({ data: { sequence: 0, received: true } });
       }
@@ -891,7 +894,7 @@ describe('Recording route', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     render(<MemoryRouter initialEntries={[`/meetings/${session.sessionId}/recording`]}>
-      <App mediaAdapter={mediaAdapter} />
+      <App mediaAdapter={mediaAdapter} blobUpload={vi.fn(async () => ({ url: 'private-blob', downloadUrl: 'private-blob', pathname: 'audio/test/chunks/0', contentType: 'audio/webm', contentDisposition: '', etag: 'etag' })) as never} />
       <CurrentPath />
     </MemoryRouter>);
 
@@ -943,7 +946,8 @@ describe('Recording route', () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
       const path = new URL(String(input)).pathname;
       if (path.endsWith('/audio')) return response({ data: { receivedSequences: [], receivedChunks: 0, totalBytes: 0 } });
-      if (path.endsWith('/audio/chunks/0')) return response({ data: { sequence: 0, received: true } });
+      if (path.endsWith('/audio/chunks/0/upload-grant')) return response({ data: { pathname: `audio/${session.sessionId}/chunks/0`, clientPayload: 'signed-grant' } });
+      if (path.endsWith('/audio/chunks/0/confirm')) return response({ data: { sequence: 0, received: true } });
       if (path.endsWith('/process')) {
         processAttempts += 1;
         if (processAttempts === 1) throw new TypeError('connection lost after request was sent');
@@ -953,7 +957,7 @@ describe('Recording route', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
     render(<MemoryRouter initialEntries={[`/meetings/${session.sessionId}/recording`]}>
-      <App mediaAdapter={mediaAdapter} />
+      <App mediaAdapter={mediaAdapter} blobUpload={vi.fn(async () => ({ url: 'private-blob', downloadUrl: 'private-blob', pathname: 'audio/test/chunks/0', contentType: 'audio/webm', contentDisposition: '', etag: 'etag' })) as never} />
       <CurrentPath />
     </MemoryRouter>);
 
@@ -1004,7 +1008,7 @@ describe('Recording route', () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const path = new URL(String(input)).pathname;
       if (path.endsWith('/audio')) return response({ data: { receivedSequences: [], receivedChunks: 0, totalBytes: 0 } });
-      if (path.endsWith('/audio/chunks/0')) return response({ error: { code: 'AUDIO_UPLOAD_REJECTED' } }, 422);
+      if (path.endsWith('/audio/chunks/0/upload-grant')) return response({ error: { code: 'AUDIO_UPLOAD_REJECTED' } }, 422);
       if (path.endsWith('/process')) return response({ data: { sessionId: session.sessionId, status: 'PROCESSING', stage: 'AUDIO_ASSEMBLY' } }, 202);
       throw new Error(`Unexpected request: ${path}`);
     });

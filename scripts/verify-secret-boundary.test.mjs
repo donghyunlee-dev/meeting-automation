@@ -17,7 +17,9 @@ EMAIL_OAUTH_REFRESH_TOKEN=
 EMAIL_SENDER_ADDRESS=
 NOTIFICATION_PROVIDER=SLACK
 ALLOWED_ORIGINS=http://localhost:5173
-PRIVATE_AUDIO_S3_BUCKET=<private-bucket-name>
+VERCEL_BLOB_CONTROL_URL=https://<vercel-project-domain>/api/audio-storage
+RENDER_AUDIO_STORAGE_SECRET=
+RENDER_AUDIO_GRANT_SECRET=
 OPENAI_API_KEY=
 SLACK_MEETING_WEBHOOK_URL=
 SLACK_ADMIN_WEBHOOK_URL=
@@ -83,14 +85,14 @@ test('requires the documented non-secret backend settings', () => {
     && issue.code === 'MISSING_REQUIRED_KEY'));
 });
 
-test('requires a private object storage bucket and no local Audio persistence setting', () => {
-  const missingBucket = inspectEnvSamples(validFrontend,
-    validBackend.replace('PRIVATE_AUDIO_S3_BUCKET=<private-bucket-name>\n', ''));
+test('requires the Vercel Blob control endpoint and server-only secrets', () => {
+  const missingEndpoint = inspectEnvSamples(validFrontend,
+    validBackend.replace('VERCEL_BLOB_CONTROL_URL=https://<vercel-project-domain>/api/audio-storage\n', ''));
 
   assert.equal(inspectEnvSamples(validFrontend, validBackend).valid, true);
-  assert.equal(missingBucket.valid, false);
-  assert.ok(missingBucket.issues.some(issue => issue.file === 'backend/.env.example'
-    && issue.key === 'PRIVATE_AUDIO_S3_BUCKET'
+  assert.equal(missingEndpoint.valid, false);
+  assert.ok(missingEndpoint.issues.some(issue => issue.file === 'backend/.env.example'
+    && issue.key === 'VERCEL_BLOB_CONTROL_URL'
     && issue.code === 'MISSING_REQUIRED_KEY'));
 });
 

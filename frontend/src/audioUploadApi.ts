@@ -1,4 +1,5 @@
 import type { StoredChunk } from './chunkRepository';
+import { upload } from '@vercel/blob/client';
 
 type ErrorEnvelope = { error?: { code?: string } };
 
@@ -16,7 +17,7 @@ export type ReceivedAudioStatus = {
 };
 
 export type ReceivedChunkAck = { sequence: number; received: true };
-export type AudioUploadRequestOptions = { timeoutMs?: number };
+export type AudioUploadRequestOptions = { timeoutMs?: number; blobUpload?: typeof upload };
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 15_000;
 
@@ -59,8 +60,42 @@ export async function putAudioChunk(chunk: StoredChunk, fetchImpl: typeof fetch 
   let response: Response;
   let body: unknown;
   try {
-    ({ response, body } = await requestAndRead(fetchImpl, `${baseUrl()}/api/v1/meeting-sessions/${encodeURIComponent(chunk.sessionId)}/audio/chunks/${chunk.sequence}`, {
-      method: 'PUT',
+    ({ response, body } = await requestAndRead(fetchImpl, `${chunkEndpoint(chunk)}/upload-grant`, {
+      method: 'POST',
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json', 'Idempotency-Key': chunk.chunkId },
+      body: JSON.stringify({ mimeType: chunk.mimeType, bytes: chunk.blob.size, sha256 }),
+    }, options.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS));
+  } catch (error) {
+    if (error instanceof RequestTimeoutError) throw timeoutApiError(error);
+    throw new AudioUploadApiError('NETWORK_ERROR', undefined, true);
+  }
+
+  if (!response.ok) throw apiError(response.status, body);
+  const grant = (body as { data?: { pathname?: string; clientPayload?: string } } | undefined)?.data;
+  if (!grant?.pathname || !grant.clientPayload) throw new AudioUploadApiError('INVALID_UPLOAD_GRANT');
+  try {
+    await (options.blobUpload ?? upload)(grant.pathname, chunk.blob, {
+      access: 'private',
+      handleUploadUrl: new URL('/api/audio-upload-token', window.location.origin).toString(),
+      clientPayload: grant.clientPayload,
+    });
+  } catch {
+    try {
+      return await confirmUploadedChunk(chunk, sha256, fetchImpl, options.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS);
+    } catch {
+      throw new AudioUploadApiError('BLOB_UPLOAD_FAILED', undefined, true);
+    }
+  }
+
+  return confirmUploadedChunk(chunk, sha256, fetchImpl, options.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS);
+}
+
+async function confirmUploadedChunk(chunk: StoredChunk, sha256: string, fetchImpl: typeof fetch, timeoutMs: number): Promise<ReceivedChunkAck> {
+  let response: Response;
+  let body: unknown;
+  try {
+    ({ response, body } = await requestAndRead(fetchImpl, `${chunkEndpoint(chunk)}/confirm`, {
+      method: 'POST',
       headers: {
         Accept: 'application/json',
         'Content-Type': chunk.mimeType,
@@ -68,8 +103,7 @@ export async function putAudioChunk(chunk: StoredChunk, fetchImpl: typeof fetch 
         'X-Audio-Byte-Length': String(chunk.blob.size),
         'Idempotency-Key': chunk.chunkId,
       },
-      body: chunk.blob,
-    }, options.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS));
+    }, timeoutMs));
   } catch (error) {
     if (error instanceof RequestTimeoutError) throw timeoutApiError(error);
     throw new AudioUploadApiError('NETWORK_ERROR', undefined, true);
@@ -81,6 +115,10 @@ export async function putAudioChunk(chunk: StoredChunk, fetchImpl: typeof fetch 
     throw new AudioUploadApiError('INVALID_UPLOAD_ACK', undefined, true);
   }
   return { sequence: data.sequence, received: true };
+}
+
+function chunkEndpoint(chunk: StoredChunk): string {
+  return `${baseUrl()}/api/v1/meeting-sessions/${encodeURIComponent(chunk.sessionId)}/audio/chunks/${chunk.sequence}`;
 }
 
 function apiError(status: number, body: unknown): AudioUploadApiError {

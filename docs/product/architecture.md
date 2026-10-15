@@ -36,7 +36,7 @@ V1은 단일 회사용 모바일 웹이다. 브라우저는 녹음 권한 획득
 
 | 단위 | 기준 | 책임 |
 |---|---|---|
-| Frontend | Node.js 22 LTS, React 19, TypeScript 5.x, Vite 7.x, npm | 모바일 UI, 녹음 제어, 재전송 가능한 chunk queue, REST 호출 |
+| Frontend | Node.js 24 LTS, React 19, TypeScript 5.x, Vite 7.x, npm | 모바일 UI, 녹음 제어, 재전송 가능한 chunk queue, REST 호출 |
 | Backend | Java 25, Spring Boot 4.1.x, Gradle 9.x (9.1+) | REST API, workflow orchestration, Provider Adapter |
 | Frontend 배포 | Vercel | 정적 웹 자산 제공 |
 | Backend 배포 | Render | Spring Boot 프로세스와 작업 실행 |

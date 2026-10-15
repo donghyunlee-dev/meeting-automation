@@ -45,7 +45,7 @@ Frontend와 Backend가 각자 소유한 디렉터리에서 독립적으로 의�
 
 ## 결정 및 전제
 
-- PRD §3.1~3.3, §20, §23.1과 `DEC-017` 기준을 따른다. FE는 Node.js 22/npm/Vite, BE는 Java 25/Spring Boot/Gradle Wrapper를 소유한다.
+- PRD §3.1~3.3, §20, §23.1과 `DEC-017` 기준을 따른다. FE는 Node.js 24/npm/Vite, BE는 Java 25/Spring Boot/Gradle Wrapper를 소유한다.
 - Frontend 샘플의 API 주소는 [Frontend Setup](../../../setup/frontend-setup.md)의 `VITE_API_BASE_URL` 예시를 따른다.
 - Backend 샘플의 키와 로컬 기본값은 [Backend Setup](../../../setup/backend-setup.md)의 비밀 아닌 설정 예시를 따른다. Secret 키 예시는 값 없이 둔다.
 - 실제 Provider credential은 Backend runtime 설정으로만 주입한다. `VITE_` 변수는 브라우저 번들에 공개될 수 있으므로 credential을 담지 않는다.

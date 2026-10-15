@@ -43,6 +43,35 @@ public final class AudioChunkService {
                 contentType, rawSha256, rawByteLength, idempotencyKey, contentLength, body));
     }
 
+    public AudioChunkUploadResponse confirmClientUpload(String sessionId, String rawSequence, String contentType,
+            String rawSha256, String rawByteLength, String idempotencyKey) {
+        return sessionStore.withSessionLock(sessionId, () -> confirmClientUploadLocked(sessionId, rawSequence, contentType,
+                rawSha256, rawByteLength, idempotencyKey));
+    }
+
+    private AudioChunkUploadResponse confirmClientUploadLocked(String sessionId, String rawSequence, String contentType,
+            String rawSha256, String rawByteLength, String idempotencyKey) {
+        var session = sessionStore.find(sessionId).orElseThrow(AudioSessionNotFoundException::new);
+        if (!"CREATED".equals(session.status()) && !"UPLOADING".equals(session.status())) {
+            throw new com.meetingautomation.api.session.SessionStateConflictException();
+        }
+        UploadPolicy policy = sessionStore.findUploadPolicy(sessionId).orElseGet(meetingSessionService::uploadPolicy);
+        int sequence = parseSequence(rawSequence);
+        String mimeType = validateMimeType(contentType, policy);
+        String sha256 = validateSha256(rawSha256);
+        long bytes = parseByteLength(rawByteLength);
+        validateIdempotencyKey(idempotencyKey);
+        if (bytes > policy.maxChunkBytes()) throw new AudioChunkInvalidException();
+
+        if (!(storage instanceof ClientUploadedAudioStoragePort clientStorage)) throw new AudioStorageException();
+        clientStorage.confirmClientUpload(sessionId, sequence, mimeType, bytes, sha256);
+        Instant expiresAt = clock.instant().plus(PrivateAudioStoragePort.TEMPORARY_LEASE);
+        renewUploadLease(sessionId, expiresAt);
+        if ("CREATED".equals(session.status())) sessionStore.transitionStatus(sessionId, "CREATED", "UPLOADING");
+        return new AudioChunkUploadResponse(new AudioChunkUploadResponse.Data(sequence, true));
+    }
+
+
     private AudioChunkUploadResponse uploadWhileSessionLocked(String sessionId, String rawSequence, String contentType,
             String rawSha256, String rawByteLength, String idempotencyKey,
             long contentLength, InputStream body) {

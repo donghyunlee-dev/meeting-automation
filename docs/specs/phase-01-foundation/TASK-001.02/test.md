@@ -2,7 +2,7 @@
 
 ## 테스트 목표
 
-React/TypeScript/Vite 개발 도구가 Node.js 22에서 설치·실행·빌드되고, 기본 앱 렌더가 Vitest로 검증되는지 확인한다. 이 작업은 제품 API나 Backend 테스트를 포함하지 않는다.
+React/TypeScript/Vite 개발 도구가 Node.js 24에서 설치·실행·빌드되고, 기본 앱 렌더가 Vitest로 검증되는지 확인한다. 이 작업은 제품 API나 Backend 테스트를 포함하지 않는다.
 
 - GitHub Issue: [#2](https://github.com/donghyunlee-dev/meeting-automation/issues/2)
 - 테스트 명령은 이 작업에서 `plan.md`에 따라 새로 제공한다.
@@ -28,7 +28,7 @@ npm ci
 npm run
 ```
 
-기대 결과: Node가 22.12 이상 22.x이며 설치가 성공한다. 스크립트 목록에 `dev`, `build`, `lint`, `test`가 표시되고 `.nvmrc` 값이 `22`, `engines.node`가 `>=22.12.0 <23`이다. 초기 scaffold에서 lockfile이 없는 동안만 `npm install`을 사용하고, 산출된 lockfile을 다음 확인부터 기준으로 한다.
+기대 결과: Node가 `.nvmrc`의 24.x 버전이며 설치가 성공한다. 스크립트 목록에 `dev`, `build`, `lint`, `test`가 표시되고 `engines.node`가 `>=24.0.0 <25`이며 npm strict engine 검사가 활성화되어 있다. 초기 scaffold에서 lockfile이 없는 동안만 `npm install`을 사용하고, 산출된 lockfile을 다음 확인부터 기준으로 한다.
 
 ### 정적 검사와 빌드
 
@@ -63,7 +63,7 @@ npm run dev
 | 기본 렌더의 실패 후 통과 | 기본 앱 렌더 테스트: 같은 대상 테스트의 실패 이유와 통과 결과 |
 | build/lint 성공 | 정적 검사와 빌드: 각 종료 코드와 `dist/index.html` 생성 확인 |
 | 개발 서버 표시 | 수동 QA: 로컬 URL, 제목 표시 확인, 화면 캡처 |
-| Node 22 기준 | Node 및 npm 도구 체계: 실제 버전, `.nvmrc`, `engines.node` 확인 |
+| Node 24 기준 | Node 및 npm 도구 체계: 실제 버전, `.nvmrc`, `engines.node` 확인 |
 | 업무 API 및 Secret 경계 | 수동 QA: 변경 파일 목록과 비민감 점검 결과 |
 
 ## 릴리스 전용 검사

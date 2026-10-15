@@ -21,7 +21,7 @@
 
 Backend 검증 전 `java -version`과 `./gradlew.bat --version`의 JVM이 모두 Java 25인지 확인한다. Windows 프로세스의 `JAVA_HOME`이 오래된 JDK(예: 17)를 가리키면 해당 터미널 프로세스만 설치된 JDK 25로 맞춘 뒤 Wrapper 버전을 재확인한다. 시스템 전체 환경을 불필요하게 변경하지 않는다.
 
-Frontend 검증 전 `frontend/package.json`의 `engines.node`와 `node --version`을 대조한다. 현재 범위는 Node `>=22.12.0 <23`이다. 기본 실행기가 범위 밖이면 해당 명령 프로세스에서만 지원 버전을 선택하고, 설치·전환이 불가능하면 검증 결과에 버전 차이를 명시한다. 테스트와 build가 우연히 실행된 것만으로 지원 버전 준수라고 간주하지 않는다.
+Frontend 검증 전 `frontend/.nvmrc`, `frontend/package.json`의 `engines.node`, `frontend/.npmrc`의 `engine-strict`가 일치하는지 확인하고 `node --version` 및 `npm --version`을 기록한다. 기준 Node는 24이며 engine 범위는 `>=24.0.0 <25`다. 불일치하면 실행을 중단하고 기준 파일과 CI 설정을 함께 갱신한다.
 
 ## 3시간 작업 창 운영
 
@@ -51,7 +51,7 @@ Frontend 검증 전 `frontend/package.json`의 `engines.node`와 `node --version
 
 ## Runtime and finalization guard
 
-- Before Frontend checks, compare the project `engines` range with the engine requirements of resolved runtime dependencies; use the highest effective minimum. For example, the current `react-router@8.4.0` requires Node `>=22.22.0` even though the frontend package allows `>=22.12.0 <23`. Verify `node --version` inside the exact command environment and record the Node and npm versions; a warning-only install under an incompatible runtime is not valid evidence.
+- Before Frontend checks, compare the project `engines` range with the engine requirements of resolved runtime dependencies; use the highest effective minimum. The supported Node major is 24. Verify `node --version` inside the exact command environment and record the Node and npm versions. `frontend/.npmrc` enables strict engine enforcement so an incompatible runtime cannot pass installation with a warning only.
 - Keep lockfile generation on the npm version that produced the existing lockfile and verify `package-lock.json` for unrelated peer or optional-platform metadata churn. In TASK-020.03, npm 11.6.2 added only the intended axe dependency, while npm 10 rewrote peer metadata; restore and regenerate with the matching npm before committing rather than carrying that rewrite.
 - After each completion-document commit, refresh the FINALIZE checkpoint for the new `HEAD`, then run `node .codex/automation/workflow.mjs gate-finalize` **before** pushing. The gate verifies only the current task's PRD/evidence files in `origin/master..HEAD`; after push that range is empty. Push only after the gate allows it, then confirm `HEAD` equals `origin/master`.
 - Run `gate-finalize` once per final documentation head. If another documentation commit is needed, refresh the checkpoint and run the gate again before the next push.

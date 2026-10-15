@@ -19,7 +19,9 @@ const BACKEND_REQUIRED = [
   'EMAIL_SENDER_ADDRESS',
   'NOTIFICATION_PROVIDER',
   'ALLOWED_ORIGINS',
-  'PRIVATE_AUDIO_S3_BUCKET',
+  'VERCEL_BLOB_CONTROL_URL',
+  'RENDER_AUDIO_STORAGE_SECRET',
+  'RENDER_AUDIO_GRANT_SECRET',
   'OPENAI_API_KEY',
   'SLACK_MEETING_WEBHOOK_URL',
   'SLACK_ADMIN_WEBHOOK_URL'
@@ -98,6 +100,8 @@ export function inspectEnvSamples(frontendContent, backendContent) {
       || entry.key === 'OPENAI_API_KEY'
       || entry.key === 'SLACK_MEETING_WEBHOOK_URL'
       || entry.key === 'SLACK_ADMIN_WEBHOOK_URL'
+      || entry.key === 'RENDER_AUDIO_STORAGE_SECRET'
+      || entry.key === 'RENDER_AUDIO_GRANT_SECRET'
       || (entry.key.startsWith('EMAIL_') && entry.key !== 'EMAIL_PROVIDER');
     if (isCredential && entry.value !== '') {
       issues.push({ file: entry.file, key: entry.key, code: 'NONEMPTY_CREDENTIAL' });

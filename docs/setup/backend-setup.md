@@ -107,16 +107,17 @@ EMAIL_OAUTH_REFRESH_TOKEN=<secret>
 EMAIL_SENDER_ADDRESS=<authorized-gmail-address>
 NOTIFICATION_PROVIDER=SLACK
 ALLOWED_ORIGINS=http://localhost:5173
-PRIVATE_AUDIO_S3_BUCKET=<required-private-bucket-name>
-PRIVATE_AUDIO_S3_REGION=us-east-1
-PRIVATE_AUDIO_S3_ENDPOINT=<optional-s3-compatible-endpoint>
-PRIVATE_AUDIO_S3_PREFIX=meeting-audio
+VERCEL_BLOB_CONTROL_URL=https://<vercel-project-domain>/api/audio-storage
+RENDER_AUDIO_STORAGE_SECRET=<shared-secret>
+RENDER_AUDIO_GRANT_SECRET=<shared-secret>
 ```
 
 Secret 설정 이름의 예:
 
 ```text
 DOCUMENT_SETTINGS_ENCRYPTION_KEY
+RENDER_AUDIO_STORAGE_SECRET
+RENDER_AUDIO_GRANT_SECRET
 OPENAI_API_KEY
 EMAIL_*
 SLACK_MEETING_WEBHOOK_URL
@@ -127,9 +128,7 @@ SLACK_ADMIN_WEBHOOK_URL
 
 ### 비공개 Audio 객체 저장소
 
-Audio 업로드와 회의 처리를 사용하려면 `PRIVATE_AUDIO_S3_BUCKET`을 private access로 설정한 S3 bucket 이름으로 지정한다. `PRIVATE_AUDIO_S3_REGION`은 AWS region이며 미설정 시 `AWS_REGION` 또는 `us-east-1`을 사용한다. `PRIVATE_AUDIO_S3_ENDPOINT`는 비 AWS S3-compatible endpoint를 쓸 때만 지정하고, `PRIVATE_AUDIO_S3_PREFIX`는 선택 경로로 기본값이 `meeting-audio`다.
-
-인증은 AWS SDK default credentials chain을 사용한다. 배포에서는 bucket에 필요한 최소 권한을 부여한 service role을 우선 사용하고, 별도 키 방식이 필요하면 `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, 필요 시 `AWS_SESSION_TOKEN`을 secret 설정에 넣는다. `.env.example`에는 실제 bucket 값이나 credential을 기록하지 않는다. Bucket은 public access를 차단하고 Backend만 읽기/쓰기/삭제할 수 있어야 한다. Audio는 Backend filesystem에 영속 저장하지 않는다.
+Audio 업로드와 회의 처리는 Vercel 프로젝트에 연결한 private Blob store를 사용한다. Render에는 `VERCEL_BLOB_CONTROL_URL=https://<vercel-project-domain>/api/audio-storage`, `RENDER_AUDIO_STORAGE_SECRET`, `RENDER_AUDIO_GRANT_SECRET`을 설정한다. 첫 secret은 Render와 Vercel Function이 storage 제어 요청을 인증할 때 사용하고, 둘째 secret은 Render가 발급한 단기 브라우저 업로드 grant를 Vercel Function이 검증할 때 사용한다. Vercel 환경에는 `BLOB_READ_WRITE_TOKEN`과 같은 `RENDER_AUDIO_STORAGE_SECRET`, `RENDER_AUDIO_GRANT_SECRET`을 설정한다. 두 secret은 각각 충분히 긴 임의 값으로 생성하고 로그나 저장소에 기록하지 않는다. Blob store는 private access로 생성해야 하며 오디오를 Backend filesystem에 영속 저장하지 않는다.
 
 ## IntelliJ IDEA 설정
 

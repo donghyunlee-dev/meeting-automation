@@ -1,13 +1,13 @@
 # Meeting Automation Product Requirements Document
 
 > **문서 ID:** PRD-MA-001\
-> **버전:** 1.9.0\
-> **기준일:** 2026-10-10\
+> **버전:** 2.0.0\
+> **기준일:** 2026-10-15\
 > **상태:** Approved Baseline Candidate\
 > **문서 역할:** Meeting Automation V1의
 > 제품·UX·디자인·아키텍처·데이터·API·개발 일정 Single Source of Truth\
 > **대상:** Product Owner, Frontend, Backend, QA, Codex\
-> **기술 기준:** React Mobile-first Web / Vercel, Java 25 / Spring Boot 4.1.x
+> **기술 기준:** Node.js 24 / React Mobile-first Web / Vercel, Java 25 / Spring Boot 4.1.x
 > / Render\
 > **운영 전제:** 단일 회사, 누적 회의 100개 미만
 
@@ -35,7 +35,8 @@
 > **변경 이력 v1.8.0:** 처리 실패 시 사용자 명시 재시도, Audio 24시간 임시 보존·다운로드·실패 문서 종료와 참석자 전달 억제 규칙 추가\
 > **변경 이력 v1.8.1:** 변환 실패 Audio를 비공개 객체 저장소에 최대 24시간 보존해 재시도·다운로드를 지원하고 만료 정리를 추가\
 > **변경 이력 v1.9.0:** 제품 계정 없이 공유하는 문서 연결 위저드·명시적 구조 생성·자료 복사 후 서비스 전환을 추가하고 TASK-022를 개발 최우선으로 지정\
-> **변경 이력 v1.1.0:** Technology Baseline 확정, Monorepo/Node.js/React/Spring Boot 역할 명시, 실제 모바일·회의실 품질 검증을 개발 선행 Gate에서 Phase 8로 이동
+> **변경 이력 v1.10.0:** Technology Baseline 확정, Monorepo/Node.js/React/Spring Boot 역할 명시, 실제 모바일·회의실 품질 검증을 개발 선행 Gate에서 Phase 8로 이동\
+> **변경 이력 v2.0.0:** Frontend 런타임 기준을 Node.js 24로 통일하고 저장소 버전 파일, package engine 검사, CI 검증을 연결
 
 ------------------------------------------------------------------------
 
@@ -153,7 +154,7 @@ Monorepo는 소스와 개발 기준을 한 Repository에서 관리하기 위한 
 
 | 항목 | 기준 |
 |---|---|
-| Runtime / Build | Node.js 22 LTS |
+| Runtime / Build | Node.js 24 LTS |
 | Package Manager | npm |
 | UI | React 19 |
 | Language | TypeScript 5.x |
@@ -192,7 +193,7 @@ flowchart LR
     DEV[Developer / Codex]
 
     subgraph FE["frontend/"]
-        NODE[Node.js 22 LTS]
+        NODE[Node.js 24 LTS]
         VITE[Vite 7.x]
         REACT[React 19 + TypeScript]
         NODE --> VITE --> REACT
@@ -229,6 +230,7 @@ Spring Boot 4.1.x / Java 25
 
 - 위 Major 기준을 Codex가 임의로 변경하지 않는다.
 - 고정 minor가 있는 `4.1.x` 항목은 해당 minor 라인의 호환 가능한 최신 patch를 선택한다. Java 25로 Gradle을 실행할 때는 Gradle 9.1 이상을 사용한다.
+- Frontend Node 버전은 `frontend/.nvmrc`를 선택 기준으로 하고 `frontend/package.json`의 `engines.node` 및 `frontend/.npmrc`의 strict 검사와 일치시킨다. 기준 변경 시 PRD, 설치 문서, task 설계 기준, Frontend CI를 같은 변경에서 갱신한다.
 - Major 변경은 PRD 또는 ADR 승인 후 진행한다.
 - Frontend와 Backend는 Monorepo에 있지만 독립적으로 build/test/deploy 가능해야 한다.
 
@@ -2501,7 +2503,7 @@ Backend API 작업은 정상 응답뿐 아니라 명세된 검증 오류, 없는
 | 세부 작업 / 영역 | 선행 작업 | Related IDs | 완료 및 검증 조건 | 설계 상태 / 문서 |
 |---|---|---|------|---|
 | `TASK-001.01` 저장소 기본 구조 및 ignore 구성 / BE, FE | 없음 | DEC-001~020, NFR-004,005,008,009 | `frontend/`, `backend/`, `docs/`가 분리되고 빌드 산출물·로컬 환경 파일이 ignore 된다. 구조 및 ignore 테스트/검사 통과 | 설계완료 · `docs/specs/phase-01-foundation/TASK-001.01/` |
-| `TASK-001.02` Frontend toolchain 초기화 / FE | TASK-001.01 | DEC-003, NFR-008 | Node 22, npm, React 19, TypeScript, Vite 기준으로 앱이 생성된다. 기본 렌더 테스트가 먼저 실패 후 통과하고 `npm run build` 통과 | 설계완료 · `docs/specs/phase-01-foundation/TASK-001.02/` |
+| `TASK-001.02` Frontend toolchain 초기화 / FE | TASK-001.01 | DEC-003, NFR-008 | Node 24, npm, React 19, TypeScript, Vite 기준으로 앱이 생성된다. 기본 렌더 테스트가 먼저 실패 후 통과하고 `npm run build` 통과 | 설계완료 · `docs/specs/phase-01-foundation/TASK-001.02/` |
 | `TASK-001.03` Backend toolchain 초기화 / BE | TASK-001.01 | DEC-004,005, NFR-009 | Java 25, Spring Boot 4.1.x, Gradle 9.x 기준으로 앱이 생성된다. 컨텍스트 로딩 테스트 및 `./gradlew build` 통과 | 설계완료 · `docs/specs/phase-01-foundation/TASK-001.03/` |
 | `TASK-001.04` 공통 오류 응답 및 Health 기반 / BE | TASK-001.03 | API 공통 규칙, ERR-001~ | 오류 응답 필드와 Health 응답이 계약 테스트로 검증되고, Secret이나 내부 예외가 노출되지 않는다. | 설계완료 · `docs/specs/phase-01-foundation/TASK-001.04/` |
 | `TASK-001.05` FE/BE 독립 빌드 및 환경 샘플 / FE, BE | TASK-001.02, TASK-001.03, TASK-001.04 | DEC-017, NFR-004,008,009 | FE/BE 빌드가 서로 독립 실행되고 환경 샘플에 실제 Secret이 없다. 두 빌드와 Secret 검사 통과 | 설계완료 · `docs/specs/phase-01-foundation/TASK-001.05/` |

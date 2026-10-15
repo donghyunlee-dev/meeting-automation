@@ -13,12 +13,12 @@
 
 ## 결과
 
-`frontend/`에 Node.js 22 LTS와 npm을 사용하는 React 19, TypeScript 5.x, Vite 7.x 기반의 독립 실행 가능한 웹 앱 도구 체계를 만든다. 기본 화면 렌더링을 검증하는 Vitest 테스트와 `dev`, `build`, `lint`, `test` npm 스크립트를 제공한다.
+`frontend/`에 Node.js 24와 npm을 사용하는 React 19, TypeScript 5.x, Vite 7.x 기반의 독립 실행 가능한 웹 앱 도구 체계를 만든다. 기본 화면 렌더링을 검증하는 Vitest 테스트와 `dev`, `build`, `lint`, `test` npm 스크립트를 제공한다.
 
 ## 범위
 
 - Vite React TypeScript 앱을 `frontend/`에 초기화한다.
-- Node.js 22 기준을 저장소에서 확인할 수 있도록 버전 기준 파일을 구성한다.
+- Node.js 24 기준을 저장소에서 확인할 수 있도록 버전 기준 파일을 구성한다.
 - React, TypeScript, Vite 및 PRD가 정한 ESLint/Vitest 개발 도구를 설정한다.
 - 최소 앱 진입점과 기본 렌더 테스트를 추가한다. 기본 앱은 `Meeting Automation` 제목을 가진 `h1` 하나를 표시해 실행 여부를 확인한다.
 - `npm run dev`, `npm run build`, `npm run lint`, `npm run test` 명령을 제공한다.
@@ -38,12 +38,12 @@
 - `npm run build`가 성공한다.
 - `npm run lint`가 성공한다.
 - `npm run dev`가 Vite 개발 서버를 실행하며 기본 앱을 표시한다.
-- Node 런타임 기준이 Node.js 22로 명시되어 있다. Vite 7의 실행 조건을 충족하는 22.12 이상을 사용하고 `package.json`의 `engines.node`는 `>=22.12.0 <23`으로 선언한다.
+- Node 런타임 기준이 `.nvmrc`에 `24`로 명시되어 있고 `package.json`의 `engines.node`가 `>=24.0.0 <25`로 선언되어 있다. `.npmrc` strict engine 검사와 CI가 버전 불일치를 거부한다.
 - 애플리케이션 업무 API가 Node.js에서 구현되지 않으며 이 작업에서 Frontend Secret이 추가되지 않는다.
 
 ## 결정 및 전제
 
-- PRD 3.1~3.2절의 Monorepo 및 Frontend 기준을 따른다: Node.js 22 LTS, npm, React 19, TypeScript 5.x, Vite 7.x, ESLint, Vitest.
+- PRD 3.1~3.2절의 Monorepo 및 Frontend 기준을 따른다: Node.js 24, npm, React 19, TypeScript 5.x, Vite 7.x, ESLint, Vitest.
 - 세부 패키지 버전은 기준 Major를 지키면서 설치 시점에 호환되는 버전을 잠금 파일에 고정한다.
 - 환경 변수는 Vite 클라이언트 bundle에 포함될 수 있으므로 공개 가능한 설정만 허용한다.
 - 선행 작업 Issue: [#1](https://github.com/donghyunlee-dev/meeting-automation/issues/1)은 `CLOSED`이며 PR #63이 `master`에 병합되었다. 선행 조건이 충족되어 이 작업의 구현을 진행한다.

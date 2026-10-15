@@ -103,7 +103,11 @@ public final class PrivateAudioExpiryCleanupScheduler {
         }
         if (!isCurrentlyExpired(object.objectId())) return;
         try {
-            storage.delete(object.objectId());
+            if (storage instanceof ExpiredAudioStoragePort expiredStorage) {
+                if (!expiredStorage.deleteIfExpired(object.objectId(), clock.instant())) return;
+            } else {
+                storage.delete(object.objectId());
+            }
             LOGGER.atInfo().addKeyValue("sessionId", object.sessionId())
                     .addKeyValue("stage", "AUDIO_CLEANUP")
                     .addKeyValue("outcome", "deleted")

@@ -16,7 +16,7 @@
 - Publish view: progress, saved document link, failed/retryable state
 - Router/cache: version-aware API-010 reconciliation, SCR-011 Settings 복귀
 
-현재 `frontend/` 프로젝트와 `frontend/package.json`이 있다. 구현 전 확인 결과 package는 Node `>=22.12.0 <23`을 요구하며 `test`, `lint`, `build` 명령은 각각 `vitest run`, `eslint .`, `tsc -b && vite build`다. 기존 FE 환경을 사용하고 새 package setup을 추가하지 않는다.
+TASK-010.03 구현 당시 `frontend/package.json`은 Node `>=22.12.0 <23`을 요구했다. 현재 기준은 Node 24이며 프로젝트 엔진은 `>=24.0.0 <25`다. `test`, `lint`, `build` 명령은 각각 `vitest run`, `eslint .`, `tsc -b && vite build`이고 기존 FE 환경을 사용한다.
 
 Backend API 변경은 선행 TASK-010.02가 제공할 publish action/error/document reference 계약만 소비한다. 채널 provider 구현 및 채널 결과 화면은 별도 선행/후속 TASK의 경계다.
 

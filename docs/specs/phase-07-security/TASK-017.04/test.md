@@ -43,15 +43,15 @@
 
 ### Focused verification commands
 
-The repository task rules replace the boilerplate full-suite and `clean build` requests with selectors that directly cover SEC-REG-01~14. Run the Backend command from `backend` with Temurin Java 25; run Frontend and scanner commands with the isolated Node 22 runtime required by `frontend/package.json`.
+The repository task rules replace the boilerplate full-suite and `clean build` requests with selectors that directly cover SEC-REG-01~14. Run the Backend command from `backend` with Temurin Java 25; run Frontend and scanner commands from `frontend` with the Node 24 runtime selected by `.nvmrc`.
 
 ```powershell
-.\gradlew.bat test --tests com.meetingautomation.DocumentSetupApiTests --tests com.meetingautomation.ConfiguredSecretsAppConfigApiTests --tests com.meetingautomation.ConfiguredSecretsIntegrationHealthApiTests --tests com.meetingautomation.document.GlobalSettingsTests --tests com.meetingautomation.document.DocumentProviderResolverTests --tests com.meetingautomation.document.DocumentProviderErrorMappingTests --tests com.meetingautomation.api.error.FailureContextTests --tests com.meetingautomation.api.error.FailureContextReporterTests --tests com.meetingautomation.notification.slack.admin.SlackAdminIncidentPayloadTests --tests com.meetingautomation.notification.slack.admin.SlackAdminIncidentNotifierTests --tests com.meetingautomation.MeetingSessionStatusApiTests --tests com.meetingautomation.api.audio.S3PrivateAudioStorageAdapterTests --tests com.meetingautomation.api.audio.AudioDownloadServiceTests --tests com.meetingautomation.api.audio.PrivateAudioAssemblyStorageTests --tests com.meetingautomation.api.audio.PrivateAudioExpiryCleanupSchedulerTests --tests com.meetingautomation.api.processing.ProcessingRetryServiceTests --tests com.meetingautomation.api.processing.ProcessingPipelineTests --tests com.meetingautomation.api.processing.ProviderFailureDocumentWriterTests --tests com.meetingautomation.api.processing.FailureFinalizeServiceTests --tests com.meetingautomation.api.processing.FailureFinalizeControllerTests
+.\gradlew.bat test --tests com.meetingautomation.DocumentSetupApiTests --tests com.meetingautomation.ConfiguredSecretsAppConfigApiTests --tests com.meetingautomation.ConfiguredSecretsIntegrationHealthApiTests --tests com.meetingautomation.document.GlobalSettingsTests --tests com.meetingautomation.document.DocumentProviderResolverTests --tests com.meetingautomation.document.DocumentProviderErrorMappingTests --tests com.meetingautomation.api.error.FailureContextTests --tests com.meetingautomation.api.error.FailureContextReporterTests --tests com.meetingautomation.notification.slack.admin.SlackAdminIncidentPayloadTests --tests com.meetingautomation.notification.slack.admin.SlackAdminIncidentNotifierTests --tests com.meetingautomation.MeetingSessionStatusApiTests --tests com.meetingautomation.api.audio.VercelBlobPrivateAudioStorageAdapterTests --tests com.meetingautomation.api.audio.AudioDownloadServiceTests --tests com.meetingautomation.api.audio.PrivateAudioAssemblyStorageTests --tests com.meetingautomation.api.audio.PrivateAudioExpiryCleanupSchedulerTests --tests com.meetingautomation.api.processing.ProcessingRetryServiceTests --tests com.meetingautomation.api.processing.ProcessingPipelineTests --tests com.meetingautomation.api.processing.ProviderFailureDocumentWriterTests --tests com.meetingautomation.api.processing.FailureFinalizeServiceTests --tests com.meetingautomation.api.processing.FailureFinalizeControllerTests
 
-npm exec --yes --package=node@22.23.3 -- npm run test -- --run src/publicBuildSecurity.test.ts
-npm exec --yes --package=node@22.23.3 -- npm run build
-npm exec --yes --package=node@22.23.3 -- node --test scripts/verify-secret-boundary.test.mjs
-npm exec --yes --package=node@22.23.3 -- node scripts/verify-secret-boundary.mjs
+npm run test -- --run src/publicBuildSecurity.test.ts
+npm run build
+node --test ../scripts/verify-secret-boundary.test.mjs
+node ../scripts/verify-secret-boundary.mjs
 ```
 
 SEC-QA-01~04 require a non-production provider/storage environment, browser download, or configured meeting. They are deferred for the user to perform after setup; this implementation run does not access provider accounts, start a service, or exercise a meeting. SEC-QA-05 is recorded as a sanitized evidence review.

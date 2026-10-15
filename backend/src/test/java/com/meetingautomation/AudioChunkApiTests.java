@@ -39,6 +39,7 @@ import org.springframework.context.annotation.Import;
 @SpringBootTest(properties = {
         "DOCUMENT_PROVIDER=",
         "NOTIFICATION_PROVIDER=SLACK",
+        "RENDER_AUDIO_GRANT_SECRET=test-audio-grant-secret",
         "MAX_CHUNK_BYTES=64",
         "ACCEPTED_AUDIO_MIME_TYPES=audio/webm,audio/mp4,audio/ogg"
 })
@@ -99,6 +100,21 @@ class AudioChunkApiTests {
     static void removeTemporaryAudioDirectory() throws IOException {
         deleteRecursively(AUDIO_ROOT);
         deleteRecursively(SETTINGS_ROOT);
+    }
+
+    @Test
+    void validUploadGrantIsBoundToTheSessionSequenceAndExpectedAudioMetadata() throws Exception {
+        byte[] audio = new byte[] {0, 1, 2};
+        String sha256 = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(audio));
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post(
+                        "/api/v1/meeting-sessions/" + SESSION_ID + "/audio/chunks/2/upload-grant")
+                        .header("Idempotency-Key", "grant-2")
+                        .contentType("application/json")
+                        .content("{\"mimeType\":\"audio/webm\",\"bytes\":3,\"sha256\":\"" + sha256 + "\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.pathname").value("audio/" + SESSION_ID + "/chunks/2"))
+                .andExpect(jsonPath("$.data.clientPayload").isString())
+                .andExpect(jsonPath("$.data.expiresAt").isNumber());
     }
 
     @Test

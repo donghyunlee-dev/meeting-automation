@@ -22,7 +22,7 @@ import { AsyncState } from './components/async-state/AsyncState';
 import { normalizeApiError } from './lib/api/normalizeApiError';
 import { ChunkRecorderAdapter } from './chunkRecorderAdapter';
 import { ChunkRepository } from './chunkRepository';
-import { getReceivedAudioStatus, putAudioChunk } from './audioUploadApi';
+import { getReceivedAudioStatus, putAudioChunk, type AudioUploadRequestOptions } from './audioUploadApi';
 import { ChunkUploadCoordinator, type ChunkUploadSnapshot } from './chunkUploadCoordinator';
 import { startProcessing } from './processingStartApi';
 import { ProcessingAttemptStore, RecordingEndCoordinator, type RecordingEndSnapshot } from './recordingEndCoordinator';
@@ -376,10 +376,11 @@ function NewMeetingRoute({ onCreated, onSubmitted }: {
   return <NewMeetingPage onSubmit={submit} />;
 }
 
-function MeetingRecordingRoute({ session, setState, mediaAdapter }: {
+function MeetingRecordingRoute({ session, setState, mediaAdapter, blobUpload }: {
   session: RecordingSession | null;
   setState: (state: RecordingViewState) => void;
   mediaAdapter: MediaRecorderAdapter;
+  blobUpload?: AudioUploadRequestOptions['blobUpload'];
 }) {
   const { sessionId } = useParams();
   if (!session || session.sessionId !== sessionId) return (
@@ -389,13 +390,14 @@ function MeetingRecordingRoute({ session, setState, mediaAdapter }: {
       <Link className="button button-primary" to="/meetings/new">새 회의 시작</Link>
     </main>
   );
-  return <ActiveMeetingRecordingRoute session={session} setState={setState} mediaAdapter={mediaAdapter} />;
+  return <ActiveMeetingRecordingRoute session={session} setState={setState} mediaAdapter={mediaAdapter} blobUpload={blobUpload} />;
 }
 
-function ActiveMeetingRecordingRoute({ session, setState, mediaAdapter }: {
+function ActiveMeetingRecordingRoute({ session, setState, mediaAdapter, blobUpload }: {
   session: RecordingSession;
   setState: (state: RecordingViewState) => void;
   mediaAdapter: MediaRecorderAdapter;
+  blobUpload?: AudioUploadRequestOptions['blobUpload'];
 }) {
   const navigate = useNavigate();
   const [snapshot, setSnapshot] = useState<RecordingSnapshot>({ state: 'Ready', elapsedMs: 0 });
@@ -418,11 +420,11 @@ function ActiveMeetingRecordingRoute({ session, setState, mediaAdapter }: {
       repository,
       api: {
         getReceivedSequences: async (sessionId) => (await getReceivedAudioStatus(sessionId, fetchImpl)).receivedSequences,
-        putChunk: async (_sessionId, chunk) => putAudioChunk(chunk, fetchImpl),
+        putChunk: async (_sessionId, chunk) => putAudioChunk(chunk, fetchImpl, { blobUpload }),
       },
       onChange: setUploadSnapshot,
     });
-  }, [repository]);
+  }, [blobUpload, repository]);
   const endCoordinator = useRef<RecordingEndCoordinator | null>(null);
   useEffect(() => {
     const coordinator = new RecordingEndCoordinator({
@@ -557,11 +559,12 @@ function BottomNavigation() {
   );
 }
 
-export function App({ onNewMeetingSubmit = () => undefined, onMinutesSave, minutesSaveState, mediaAdapter = browserMediaAdapter }: {
+export function App({ onNewMeetingSubmit = () => undefined, onMinutesSave, minutesSaveState, mediaAdapter = browserMediaAdapter, blobUpload }: {
   onNewMeetingSubmit?: (payload: NewMeetingPayload) => void;
   onMinutesSave?: (sessionId: string, minutes: StructuredMinutes) => void;
   minutesSaveState?: MinutesSaveState;
   mediaAdapter?: MediaRecorderAdapter;
+  blobUpload?: AudioUploadRequestOptions['blobUpload'];
 } = {}) {
   const [createdSession, setCreatedSession] = useState<RecordingSession | null>(restoreRecordingSession);
   const [recordingState, setRecordingState] = useState<RecordingViewState>('Ready');
@@ -600,7 +603,7 @@ export function App({ onNewMeetingSubmit = () => undefined, onMinutesSave, minut
         <Route path="/meetings" element={<MeetingsPage />} />
         <Route path="/meetings/new" element={<SetupGate><NewMeetingRoute onCreated={(session) => { setCreatedSession(session); saveRecordingSession(session); setRecordingState('Ready'); }} onSubmitted={onNewMeetingSubmit} /></SetupGate>} />
         <Route path="/meetings/:documentId" element={<MeetingDetailPage />} />
-        <Route path="/meetings/:sessionId/recording" element={<MeetingRecordingRoute session={createdSession} setState={setRecordingState} mediaAdapter={mediaAdapter} />} />
+        <Route path="/meetings/:sessionId/recording" element={<MeetingRecordingRoute session={createdSession} setState={setRecordingState} mediaAdapter={mediaAdapter} blobUpload={blobUpload} />} />
         <Route path="/meetings/:sessionId/processing" element={<ProcessingPage />} />
         <Route path="/meetings/:sessionId/review" element={<ReviewSpeakerPage drafts={speakerDrafts} onInitialize={initializeSpeakerDraft} onChange={updateSpeakerDraft} onCommit={commitSpeakerMappings} onMinutesSave={onMinutesSave} minutesSaveState={minutesSaveState} />} />
         <Route path="/meetings/:sessionId/share" element={<SharePage />} />

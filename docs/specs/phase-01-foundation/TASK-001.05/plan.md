@@ -23,7 +23,7 @@
 | `frontend/.env.example` | FE 공개 설정 샘플; `VITE_API_BASE_URL`만 제공 |
 | `backend/.env.example` | BE 로컬 설정 참고 샘플; 실제 credential 값은 비움 |
 | `.gitignore` | 개인 환경 파일이 ignore되는지 확인하고 필요한 최소 패턴만 추가 |
-| `scripts/verify-secret-boundary.mjs` | 두 환경 샘플의 변수명/credential 값 경계를 검사하는 Node.js 22 스크립트 |
+| `scripts/verify-secret-boundary.mjs` | 두 환경 샘플의 변수명/credential 값 경계를 검사하는 Node.js 24 스크립트 |
 | `scripts/verify-secret-boundary.test.mjs` | 정상 및 위반 fixture에 대한 Node.js 내장 테스트 |
 | `frontend/package.json` | 기존 명령을 보존하며 검사기 실행 진입점이 필요할 때만 스크립트 추가 |
 | `docs/evidence/TASK-001.05.md` | 명령, 종료 결과, 샘플/ignore 검사 증거 기록 |
@@ -46,7 +46,7 @@ Backend 빌드 스크립트나 Frontend 앱 소스는 변경하지 않는다. �
 - `TASK-001.02` (#2): Node/npm, Frontend lockfile, `test`/`lint`/`build` 명령.
 - `TASK-001.03` (#3): Backend Gradle Wrapper 및 `clean build` 명령.
 - `TASK-001.04` (#4): Backend 오류/Health 기반과 관련된 표준 구성이 완료된 상태.
-- Frontend는 Node.js 22 이상 22.x, Backend는 JDK 25와 Wrapper를 각각 사용한다.
+- Frontend는 `.nvmrc`의 Node.js 24, Backend는 JDK 25와 Wrapper를 각각 사용한다.
 - `.env.example`은 Spring Boot 자동 로딩을 전제하지 않으며 개발자가 IDE/runtime 환경 변수로 적용한다.
 
 ## 검증 접근

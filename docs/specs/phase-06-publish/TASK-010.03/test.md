@@ -2,7 +2,7 @@
 
 ## 자동화 검증
 
-`frontend/package.json`의 `test`, `lint`, `build` scripts를 사용한다. 구현 시 변경 컴포넌트와 직접 영향을 받는 FE 테스트에 Vitest file selectors를 적용하고 lint/build를 실행한다. 환경: Node `>=22.12.0 <23`.
+`frontend/package.json`의 `test`, `lint`, `build` scripts를 사용한다. 구현 시 변경 컴포넌트와 직접 영향을 받는 FE 테스트에 Vitest file selectors를 적용하고 lint/build를 실행한다. 현재 환경 기준은 Node 24 (`>=24.0.0 <25`)다.
 
 | ID | 준비/입력 | 기대 결과 | 증거 |
 |---|---|---|---|

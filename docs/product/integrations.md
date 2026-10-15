@@ -221,13 +221,12 @@ NOTIFICATION_PROVIDER
 SLACK_MEETING_WEBHOOK_URL
 SLACK_ADMIN_WEBHOOK_URL
 ALLOWED_ORIGINS
-PRIVATE_AUDIO_S3_BUCKET
-PRIVATE_AUDIO_S3_REGION
-PRIVATE_AUDIO_S3_ENDPOINT
-PRIVATE_AUDIO_S3_PREFIX
+VERCEL_BLOB_CONTROL_URL
+RENDER_AUDIO_STORAGE_SECRET
+RENDER_AUDIO_GRANT_SECRET
 ```
 
-AI/Email/Slack, AWS access key/session token, 설정 암호화 키는 Render Secret/환경 설정에 저장한다. 배포에서는 필요한 S3 bucket 권한만 가진 Backend service role을 우선 사용한다. `PRIVATE_AUDIO_S3_BUCKET`은 Audio 처리를 위해 필요하며 bucket은 private access로 제한한다. Region, endpoint, prefix는 비밀이 아닌 설정이다. Document 연결 입력은 암호화 전역 설정에 저장한다. sample 파일은 bucket placeholder 외 실제 자원 값과 secret을 담지 않는다. Frontend에는 Backend public URL 외 Provider 설정을 넣지 않는다.
+AI/Email/Slack, Vercel Blob control secrets, 설정 암호화 키는 Render Secret/환경 설정에 저장한다. Audio 저장소는 private Vercel Blob store를 사용한다. Document 연결 입력은 암호화 전역 설정에 저장한다. sample 파일은 실제 자원 값과 secret을 담지 않는다. Frontend에는 Backend public URL 외 Provider 설정을 넣지 않는다.
 
 ## 실패 분류와 재시도
 

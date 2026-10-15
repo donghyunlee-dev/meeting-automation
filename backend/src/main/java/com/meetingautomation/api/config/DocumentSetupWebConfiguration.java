@@ -13,7 +13,7 @@ public class DocumentSetupWebConfiguration implements WebMvcConfigurer {
     }
     @Override public void addCorsMappings(CorsRegistry registry) {
         registry.addMapping("/api/v1/**").allowedOrigins(origins).allowedMethods("GET", "POST", "PUT", "PATCH", "OPTIONS")
-            .allowedHeaders("Content-Type", "If-Match", "Idempotency-Key", "X-Document-Setup-Request", "X-Request-Id")
+            .allowedHeaders("Accept", "Content-Type", "If-Match", "Idempotency-Key", "X-Audio-SHA256", "X-Audio-Byte-Length", "X-Document-Setup-Request", "X-Request-Id")
             .exposedHeaders("ETag").allowCredentials(false);
     }
 }
