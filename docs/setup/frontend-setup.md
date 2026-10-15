@@ -114,7 +114,7 @@ Vercel 프로젝트는 monorepo의 `frontend/` 디렉터리를 Root Directory로
 
 오디오 저장에는 Vercel 프로젝트에 연결된 private Blob store를 사용한다. `frontend/api/` Function 환경에는 `BLOB_READ_WRITE_TOKEN`, `RENDER_AUDIO_STORAGE_SECRET`, `RENDER_AUDIO_GRANT_SECRET`만 Secret으로 설정한다. 이 값은 `VITE_` 접두사를 붙이지 않는다. Render 서비스에는 같은 두 `RENDER_AUDIO_*_SECRET` 값과 `VERCEL_BLOB_CONTROL_URL=https://<project-domain>/api/audio-storage`를 설정한다. 브라우저는 Render API에서 단기 업로드 grant를 받은 뒤 private Blob으로 직접 청크를 올리고, Render가 Blob 내용을 확인한 다음 업로드를 승인한다.
 
-저장소가 Vercel 프로젝트의 Git source에 연결되어 있지 않으면 `master` 푸시만으로 배포가 시작되지 않는다. 연결을 복구하거나 프로젝트가 `frontend/`를 root로 사용하는지 확인한 뒤 프로덕션 배포를 실행한다. 배포 후 홈페이지 응답, Render API 연결, private Blob 업로드와 확인 응답을 각각 검증한다.
+저장소가 Vercel 프로젝트의 Git source에 연결되어 있지 않으면 `master` 푸시만으로 배포가 시작되지 않는다. 연결을 복구하거나 프로젝트가 `frontend/`를 root로 사용하는지 확인한 뒤 프로덕션 배포를 실행한다. CLI에서 배포할 때는 커밋 작성자 이메일이 프로젝트의 배포 권한이 있는 Vercel 계정과 일치해야 한다. 배포 후 홈페이지 응답, Render API 연결, private Blob 업로드와 확인 응답을 각각 검증한다.
 
 ## VS Code 설정
 
