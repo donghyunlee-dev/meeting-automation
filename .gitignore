@@ -16,3 +16,6 @@
 # Safe environment examples remain trackable
 !**/.env.example
 !**/.env.*.example
+
+# Agent worktrees
+.worktrees/
