@@ -326,6 +326,7 @@ test('TASK-022.07 keeps first document connection guidance readable and clear of
   await page.getByRole('button', { name: 'Confluence Cloud로 변경' }).click();
   await expect(page.getByRole('heading', { name: 'Confluence Cloud 연결 가이드' })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Atlassian API token 만들기' })).toBeVisible();
+  await expect(page.getByText(/범위 없는 기본 API token/)).toBeVisible();
   await expect(page.getByLabel('Space ID')).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
 });

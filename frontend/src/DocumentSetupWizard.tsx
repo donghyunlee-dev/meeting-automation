@@ -348,7 +348,7 @@ export function DocumentSetupWizard({ settings = false }: { settings?: boolean }
             <li><span>아래에 내부 연결 토큰과 부모 페이지 링크 또는 ID를 입력하세요. 토큰은 테스트 후 화면에서 지워지며 브라우저에 저장되지 않습니다.</span></li>
           </ol> : <ol className="setup-guide-steps">
             <li><span>전용 Atlassian 운영 계정과 해당 계정의 이메일을 준비하세요. 사이트 주소는 예를 들어 <code>https://회사이름.atlassian.net</code> 형식입니다.</span></li>
-            <li><span><a href="https://support.atlassian.com/atlassian-account/docs/manage-api-tokens-for-your-atlassian-account" target="_blank" rel="noreferrer">Atlassian API token 만들기</a>에서 토큰을 발급하세요. 조직 정책에 따라 관리자 승인이 필요할 수 있습니다.</span></li>
+            <li><span><a href="https://support.atlassian.com/atlassian-account/docs/manage-api-tokens-for-your-atlassian-account" target="_blank" rel="noreferrer">Atlassian API token 만들기</a>에서 범위 없는 기본 API token을 발급하세요. 이 연결은 사이트 URL에 Basic 인증을 사용하며, 조직 정책에 따라 관리자 승인이 필요할 수 있습니다.</span></li>
             <li><span>저장할 Confluence 공간의 Space ID와 운영 계정의 페이지 읽기·생성·갱신 권한을 관리자에게 확인하세요. <a href="https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-space/" target="_blank" rel="noreferrer">공간 API 문서</a>에서 ID 항목을 확인할 수 있습니다.</span></li>
             <li><span>아래에 사이트 URL, 계정 이메일, API token, Space ID를 입력하세요. token은 테스트 후 화면에서 지워지며 브라우저에 저장되지 않습니다.</span></li>
           </ol>}

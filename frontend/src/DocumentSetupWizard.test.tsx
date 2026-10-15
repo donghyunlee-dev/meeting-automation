@@ -83,6 +83,7 @@ describe('document setup wizard', () => {
     expect((screen.getByLabelText('Atlassian API token') as HTMLInputElement).value).toBe('');
     expect((screen.getByLabelText('Atlassian 계정 이메일') as HTMLInputElement).value).toBe('');
     expect(screen.getByText(/Space ID와 운영 계정의 페이지 읽기·생성·갱신 권한/)).toBeTruthy();
+    expect(screen.getByText(/범위 없는 기본 API token/)).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Atlassian API token 만들기' }).getAttribute('href')).toBe('https://support.atlassian.com/atlassian-account/docs/manage-api-tokens-for-your-atlassian-account');
   });
 
