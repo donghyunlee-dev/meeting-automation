@@ -334,7 +334,26 @@ export function DocumentSetupWizard({ settings = false }: { settings?: boolean }
     {preparedTarget && !initializationUncertain && <section className="setup-card" aria-labelledby="migration-heading"><h2 id="migration-heading">자료 이전 방식</h2><p>대상 연결: {snapshot.draft?.provider === 'NOTION' ? 'Notion' : 'Confluence Cloud'}</p><p>참석자와 회의록의 Transcript, Minutes, 참석자 참조를 전체 복사합니다. 첨부·댓글·버전 이력은 포함되지 않으며 이메일과 Slack 알림을 다시 보내지 않습니다.</p><p>원본 자료는 원본 서비스에 보존됩니다. 전환이 완료된 뒤 새 서비스의 목록을 사용합니다.</p><fieldset className="setup-mode"><legend>이전 방식 선택</legend><label><input type="radio" name="switch-mode" checked={mode === 'COPY_ALL'} onChange={() => { setMode('COPY_ALL'); setConfirmEmpty(false); }} />전체 복사</label><label><input type="radio" name="switch-mode" checked={mode === 'START_EMPTY'} onChange={() => { setMode('START_EMPTY'); setConfirmEmpty(false); }} />빈 구조로 새 시작</label></fieldset>{mode === 'START_EMPTY' && <label className="setup-confirm"><input type="checkbox" checked={confirmEmpty} onChange={(event) => setConfirmEmpty(event.target.checked)} />기존 자료가 새 서비스 목록에 나타나지 않음을 확인했습니다. 자료는 원본에 보존됩니다.</label>}<button className="button button-primary" type="button" disabled={busy || mode === 'START_EMPTY' && !confirmEmpty} onClick={() => void startSwitch()}>{busy ? '전환 시작 중…' : '문서 서비스 전환'}</button></section>}
     {!hasBlockingOperation && !preparedTarget && !initializationUncertain && <>
       {!provider ? <section className="setup-card"><h2>문서 서비스 선택</h2><div className="setup-choice"><button className="button button-secondary" type="button" onClick={() => chooseProvider('NOTION')}>Notion 선택</button><button className="button button-secondary" type="button" onClick={() => chooseProvider('CONFLUENCE')}>Confluence Cloud 선택</button></div></section> : <>
-        <section className="setup-card" aria-labelledby="guide-title"><div className="setup-card-heading"><div><h2 id="guide-title">{provider === 'NOTION' ? 'Notion 연결 가이드' : 'Confluence Cloud 연결 가이드'}</h2><p>{provider === 'NOTION' ? '내부 연결을 만들고 대상 부모 페이지에 연결 접근 권한을 부여해 주세요. 읽기·페이지 생성·갱신 권한이 필요합니다.' : '내부 운영용 Atlassian 계정과 API token을 준비하고, 공간 읽기·페이지 생성·갱신 권한을 확인해 주세요.'}</p></div><button className="button button-secondary" type="button" onClick={() => chooseProvider(provider === 'NOTION' ? 'CONFLUENCE' : 'NOTION')}>{provider === 'NOTION' ? 'Confluence Cloud 선택' : 'Notion 선택'}</button></div></section>
+        <section className="setup-card setup-guide" aria-labelledby="guide-title">
+          <div className="setup-card-heading">
+            <div>
+              <h2 id="guide-title">{provider === 'NOTION' ? 'Notion 연결 가이드' : 'Confluence Cloud 연결 가이드'}</h2>
+              <p>연결 전에 아래 정보와 권한을 준비해 주세요.</p>
+            </div>
+            <button className="button button-secondary setup-provider-switch" type="button" onClick={() => chooseProvider(provider === 'NOTION' ? 'CONFLUENCE' : 'NOTION')}>{provider === 'NOTION' ? 'Confluence Cloud로 변경' : 'Notion으로 변경'}</button>
+          </div>
+          {provider === 'NOTION' ? <ol className="setup-guide-steps">
+            <li><span><a href="https://www.notion.com/help/create-integrations-with-the-notion-api" target="_blank" rel="noreferrer">Notion 연결 만들기</a>에서 내부 연결을 만들고 표시되는 토큰을 준비하세요.</span></li>
+            <li><span>회의 자료를 저장할 부모 페이지를 열고 메뉴에서 방금 만든 연결을 추가하세요. 연결에 페이지 읽기와 콘텐츠 추가·수정 권한을 허용해야 합니다.</span></li>
+            <li><span>아래에 내부 연결 토큰과 부모 페이지 링크 또는 ID를 입력하세요. 토큰은 테스트 후 화면에서 지워지며 브라우저에 저장되지 않습니다.</span></li>
+          </ol> : <ol className="setup-guide-steps">
+            <li><span>전용 Atlassian 운영 계정과 해당 계정의 이메일을 준비하세요. 사이트 주소는 예를 들어 <code>https://회사이름.atlassian.net</code> 형식입니다.</span></li>
+            <li><span><a href="https://support.atlassian.com/atlassian-account/docs/manage-api-tokens-for-your-atlassian-account" target="_blank" rel="noreferrer">Atlassian API token 만들기</a>에서 범위 없는 기본 API token을 발급하세요. 이 연결은 사이트 URL에 Basic 인증을 사용하며, 조직 정책에 따라 관리자 승인이 필요할 수 있습니다.</span></li>
+            <li><span>저장할 Confluence 공간의 Space ID와 운영 계정의 페이지 읽기·생성·갱신 권한을 관리자에게 확인하세요. <a href="https://developer.atlassian.com/cloud/confluence/rest/v2/api-group-space/" target="_blank" rel="noreferrer">공간 API 문서</a>에서 ID 항목을 확인할 수 있습니다.</span></li>
+            <li><span>아래에 사이트 URL, 계정 이메일, API token, Space ID를 입력하세요. token은 테스트 후 화면에서 지워지며 브라우저에 저장되지 않습니다.</span></li>
+          </ol>}
+          <p className="setup-guide-note">연결 테스트는 접근 여부를 확인하며 테스트용 페이지를 만들지 않습니다. 실제 페이지를 만들 수 있는지는 마지막 초기 설정 단계에서 확인합니다.</p>
+        </section>
         <form ref={formRef} className="setup-card setup-form" onSubmit={(event) => void handleTest(event)} noValidate>
           {provider === 'NOTION' ? <>
             <div className="setup-field"><label htmlFor="notion-token">Notion 내부 연결 토큰</label><input id="notion-token" type="password" autoComplete="new-password" value={credentials.token} onChange={(event) => updateCredential('token', event.target.value)} aria-invalid={Boolean(fieldErrors['notion-token'])} aria-describedby={`notion-token-help${fieldErrors['notion-token'] ? ' notion-token-error' : ''}`} /><small id="notion-token-help">연결 테스트 후 입력한 토큰은 화면에서 지우며 브라우저 저장소에는 저장하지 않습니다.</small>{fieldErrors['notion-token'] && <small className="setup-error" id="notion-token-error" role="alert">{fieldErrors['notion-token']}</small>}</div>
