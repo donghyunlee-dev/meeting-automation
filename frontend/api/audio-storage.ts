@@ -1,5 +1,5 @@
 import { del, get, put } from '@vercel/blob';
-import { listManifests, readManifest, updateManifest, type AudioBlobEntry } from '../src/server/audioBlobManifest';
+import { listManifests, readManifest, updateManifest, type AudioBlobEntry } from '../src/server/audioBlobManifest.js';
 
 declare const process: { env: Record<string, string | undefined> };
 
