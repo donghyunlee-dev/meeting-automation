@@ -75,13 +75,15 @@ describe('document setup wizard', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Notion 선택' }));
     fireEvent.change(screen.getByLabelText('Notion 내부 연결 토큰'), { target: { value: 'secret-token' } });
     fireEvent.change(screen.getByLabelText('부모 페이지 URL 또는 ID'), { target: { value: 'notion-parent' } });
-    expect(screen.getByText(/페이지 생성·갱신 권한/)).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Confluence Cloud 선택' }));
+    expect(screen.getByText(/페이지 읽기와 콘텐츠 추가·수정 권한/)).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Notion 연결 만들기' }).getAttribute('href')).toBe('https://www.notion.com/help/create-integrations-with-the-notion-api');
+    fireEvent.click(screen.getByRole('button', { name: 'Confluence Cloud로 변경' }));
     expect(screen.queryByLabelText('Notion 내부 연결 토큰')).toBeNull();
     expect(screen.getByLabelText('Atlassian API token')).toBeTruthy();
     expect((screen.getByLabelText('Atlassian API token') as HTMLInputElement).value).toBe('');
     expect((screen.getByLabelText('Atlassian 계정 이메일') as HTMLInputElement).value).toBe('');
-    expect(screen.getByText(/공간 읽기·페이지 생성·갱신 권한/)).toBeTruthy();
+    expect(screen.getByText(/Space ID와 운영 계정의 페이지 읽기·생성·갱신 권한/)).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Atlassian API token 만들기' }).getAttribute('href')).toBe('https://support.atlassian.com/atlassian-account/docs/manage-api-tokens-for-your-atlassian-account');
   });
 
   it('shows recovery guidance for unavailable settings storage', async () => {

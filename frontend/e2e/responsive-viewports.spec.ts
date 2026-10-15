@@ -278,3 +278,54 @@ for (const width of [360, 375]) {
     await expect(drawer.locator('button[aria-label*="닫기"]')).toBeVisible();
   });
 }
+
+test('TASK-022.07 keeps first document connection guidance readable and clear of the bottom navigation at 360px', async ({ page }, testInfo) => {
+  const width = 360;
+  await page.setViewportSize({ width, height: 800 });
+  await page.route('**/api/v1/document-setup', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ data: { version: 0, status: 'UNCONFIGURED', active: null, draft: null, operation: null, canCreateMeeting: false } }),
+  }));
+  await page.goto('/setup/document');
+
+  await page.getByRole('button', { name: 'Notion 선택' }).click();
+  await expect(page.getByRole('heading', { name: 'Notion 연결 가이드' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Notion 연결 만들기' })).toBeVisible();
+  await expect(page.getByLabel('부모 페이지 URL 또는 ID')).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('notion-first-connection-mobile.png'), fullPage: true });
+
+  const notionLayout = await page.evaluate(() => {
+    const button = document.querySelector<HTMLButtonElement>('.setup-provider-switch');
+    const action = document.querySelector<HTMLButtonElement>('.setup-form .button-primary');
+    const navigation = document.querySelector<HTMLElement>('.bottom-navigation');
+    if (!button || !action || !navigation) throw new Error('Expected provider switch, test action and bottom navigation');
+    const actionBounds = action.getBoundingClientRect();
+    const navigationBounds = navigation.getBoundingClientRect();
+    return {
+      viewport: document.documentElement.clientWidth,
+      documentWidth: document.documentElement.scrollWidth,
+      switchWidth: button.clientWidth,
+      switchTextWidth: button.scrollWidth,
+      switchWhiteSpace: getComputedStyle(button).whiteSpace,
+      actionBottom: actionBounds.bottom,
+      navigationTop: navigationBounds.top,
+    };
+  });
+  expect(notionLayout.documentWidth).toBeLessThanOrEqual(notionLayout.viewport);
+  expect(notionLayout.switchWhiteSpace).toBe('nowrap');
+  expect(notionLayout.switchTextWidth).toBeLessThanOrEqual(notionLayout.switchWidth);
+  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+  const bottomGap = await page.evaluate(() => {
+    const action = document.querySelector('.setup-form .button-primary')!.getBoundingClientRect();
+    const navigation = document.querySelector('.bottom-navigation')!.getBoundingClientRect();
+    return navigation.top - action.bottom;
+  });
+  expect(bottomGap).toBeGreaterThan(0);
+
+  await page.getByRole('button', { name: 'Confluence Cloud로 변경' }).click();
+  await expect(page.getByRole('heading', { name: 'Confluence Cloud 연결 가이드' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Atlassian API token 만들기' })).toBeVisible();
+  await expect(page.getByLabel('Space ID')).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+});
