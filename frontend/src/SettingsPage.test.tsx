@@ -32,9 +32,20 @@ describe('Settings page', () => {
       '/api/v1/app-config', '/api/v1/integrations/health',
     ]);
     pending.forEach(({ path, resolve }) => resolve(response(path.endsWith('/app-config') ? config : health)));
-    expect(await screen.findByText('Acme')).toBeTruthy();
-    expect(await screen.findByText('설정 연결 확인됨')).toBeTruthy();
+    await waitFor(() => expect(document.querySelector('.settings-sections')?.textContent).toContain('Notion'));
+    expect(await screen.findByText('연결 상태 확인됨')).toBeTruthy();
     expect(screen.getByText('최근 알림 전달 상태가 확인되지 않았습니다.')).toBeTruthy();
+    expect(screen.getByRole('heading', { level: 1, name: '설정' })).toBeTruthy();
+    expect([...document.querySelectorAll('.settings-sections > section h2')].map((heading) => heading.textContent)).toEqual(['문서 연결', '이메일', '알림', '참석자']);
+    expect(screen.getByText((_content, element) => element?.classList.contains('settings-method') === true && element.textContent?.includes('Notion') === true)).toBeTruthy();
+    expect(screen.getByText((_content, element) => element?.classList.contains('settings-method') === true && element.textContent?.includes('Gmail OAuth') === true)).toBeTruthy();
+    expect(screen.getByText((_content, element) => element?.classList.contains('settings-method') === true && element.textContent?.includes('Slack Webhook URL') === true)).toBeTruthy();
+    expect(screen.getByRole('link', { name: '문서 연결 설정' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: '참석자 관리' })).toBeTruthy();
+    expect(screen.queryByText('Acme')).toBeNull();
+    expect(screen.queryByText(/시간대:/)).toBeNull();
+    expect(screen.queryByRole('region', { name: '회사' })).toBeNull();
+    expect(screen.getByRole('region', { name: '참석자' })).toBeTruthy();
   });
 
   it('keeps public configuration visible when health fails and retry refreshes only health with GET', async () => {
@@ -50,15 +61,14 @@ describe('Settings page', () => {
     vi.stubGlobal('fetch', fetchMock);
     render(<MemoryRouter><SettingsPage /></MemoryRouter>);
 
-    expect(await screen.findByText('Acme')).toBeTruthy();
-    const documentSection = screen.getByRole('region', { name: '문서 서비스' });
-    fireEvent.click(within(documentSection).getByRole('button', { name: '연결 상태 다시 확인' }));
+    await waitFor(() => expect(document.querySelector('.settings-sections')?.textContent).toContain('Notion'));
+    fireEvent.click(screen.getByRole('button', { name: '연결 상태 다시 확인' }));
     expect(await screen.findByText('최근 알림 전달 상태가 확인되지 않았습니다.')).toBeTruthy();
     expect(fetchMock.mock.calls.filter(([input]) => new URL(String(input)).pathname.endsWith('/app-config'))).toHaveLength(1);
     expect(fetchMock.mock.calls.some(([, init]) => init?.method && init.method !== 'GET')).toBe(false);
   });
 
-  it('labels stale health after refresh failure and keeps retry available in every health section', async () => {
+  it('shows one shared health retry after refresh failure', async () => {
     let healthCalls = 0;
     const recoveredHealth = {
       ...health,
@@ -77,22 +87,18 @@ describe('Settings page', () => {
     vi.stubGlobal('fetch', fetchMock);
     render(<MemoryRouter><SettingsPage /></MemoryRouter>);
 
-    fireEvent.click(await screen.findByRole('button', { name: '모든 공개 상태 새로고침' }));
-    const documentSection = screen.getByRole('region', { name: '문서 서비스' });
+    fireEvent.click(await screen.findByRole('button', { name: '모든 연결 상태 새로고침' }));
+    const documentSection = screen.getByRole('region', { name: '문서 연결' });
     const emailSection = screen.getByRole('region', { name: '이메일' });
     const notificationSection = screen.getByRole('region', { name: '알림' });
-    await within(documentSection).findByText('새로고침하지 못했습니다. 기존 내용을 유지합니다.');
-
-    for (const section of [documentSection, emailSection, notificationSection]) {
-      expect(within(section).getByRole('status').textContent).toContain('기존 내용을 유지합니다.');
-      expect(within(section).getByRole('button', { name: '연결 상태 다시 확인' })).toBeTruthy();
-    }
+    await screen.findByText('새로고침하지 못했습니다. 기존 내용을 유지합니다.');
+    expect(screen.getAllByRole('button', { name: '연결 상태 다시 확인' })).toHaveLength(1);
     expect(healthCalls).toBe(2);
-    fireEvent.click(within(notificationSection).getByRole('button', { name: '연결 상태 다시 확인' }));
-    expect(await within(notificationSection).findByText('공개 상태 확인됨')).toBeTruthy();
-    for (const section of [documentSection, emailSection, notificationSection]) {
-      await waitFor(() => expect(within(section).queryByText('새로고침하지 못했습니다. 기존 내용을 유지합니다.')).toBeNull());
-    }
+    fireEvent.click(screen.getByRole('button', { name: '연결 상태 다시 확인' }));
+    expect(await within(notificationSection).findByText('연결 확인됨')).toBeTruthy();
+    await waitFor(() => expect(screen.queryByText('새로고침하지 못했습니다. 기존 내용을 유지합니다.')).toBeNull());
+    expect(documentSection).toBeTruthy();
+    expect(emailSection).toBeTruthy();
     expect(healthCalls).toBe(3);
   });
 
@@ -103,7 +109,7 @@ describe('Settings page', () => {
     render(<MemoryRouter><SettingsPage /></MemoryRouter>);
 
     expect(await screen.findByRole('alert')).toBeTruthy();
-    expect(screen.getByText('Slack')).toBeTruthy();
+    expect(document.querySelector('.settings-sections')?.textContent).toContain('Slack');
     expect(screen.getByText('최근 알림 전달 상태가 확인되지 않았습니다.')).toBeTruthy();
   });
 
@@ -132,10 +138,10 @@ describe('Settings page', () => {
     vi.stubGlobal('fetch', fetchMock);
     render(<MemoryRouter><SettingsPage /></MemoryRouter>);
 
-    expect(await screen.findByText('Acme')).toBeTruthy();
+    await waitFor(() => expect(document.querySelector('.settings-sections')?.textContent).toContain('Notion'));
     const visibleText = document.body.textContent ?? '';
     expect(visibleText).not.toMatch(/secret-root|root-id|raw-provider-token|private-root-id/);
-    expect(visibleText).toContain('실제 이메일 또는 Slack 메시지 전달 성공을 보장하지 않습니다');
+    expect(visibleText).toContain('실제 전달 성공을 보장하지 않습니다');
   });
 
   it('keeps an accessible route to the shared document setup wizard and participant settings', async () => {
@@ -149,7 +155,7 @@ describe('Settings page', () => {
     vi.stubGlobal('fetch', fetchMock);
     render(<MemoryRouter initialEntries={['/settings']}><App /></MemoryRouter>);
 
-    fireEvent.click(await screen.findByRole('link', { name: '문서 연결 설정 열기' }));
+    fireEvent.click(await screen.findByRole('link', { name: '문서 연결 설정' }));
     expect(await screen.findByRole('button', { name: '문서 서비스 변경' })).toBeTruthy();
     expect(screen.getByRole('link', { name: '참석자 관리' }).getAttribute('href')).toBe('/settings/participants');
   });

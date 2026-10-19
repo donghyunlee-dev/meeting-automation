@@ -5,11 +5,11 @@ import type { Participant } from './participantsApi';
 import { getReviewSession, ReviewApiError, updateReviewMinutes, updateSpeakerMappings, type ReviewSession, type ReviewSpeaker, type SpeakerMappingInput, type StructuredMinutes } from './reviewApi';
 import { ReviewMinutesEditor, type MinutesSaveState } from './ReviewMinutesEditor';
 import { ReviewTranscriptDrawer } from './ReviewTranscriptDrawer';
-import { MinutesRegenerationControl } from './MinutesRegenerationControl';
 import { getMinutesRegenerationSnapshot, type MinutesRegenerationSnapshot } from './minutesRegenerationApi';
 import { ProcessingPoller } from './processingPoller';
 import { AsyncState } from './components/async-state/AsyncState';
 import { normalizeApiError } from './lib/api/normalizeApiError';
+import { confirmReview, createIdempotencyKey, getPublishSnapshot, PublishApiError, publishSession } from './publishApi';
 
 type Resource<T> = { status: 'loading' | 'ready' | 'error'; data?: T };
 type ReviewResource = Resource<Awaited<ReturnType<typeof getReviewSession>>> & { requestSessionId: string };
@@ -38,12 +38,11 @@ export function ReviewSpeakerPage({ drafts, onInitialize, onChange, onCommit, on
   const [participants, setParticipants] = useState<Resource<Participant[]>>({ status: 'loading' });
   const [config, setConfig] = useState<Resource<DocumentAppConfig>>({ status: 'loading' });
   const [retryingRoster, setRetryingRoster] = useState(false);
+  const [completingReview, setCompletingReview] = useState(false);
   const [minutesDraftStore, setMinutesDraftStore] = useState<MinutesDraftStore>(() => ({ drafts: {}, baselines: {}, baseVersions: {}, saveStatuses: {} }));
   const [minutesMutationStates, setMinutesMutationStates] = useState<Record<string, MinutesMutationState>>({});
   const [reviewFailure, setReviewFailure] = useState<{ sessionId: string; code: ReviewFailureCode } | null>(null);
   const [transcriptOpen, setTranscriptOpen] = useState(false);
-  const [regenerationProcessing, setRegenerationProcessing] = useState<{ sessionId: string; processing: boolean }>(() => ({ sessionId, processing: false }));
-  const [regenerationControlUsed, setRegenerationControlUsed] = useState<{ sessionId: string; used: boolean }>(() => ({ sessionId, used: false }));
   const [regenerationResume, setRegenerationResume] = useState<{ sessionId: string; progress: number | null } | null>(null);
   const [regenerationResumeMessage, setRegenerationResumeMessage] = useState<{ sessionId: string; message: string } | null>(null);
   const [saveState, setSaveState] = useState<{ sessionId: string; saving: boolean; message: string; recoveryAttempt: SpeakerMappingInput[] | null }>({
@@ -51,6 +50,8 @@ export function ReviewSpeakerPage({ drafts, onInitialize, onChange, onCommit, on
   });
   const reviewRequestGeneration = useRef(0);
   const saveInFlight = useRef(false);
+  const confirmInFlight = useRef(false);
+  const confirmAttempt = useRef<{ version: number; key: string } | null>(null);
   const minutesSaveInFlight = useRef(new Set<string>());
   const activeSessionId = useRef(sessionId);
   const latestReview = useRef<{ sessionId: string; version: number } | null>(null);
@@ -111,11 +112,6 @@ export function ReviewSpeakerPage({ drafts, onInitialize, onChange, onCommit, on
     reviewRequestGeneration.current += 1;
     saveInFlight.current = false;
     latestReview.current = null;
-  }, [sessionId]);
-
-  const reportRegenerationProcessing = useCallback((processing: boolean) => {
-    setRegenerationProcessing({ sessionId, processing });
-    if (processing) setRegenerationControlUsed({ sessionId, used: true });
   }, [sessionId]);
 
   const applySnapshot = useCallback((data: ReviewSession) => {
@@ -462,35 +458,6 @@ export function ReviewSpeakerPage({ drafts, onInitialize, onChange, onCommit, on
     }
   }
 
-  async function prepareRegenerationSnapshot(): Promise<ReviewSession | null> {
-    const expectedSessionId = sessionId;
-    const visibleReview = review.data;
-    if (!visibleReview || visibleReview.sessionId !== expectedSessionId || activeSessionId.current !== expectedSessionId) return null;
-    const draft = minutesDraftBySession.current.has(expectedSessionId)
-      ? minutesDraftBySession.current.get(expectedSessionId) ?? null
-      : currentMinutes;
-    const base = serverBaseBySession.current.get(expectedSessionId) ?? { version: visibleReview.version, minutes: visibleReview.minutes };
-    if (!sameMinutes(draft, base.minutes)) {
-      if (!draft) return null;
-      await saveMinutes(expectedSessionId, draft);
-      const draftAfterSave = minutesDraftBySession.current.has(expectedSessionId)
-        ? minutesDraftBySession.current.get(expectedSessionId) ?? null : draft;
-      if (!sameMinutes(draftAfterSave, draft)) return null;
-      const savedBase = serverBaseBySession.current.get(expectedSessionId);
-      if (!savedBase || !sameMinutes(savedBase.minutes, draft)) return null;
-    }
-    try {
-      const latest = await getReviewSession(expectedSessionId);
-      if (latest.version < (serverBaseBySession.current.get(expectedSessionId)?.version ?? visibleReview.version)) return null;
-      if (!sameMinutes(latest.minutes, draft)) return null;
-      if (!applySnapshot(latest)) return null;
-      return latest;
-    } catch (error) {
-      recordReviewFailure(expectedSessionId, error);
-      return null;
-    }
-  }
-
   async function checkMinutesResult(expectedSessionId: string) {
     const submittedSnapshot = minutesMutationStates[expectedSessionId]?.recoverySnapshot;
     if (!submittedSnapshot || minutesSaveInFlight.current.has(expectedSessionId)) return;
@@ -513,10 +480,8 @@ export function ReviewSpeakerPage({ drafts, onInitialize, onChange, onCommit, on
   const draftIsDirty = submittedMappings.length > 0 && submittedMappings.some((mapping, index) => mapping.participantId !== committedMappings[index]?.participantId);
   const minutesDraftIsDirty = Boolean(currentReview && !sameMinutes(currentMinutes, minutesBaseline));
   const savingMinutes = sessionMinutesSaveState.status === 'saving';
-  const shareBlocked = draftIsDirty || minutesDraftIsDirty || saving || savingMinutes;
-  const canShare = Boolean(currentReview?.allowedActions.includes('CONFIRM')) && !shareBlocked;
-  const canSave = Boolean(currentReview && providerReady && currentReview.allowedActions.includes('UPDATE_SPEAKER_MAPPING')
-    && draftIsDirty && !saving && participants.status !== 'loading');
+  const completionBlocked = draftIsDirty || minutesDraftIsDirty || saving || savingMinutes;
+  const canComplete = Boolean(currentReview?.allowedActions.includes('CONFIRM')) && providerReady && !completionBlocked;
 
   async function reconcile(attempt: SpeakerMappingInput[], isUncertain: boolean, generation = reviewRequestGeneration.current, expectedSessionId = sessionId) {
     const isCurrent = () => generation === reviewRequestGeneration.current && activeSessionId.current === expectedSessionId;
@@ -531,10 +496,8 @@ export function ReviewSpeakerPage({ drafts, onInitialize, onChange, onCommit, on
         setSaveMessage('매핑 저장이 확인되었습니다.');
         setRecoveryAttempt(null);
       } else {
-        setSaveMessage(isUncertain
-          ? '서버의 최신 매핑을 불러왔습니다. 변경 내용은 유지했습니다. 확인 후 다시 저장해 주세요.'
-          : '최신 회의 정보를 불러왔습니다. 변경 내용은 유지했으며 자동 저장하지 않았습니다. 확인 후 다시 저장해 주세요.');
-        setRecoveryAttempt(null);
+        setSaveMessage('최신 회의 정보를 불러왔습니다. 변경 내용은 유지했습니다. 확인 후 다시 저장해 주세요.');
+        setRecoveryAttempt(attempt);
       }
     } catch {
       if (!isCurrent()) return;
@@ -556,15 +519,18 @@ export function ReviewSpeakerPage({ drafts, onInitialize, onChange, onCommit, on
     }
   }
 
-  async function saveMappings() {
-    if (!currentReview || !canSave || saveInFlight.current) return;
+  async function saveMappings(mappingsAttempt: SpeakerMappingInput[]) {
+    if (!currentReview || !providerReady || !currentReview.allowedActions.includes('UPDATE_SPEAKER_MAPPING')
+      || saveInFlight.current || participants.status === 'loading') return;
+    const baseline = currentReview.speakers.map((speaker) => ({ speakerId: speaker.speakerId, participantId: speaker.participantId }));
+    if (mappingsAttempt.length !== baseline.length || mappingsAttempt.every((mapping, index) => mapping.participantId === baseline[index]?.participantId)) return;
     const expectedSessionId = sessionId;
     const generation = reviewRequestGeneration.current;
     const isCurrent = () => generation === reviewRequestGeneration.current && activeSessionId.current === expectedSessionId;
     saveInFlight.current = true;
     setSaving(true);
     setSaveMessage('매핑을 저장하는 중입니다.');
-    const attempt = submittedMappings;
+    const attempt = mappingsAttempt;
     try {
       const result = await updateSpeakerMappings(expectedSessionId, currentReview.version, attempt);
       if (!isCurrent()) return;
@@ -590,6 +556,7 @@ export function ReviewSpeakerPage({ drafts, onInitialize, onChange, onCommit, on
         await reconcile(attempt, true, generation, expectedSessionId);
       } else {
         setSaveMessage('매핑을 저장하지 못했습니다. 기존 저장 내용과 변경 내용은 유지됩니다. 다시 시도해 주세요.');
+        setRecoveryAttempt(attempt);
       }
     } finally {
       if (isCurrent()) {
@@ -599,12 +566,47 @@ export function ReviewSpeakerPage({ drafts, onInitialize, onChange, onCommit, on
     }
   }
 
+  async function completeReview() {
+    if (!currentReview || !canComplete || confirmInFlight.current) return;
+    confirmInFlight.current = true;
+    setCompletingReview(true);
+    setSaveMessage('회의록을 확정하고 참석자에게 전달하는 중입니다.');
+    const attempt = confirmAttempt.current?.version === currentReview.version
+      ? confirmAttempt.current : { version: currentReview.version, key: createIdempotencyKey() };
+    confirmAttempt.current = attempt;
+    let confirmed = false;
+    try {
+      let confirmedVersion: number;
+      try {
+        confirmedVersion = await confirmReview(sessionId, attempt.version, attempt.key);
+      } catch (error) {
+        if (!(error instanceof PublishApiError) || !error.outcomeUnknown) throw error;
+        const latest = await getPublishSnapshot(sessionId);
+        if (latest.status === 'CONFIRMED' && latest.allowedActions.includes('PUBLISH')) confirmedVersion = latest.version;
+        else if (latest.status === 'REVIEW') confirmedVersion = await confirmReview(sessionId, attempt.version, attempt.key);
+        else throw new Error('회의 상태가 변경되어 완료할 수 없습니다.');
+      }
+      confirmed = true;
+      confirmAttempt.current = null;
+      await publishSession(sessionId, confirmedVersion, createIdempotencyKey(), currentReview.participantIds,
+        config.data?.notification?.configured === true);
+      navigate(`/meetings/${encodeURIComponent(sessionId)}/complete`, { replace: true });
+    } catch (error) {
+      if (confirmed || (error instanceof PublishApiError && error.outcomeUnknown)) {
+        navigate(`/meetings/${encodeURIComponent(sessionId)}/complete`, { replace: true });
+      } else {
+        setSaveMessage('회의록을 확정하거나 전달하지 못했습니다. 연결 상태를 확인한 뒤 다시 시도해 주세요.');
+      }
+    } finally {
+      confirmInFlight.current = false;
+      setCompletingReview(false);
+    }
+  }
+
   return (
     <main className="review-speaker-page">
       <header className="review-speaker-heading">
-        <p className="eyebrow">MEETING REVIEW</p>
-        <h1>회의록 검토</h1>
-        <p>회의록과 화자 정보를 확인하고 수정할 수 있습니다.</p>
+        <h1><svg className="workflow-heading-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h10l4 4v12H5zM14 4v5h5M8 13h8M8 17h6" /></svg>회의록 검토</h1>
       </header>
 
       {reviewIsLoading && regenerationResume?.sessionId !== sessionId && <p role="status">회의의 화자 정보를 불러오는 중입니다.</p>}
@@ -634,16 +636,12 @@ export function ReviewSpeakerPage({ drafts, onInitialize, onChange, onCommit, on
       }} renderReady={() => null} />}
 
       {currentReview && <>
-        <div className="review-save-controls">
-          <button className="button button-primary" type="button" disabled={!canShare}
-            aria-describedby={shareBlocked ? 'share-save-instruction' : undefined}
-            onClick={() => navigate(`/meetings/${encodeURIComponent(sessionId)}/share`, { state: {
-              review: currentReview,
-              speakerDrafts: currentDraft,
-              minutesDraft: currentMinutes,
-            } })}>저장하고 공유</button>
-          {shareBlocked && <p id="share-save-instruction" role="status" aria-live="polite">
-            {saving || savingMinutes ? '저장 중인 변경사항이 있습니다. 저장이 끝날 때까지 기다려 주세요.' : '화자 매핑 또는 회의록을 저장한 뒤 공유하세요.'}
+        <div className="review-save-controls review-flow-dock">
+          <button className="button button-primary" type="button" disabled={!canComplete || completingReview} onClick={() => void completeReview()}>
+            {completingReview ? '전달 준비 중…' : '검토 완료'}
+          </button>
+          {completionBlocked && <p role="status" aria-live="polite">
+            {saving || savingMinutes ? '저장 중인 변경사항이 있습니다. 저장이 끝날 때까지 기다려 주세요.' : '수정한 내용을 저장한 뒤 검토를 완료할 수 있습니다.'}
           </p>}
         </div>
         <ReviewMinutesEditor
@@ -655,86 +653,70 @@ export function ReviewSpeakerPage({ drafts, onInitialize, onChange, onCommit, on
           ownerState={minutesOwnerState}
           saveState={sessionMinutesSaveState}
           saveBlockedMessage={minutesSaveBlockedMessage}
-          disabled={regenerationProcessing.sessionId === sessionId && regenerationProcessing.processing}
+          disabled={regenerationResume?.sessionId === sessionId}
           onSave={onMinutesSave ?? saveMinutes}
           onChange={updateMinutesDraft}
+          footerContent={<>
+            <details className="review-speaker-card review-speaker-details">
+              <summary>화자 정보 (선택)</summary>
+              <div className="review-speaker-card-heading">
+                <div><p>매핑한 참석자 이름은 모든 해당 발화에 적용됩니다.</p></div>
+                <div className="review-speaker-actions">
+                  <button className="button button-secondary" type="button" onClick={() => setTranscriptOpen(true)}>Transcript 원문 보기</button>
+                </div>
+              </div>
+              {participants.status === 'loading' && <AsyncState state={{ status: 'loading', label: '참석자 목록을 불러오는 중입니다.' }} renderReady={() => null} />}
+              {participants.status === 'error' && <AsyncState state={{
+                status: 'error', title: '참석자 목록을 불러오지 못했습니다.',
+                error: normalizeApiError({ error: { code: 'REQUEST_FAILED' } }),
+                description: '참석자 목록을 불러오지 못했습니다. 기존 선택은 유지됩니다.',
+                onRetry: () => void loadRoster(), retryLabel: retryingRoster ? '불러오는 중…' : '참석자 목록 다시 불러오기',
+              }} renderReady={() => null} />}
+              {needsSettings && <div className="review-speaker-message" role="status"><p>참석자 매핑을 사용하려면 문서 서비스 연결이 필요합니다.</p></div>}
+              {config.status === 'error' && <div className="review-speaker-message" role="alert"><p>문서 연결 상태를 확인할 수 없습니다. 기존 선택은 유지됩니다.</p><button className="button button-secondary" type="button" onClick={() => void loadConfig()}>설정 상태 다시 확인</button></div>}
+              {participants.status === 'ready' && participants.data?.length === 0 && <AsyncState state={{
+                status: 'empty', title: '선택할 참석자가 없습니다.', description: '참석자를 먼저 추가해 주세요.',
+                action: <Link className="button button-secondary" to="/settings/participants" state={{ from: location.pathname }}>참석자 관리</Link>,
+              }} renderReady={() => null} />}
+              {currentReview.speakers.length === 0 && <p role="status">감지된 화자가 없습니다.</p>}
+              <div className="review-speaker-list">
+                {currentReview.speakers.map((speaker) => {
+                  const value = speakerValue(speaker);
+                  const selectedIsInList = availableParticipants.some(({ id }) => id === value);
+                  const fallbackLabel = participants.status === 'loading' ? '참석자 목록 확인 중' : '기존 매핑 유지';
+                  return <div className="review-speaker-row" key={speaker.speakerId}>
+                    <label htmlFor={`speaker-${speaker.speakerId}`}>{speaker.label}</label>
+                    {providerReady ? <div className="meeting-select-control review-select-control"><select
+                      id={`speaker-${speaker.speakerId}`}
+                      aria-label={`${speaker.label} 참가자`}
+                      value={value}
+                      disabled={regenerationResume?.sessionId === sessionId || saving || participants.status === 'loading' || availableParticipants.length === 0}
+                      onChange={(event) => {
+                        const participantId = event.target.value || null;
+                        onChange(sessionId, speaker.speakerId, participantId);
+                        const attempt = submittedMappings.map((mapping) => mapping.speakerId === speaker.speakerId
+                          ? { ...mapping, participantId } : mapping);
+                        void saveMappings(attempt);
+                      }}
+                    >
+                      <option value="">참가자 선택</option>
+                      {value && !selectedIsInList && <option value={value}>{fallbackLabel}</option>}
+                      {availableParticipants.map(({ id, name }) => <option key={id} value={id}>{name}</option>)}
+                    </select><svg className="meeting-dropdown-chevron" viewBox="0 0 20 20" aria-hidden="true"><path d="m5 7.5 5 5 5-5" /></svg></div> : <p className="review-speaker-current">{speaker.participantId ? (availableParticipants.find(({ id }) => id === value)?.name ?? fallbackLabel) : '참가자 선택'}</p>}
+                  </div>;
+                })}
+              </div>
+              {(currentReview.allowedActions.includes('UPDATE_SPEAKER_MAPPING') || saveMessage) && <div className="review-save-controls">
+                {saveMessage && <p role="status">{saveMessage}</p>}
+                {recoveryAttempt && <button className="button button-secondary" type="button" disabled={saving} onClick={() => void saveMappings(recoveryAttempt)}>매핑 다시 저장</button>}
+              </div>}
+            </details>
+            {sessionMinutesMutationState.recoverySnapshot && <button className="button button-secondary" type="button"
+              disabled={sessionMinutesMutationState.status === 'saving'} onClick={() => void checkMinutesResult(sessionId)}>
+              저장 결과 다시 확인
+            </button>}
+          </>}
         />
-        {(currentReview.allowedActions.includes('REGENERATE_MINUTES') || (regenerationControlUsed.sessionId === sessionId && regenerationControlUsed.used)) && <MinutesRegenerationControl
-          session={currentReview}
-          blocked={(regenerationProcessing.sessionId === sessionId && regenerationProcessing.processing) || saving || Boolean(sessionMinutesMutationState.status === 'saving')}
-          prepareSnapshot={prepareRegenerationSnapshot}
-          applySnapshot={applyRegenerationSnapshot}
-          onProcessingChange={reportRegenerationProcessing}
-        />}
-        {sessionMinutesMutationState.recoverySnapshot && <button className="button button-secondary" type="button"
-          disabled={sessionMinutesMutationState.status === 'saving'} onClick={() => void checkMinutesResult(sessionId)}>
-          저장 결과 다시 확인
-        </button>}
-        <section className="review-speaker-card" aria-labelledby="speaker-mapping-heading">
-        <div className="review-speaker-card-heading">
-          <div><h2 id="speaker-mapping-heading">화자 매핑</h2><p>매핑한 참석자 이름은 모든 해당 발화에 적용됩니다.</p></div>
-          <div className="review-speaker-actions">
-            <button className="button button-secondary" type="button" onClick={() => setTranscriptOpen(true)}>Transcript 원문 보기</button>
-            {providerReady && <button className="button button-secondary" type="button" disabled={retryingRoster || participants.status === 'loading'} onClick={() => void loadRoster()}>참석자 목록 새로고침</button>}
-          </div>
-        </div>
-        {participants.status === 'loading' && <AsyncState state={{ status: 'loading', label: '참석자 목록을 불러오는 중입니다.' }} renderReady={() => null} />}
-        {participants.status === 'error' && <AsyncState state={{
-          status: 'error', title: '참석자 목록을 불러오지 못했습니다.',
-          error: normalizeApiError({ error: { code: 'REQUEST_FAILED' } }),
-          description: '참석자 목록을 불러오지 못했습니다. 기존 선택은 유지됩니다.',
-          onRetry: () => void loadRoster(), retryLabel: retryingRoster ? '불러오는 중…' : '참석자 목록 다시 불러오기',
-        }} renderReady={() => null} />}
-        {needsSettings && <div className="review-speaker-message" role="status"><p>문서 서비스를 연결하면 화자를 참석자와 연결할 수 있습니다.</p><Link className="button button-primary" to="/settings" state={{ from: location.pathname }}>문서 설정 열기</Link></div>}
-        {config.status === 'error' && <div className="review-speaker-message" role="alert"><p>문서 연결 상태를 확인할 수 없습니다. 기존 선택은 유지됩니다.</p><button className="button button-secondary" type="button" onClick={() => void loadConfig()}>설정 상태 다시 확인</button></div>}
-        {participants.status === 'ready' && participants.data?.length === 0 && <AsyncState state={{
-          status: 'empty', title: '선택할 참석자가 없습니다.', description: '참석자를 먼저 추가해 주세요.',
-          action: <Link className="button button-secondary" to="/settings/participants" state={{ from: location.pathname }}>참석자 관리</Link>,
-        }} renderReady={() => null} />}
-        {currentReview.speakers.length === 0 && <p role="status">감지된 화자가 없습니다.</p>}
-        <div className="review-speaker-list">
-          {currentReview.speakers.map((speaker) => {
-            const value = speakerValue(speaker);
-            const selectedIsInList = availableParticipants.some(({ id }) => id === value);
-            const fallbackLabel = participants.status === 'loading' ? '참석자 목록 확인 중' : '기존 매핑 유지';
-            return <div className="review-speaker-row" key={speaker.speakerId}>
-              <label htmlFor={`speaker-${speaker.speakerId}`}>{speaker.label} 참가자</label>
-              {providerReady ? <select
-                id={`speaker-${speaker.speakerId}`}
-                aria-label={`${speaker.label} 참가자`}
-                value={value}
-                disabled={(regenerationProcessing.sessionId === sessionId && regenerationProcessing.processing) || saving || participants.status === 'loading' || availableParticipants.length === 0}
-                onChange={(event) => onChange(sessionId, speaker.speakerId, event.target.value || null)}
-              >
-                <option value="">참가자 선택</option>
-                {value && !selectedIsInList && <option value={value}>{fallbackLabel}</option>}
-                {availableParticipants.map(({ id, name }) => <option key={id} value={id}>{name}</option>)}
-              </select> : <p className="review-speaker-current">{speaker.participantId ? (availableParticipants.find(({ id }) => id === value)?.name ?? fallbackLabel) : '참가자 선택'}</p>}
-            </div>;
-          })}
-        </div>
-        {currentReview.transcript.length > 0 && <section className="review-transcript" aria-label="화자 매핑 미리보기">
-          <h3>발화 미리보기</h3>
-          {currentReview.transcript.map((segment) => {
-            const speaker = currentReview.speakers.find((item) => item.speakerId === segment.speakerId);
-            const participantId = speaker ? speakerValue(speaker) : null;
-            const participant = availableParticipants.find((item) => item.id === participantId);
-            const participantName = participant?.name ?? (participantId === speaker?.participantId ? speaker?.participantName : null) ?? null;
-            return <p key={segment.segmentId} data-segment-id={segment.segmentId} data-start-ms={segment.startMs} data-end-ms={segment.endMs}
-              data-speaker-name={participantName ?? ''}>
-              <span>{speaker?.label ?? segment.speakerId}</span>{participantName && <span> · {participantName}</span>}{' '}
-              <time>{segment.startMs}–{segment.endMs}ms</time>{' '}{segment.text}
-            </p>;
-          })}
-        </section>}
-        {(currentReview.allowedActions.includes('UPDATE_SPEAKER_MAPPING') || saveMessage) && <div className="review-save-controls">
-          {currentReview.allowedActions.includes('UPDATE_SPEAKER_MAPPING') && <button className="button button-primary" type="button" disabled={!canSave || (regenerationProcessing.sessionId === sessionId && regenerationProcessing.processing)} onClick={() => void saveMappings()}>
-            {saving ? '저장 중…' : '매핑 저장'}
-          </button>}
-          {saveMessage && <p role="status">{saveMessage}</p>}
-          {recoveryAttempt && <button className="button button-secondary" type="button" disabled={saving} onClick={() => void reconcile(recoveryAttempt, true)}>저장 상태 다시 확인</button>}
-        </div>}
-        </section>
         <ReviewTranscriptDrawer
           open={transcriptOpen}
           segments={currentReview.transcript}

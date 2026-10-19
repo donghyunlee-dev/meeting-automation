@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate } from 'react-router';
 import { AsyncState } from './components/async-state/AsyncState';
 import { normalizeApiError, type SafeApiError } from './lib/api/normalizeApiError';
 import { listMeetings, MeetingListApiError, type MeetingSummary } from './meetingListApi';
-import { filterMeetings, groupMeetingsByLocalMonth, hasInvalidDateRange, type MeetingFilters } from './meetingFilters';
+import { filterMeetings, hasInvalidDateRange, type MeetingFilters } from './meetingFilters';
+import { getSetupSnapshot, type DocumentProvider, type SetupSnapshot } from './documentSetupApi';
 
 type ListResult =
   | { status: 'loading' }
@@ -26,23 +27,28 @@ function participantSummary(meeting: MeetingSummary, showNames: boolean): string
 }
 
 function MeetingRows({ meetings, showParticipantNames, linkRows = false }: { meetings: MeetingSummary[]; showParticipantNames: boolean; linkRows?: boolean }) {
+  const navigate = useNavigate();
   return (
     <ul className="meeting-summary-list">
       {meetings.map((meeting) => (
         <li className="meeting-summary-row" key={meeting.documentId}>
-          <h3>{linkRows ? <Link aria-label={`${meeting.title} 상세 보기`} to={`/meetings/${encodeURIComponent(meeting.documentId)}`}>{meeting.title}</Link> : meeting.title}</h3>
-          <p>{formatMeetingDate(meeting.meetingAt)}</p>
-          <p>{participantSummary(meeting, showParticipantNames)}</p>
+          {linkRows ? <button className="meeting-summary-button" type="button" aria-label={`${meeting.title} 상세 보기`}
+            onClick={() => navigate(`/meetings/${encodeURIComponent(meeting.documentId)}`)}>
+            <span className="meeting-summary-copy"><h3>{meeting.title}</h3><span className="meeting-summary-meta"><time>{formatMeetingDate(meeting.meetingAt)}</time><span aria-hidden="true">·</span><span>{participantSummary(meeting, showParticipantNames)}</span></span></span>
+            <span className="meeting-summary-arrow" aria-hidden="true">›</span>
+          </button> : <><h3>{meeting.title}</h3><p>{formatMeetingDate(meeting.meetingAt)}</p><p>{participantSummary(meeting, showParticipantNames)}</p></>}
         </li>
       ))}
     </ul>
   );
 }
 
-function MeetingList({ limit, emptyMessage, enableFilters = false }: { limit?: number; emptyMessage: string; enableFilters?: boolean }) {
+function MeetingList({ limit, emptyMessage, enableFilters = false, quietEmpty = false, linkRows = false }: { limit?: number; emptyMessage: string; enableFilters?: boolean; quietEmpty?: boolean; linkRows?: boolean }) {
   const [result, setResult] = useState<ListResult>({ status: 'loading' });
   const [attempt, setAttempt] = useState(0);
   const [filters, setFilters] = useState<MeetingFilters>({ query: '', from: '', to: '' });
+  const [appliedFilters, setAppliedFilters] = useState<MeetingFilters>({ query: '', from: '', to: '' });
+  const [filtersExpanded, setFiltersExpanded] = useState(false);
   const retry = () => setAttempt((value) => value + 1);
 
   useEffect(() => {
@@ -63,72 +69,154 @@ function MeetingList({ limit, emptyMessage, enableFilters = false }: { limit?: n
   const refreshing = result.status === 'ready' && result.loadedAttempt < attempt;
 
   const visibleMeetings = useMemo(() => result.status === 'ready'
-    ? (enableFilters ? filterMeetings(result.data, filters) : result.data).slice(0, limit ?? 100)
-    : [], [enableFilters, filters, limit, result]);
+    ? (enableFilters ? filterMeetings(result.data, appliedFilters) : result.data).slice(0, limit ?? 100)
+    : [], [enableFilters, appliedFilters, limit, result]);
 
-  if (result.status === 'loading') return <AsyncState state={{ status: 'loading', label: '회의 목록을 불러오는 중…' }} renderReady={() => null} />;
+  if (result.status === 'loading') return <AsyncState state={{ status: 'loading', label: '회의 목록을 불러오는 중…', fullPage: enableFilters }} renderReady={() => null} />;
   if (result.status === 'error') return <AsyncState state={{ status: 'error', title: '회의 목록을 불러오지 못했습니다.', error: result.error, onRetry: retry }} renderReady={() => null} />;
   if (result.data.length === 0) return <AsyncState state={{
     status: 'empty', title: emptyMessage,
-    action: limit === undefined ? <Link className="button button-primary" to="/meetings/new">새 회의 시작</Link> : undefined,
+    visual: quietEmpty ? <img className="empty-meetings-icon" src="/assets/empty-meetings.svg" alt="회의 기록 없음" /> : undefined,
+    visuallyHideTitle: quietEmpty,
   }} renderReady={() => null} />;
-  if (!enableFilters) return <AsyncState state={{ status: 'ready', data: visibleMeetings, refreshing, warning: result.warning, onRetry: retry }} renderReady={(items) => <MeetingRows meetings={items} showParticipantNames={limit === undefined} />} />;
+  if (!enableFilters) return <AsyncState state={{ status: 'ready', data: visibleMeetings, refreshing, warning: result.warning, onRetry: retry }} renderReady={(items) => <MeetingRows meetings={items} showParticipantNames={limit === undefined} linkRows={linkRows} />} />;
   const invalidRange = hasInvalidDateRange(filters.from, filters.to);
-  const reset = () => setFilters({ query: '', from: '', to: '' });
   return (
     <AsyncState state={{ status: 'ready', data: visibleMeetings, refreshing, warning: result.warning, onRetry: retry }} renderReady={(items) => <>
-      <button className="button button-secondary meeting-list-refresh" type="button" onClick={retry} disabled={refreshing}>회의 목록 새로고침</button>
-      <form className="meeting-filters" aria-label="회의 필터" onSubmit={(event) => event.preventDefault()}>
-        <label>회의 검색<input type="search" aria-label="회의 검색" value={filters.query} onChange={(event) => setFilters((current) => ({ ...current, query: event.target.value }))} placeholder="회의명 또는 참석자" /></label>
-        <label>시작일<input type="date" aria-label="시작일" value={filters.from} onChange={(event) => setFilters((current) => ({ ...current, from: event.target.value }))} aria-invalid={invalidRange} aria-describedby={invalidRange ? 'meeting-date-error' : undefined} /></label>
-        <label>종료일<input type="date" aria-label="종료일" value={filters.to} onChange={(event) => setFilters((current) => ({ ...current, to: event.target.value }))} aria-invalid={invalidRange} aria-describedby={invalidRange ? 'meeting-date-error' : undefined} /></label>
-        {invalidRange && <p id="meeting-date-error" className="field-error" role="alert">시작일은 종료일보다 늦을 수 없습니다. 날짜 범위는 적용하지 않았습니다.</p>}
-        <button className="button button-secondary" type="button" onClick={reset}>필터 초기화</button>
-      </form>
+      <section className="meeting-filter-shell" aria-label="회의 검색 조건">
+        <form className="meeting-filters" aria-label="회의 필터" onSubmit={(event) => { event.preventDefault(); setAppliedFilters(filters); }}>
+          <label className="meeting-search-field">회의 검색<span className="meeting-search-control">
+            <input type="search" aria-label="회의 검색" value={filters.query}
+              onChange={(event) => setFilters((current) => ({ ...current, query: event.target.value }))}
+              onBlur={() => setAppliedFilters((current) => ({ ...current, query: filters.query }))}
+              placeholder="회의명 또는 참석자" />
+            <button className="meeting-search-clear" type="button" aria-label="검색어 초기화" title="검색어 초기화" disabled={!filters.query}
+              onClick={() => { setFilters((current) => ({ ...current, query: '' })); setAppliedFilters((current) => ({ ...current, query: '' })); }}>
+              <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m6 6 8 8M14 6l-8 8" /></svg>
+            </button>
+          </span></label>
+          <div className="meeting-filter-details-row">
+            <button className="meeting-filter-toggle" type="button" aria-expanded={filtersExpanded}
+              onClick={() => setFiltersExpanded((expanded) => !expanded)}>
+              상세 조건<svg viewBox="0 0 20 20" aria-hidden="true"><path d={filtersExpanded ? 'm5 12 5-5 5 5' : 'm5 8 5 5 5-5'} /></svg>
+            </button>
+          </div>
+          {filtersExpanded && <fieldset className="meeting-date-range" aria-describedby={invalidRange ? 'meeting-date-error' : undefined}>
+            <legend>검색 기간</legend>
+            <label><span>시작일</span><input type="date" aria-label="시작일" value={filters.from}
+              onChange={(event) => { const from = event.target.value; setFilters((current) => ({ ...current, from })); setAppliedFilters((current) => ({ ...current, from })); }} aria-invalid={invalidRange} /></label>
+            <span className="meeting-date-separator" aria-hidden="true">~</span>
+            <label><span>종료일</span><input type="date" aria-label="종료일" value={filters.to}
+              onChange={(event) => { const to = event.target.value; setFilters((current) => ({ ...current, to })); setAppliedFilters((current) => ({ ...current, to })); }} aria-invalid={invalidRange} /></label>
+          </fieldset>}
+          {invalidRange && <p id="meeting-date-error" className="field-error" role="alert">시작일은 종료일보다 늦을 수 없습니다. 날짜 범위는 적용하지 않았습니다.</p>}
+        </form>
+      </section>
+      <p className="meeting-result-count">총 {items.length}건</p>
       {items.length === 0 ? (
-        <div className="state-card empty-card"><p>검색 결과가 없습니다.</p><button className="button button-secondary" type="button" onClick={reset}>필터 초기화</button></div>
-      ) : groupMeetingsByLocalMonth(items).map((group) => (
-        <section className="meeting-month-group" aria-labelledby={`month-${group.key}`} key={group.key}>
-          <h2 id={`month-${group.key}`}>{group.label}</h2>
-          <MeetingRows meetings={group.meetings} showParticipantNames linkRows />
-        </section>
-      ))}
+        <div className="state-card empty-card"><p>검색 결과가 없습니다.</p></div>
+      ) : <MeetingRows meetings={items} showParticipantNames linkRows />}
     </>} />
   );
 }
 
 export function HomePage() {
+  const navigate = useNavigate();
+  const [connection, setConnection] = useState<{ status: 'loading' | 'error' | 'ready'; snapshot?: SetupSnapshot }>({ status: 'loading' });
+  const [connectionDialogOpen, setConnectionDialogOpen] = useState(false);
+  const connectionButtonRef = useRef<HTMLButtonElement | null>(null);
+  const dialogCloseRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    void getSetupSnapshot().then(({ snapshot }) => {
+      if (live) setConnection({ status: 'ready', snapshot });
+    }).catch(() => {
+      if (live) setConnection({ status: 'error' });
+    });
+    return () => { live = false; };
+  }, []);
+
+  useEffect(() => {
+    if (!connectionDialogOpen) return;
+    dialogCloseRef.current?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setConnectionDialogOpen(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      connectionButtonRef.current?.focus();
+    };
+  }, [connectionDialogOpen]);
+
+  const active = connection.snapshot?.active ?? null;
+  const providerLabel = (provider: DocumentProvider) => provider === 'NOTION' ? 'Notion' : 'Confluence';
+  const connectionReady = connection.snapshot?.status === 'READY' && connection.snapshot.canCreateMeeting;
+  const connectionLabel = connection.status === 'loading' ? '연결 상태 확인 중' : connection.status === 'error'
+    ? '연결 상태 확인 필요' : active
+      ? connection.snapshot?.status === 'SWITCHING' ? `${providerLabel(active.provider)} 전환 중`
+        : connection.snapshot?.status === 'ATTENTION_REQUIRED' ? '연결 점검 필요'
+          : connectionReady ? `${providerLabel(active.provider)} 연결됨` : '문서 설정 확인 필요'
+      : '문서 서비스 연결 필요';
+
   return (
     <main className="home-page">
       <div className="home-content">
-        <p className="eyebrow">MEETING AUTOMATION</p>
-        <h1>Meeting Automation</h1>
+        <div className="home-toolbar">
+          <button ref={connectionButtonRef} className={`home-connection-button${connectionReady ? ' is-connected' : ''}`} type="button"
+            aria-label={`문서 서비스 연결 상태: ${connectionLabel}`} aria-haspopup="dialog" onClick={() => setConnectionDialogOpen(true)}>
+            <span className="home-connection-indicator" aria-hidden="true" />
+            {active ? <span className={`home-provider-icon home-provider-icon-${active.provider.toLowerCase()}`}><img src={active.provider === 'NOTION' ? '/assets/notion.ico' : '/assets/confluence.svg'} alt="" /></span>
+              : <span className="home-provider-placeholder" aria-hidden="true">▤</span>}
+          </button>
+        </div>
         <div className="home-message">
           <h2>회의를 시작할까요?</h2>
-          <p>회의 내용을 녹음하고 자동으로 정리합니다.</p>
         </div>
-        <Link className="button button-primary home-cta" to="/meetings/new">새 회의 시작</Link>
+        <button className="button button-primary home-cta" type="button" onClick={() => navigate('/meetings/new')}>새 회의 시작</button>
         <section className="home-recent" aria-labelledby="recent-meetings-title">
           <div className="home-recent-heading">
             <h2 id="recent-meetings-title">최근 회의</h2>
-            <Link to="/meetings">전체 보기</Link>
+            <button className="home-all-meetings" type="button" onClick={() => navigate('/meetings')}>전체 보기 <span aria-hidden="true">→</span></button>
           </div>
-          <MeetingList limit={5} emptyMessage="최근 회의가 없습니다. 새 회의를 시작해 보세요." />
+          <MeetingList limit={5} emptyMessage="최근 회의가 없습니다. 새 회의를 시작해 보세요." quietEmpty linkRows />
         </section>
       </div>
+      {connectionDialogOpen && <div className="home-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setConnectionDialogOpen(false); }}>
+        <section className="home-connection-dialog" role="dialog" aria-modal="true" aria-labelledby="home-connection-dialog-title">
+          <header><div><p className="eyebrow">DOCUMENT SERVICE</p><h2 id="home-connection-dialog-title">문서 연결 상태</h2></div>
+            <button ref={dialogCloseRef} className="home-dialog-close" type="button" aria-label="닫기" onClick={() => setConnectionDialogOpen(false)}>×</button></header>
+          {connection.status === 'loading' ? <p role="status">문서 연결 상태를 불러오는 중…</p>
+            : connection.status === 'error' ? <div className="home-dialog-status" role="alert"><strong>연결 상태를 확인할 수 없습니다</strong><p>백엔드 연결을 확인한 뒤 다시 시도해 주세요.</p>
+              <button className="button button-secondary" type="button" onClick={() => { setConnection({ status: 'loading' }); void getSetupSnapshot().then(({ snapshot }) => setConnection({ status: 'ready', snapshot })).catch(() => setConnection({ status: 'error' })); }}>다시 확인</button></div>
+              : active ? <>
+                <div className="home-dialog-provider"><span className={`home-provider-icon home-provider-icon-${active.provider.toLowerCase()}`}><img src={active.provider === 'NOTION' ? '/assets/notion.ico' : '/assets/confluence.svg'} alt="" /></span>
+                  <span><strong>{providerLabel(active.provider)}</strong><small>{connection.snapshot?.status === 'SWITCHING' ? '새 문서 서비스로 전환 중' : connectionReady ? `연결됨 · 버전 ${active.connectionVersion}` : '연결 상태를 확인해 주세요'}</small></span>
+                  {connectionReady && <span className="home-connected-check" aria-label="연결됨">✓</span>}</div>
+                <div className="home-document-structure"><h3>문서 구조</h3><ul><li><strong>Meeting Automation</strong><ul><li>Meetings <span>회의록</span></li><li>Participants <span>참석자</span></li><li>Templates <span>기본 회의록 템플릿</span></li></ul></li></ul></div>
+                <div className="home-dialog-actions"><button className="button button-secondary" type="button" onClick={() => window.open(active.rootUrl, '_blank', 'noopener,noreferrer')}>연결된 문서 열기 <span aria-hidden="true">↗</span></button>
+                  <button className="button button-primary" type="button" onClick={() => navigate('/setup/document')}>문서 연결 변경</button></div>
+              </> : <div className="home-dialog-status"><strong>연결된 문서 서비스가 없습니다</strong><p>회의록을 저장하려면 문서 서비스를 연결해 주세요.</p>
+                <button className="button button-primary" type="button" onClick={() => navigate('/setup/document')}>문서 서비스 연결</button></div>}
+        </section>
+      </div>}
     </main>
   );
 }
 
 export function MeetingsPage() {
+  const navigate = useNavigate();
   return (
     <main className="meetings-page">
       <header className="meetings-heading">
-        <p className="eyebrow">MEETING AUTOMATION</p>
-        <h1>회의록</h1>
-        <p>저장된 회의를 최신순으로 확인합니다.</p>
+        <h1><svg className="meetings-heading-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d="M9 6h11M9 12h11M9 18h11" />
+          <path d="M4 6h.01M4 12h.01M4 18h.01" />
+        </svg>회의 기록</h1>
       </header>
-      <MeetingList emptyMessage="회의 기록이 없습니다. 회의를 완료하면 여기에 표시됩니다." enableFilters />
+      <MeetingList emptyMessage="회의 기록이 없습니다. 회의를 완료하면 여기에 표시됩니다." enableFilters quietEmpty />
+      <div className="meetings-create-dock"><button className="button button-primary" type="button" onClick={() => navigate('/meetings/new')}>새 회의 시작</button></div>
     </main>
   );
 }

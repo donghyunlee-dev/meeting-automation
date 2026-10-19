@@ -13,7 +13,6 @@ import { NewMeetingPage, type NewMeetingPayload } from './NewMeetingPage';
 import { createMeetingSession, type MeetingSession, type MeetingSessionAttempt } from './newMeetingApi';
 import { RecordingPage, type RecordingViewState } from './RecordingPage';
 import { DocumentSetupWizard } from './DocumentSetupWizard';
-import { SharePage } from './SharePage';
 import { CompletePage } from './CompletePage';
 import { getSetupSnapshot } from './documentSetupApi';
 import { browserMediaAdapter } from './browserMediaAdapter';
@@ -22,7 +21,7 @@ import { AsyncState } from './components/async-state/AsyncState';
 import { normalizeApiError } from './lib/api/normalizeApiError';
 import { ChunkRecorderAdapter } from './chunkRecorderAdapter';
 import { ChunkRepository } from './chunkRepository';
-import { getReceivedAudioStatus, putAudioChunk, type AudioUploadRequestOptions } from './audioUploadApi';
+import { getReceivedAudioStatus, putAudioChunk } from './audioUploadApi';
 import { ChunkUploadCoordinator, type ChunkUploadSnapshot } from './chunkUploadCoordinator';
 import { startProcessing } from './processingStartApi';
 import { ProcessingAttemptStore, RecordingEndCoordinator, type RecordingEndSnapshot } from './recordingEndCoordinator';
@@ -71,7 +70,6 @@ function ParticipantsPage() {
   const [formError, setFormError] = useState('');
   const [notice, setNotice] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [viewportHeight, setViewportHeight] = useState(() => window.visualViewport?.height ?? window.innerHeight);
   const createAttempt = useRef<{ payload: string; key: string } | null>(null);
   const dialogRef = useRef<HTMLElement | null>(null);
   const nameInputRef = useRef<HTMLInputElement | null>(null);
@@ -101,16 +99,6 @@ function ParticipantsPage() {
       setListError('참석자 목록을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.');
     });
     return () => { mounted = false; };
-  }, []);
-
-  useEffect(() => {
-    const updateViewportHeight = () => setViewportHeight(window.visualViewport?.height ?? window.innerHeight);
-    window.addEventListener('resize', updateViewportHeight);
-    window.visualViewport?.addEventListener('resize', updateViewportHeight);
-    return () => {
-      window.removeEventListener('resize', updateViewportHeight);
-      window.visualViewport?.removeEventListener('resize', updateViewportHeight);
-    };
   }, []);
 
   const filteredParticipants = useMemo(() => {
@@ -237,33 +225,20 @@ function ParticipantsPage() {
 
   return (
     <main className="participants-main">
-      <header className="topbar">
-        <Link className="brand" to="/" aria-label="Meeting Automation 홈">M</Link>
-        <div>
-          <p className="eyebrow">MEETING AUTOMATION</p>
-          <h1>설정</h1>
-        </div>
-      </header>
-
-      <nav className="breadcrumbs" aria-label="현재 위치">
-        <span>설정</span><span aria-hidden="true">/</span><span aria-current="page">참석자</span>
-      </nav>
-
       <section className="participants-page" id="participants" aria-labelledby="page-title">
         <div className="page-heading">
-          <div>
-            <p className="eyebrow">ROSTER</p>
-            <h2 id="page-title">참석자</h2>
-            <p className="page-description">회의에서 사용할 참석자 정보를 관리합니다.</p>
-          </div>
-          <button className="button button-primary add-button" type="button" aria-label="새 참석자 추가" onClick={(event) => openCreate(event.currentTarget)}>
-            <span aria-hidden="true">＋</span> 참석자 추가
-          </button>
+          <h1 id="page-title">
+            <svg className="participants-heading-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="9" cy="8" r="3.25" />
+              <path d="M2.8 20v-1.4a5.2 5.2 0 0 1 5.2-5.2h2a5.2 5.2 0 0 1 5.2 5.2V20M16 5.2a3.2 3.2 0 0 1 0 6.2M17.2 13.6a4.5 4.5 0 0 1 4 4.5V20" />
+            </svg>
+            참석자
+          </h1>
         </div>
 
         {notice && <p className="notice" role="status">{notice}</p>}
 
-        {viewState === 'loading' && <AsyncState state={{ status: 'loading', label: '참석자 목록을 불러오는 중…' }} renderReady={() => null} />}
+        {viewState === 'loading' && <AsyncState state={{ status: 'loading', label: '참석자 목록을 불러오는 중…', fullPage: true }} renderReady={() => null} />}
 
         {viewState === 'error' && <AsyncState state={{
           status: 'error', title: '참석자 목록을 불러오지 못했습니다.',
@@ -274,7 +249,6 @@ function ParticipantsPage() {
         {viewState === 'ready' && participants.length === 0 && <AsyncState state={{
           status: 'empty', title: '등록된 참석자가 없습니다.',
           description: '참석자를 추가하면 회의에서 선택할 수 있습니다.',
-          action: <button className="button button-primary" type="button" onClick={(event) => openCreate(event.currentTarget)}>참석자 추가</button>,
         }} renderReady={() => null} />}
 
         {viewState === 'ready' && participants.length > 0 && <AsyncState state={{ status: 'ready', data: participants }} renderReady={() => <>
@@ -297,26 +271,41 @@ function ParticipantsPage() {
           </>}
         </>} />}
 
-        {form && <div className="form-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !submitting) closeForm(); }}>
-          <section ref={dialogRef} className="participant-form-panel" role="dialog" aria-modal="true" aria-labelledby="form-title" onKeyDown={handleDialogKeyDown} style={{ maxHeight: `calc(${viewportHeight}px - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 24px)`, overflowY: 'auto' }}>
-            <div className="form-heading"><div><p className="eyebrow">PARTICIPANT</p><h3 id="form-title">{form.mode === 'create' ? '참석자 추가' : '참석자 수정'}</h3></div><button type="button" className="icon-button" aria-label="닫기" onClick={closeForm} disabled={submitting}>×</button></div>
+        {form && <div className="form-backdrop" role="presentation">
+          <section ref={dialogRef} className="participant-form-panel participant-form-screen" role="dialog" aria-modal="true" aria-labelledby="form-title" onKeyDown={handleDialogKeyDown}>
+            <div className="form-heading"><div className="participant-form-title"><span className="participant-form-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M16 20v-1.5a4.5 4.5 0 0 0-4.5-4.5h-4A4.5 4.5 0 0 0 3 18.5V20M9.5 10a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7ZM19 8v6M16 11h6" /></svg></span><div><p className="eyebrow">참석자 관리</p><h3 id="form-title">{form.mode === 'create' ? '참석자 추가' : '참석자 수정'}</h3></div></div><button type="button" className="icon-button" aria-label="닫기" onClick={closeForm} disabled={submitting}>×</button></div>
             <p className="form-description">이름과 이메일 정보를 입력해 주세요.</p>
             <form onSubmit={(event) => void handleSubmit(event)} noValidate>
               <div className="form-field"><label htmlFor="participant-name">이름</label><input ref={nameInputRef} id="participant-name" autoComplete="name" value={fields.name} onChange={(event) => changeField('name', event.target.value)} aria-invalid={Boolean(fieldErrors.name)} aria-describedby={fieldErrors.name ? 'name-error' : undefined} />{fieldErrors.name && <p className="field-error" id="name-error">{fieldMessage('name', fieldErrors.name)}</p>}</div>
               <div className="form-field"><label htmlFor="participant-email">이메일</label><input id="participant-email" type="email" autoComplete="email" value={fields.email} onChange={(event) => changeField('email', event.target.value)} aria-invalid={Boolean(fieldErrors.email)} aria-describedby={fieldErrors.email ? 'email-error' : undefined} />{fieldErrors.email && <p className="field-error" id="email-error">{fieldMessage('email', fieldErrors.email)}</p>}</div>
               {formError && <p className="form-error" role="alert">{formError}</p>}
               {formError.includes('새로고침') && <button className="button button-secondary refresh-button" type="button" onClick={() => void refreshParticipants()}>목록 새로고침</button>}
-              <div className="form-actions"><button className="button button-secondary" type="button" onClick={closeForm} disabled={submitting}>취소</button><button className="button button-primary" type="submit" disabled={submitting}>{submitting ? '저장 중…' : '저장'}</button></div>
+              <div className="form-actions participant-form-actions"><button className="button button-primary" type="submit" disabled={submitting}>{submitting ? '저장 중…' : '저장'}</button></div>
             </form>
           </section>
         </div>}
       </section>
+      <div className="participants-create-dock">
+        <button className="button button-primary" type="button" aria-label="참석자 추가" onClick={(event) => openCreate(event.currentTarget)}>
+          <span aria-hidden="true">＋</span> 참석자 추가
+        </button>
+      </div>
     </main>
   );
 }
 
 function FutureRouteNotice() {
-  return <main className="future-page"><h1>화면 준비 중</h1><p>이 화면은 다음 작업에서 제공됩니다.</p></main>;
+  return <main className="future-page" aria-labelledby="future-title">
+    <section className="future-route-card">
+      <p className="eyebrow">PAGE NOT FOUND</p>
+      <h1 id="future-title">페이지를 찾을 수 없습니다</h1>
+      <p>주소가 잘못되었거나 페이지가 이동되었을 수 있습니다.</p>
+      <nav className="future-route-actions" aria-label="다른 페이지로 이동">
+        <Link className="button button-primary" to="/">홈으로 이동</Link>
+        <Link className="button button-secondary" to="/meetings">회의록 목록</Link>
+      </nav>
+    </section>
+  </main>;
 }
 
 function SetupGate({ children }: { children: React.ReactNode }) {
@@ -324,6 +313,7 @@ function SetupGate({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
   const [allowed, setAllowed] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     let live = true;
     void getSetupSnapshot().then(({ snapshot }) => {
@@ -332,8 +322,15 @@ function SetupGate({ children }: { children: React.ReactNode }) {
       else navigate(snapshot.status === 'STORAGE_UNAVAILABLE' ? '/settings/document' : '/setup/document', { replace: true, state: { from: location.pathname } });
     }).catch(() => { if (live) setFailed(true); });
     return () => { live = false; };
-  }, [location.pathname, navigate]);
-  if (failed) return <main className="setup-page"><section className="setup-card" role="alert"><h1>문서 설정 상태를 확인할 수 없습니다</h1><p>연결을 확인한 뒤 다시 시도해 주세요.</p></section></main>;
+  }, [attempt, location.pathname, navigate]);
+  if (failed) return <main className="setup-page"><section className="setup-card" role="alert">
+    <h1>문서 연결 상태를 확인할 수 없습니다</h1>
+    <p>서버 연결을 확인한 뒤 다시 시도하거나 문서 연결 설정을 열어 주세요.</p>
+    <div className="setup-gate-actions">
+      <button className="button button-primary" type="button" onClick={() => { setFailed(false); setAttempt((value) => value + 1); }}>다시 확인</button>
+      <Link className="button button-secondary" to="/settings/document">문서 연결 설정</Link>
+    </div>
+  </section></main>;
   return allowed ? <>{children}</> : <main className="setup-page"><p role="status">문서 연결 상태를 확인하는 중…</p></main>;
 }
 
@@ -366,6 +363,7 @@ function NewMeetingRoute({ onCreated, onSubmitted }: {
     onCreated({ ...session, title: attempt.title });
     onSubmitted?.({
       title: attempt.title,
+      meetingDate: attempt.meetingDate,
       templateId: attempt.templateId,
       participantIds: [...attempt.participantIds],
       timezone: attempt.timezone,
@@ -376,11 +374,11 @@ function NewMeetingRoute({ onCreated, onSubmitted }: {
   return <NewMeetingPage onSubmit={submit} />;
 }
 
-function MeetingRecordingRoute({ session, setState, mediaAdapter, blobUpload }: {
+function MeetingRecordingRoute({ session, setState, setNavigationLocked, mediaAdapter }: {
   session: RecordingSession | null;
   setState: (state: RecordingViewState) => void;
+  setNavigationLocked: (locked: boolean) => void;
   mediaAdapter: MediaRecorderAdapter;
-  blobUpload?: AudioUploadRequestOptions['blobUpload'];
 }) {
   const { sessionId } = useParams();
   if (!session || session.sessionId !== sessionId) return (
@@ -390,14 +388,14 @@ function MeetingRecordingRoute({ session, setState, mediaAdapter, blobUpload }: 
       <Link className="button button-primary" to="/meetings/new">새 회의 시작</Link>
     </main>
   );
-  return <ActiveMeetingRecordingRoute session={session} setState={setState} mediaAdapter={mediaAdapter} blobUpload={blobUpload} />;
+  return <ActiveMeetingRecordingRoute session={session} setState={setState} setNavigationLocked={setNavigationLocked} mediaAdapter={mediaAdapter} />;
 }
 
-function ActiveMeetingRecordingRoute({ session, setState, mediaAdapter, blobUpload }: {
+function ActiveMeetingRecordingRoute({ session, setState, setNavigationLocked, mediaAdapter }: {
   session: RecordingSession;
   setState: (state: RecordingViewState) => void;
+  setNavigationLocked: (locked: boolean) => void;
   mediaAdapter: MediaRecorderAdapter;
-  blobUpload?: AudioUploadRequestOptions['blobUpload'];
 }) {
   const navigate = useNavigate();
   const [snapshot, setSnapshot] = useState<RecordingSnapshot>({ state: 'Ready', elapsedMs: 0 });
@@ -420,11 +418,11 @@ function ActiveMeetingRecordingRoute({ session, setState, mediaAdapter, blobUplo
       repository,
       api: {
         getReceivedSequences: async (sessionId) => (await getReceivedAudioStatus(sessionId, fetchImpl)).receivedSequences,
-        putChunk: async (_sessionId, chunk) => putAudioChunk(chunk, fetchImpl, { blobUpload }),
+        putChunk: async (_sessionId, chunk) => putAudioChunk(chunk, fetchImpl),
       },
       onChange: setUploadSnapshot,
     });
-  }, [blobUpload, repository]);
+  }, [repository]);
   const endCoordinator = useRef<RecordingEndCoordinator | null>(null);
   useEffect(() => {
     const coordinator = new RecordingEndCoordinator({
@@ -492,6 +490,8 @@ function ActiveMeetingRecordingRoute({ session, setState, mediaAdapter, blobUplo
       onChange: (next) => {
         setSnapshot(next);
         setState(next.state);
+        if (next.completed) setNavigationLocked(false);
+        else if (next.state === 'Recording' || next.state === 'Paused') setNavigationLocked(true);
         if (next.errorMessage && stopWaiter.current) {
           const waiter = stopWaiter.current;
           stopWaiter.current = null;
@@ -522,7 +522,7 @@ function ActiveMeetingRecordingRoute({ session, setState, mediaAdapter, blobUplo
       current.dispose();
       if (controllerRef.current === current) controllerRef.current = null;
     };
-  }, [session, setState, mediaAdapter, repository, uploader]);
+  }, [session, setState, setNavigationLocked, mediaAdapter, repository, uploader]);
 
   return <RecordingPage
     sessionId={session.sessionId}
@@ -539,12 +539,19 @@ function ActiveMeetingRecordingRoute({ session, setState, mediaAdapter, blobUplo
         if (endSnapshot.status === 'upload-failed' && result.status === 'complete') void endCoordinator.current?.start();
       });
     }}
-    onRetryProcessing={() => { void endCoordinator.current?.start(); }}
-    onStart={() => { if (controllerRef.current) void controllerRef.current.start(); }}
+    onRetryProcessing={() => { setNavigationLocked(true); void endCoordinator.current?.start(); }}
+    onStart={async () => {
+      setNavigationLocked(true);
+      const controller = controllerRef.current;
+      if (!controller) { setNavigationLocked(false); return; }
+      await controller.start();
+      const current = controller.getSnapshot();
+      if (current.state === 'Ready' && current.errorMessage && !current.completed) setNavigationLocked(false);
+    }}
     onPause={() => controllerRef.current?.pause()}
     onResume={() => controllerRef.current?.resume()}
     onRequestEnd={() => undefined}
-    onConfirmEnd={() => { void endCoordinator.current?.start(); }}
+    onConfirmEnd={() => { setNavigationLocked(true); void endCoordinator.current?.start(); }}
     onCancelEnd={() => undefined}
   />;
 }
@@ -559,15 +566,15 @@ function BottomNavigation() {
   );
 }
 
-export function App({ onNewMeetingSubmit = () => undefined, onMinutesSave, minutesSaveState, mediaAdapter = browserMediaAdapter, blobUpload }: {
+export function App({ onNewMeetingSubmit = () => undefined, onMinutesSave, minutesSaveState, mediaAdapter = browserMediaAdapter }: {
   onNewMeetingSubmit?: (payload: NewMeetingPayload) => void;
   onMinutesSave?: (sessionId: string, minutes: StructuredMinutes) => void;
   minutesSaveState?: MinutesSaveState;
   mediaAdapter?: MediaRecorderAdapter;
-  blobUpload?: AudioUploadRequestOptions['blobUpload'];
 } = {}) {
   const [createdSession, setCreatedSession] = useState<RecordingSession | null>(restoreRecordingSession);
   const [recordingState, setRecordingState] = useState<RecordingViewState>('Ready');
+  const [recordingNavigationLocked, setRecordingNavigationLocked] = useState(false);
   const [speakerDrafts, setSpeakerDrafts] = useState<Record<string, Record<string, string | null>>>({});
   const location = useLocation();
   const initializeSpeakerDraft = useCallback((sessionId: string, speakers: ReviewSpeaker[]) => {
@@ -592,7 +599,31 @@ export function App({ onNewMeetingSubmit = () => undefined, onMinutesSave, minut
       [sessionId]: Object.fromEntries(speakers.map((speaker) => [speaker.speakerId, speaker.participantId])),
     }));
   }, []);
-  const isActiveRecording = (/^\/meetings\/[^/]+\/recording$/.test(location.pathname) && recordingState !== 'Ready') || /^\/meetings\/[^/]+\/processing$/.test(location.pathname);
+  const isActiveRecording = (/^\/meetings\/[^/]+\/recording$/.test(location.pathname) && (recordingState !== 'Ready' || recordingNavigationLocked)) || /^\/meetings\/[^/]+\/processing$/.test(location.pathname);
+  const shouldWarnBeforeLeavingRecording = /^\/meetings\/[^/]+\/recording$/.test(location.pathname) && (recordingState !== 'Ready' || recordingNavigationLocked);
+  const isDocumentConnectionRoute = location.pathname === '/setup/document' || location.pathname === '/settings/document';
+
+  useEffect(() => {
+    if (!shouldWarnBeforeLeavingRecording) return;
+    const guardedUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    const guardedState = { ...(window.history.state ?? {}), meetingAutomationRecordingGuard: true };
+    window.history.pushState(guardedState, '', guardedUrl);
+    const blockBackNavigation = (event: PopStateEvent) => {
+      event.stopImmediatePropagation();
+      window.history.pushState(guardedState, '', guardedUrl);
+    };
+    const warnBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('popstate', blockBackNavigation, true);
+    window.addEventListener('beforeunload', warnBeforeUnload);
+    return () => {
+      window.removeEventListener('popstate', blockBackNavigation, true);
+      window.removeEventListener('beforeunload', warnBeforeUnload);
+    };
+  }, [shouldWarnBeforeLeavingRecording]);
+
   return (
     <div className="app-shell">
       <Routes>
@@ -601,17 +632,16 @@ export function App({ onNewMeetingSubmit = () => undefined, onMinutesSave, minut
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/settings/document" element={<DocumentSetupWizard settings />} />
         <Route path="/meetings" element={<MeetingsPage />} />
-        <Route path="/meetings/new" element={<SetupGate><NewMeetingRoute onCreated={(session) => { setCreatedSession(session); saveRecordingSession(session); setRecordingState('Ready'); }} onSubmitted={onNewMeetingSubmit} /></SetupGate>} />
+        <Route path="/meetings/new" element={<SetupGate><NewMeetingRoute onCreated={(session) => { setCreatedSession(session); saveRecordingSession(session); setRecordingState('Ready'); setRecordingNavigationLocked(false); }} onSubmitted={onNewMeetingSubmit} /></SetupGate>} />
         <Route path="/meetings/:documentId" element={<MeetingDetailPage />} />
-        <Route path="/meetings/:sessionId/recording" element={<MeetingRecordingRoute session={createdSession} setState={setRecordingState} mediaAdapter={mediaAdapter} blobUpload={blobUpload} />} />
+        <Route path="/meetings/:sessionId/recording" element={<MeetingRecordingRoute session={createdSession} setState={setRecordingState} setNavigationLocked={setRecordingNavigationLocked} mediaAdapter={mediaAdapter} />} />
         <Route path="/meetings/:sessionId/processing" element={<ProcessingPage />} />
         <Route path="/meetings/:sessionId/review" element={<ReviewSpeakerPage drafts={speakerDrafts} onInitialize={initializeSpeakerDraft} onChange={updateSpeakerDraft} onCommit={commitSpeakerMappings} onMinutesSave={onMinutesSave} minutesSaveState={minutesSaveState} />} />
-        <Route path="/meetings/:sessionId/share" element={<SharePage />} />
         <Route path="/meetings/:sessionId/complete" element={<CompletePage />} />
         <Route path="/settings/participants" element={<SetupGate><ParticipantsPage /></SetupGate>} />
         <Route path="*" element={<FutureRouteNotice />} />
       </Routes>
-      {!isActiveRecording && <BottomNavigation />}
+      {!isActiveRecording && !isDocumentConnectionRoute && <BottomNavigation />}
     </div>
   );
 }

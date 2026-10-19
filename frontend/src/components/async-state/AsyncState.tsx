@@ -2,8 +2,8 @@ import { useId, type ReactNode } from 'react';
 import type { SafeApiError } from '../../lib/api/normalizeApiError';
 
 export type AsyncStateValue<T> =
-  | { status: 'loading'; label: string }
-  | { status: 'empty'; title: string; description?: string; action?: ReactNode }
+  | { status: 'loading'; label: string; fullPage?: boolean }
+  | { status: 'empty'; title: string; description?: string; visual?: ReactNode; visuallyHideTitle?: boolean; action?: ReactNode }
   | { status: 'error'; title: string; error: SafeApiError; description?: string; onRetry?: () => void; retryLabel?: string; action?: ReactNode }
   | { status: 'ready'; data: T; refreshing?: boolean; warning?: SafeApiError; onRetry?: () => void; retryLabel?: string };
 
@@ -11,12 +11,16 @@ export function AsyncState<T>({ state, renderReady }: { state: AsyncStateValue<T
   const titleId = `async-state-title-${useId()}`;
 
   if (state.status === 'loading') {
-    return <div className="state-card loading" role="status"><span className="spinner" aria-hidden="true" />{state.label}</div>;
+    return <div className={`async-state-loading${state.fullPage ? ' async-state-loading-page' : ''}`} role="status">
+      <span className="spinner" aria-hidden="true" />
+      <span>{state.label}</span>
+    </div>;
   }
 
   if (state.status === 'empty') {
     return <section className="state-card empty-card" aria-labelledby={titleId}>
-      <h3 id={titleId}>{state.title}</h3>
+      <h3 id={titleId} className={state.visuallyHideTitle ? 'visually-hidden' : undefined}>{state.title}</h3>
+      {state.visual}
       {state.description && <p>{state.description}</p>}
       {state.action}
     </section>;

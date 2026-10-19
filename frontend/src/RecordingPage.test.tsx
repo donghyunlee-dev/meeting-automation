@@ -25,11 +25,22 @@ describe('RecordingPage', () => {
     ['Paused', 62018, '일시정지됨', '녹음 재개'],
   ] as const)('renders %s title, status, elapsed time, and primary action', (state, elapsedMs, status, primaryAction) => {
     renderRecording(state, elapsedMs);
-    expect(screen.getByRole('heading', { name: 'Planning' })).toBeTruthy();
-    expect(screen.getByText('세션 ID:').textContent).toContain('session-123');
+    expect(screen.getByRole('heading', { name: '회의 녹음', level: 1 })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Planning', level: 2 })).toBeTruthy();
+    expect(screen.queryByText(/세션 ID/)).toBeNull();
     expect(screen.getByRole('status').textContent).toContain(status);
     expect(screen.getByLabelText('경과 시간').textContent).toBe(state === 'Ready' ? '00:00:00' : '00:01:02');
     expect(screen.getByRole('button', { name: primaryAction })).toBeTruthy();
+  });
+
+  it('shows the recording menu title with its icon and meeting title above the timer', () => {
+    renderRecording('Ready');
+
+    const menuTitle = screen.getByRole('heading', { name: '회의 녹음', level: 1 });
+    expect(menuTitle.querySelector('.recording-title-icon')).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Planning', level: 2 }).className).toContain('recording-meeting-title');
+    expect(screen.queryByText(/세션 ID/)).toBeNull();
+    expect(screen.getByRole('button', { name: '녹음 시작' }).className).toContain('recording-start-action');
   });
 
   it('formats durations as padded HH:mm:ss, including hours and fractional seconds', () => {

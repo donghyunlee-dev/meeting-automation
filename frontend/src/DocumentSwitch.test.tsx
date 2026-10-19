@@ -4,8 +4,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { App } from './App';
 import type { SetupOperation, SetupSnapshot } from './documentSetupApi';
 
-const source = { provider: 'NOTION' as const, connectionVersion: 4, rootUrl: 'https://notion.example/source' };
-const target = { provider: 'CONFLUENCE' as const, connectionVersion: 5, rootUrl: 'https://example.atlassian.net/target' };
+const source = { provider: 'NOTION' as const, connectionVersion: 4, rootId: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', rootUrl: 'https://notion.example/source' };
+const target = { provider: 'CONFLUENCE' as const, connectionVersion: 5, rootId: '12345', rootUrl: 'https://example.atlassian.net/target' };
 const ready: SetupSnapshot = { version: 10, status: 'READY', active: source, draft: null, operation: null, canCreateMeeting: true };
 const prepared: SetupSnapshot = { ...ready, version: 14, draft: { draftId: 'target-draft', revision: 2, provider: 'CONFLUENCE', state: 'PREPARED' }, operation: { operationId: 'prepare-1', type: 'INITIALIZE', status: 'SUCCEEDED' } };
 function op(status: string, allowedActions: string[] = []): SetupOperation {
@@ -56,12 +56,10 @@ async function connectTarget() {
   fireEvent.click(await screen.findByRole('button', { name: '문서 서비스 변경' }));
   fireEvent.click(screen.getByRole('button', { name: 'Confluence Cloud 선택' }));
   for (const [label, value] of [['Confluence 사이트 URL', 'https://example.atlassian.net'], ['Atlassian 계정 이메일', 'synthetic@example.test'], ['Atlassian API token', 'synthetic-secret'], ['Space ID', '42']]) fireEvent.change(screen.getByLabelText(label), { target: { value } });
-  fireEvent.click(screen.getByRole('button', { name: '읽기 전용 연결 테스트' }));
-  await screen.findByRole('heading', { name: '생성될 구조' });
+  fireEvent.click(screen.getByRole('button', { name: '연결 확인' }));
   expect(screen.getByText('현재 연결: Notion')).toBeTruthy();
-  expect((screen.getByLabelText('Atlassian API token') as HTMLInputElement).value).toBe('');
-  fireEvent.click(screen.getByRole('button', { name: '구조 생성 및 연결 완료' }));
   await screen.findByRole('heading', { name: '자료 이전 방식' });
+  expect(screen.queryByLabelText('Atlassian API token')).toBeNull();
 }
 function writes(fetchMock: ReturnType<typeof harness>['fetchMock'], suffix: string) { return fetchMock.mock.calls.filter(([url, init]) => String(url).endsWith(suffix) && init?.method === 'POST'); }
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
@@ -117,15 +115,15 @@ describe('document service change', () => {
     expect((await screen.findByRole('alert')).textContent).toMatch(/설정 버전.*19.*draft revision.*3/);
     expect(screen.queryByRole('button', { name: '문서 서비스 전환' })).toBeNull(); expect(writes(fetchMock, '/switch')).toHaveLength(1);
   });
-  it('CHANGE-INTEGRATION successful switching refreshes the new connection version and target roster', async () => {
+  it('CHANGE-INTEGRATION successful switching refreshes the new connection and target roster', async () => {
     const snapshot: SetupSnapshot = { ...ready, active: target, version: 18, operation: { operationId: 'switch-1', type: 'SWITCH', status: 'SUCCEEDED' } };
     const { fetchMock } = harness(snapshot, op('SUCCEEDED')); const listener = vi.fn(); window.addEventListener('document-connection-changed', listener);
     try {
-      settings(); expect(await screen.findByText(/연결 버전: 5/)).toBeTruthy(); await waitFor(() => expect(listener).toHaveBeenCalled());
+      settings(); expect(await screen.findByRole('heading', { name: 'Confluence' })).toBeTruthy(); await waitFor(() => expect(listener).toHaveBeenCalled());
       expect((listener.mock.calls[0][0] as CustomEvent).detail).toEqual({ connectionVersion: 5 });
       expect(fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/app-config'))).toHaveLength(1);
       expect(fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/participants'))).toHaveLength(1);
-      fireEvent.click(screen.getByRole('link', { name: '참석자 관리' })); expect(await screen.findByText('Synthetic Ada')).toBeTruthy(); expect(screen.getByText('ada@example.test')).toBeTruthy();
+      expect(screen.queryByRole('link', { name: '참석자 관리' })).toBeNull();
     } finally { window.removeEventListener('document-connection-changed', listener); }
   });
   it('CHANGE-GATE reports a switch lock from an already open participant write form', async () => {
@@ -150,14 +148,14 @@ describe('document service change', () => {
     const { fetchMock, failSwitch, setSnapshot } = harness(prepared); failSwitch(); settings(); fireEvent.click(await screen.findByRole('button', { name: '문서 서비스 변경' })); fireEvent.click(screen.getByRole('button', { name: '문서 서비스 전환' })); await screen.findByRole('alert');
     setSnapshot(ready); fireEvent.click(screen.getByRole('button', { name: 'Confluence Cloud 선택' }));
     for (const [label, value] of [['Confluence 사이트 URL', 'https://example.atlassian.net'], ['Atlassian 계정 이메일', 'synthetic@example.test'], ['Atlassian API token', 'synthetic-secret'], ['Space ID', '42']]) fireEvent.change(screen.getByLabelText(label), { target: { value } });
-    fireEvent.click(screen.getByRole('button', { name: '읽기 전용 연결 테스트' })); await screen.findByRole('heading', { name: '생성될 구조' }); fireEvent.click(screen.getByRole('button', { name: '구조 생성 및 연결 완료' }));
+    fireEvent.click(screen.getByRole('button', { name: '연결 확인' }));
     expect(await screen.findByRole('heading', { name: '자료 이전 방식' })).toBeTruthy(); expect(writes(fetchMock, '/switch')).toHaveLength(1);
   });
   it('CHANGE-PROGRESS lost switch response keeps source visible and does not mistake an old preparation for the switch', async () => {
     const { fetchMock, loseSwitch } = harness(prepared); loseSwitch(); settings(); fireEvent.click(await screen.findByRole('button', { name: '문서 서비스 변경' })); fireEvent.click(screen.getByRole('button', { name: '문서 서비스 전환' })); await screen.findByRole('heading', { name: '요청 상태 확인' });
     expect(screen.queryByRole('button', { name: '문서 서비스 전환' })).toBeNull(); expect(screen.getByText('현재 연결: Notion')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: '다시 확인' }));
-    await screen.findByText(/진행 중인 변경 작업이 없습니다.*연결 테스트/);
+    await screen.findByText(/진행 중인 변경 작업이 없습니다.*연결 확인/);
     expect(screen.queryByRole('button', { name: '문서 서비스 전환' })).toBeNull(); expect(writes(fetchMock, '/switch')).toHaveLength(1);
   });
   it('CHANGE-INTEGRATION an unavailable consumer refresh is announced and can be retried without switching again', async () => {

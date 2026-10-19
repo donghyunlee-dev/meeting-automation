@@ -57,8 +57,7 @@ export function SettingsPage() {
     return () => { live = false; };
   }, []);
 
-  const summaryConfig: AppConfig | null = config.data ?? (health.data ? {
-    company: { id: '', name: '', timezone: '' },
+  const summaryConfig: Pick<AppConfig, 'document' | 'email' | 'notification'> | null = config.data ?? (health.data ? {
     document: health.data.document ? {
       provider: health.data.document.provider,
       configured: health.data.document.configured,
@@ -76,36 +75,36 @@ export function SettingsPage() {
   const notificationStatus = summary?.notification.state;
 
   return <main className="settings-page">
-    <header className="settings-heading"><p className="eyebrow">SETTINGS</p><h1>설정</h1><p>회사 정보와 연결 서비스의 공개 상태를 확인합니다.</p></header>
+    <header className="settings-heading"><h1><svg className="settings-heading-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h8m4 0h4M4 12h3m4 0h9M4 18h10m4 0h2" /><circle cx="14" cy="6" r="2" /><circle cx="9" cy="12" r="2" /><circle cx="16" cy="18" r="2" /></svg>설정</h1></header>
     {bothQueriesFailed && <SettingsQueryError title="설정과 연결 상태를 불러오지 못했습니다." description="오류 세부 정보는 표시하지 않습니다." retryLabel="전체 설정 다시 불러오기" onRetry={() => { void refreshConfig(); void refreshHealth(); }} />}
-    <section className="settings-card" aria-labelledby="settings-company-heading">
-      <h2 id="settings-company-heading">회사</h2>
-      {config.data ? <><p>{config.data.company.name}</p><p>시간대: {config.data.company.timezone}</p>{config.status === 'error' && <AsyncState state={{ status: 'ready', data: config.data, warning: SAFE_SETTINGS_QUERY_ERROR, onRetry: () => void refreshConfig(), retryLabel: '공개 설정 다시 불러오기' }} renderReady={() => null} />}</> : config.status === 'loading'
-        ? <SettingsQueryLoading label="공개 설정을 불러오는 중…" />
-        : !bothQueriesFailed && <SettingsQueryError title="공개 설정을 불러오지 못했습니다." description="Provider 오류 세부 정보는 표시하지 않습니다." retryLabel="공개 설정 다시 불러오기" onRetry={() => void refreshConfig()} />}
-    </section>
-    <section className="settings-card" aria-labelledby="settings-document-heading">
-      <h2 id="settings-document-heading">문서 서비스</h2>
-      {health.status === 'loading' && !health.data && <SettingsQueryLoading label="연결 상태를 불러오는 중…" />}
-      {health.status === 'error' && !health.data && !bothQueriesFailed && <SettingsQueryError title="문서 연결 상태를 불러오지 못했습니다." description="연결 상태 조회를 다시 시도할 수 있습니다." retryLabel="연결 상태 다시 확인" onRetry={() => void refreshHealth()} />}
-      {summary && <><p>{documentName}</p><ProviderStatus state={summary.document.state} configuredLabel="연결 상태 확인됨" /><Link className="button button-secondary" to="/settings/document">문서 연결 설정 열기</Link></>}
-      {health.status === 'error' && health.data && <StaleHealthNotice onRetry={() => void refreshHealth()} />}
-    </section>
-    <section className="settings-card" aria-labelledby="settings-email-heading">
-      <h2 id="settings-email-heading">이메일</h2>
-      {health.status === 'loading' && !health.data && <SettingsQueryLoading label="연결 상태를 불러오는 중…" />}
-      {summary && <><p>{emailStatus === 'not-configured' ? '이메일 서비스가 설정되지 않았습니다.' : '이메일 서비스'}</p><ProviderStatus state={emailStatus ?? 'health-unknown'} configuredLabel="설정 연결 확인됨" /></>}
-      {health.status === 'error' && !health.data && !bothQueriesFailed && <SettingsQueryError title="이메일 연결 상태를 불러오지 못했습니다." description="Provider 오류 세부 정보는 표시하지 않습니다." retryLabel="연결 상태 다시 확인" onRetry={() => void refreshHealth()} />}
-      {health.status === 'error' && health.data && <StaleHealthNotice onRetry={() => void refreshHealth()} />}
-    </section>
-    <section className="settings-card" aria-labelledby="settings-notification-heading">
-      <h2 id="settings-notification-heading">알림</h2>
-      {health.status === 'loading' && !health.data && <SettingsQueryLoading label="연결 상태를 불러오는 중…" />}
-      {summary && <><p>{notificationName}</p><ProviderStatus state={notificationStatus ?? 'health-unknown'} configuredLabel="공개 상태 확인됨" /><p className="settings-note">연결 상태는 실제 이메일 또는 Slack 메시지 전달 성공을 보장하지 않습니다.</p></>}
-      {health.status === 'error' && !health.data && !bothQueriesFailed && <SettingsQueryError title="알림 연결 상태를 불러오지 못했습니다." description="Provider 오류 세부 정보는 표시하지 않습니다." retryLabel="연결 상태 다시 확인" onRetry={() => void refreshHealth()} />}
-      {health.status === 'error' && health.data && <StaleHealthNotice onRetry={() => void refreshHealth()} />}
-    </section>
-    {config.status === 'ready' && health.status === 'ready' && <button className="button button-secondary" type="button" onClick={() => { void refreshConfig(); void refreshHealth(); }}>모든 공개 상태 새로고침</button>}
-    <nav aria-label="설정 메뉴" className="settings-links"><Link to="/settings/document">문서 연결 설정</Link><Link to="/settings/participants">참석자 관리</Link></nav>
+    {health.status === 'loading' && !health.data && <SettingsQueryLoading label="연결 상태를 불러오는 중…" />}
+    {health.status === 'error' && !health.data && !bothQueriesFailed && <SettingsQueryError title="연결 상태를 불러오지 못했습니다." description="서비스 연결 상태를 다시 확인해 주세요." retryLabel="연결 상태 다시 확인" onRetry={() => void refreshHealth()} />}
+    {health.status === 'error' && health.data && <StaleHealthNotice onRetry={() => void refreshHealth()} />}
+    {config.status === 'error' && config.data && <AsyncState state={{ status: 'ready', data: config.data, warning: SAFE_SETTINGS_QUERY_ERROR, onRetry: () => void refreshConfig(), retryLabel: '공개 설정 다시 불러오기' }} renderReady={() => null} />}
+    {config.status === 'error' && !config.data && health.data && <SettingsQueryError title="공개 설정을 불러오지 못했습니다." description="확인 가능한 연결 상태를 표시합니다." retryLabel="공개 설정 다시 불러오기" onRetry={() => void refreshConfig()} />}
+    <div className="settings-sections">
+      {summary && <>
+        <section className="settings-card" aria-labelledby="settings-document-heading">
+          <div className="settings-card-heading"><h2 id="settings-document-heading">문서 연결</h2><ProviderStatus state={summary.document.state} configuredLabel="연결 상태 확인됨" /></div>
+          <p className="settings-method"><strong>연결 방법</strong> · {documentName} 연결 정보로 회의록 구조를 만듭니다.</p>
+          <Link className="button button-secondary" to="/settings/document">문서 연결 설정</Link>
+        </section>
+        <section className="settings-card" aria-labelledby="settings-email-heading">
+          <div className="settings-card-heading"><h2 id="settings-email-heading">이메일</h2><ProviderStatus state={emailStatus ?? 'health-unknown'} configuredLabel="연결 확인됨" /></div>
+          <p className="settings-method"><strong>연결 방법</strong> · Gmail OAuth 정보를 백엔드 환경에 설정합니다.</p>
+        </section>
+        <section className="settings-card" aria-labelledby="settings-notification-heading">
+          <div className="settings-card-heading"><h2 id="settings-notification-heading">알림</h2><ProviderStatus state={notificationStatus ?? 'health-unknown'} configuredLabel="연결 확인됨" /></div>
+          <p className="settings-method"><strong>연결 방법</strong> · {notificationName} Webhook URL을 백엔드 환경에 설정합니다.</p>
+          <p className="settings-note">최근 전달 결과를 표시하며 실제 전달 성공을 보장하지 않습니다.</p>
+        </section>
+      </>}
+      <section className="settings-card" aria-labelledby="settings-participants-heading">
+        <div className="settings-card-heading"><h2 id="settings-participants-heading">참석자</h2></div>
+        <p className="settings-method">회의에서 선택할 참석자 목록을 관리합니다.</p>
+        <Link className="button button-secondary" to="/settings/participants">참석자 관리</Link>
+      </section>
+    </div>
+    {config.status === 'ready' && health.status === 'ready' && <button className="button button-secondary settings-refresh" type="button" onClick={() => { void refreshConfig(); void refreshHealth(); }}>모든 연결 상태 새로고침</button>}
   </main>;
 }

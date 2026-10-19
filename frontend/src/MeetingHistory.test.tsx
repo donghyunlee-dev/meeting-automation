@@ -24,7 +24,14 @@ function response(body: unknown, status = 200) {
 }
 
 function installListFetch(items: MeetingSummary[]) {
-  const fetchMock = vi.fn<(input: RequestInfo | URL) => Promise<Response>>(async () => response({ data: { items } }));
+  const fetchMock = vi.fn<(input: RequestInfo | URL) => Promise<Response>>(async (input) => {
+    const path = new URL(String(input)).pathname;
+    if (path.endsWith('/document-setup')) return response({ data: {
+      version: 1, status: 'READY', active: { provider: 'NOTION', connectionVersion: 1, rootUrl: 'https://notion.example' },
+      draft: null, operation: null, canCreateMeeting: true,
+    } });
+    return response({ data: { items } });
+  });
   vi.stubGlobal('fetch', fetchMock);
   return fetchMock;
 }
@@ -37,11 +44,12 @@ describe('Home recent meetings', () => {
     expect(await screen.findByText('Meeting 1')).toBeTruthy();
     expect(screen.getByText('Meeting 5')).toBeTruthy();
     expect(screen.queryByText('Meeting 6')).toBeNull();
-    expect(String(fetchMock.mock.calls[0]?.[0])).toContain('/api/v1/meetings?limit=5');
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/api/v1/meetings?limit=5'))).toBe(true);
     expect(screen.getAllByText('참석자 1명')).toHaveLength(5);
     expect(screen.queryByText('Person 1')).toBeNull();
     expect(screen.queryByText(/private\.example|private-\d+@example\.com|COMPLETED|private provider details/)).toBeNull();
-    expect(screen.getByRole('link', { name: '전체 보기' }).getAttribute('href')).toBe('/meetings');
+    expect(screen.getByRole('button', { name: '전체 보기' })).toBeTruthy();
+    expect(screen.queryByText('Meeting Automation')).toBeNull();
   });
 
   it('keeps the create-meeting CTA visible when there are no recent meetings', async () => {
@@ -49,13 +57,34 @@ describe('Home recent meetings', () => {
     render(<MemoryRouter><HomePage /></MemoryRouter>);
 
     expect(await screen.findByText(/최근 회의가 없습니다/)).toBeTruthy();
-    expect(screen.getByRole('link', { name: '새 회의 시작' }).getAttribute('href')).toBe('/meetings/new');
+    expect(screen.getByRole('img', { name: '회의 기록 없음' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: '최근 회의가 없습니다. 새 회의를 시작해 보세요.' }).className).toContain('visually-hidden');
+    expect(screen.getByRole('button', { name: /새 회의 시작/ })).toBeTruthy();
+  });
+
+  it('opens a document service status dialog with structure and connection actions', async () => {
+    installListFetch([]);
+    render(<MemoryRouter><Routes><Route path="/" element={<HomePage />} /><Route path="/setup/document" element={<h1>문서 연결 설정</h1>} /></Routes></MemoryRouter>);
+
+    fireEvent.click(await screen.findByRole('button', { name: /Notion 연결됨/ }));
+    expect(screen.getByRole('dialog', { name: '문서 연결 상태' })).toBeTruthy();
+    expect(screen.getByText('Meetings')).toBeTruthy();
+    expect(screen.getByText('Participants')).toBeTruthy();
+    expect(screen.getByText('Templates')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '문서 연결 변경' }));
+    expect(await screen.findByRole('heading', { name: '문서 연결 설정' })).toBeTruthy();
   });
 
   it('shows a safe error and retries the same five-meeting query', async () => {
-    const fetchMock = vi.fn<(input: RequestInfo | URL) => Promise<Response>>(() => Promise.resolve(response({ data: { items: [] } })))
-      .mockResolvedValueOnce(response({ error: { code: 'PROVIDER_FAILURE', message: 'sensitive provider data' } }, 502))
-      .mockResolvedValueOnce(response({ data: { items: meetings.slice(0, 2) } }));
+    let meetingReads = 0;
+    const fetchMock = vi.fn<(input: RequestInfo | URL) => Promise<Response>>((input) => {
+      const path = new URL(String(input)).pathname;
+      if (path.endsWith('/document-setup')) return Promise.resolve(response({ data: { version: 0, status: 'UNCONFIGURED', active: null, draft: null, operation: null, canCreateMeeting: false } }));
+      meetingReads += 1;
+      return Promise.resolve(meetingReads === 1
+        ? response({ error: { code: 'PROVIDER_FAILURE', message: 'sensitive provider data' } }, 502)
+        : response({ data: { items: meetings.slice(0, 2) } }));
+    });
     vi.stubGlobal('fetch', fetchMock);
     render(<MemoryRouter><HomePage /></MemoryRouter>);
 
@@ -64,18 +93,19 @@ describe('Home recent meetings', () => {
     fireEvent.click(screen.getByRole('button', { name: '다시 시도' }));
 
     expect(await screen.findByText('Meeting 2')).toBeTruthy();
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(String(fetchMock.mock.calls[1]?.[0])).toContain('limit=5');
+    expect(fetchMock.mock.calls.filter(([url]) => String(url).includes('limit=5'))).toHaveLength(2);
   });
 
   it('announces the loading state while the list request is pending', async () => {
-    let resolveFetch: ((value: Response) => void) | undefined;
-    vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>((resolve) => { resolveFetch = resolve; })));
+    const pending: Array<{ path: string; resolve: (value: Response) => void }> = [];
+    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => new Promise<Response>((resolve) => {
+      pending.push({ path: new URL(String(input)).pathname, resolve });
+    })));
     render(<MemoryRouter><HomePage /></MemoryRouter>);
 
     expect(screen.getByRole('heading', { name: '최근 회의' })).toBeTruthy();
     expect(screen.getByRole('status').textContent).toContain('회의 목록');
-    await act(async () => { resolveFetch?.(response({ data: { items: [] } })); });
+    await act(async () => { pending.forEach(({ resolve }) => resolve(response({ data: { items: [] } }))); });
   });
 });
 
@@ -88,18 +118,18 @@ describe('Meetings page', () => {
     vi.stubGlobal('fetch', fetchMock);
     render(<MemoryRouter initialEntries={['/meetings']}><Routes><Route path="/meetings" element={<MeetingsPage />} /></Routes></MemoryRouter>);
 
-    expect(await screen.findByRole('link', { name: /Meeting 1/i })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: /Meeting 1 상세 보기/ })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: '회의 목록 새로고침' }));
 
     expect(await screen.findByRole('status')).toBeTruthy();
-    expect(screen.getByRole('link', { name: /Meeting 1/i })).toBeTruthy();
-    expect(screen.getByRole('link', { name: /Meeting 2/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Meeting 1 상세 보기/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Meeting 2 상세 보기/ })).toBeTruthy();
     expect(screen.getByText('새로고침하지 못했습니다. 기존 내용을 유지합니다.')).toBeTruthy();
     expect(document.body.textContent).not.toContain('private-provider-secret');
     expect(fetchMock).toHaveBeenCalledTimes(2);
 
     fireEvent.click(screen.getByRole('button', { name: '다시 시도' }));
-    expect(await screen.findByRole('link', { name: /Meeting 3/i })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: /Meeting 3 상세 보기/ })).toBeTruthy();
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
@@ -113,9 +143,10 @@ describe('Meetings page', () => {
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
     const requestedUrls = fetchMock.mock.calls.map(([input]) => String(input));
-    expect(requestedUrls).toHaveLength(2);
+    expect(requestedUrls).toHaveLength(4);
     expect(requestedUrls.filter((url) => url.endsWith('/meetings?limit=5'))).toHaveLength(1);
     expect(requestedUrls.filter((url) => url.endsWith('/meetings'))).toHaveLength(1);
+    expect(requestedUrls.filter((url) => url.endsWith('/document-setup'))).toHaveLength(2);
 
     await act(async () => {
       pendingResponses.forEach(({ resolve }) => resolve(response({ data: { items: [] } })));
@@ -133,7 +164,8 @@ describe('Meetings page', () => {
     expect(first.compareDocumentPosition(screen.getByText('Meeting 1')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(String(fetchMock.mock.calls[0]?.[0])).toBe('http://localhost:8080/api/v1/meetings');
     expect(screen.getByText('Person 2')).toBeTruthy();
-    expect(screen.getByRole('heading', { name: '회의록' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: '회의 기록' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '새 회의 시작' }).parentElement?.className).toContain('meetings-create-dock');
   });
 
   it('shows empty, loading, and retryable safe error states', async () => {

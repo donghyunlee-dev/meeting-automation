@@ -26,11 +26,12 @@ describe('meeting history routes', () => {
     vi.stubGlobal('fetch', fetchMock);
     render(<MemoryRouter initialEntries={['/meetings']}><App /></MemoryRouter>);
 
-    expect(await screen.findByRole('heading', { name: '회의록' })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: '회의 기록' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '새 회의 시작' }).parentElement?.className).toContain('meetings-create-dock');
     expect(await screen.findByText('Completed planning')).toBeTruthy();
     fireEvent.click(screen.getByRole('link', { name: '홈' }));
 
-    expect(await screen.findByRole('link', { name: '새 회의 시작' })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: /새 회의 시작/ })).toBeTruthy();
     expect(fetchMock.mock.calls.some(([input]) => String(input).endsWith('/meetings?limit=5'))).toBe(true);
     expect(screen.getByRole('link', { name: '회의록' }).getAttribute('href')).toBe('/meetings');
   });

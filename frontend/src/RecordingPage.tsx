@@ -38,8 +38,14 @@ const statusByState: Record<RecordingViewState, string> = {
   Paused: '일시정지됨',
 };
 
-export function RecordingPage({ sessionId, title, state, elapsedMs, errorMessage, completed = false, endFlowFailed = false, uploadSnapshot, endSnapshot, onRetryUpload, onRetryProcessing, onStart, onPause, onResume, onRequestEnd, onConfirmEnd, onCancelEnd }: RecordingPageProps) {
+export function RecordingPage({ title, state, elapsedMs, errorMessage, completed = false, endFlowFailed = false, uploadSnapshot, endSnapshot, onRetryUpload, onRetryProcessing, onStart, onPause, onResume, onRequestEnd, onConfirmEnd, onCancelEnd }: RecordingPageProps) {
   const [isConfirmOpen, setConfirmOpen] = useState(false);
+  const showRecoveryActions = (completed && Boolean(errorMessage)) || endFlowFailed || ['retryable', 'incomplete', 'upload-failed', 'failed'].includes(endSnapshot?.status ?? '');
+  const hasRecordingActions = (state === 'Ready' && !completed && !endFlowFailed)
+    || (state === 'Ready' && showRecoveryActions)
+    || state === 'Recording'
+    || state === 'Paused';
+  const isRecovering = completed || endFlowFailed || ['retryable', 'incomplete', 'upload-failed', 'failed'].includes(endSnapshot?.status ?? '');
   const endTrigger = useRef<HTMLButtonElement>(null);
   const cancelButton = useRef<HTMLButtonElement>(null);
   const confirmButton = useRef<HTMLButtonElement>(null);
@@ -92,40 +98,51 @@ export function RecordingPage({ sessionId, title, state, elapsedMs, errorMessage
   }
 
   return (
-    <main className={`recording-page recording-page--${state.toLowerCase()}`}>
+    <main className={`recording-page recording-page--${state.toLowerCase()}${completed ? ' recording-page--completed' : ''}${isRecovering ? ' recording-page--recovering' : ''}`}>
       <header className="recording-heading">
-        <p className="recording-eyebrow">회의 녹음</p>
-        <h1>{title}</h1>
-        <p className="recording-session-id">세션 ID: <span>{sessionId}</span></p>
+        <h1>
+          <svg className="recording-title-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <rect x="9" y="3" width="6" height="12" rx="3" />
+            <path d="M5.5 11v1a6.5 6.5 0 0 0 13 0v-1M12 18.5V22m-4 0h8" />
+          </svg>
+          회의 녹음
+        </h1>
       </header>
 
       <section className="recording-content" aria-label="녹음 상태">
+        <h2 className="recording-meeting-title">{title}</h2>
         <p className="recording-status" role="status" aria-live="polite">
           {state === 'Recording' && <span className="recording-indicator" aria-hidden="true" />}
           {completed ? '녹음이 종료되었습니다.' : statusByState[state]}
         </p>
         <p className="recording-timer" aria-label="경과 시간">{formatElapsedTime(state === 'Ready' && !completed ? 0 : elapsedMs)}</p>
         {errorMessage && <p className="recording-error" role="alert">{errorMessage}</p>}
-        {endSnapshot?.message && endSnapshot.status !== 'idle' && <div className="recording-end-state" aria-label="처리 시작 상태">
-          <p role={['stopping', 'persisting', 'uploading', 'starting'].includes(endSnapshot.status) ? 'status' : ['retryable', 'incomplete', 'upload-failed', 'failed'].includes(endSnapshot.status) ? 'alert' : 'status'} aria-live={['stopping', 'persisting', 'uploading', 'starting'].includes(endSnapshot.status) ? 'polite' : undefined}>
+        {endSnapshot?.message && endSnapshot.status !== 'idle'
+          && !(endSnapshot.status === 'uploading' && uploadSnapshot && (uploadSnapshot.totalCount > 0 || uploadSnapshot.status === 'retryable'))
+          && <div className={`recording-end-state${endSnapshot.status === 'uploading' ? ' recording-end-state--uploading' : ''}`} aria-label="처리 시작 상태">
+          {endSnapshot.status === 'uploading' && <div className="recording-upload-heading"><strong>오디오 업로드</strong></div>}
+          <p className={endSnapshot.status === 'uploading' ? 'visually-hidden' : undefined} role={['stopping', 'persisting', 'uploading', 'starting'].includes(endSnapshot.status) ? 'status' : ['retryable', 'incomplete', 'upload-failed', 'failed'].includes(endSnapshot.status) ? 'alert' : 'status'} aria-live={['stopping', 'persisting', 'uploading', 'starting'].includes(endSnapshot.status) ? 'polite' : undefined}>
             {endSnapshot.message}
           </p>
-          {['stopping', 'persisting', 'uploading', 'starting'].includes(endSnapshot.status) && <progress aria-label="처리 시작 진행" />}
-          {['retryable', 'incomplete'].includes(endSnapshot.status) && onRetryProcessing && <button className="button button-secondary" type="button" onClick={onRetryProcessing}>처리 시작 재시도</button>}
+          {['stopping', 'persisting', 'uploading', 'starting'].includes(endSnapshot.status) && <progress aria-label={endSnapshot.status === 'uploading' ? '오디오 업로드 진행' : '처리 시작 진행'} />}
+          {['retryable', 'incomplete', 'failed'].includes(endSnapshot.status) && onRetryProcessing && <button className="button button-secondary" type="button" onClick={onRetryProcessing}>처리 시작 재시도</button>}
         </div>}
-        {uploadSnapshot && (uploadSnapshot.totalCount > 0 || uploadSnapshot.message) && <div className="recording-upload" aria-label="오디오 업로드">
+        {uploadSnapshot && (uploadSnapshot.totalCount > 0 || uploadSnapshot.status === 'retryable') && <div className="recording-upload" aria-label="오디오 업로드">
           <div className="recording-upload-heading"><strong>오디오 업로드</strong><span>{uploadSnapshot.confirmedCount}/{uploadSnapshot.totalCount}</span></div>
-          {uploadSnapshot.totalCount > 0 && <progress aria-label="오디오 업로드 진행" value={uploadSnapshot.confirmedCount} max={uploadSnapshot.totalCount} />}
-          {uploadSnapshot.status === 'complete'
-            ? <p>오디오 업로드가 완료되었습니다.</p>
-            : <p role={uploadSnapshot.status === 'uploading' ? undefined : 'alert'} aria-live={uploadSnapshot.status === 'uploading' ? 'polite' : undefined}>
-              {uploadSnapshot.message ?? (uploadSnapshot.status === 'uploading' ? '오디오를 업로드하고 있습니다.' : `${uploadSnapshot.pendingCount}개 조각 업로드 대기 중`)}
-            </p>}
+          {uploadSnapshot.totalCount > 0
+            ? <progress aria-label="오디오 업로드 진행" value={uploadSnapshot.confirmedCount} max={uploadSnapshot.totalCount} />
+            : <progress aria-label="오디오 업로드 진행" />}
+          <span className="visually-hidden" role={uploadSnapshot.status === 'retryable' ? 'alert' : 'status'} aria-live="polite">
+            {uploadSnapshot.message ?? (uploadSnapshot.status === 'complete' ? '오디오 업로드가 완료되었습니다.' : `${uploadSnapshot.pendingCount}개 조각 업로드 대기 중`)}
+          </span>
           {uploadSnapshot.status === 'retryable' && onRetryUpload && <button className="button button-secondary" type="button" onClick={onRetryUpload}>업로드 재시도</button>}
         </div>}
-        <div className="recording-actions">
-          {state === 'Ready' && !completed && !endFlowFailed && <button className="button button-primary recording-primary-action" type="button" onClick={onStart}>녹음 시작</button>}
-          {state === 'Ready' && endFlowFailed && <Link className="button button-primary recording-primary-action" to="/meetings/new">새 회의 시작</Link>}
+        {hasRecordingActions && <div className="recording-actions">
+          {state === 'Ready' && !completed && !endFlowFailed && <button className="button button-primary recording-primary-action recording-start-action" type="button" onClick={onStart}>녹음 시작</button>}
+          {state === 'Ready' && showRecoveryActions && <>
+            <Link className="button button-primary recording-primary-action" to="/meetings/new">새 회의 시작</Link>
+            <Link className="button button-secondary" to="/meetings">회의록 목록</Link>
+          </>}
           {state === 'Recording' && <>
             <button className="button button-secondary" type="button" onClick={onPause}>일시정지</button>
             <button className="button button-danger recording-primary-action" type="button" ref={endTrigger} onClick={requestEnd}>회의 종료</button>
@@ -134,7 +151,7 @@ export function RecordingPage({ sessionId, title, state, elapsedMs, errorMessage
             <button className="button button-primary recording-primary-action" type="button" onClick={onResume}>녹음 재개</button>
             <button className="button button-danger" type="button" ref={endTrigger} onClick={requestEnd}>회의 종료</button>
           </>}
-        </div>
+        </div>}
       </section>
 
       {isConfirmOpen && (

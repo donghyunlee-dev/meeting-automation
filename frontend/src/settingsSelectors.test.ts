@@ -5,8 +5,8 @@ const company = { id: 'c1', name: 'Acme', timezone: 'Asia/Seoul' };
 
 describe('settings summary selector', () => {
   it('distinguishes an unselected document provider from an unconfigured selected provider', () => {
-    const noProvider = selectSettingsSummary({ company, document: { provider: null, configured: false, connectionVersion: 0, rootUrl: null }, email: { enabled: false, configured: false }, notification: { provider: null, enabled: false } }, null);
-    const selected = selectSettingsSummary({ company, document: { provider: 'NOTION', configured: false, connectionVersion: 1, rootUrl: 'https://private.example' }, email: { enabled: false, configured: false }, notification: { provider: null, enabled: false } }, null);
+    const noProvider = selectSettingsSummary({ document: { provider: null, configured: false, connectionVersion: 0, rootUrl: null }, email: { enabled: false, configured: false }, notification: { provider: null, enabled: false } }, null);
+    const selected = selectSettingsSummary({ document: { provider: 'NOTION', configured: false, connectionVersion: 1, rootUrl: 'https://private.example' }, email: { enabled: false, configured: false }, notification: { provider: null, enabled: false } }, null);
 
     expect(noProvider.document.state).toBe('not-selected');
     expect(selected.document).toMatchObject({ state: 'not-configured', provider: 'Notion' });
@@ -36,7 +36,6 @@ describe('settings summary selector', () => {
 
   it('reports configured providers with failed connection checks as unreachable', () => {
     const summary = selectSettingsSummary({
-      company,
       document: { provider: 'NOTION', configured: true, connectionVersion: 1, rootUrl: null },
       email: { enabled: true, configured: true },
       notification: { provider: null, enabled: false },

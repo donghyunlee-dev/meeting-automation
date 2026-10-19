@@ -9,16 +9,6 @@ function formatDate(value: string): string {
   return Number.isNaN(date.getTime()) ? '날짜 정보 없음' : new Intl.DateTimeFormat('ko-KR', { dateStyle: 'long', timeStyle: 'short' }).format(date);
 }
 
-function safeExternalUrl(value: string | null): string | null {
-  if (!value) return null;
-  try {
-    const url = new URL(value);
-    return (url.protocol === 'http:' || url.protocol === 'https:') && url.hostname && !url.username && !url.password ? value : null;
-  } catch {
-    return null;
-  }
-}
-
 function TranscriptDrawer({ detail, onClose }: { detail: MeetingDetail; onClose: () => void }) {
   const closeRef = useRef<HTMLButtonElement>(null);
   const dialogRef = useRef<HTMLElement>(null);
@@ -109,25 +99,24 @@ export function MeetingDetailPage() {
   const currentStatus = result.documentId === documentId ? result.status : 'loading';
   const detail = result.documentId === documentId ? result.detail ?? null : null;
   const error = result.documentId === documentId ? result.error ?? null : null;
-  if (currentStatus === 'loading') return <main className="meeting-detail-page"><AsyncState state={{ status: 'loading', label: '회의 상세를 불러오는 중…' }} renderReady={() => null} /></main>;
+  if (currentStatus === 'loading') return <main className="meeting-detail-page"><AsyncState state={{ status: 'loading', label: '회의 상세를 불러오는 중…', fullPage: true }} renderReady={() => null} /></main>;
   if (error?.safe.kind === 'not-found') return <main className="meeting-detail-page"><AsyncState state={{ status: 'error', title: '회의 기록을 찾을 수 없습니다.', error: error.safe, description: '삭제되었거나 더 이상 접근할 수 없는 회의입니다.', action: <Link className="button button-secondary" to="/meetings">회의록 목록으로</Link> }} renderReady={() => null} /></main>;
   if (error || !detail) return <main className="meeting-detail-page"><AsyncState state={{ status: 'error', title: '회의 상세를 불러오지 못했습니다.', error: error?.safe ?? normalizeApiError(null), onRetry: () => { setResult({ documentId, status: 'loading' }); setAttempt((value) => value + 1); }, action: <Link to="/meetings">회의록 목록으로</Link> }} renderReady={() => null} /></main>;
 
   return <AsyncState state={{ status: 'ready', data: detail }} renderReady={(detail) => {
-    const externalUrl = safeExternalUrl(detail.documentUrl);
     const participantNames = new Map(detail.participants.map(({ id, name }) => [id, name]));
     const minutes = detail.minutes;
     return (
     <main className="meeting-detail-page">
       <Link className="meeting-detail-back" to="/meetings">← 회의록 목록</Link>
-      <header className="meeting-detail-heading"><p className="eyebrow">MEETING HISTORY</p><h1>{detail.title}</h1><p>{formatDate(detail.meetingAt)}</p><p>{detail.participants.length ? detail.participants.map(({ name }) => name).join(', ') : '참석자 정보 없음'}</p></header>
+      <header className="meeting-detail-heading"><h1>{detail.title}</h1><p>{formatDate(detail.meetingAt)}</p><p>{detail.participants.length ? detail.participants.map(({ name }) => name).join(', ') : '참석자 정보 없음'}</p></header>
       <section className="meeting-detail-card" aria-labelledby="minutes-title"><h2 id="minutes-title">회의록</h2><section><h3>요약</h3><p>{minutes.summary || '요약이 없습니다.'}</p></section>
         {minutes.discussionPoints.length > 0 && <section><h3>논의 사항</h3><ul>{minutes.discussionPoints.map((item, index) => <li key={`${index}-${item}`}>{item}</li>)}</ul></section>}
         {minutes.decisions.length > 0 && <section><h3>결정 사항</h3><ul>{minutes.decisions.map((item, index) => <li key={`${index}-${item}`}>{item}</li>)}</ul></section>}
         {minutes.actionItems.length > 0 && <section><h3>실행 항목</h3><ul>{minutes.actionItems.map((item, index) => <li key={`${index}-${item.task}`}><strong>{item.task}</strong>{item.ownerParticipantId && <span> · 담당: {participantNames.get(item.ownerParticipantId) ?? '참석자'}</span>}{item.dueDate && <span> · 기한: {item.dueDate}</span>}</li>)}</ul></section>}
         {minutes.followUps.length > 0 && <section><h3>후속 조치</h3><ul>{minutes.followUps.map((item, index) => <li key={`${index}-${item}`}>{item}</li>)}</ul></section>}
       </section>
-      <div className="meeting-detail-actions"><button ref={transcriptTrigger} className="button button-secondary" type="button" onClick={() => setShowTranscript(true)}>Transcript 보기</button>{externalUrl && <a className="button button-primary" href={externalUrl} target="_blank" rel="noopener noreferrer">Notion/Confluence에서 열기</a>}</div>
+      <div className="meeting-detail-actions"><button ref={transcriptTrigger} className="button button-secondary" type="button" onClick={() => setShowTranscript(true)}>Transcript 보기</button></div>
       {showTranscript && <TranscriptDrawer detail={detail} onClose={closeTranscript} />}
     </main>
     );

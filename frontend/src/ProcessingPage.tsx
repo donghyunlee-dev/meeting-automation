@@ -172,7 +172,7 @@ export function ProcessingPage() {
 
   return (
     <main className="processing-page" aria-labelledby="processing-title">
-      <header className="processing-heading"><p className="eyebrow">MEETING AUTOMATION</p><h1 id="processing-title">회의 처리</h1><p>회의 내용을 정리하고 있습니다. 이 화면을 닫아도 처리는 계속됩니다.</p></header>
+      <header className="processing-heading"><h1 id="processing-title"><svg className="workflow-heading-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h10M4 18h7" /><circle cx="18" cy="16" r="3" /></svg>회의 처리</h1></header>
       {!snapshot && failure === null && <AsyncState state={{ status: 'loading', label: '회의 처리 상태를 확인하고 있습니다.' }} renderReady={() => null} />}
       {failure === 'network' && !snapshot && <AsyncState state={{
         status: 'error',
@@ -207,12 +207,15 @@ export function ProcessingPage() {
         {confirmDownload && <section ref={downloadDialogRef} className="processing-confirmation" role="dialog" aria-labelledby="download-confirm-title" aria-describedby="download-confirm-description"><h3 id="download-confirm-title">오디오를 기기에 저장했나요?</h3><p id="download-confirm-description">저장된 것을 확인한 경우에만 다운로드 완료로 기록합니다.</p><button className="button button-primary" disabled={busy} onClick={() => void mutate('finalize', 'DOWNLOADED')}>저장했어요</button><button className="button button-secondary" onClick={() => setConfirmDownload(false)}>저장하지 못했어요</button></section>}
         {confirmDiscard && <section ref={discardDialogRef} className="processing-confirmation" role="dialog" aria-labelledby="discard-confirm-title" aria-describedby="discard-confirm-description"><h3 id="discard-confirm-title">오디오 없이 마무리</h3><p id="discard-confirm-description">오디오를 보관하지 않고 실패 회의 기록을 저장합니다. 이 선택은 되돌릴 수 없습니다.</p><button className="button button-primary" disabled={busy} onClick={() => void mutate('finalize', 'DISCARDED')}>실패 마무리</button><button className="button button-secondary" disabled={busy} onClick={() => setConfirmDiscard(false)}>취소</button></section>}
       </section>}
-      {snapshot?.status === 'COMPLETED_WITH_WARNINGS' && <section className="processing-message" role="status"><h2>실패 기록을 저장했습니다</h2><p>Email 또는 Slack으로 회의가 전달되지 않았습니다.</p>{snapshot.document?.documentUrl && <a className="button button-primary" href={snapshot.document.documentUrl} target="_blank" rel="noreferrer">실패 회의 기록 보기</a>}</section>}
+      {snapshot?.status === 'COMPLETED_WITH_WARNINGS' && <section className="processing-message" role="status"><h2>실패 기록을 저장했습니다</h2><p>Email 또는 Slack으로 회의가 전달되지 않았습니다.</p></section>}
       {(failure === null || failure === 'network') && snapshot?.status !== 'PROCESSING_FAILED' && snapshot?.status !== 'COMPLETED_WITH_WARNINGS' && (
         <section className="processing-card" aria-label="처리 단계"><ol className="processing-steps">{stageNames.map((name, index) => {
           const current = isProcessing && activeStage === index;
           const complete = snapshot?.status === 'REVIEW' || (isProcessing && activeStage > index);
-          return <li key={name} className={current ? 'is-current' : complete ? 'is-complete' : ''} aria-current={current ? 'step' : undefined}><span className="processing-step-icon" aria-hidden="true">{complete ? '✓' : current ? '●' : '○'}</span><span>{name}</span></li>;
+          return <li key={name} className={current ? 'is-current' : complete ? 'is-complete' : ''} aria-current={current ? 'step' : undefined}>
+            <span className="processing-step-icon" aria-hidden="true">{complete ? <svg viewBox="0 0 20 20"><path d="m4 10 4 4 8-8" /></svg> : current ? <span /> : null}</span>
+            <span className="processing-step-label">{name}</span>
+          </li>;
         })}</ol>{validProgress && <progress aria-label="처리 진행률" value={progress} max={100}>{progress}%</progress>}<p className="processing-current" role="status">{activeStage >= 0 ? `${stageNames[activeStage]} 단계 처리 중입니다.` : '처리 상태를 확인하고 있습니다.'}</p></section>
       )}
     </main>

@@ -219,7 +219,10 @@ export function MinutesRegenerationControl({ session, blocked = false, prepareSn
   useEffect(() => { onProcessingChange?.(state === 'processing' || state === 'checking'); }, [onProcessingChange, state]);
 
   return <section className="minutes-regeneration" aria-labelledby="minutes-regeneration-heading">
-    <h2 id="minutes-regeneration-heading">Minutes 재생성</h2>
+    <div className="minutes-regeneration-heading">
+      <h2 id="minutes-regeneration-heading">다른 템플릿으로 다시 생성</h2>
+      <p>현재 회의록이 있을 때 사용할 수 있습니다. 다시 생성하면 회의록 내용이 새 결과로 바뀝니다.</p>
+    </div>
     {templates.status === 'loading' && <p role="status">Template 목록을 불러오는 중…</p>}
     {templates.status === 'error' && <div role="alert"><p>Template 목록을 불러오지 못했습니다. 다시 시도해 주세요.</p>
       <button type="button" className="button button-secondary" onClick={() => {
@@ -227,17 +230,17 @@ export function MinutesRegenerationControl({ session, blocked = false, prepareSn
         void listMeetingTemplates().then((items) => setTemplates({ status: 'ready', items })).catch(() => setTemplates({ status: 'error' }));
       }}>Template 목록 다시 시도</button></div>}
     {templates.status === 'ready' && <>
-      <label htmlFor="minutes-regeneration-template">새 Template</label>
-      <select ref={templateSelector} id="minutes-regeneration-template" value={selectedTemplateId}
+      <label htmlFor="minutes-regeneration-template">사용할 템플릿</label>
+      <div className="meeting-select-control review-select-control"><select ref={templateSelector} id="minutes-regeneration-template" value={selectedTemplateId}
         onChange={(event) => setSelectedTemplateId(event.target.value)} disabled={busy || blocked}>
         {currentTemplateId && !templates.items?.some(({ id }) => id === currentTemplateId)
           && <option value={currentTemplateId}>현재 Template ({currentTemplateId}) — 목록에서 사용할 수 없음</option>}
         {templates.items?.map((template) => <option key={template.id} value={template.id}>{template.name} (v{template.version})</option>)}
-      </select>
+      </select><svg className="meeting-dropdown-chevron" viewBox="0 0 20 20" aria-hidden="true"><path d="m5 7.5 5 5 5-5" /></svg></div>
       {!templates.items?.some(({ id }) => id === currentTemplateId) && <p role="status">현재 Template을 사용할 수 없어 재생성을 시작할 수 없습니다.</p>}
       <button ref={opener} type="button" className="button button-secondary" disabled={!canRegenerate || busy}
         onClick={() => { setState('confirming'); setMessage(''); requestAnimationFrame(() => confirmButton.current?.focus()); }}>
-        선택한 Template으로 재생성
+        선택한 템플릿으로 다시 생성
       </button>
     </>}
     {message && <p ref={resultStatus} tabIndex={state === 'success' || state === 'failed' ? -1 : undefined}
@@ -248,12 +251,12 @@ export function MinutesRegenerationControl({ session, blocked = false, prepareSn
       onMouseDown={(event) => { if (event.target === event.currentTarget) closeDialog(); }}>
       <div className="minutes-regeneration-dialog" role="dialog" aria-modal="true" aria-labelledby="minutes-regeneration-confirm-title"
         aria-describedby="minutes-regeneration-confirm-description" onKeyDown={handleDialogKeyDown}>
-        <h3 id="minutes-regeneration-confirm-title">Minutes를 재생성할까요?</h3>
-        <p id="minutes-regeneration-confirm-description">저장된 Minutes가 {templates.items?.find(({ id }) => id === selectedTemplateId)?.name} Template으로 교체됩니다. Transcript와 Speaker 정보는 유지됩니다.</p>
+        <h3 id="minutes-regeneration-confirm-title">기존 회의록을 바꿀까요?</h3>
+        <p id="minutes-regeneration-confirm-description">현재 회의록의 내용과 직접 수정한 부분이 {templates.items?.find(({ id }) => id === selectedTemplateId)?.name} 템플릿으로 만든 새 결과로 교체됩니다. Transcript와 화자 매핑은 유지됩니다.</p>
         <div className="minutes-regeneration-dialog-actions">
           <button type="button" className="button button-secondary" onClick={closeDialog}>취소</button>
           <button ref={confirmButton} type="button" className="button button-primary" disabled={!canRegenerate}
-            onClick={() => void confirmRegeneration()}>재생성 시작</button>
+            onClick={() => void confirmRegeneration()}>새 회의록 만들기</button>
         </div>
       </div>
     </div>}
