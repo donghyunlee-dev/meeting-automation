@@ -14,7 +14,7 @@ meeting-automation/
 └─ docs/
 ```
 
-Frontend는 업무 API 서버가 아니다. OpenAI, Notion/Confluence, Email, Slack의 Secret은 Frontend 환경변수에 넣지 않고 Backend에서만 관리한다.
+Frontend는 업무 API 서버가 아니다. OpenAI, Notion/Confluence, Email, Slack의 Secret은 Backend에서만 관리한다. 오디오 조각도 Backend API에 직접 전송한다. 브라우저에 노출되는 `VITE_` 변수에는 Backend 공개 URL 외 Secret을 넣지 않는다.
 
 ## 사전 준비
 
@@ -64,7 +64,7 @@ npm install
 npm run dev
 ```
 
-터미널에 출력되는 Local URL을 브라우저에서 연다. Vite 기본 포트는 `5173`이다. 다른 서비스가 해당 포트를 사용 중이면 Vite가 출력한 실제 URL을 사용한다.
+터미널에 출력되는 Local URL을 브라우저에서 연다. Vite 기본 포트는 `5173`이다. 다른 서비스가 해당 포트를 사용 중이면 Vite가 출력한 실제 URL을 사용한다. `npm run dev`는 화면 개발 서버만 실행한다. 실제 회의 흐름은 Backend를 별도로 실행하고 `VITE_API_BASE_URL`로 연결한다. 오디오 업로드·처리 계약은 [Backend 소유 Audio 설계](../superpowers/specs/2026-10-16-backend-owned-audio-design.md)를 따른다.
 
 프로젝트 스크립트와 사용 가능한 명령을 확인하려면 다음을 실행한다.
 

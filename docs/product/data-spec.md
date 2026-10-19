@@ -1,15 +1,18 @@
 # Meeting Automation Data Specification
 
+> **현재 기준:** [최초 연결·자동 발송 기준 흐름](../superpowers/specs/2026-10-16-first-run-and-autodelivery-design.md)이 최초 설정, Template seed, Speaker Memory, 회의 처리 순서를 정의한다. 아래 기존 Session/Review 데이터 필드 중 `REVIEW`/`CONFIRMED`/사용자 Publish 전제를 가진 항목은 과거 계약 기록이며 현재 자동 처리 흐름의 상태 기준으로 사용하지 않는다.
+
 > **문서 역할:** V1의 표준 데이터 모델, 메모리 수명주기, Provider 저장 형태를 정의한다.
 > **기준 문서:** [PRD.md](./PRD.md)
 > **상호 참조:** [architecture.md](./architecture.md), [api-spec.md](./api-spec.md)
-> **기준일:** 2026-10-06
+> **기준일:** 2026-10-16 · PRD v2.1.0 draft
+> **최초 설정·자동 발송 흐름:** [기준 설계](../superpowers/specs/2026-10-16-first-run-and-autodelivery-design.md)
 
 ## 설계 원칙
 
 - 별도 application database를 두지 않는다.
 - 진행 중 Session과 조회 cache는 메모리에만 둔다.
-- Participant와 완료 Meeting 문서는 Document Provider가 영속 Source of Truth다.
+- Participant, Template, 확인된 Speaker Memory, 완료 Meeting 문서는 Document Provider가 영속 Source of Truth다.
 - Audio는 처리용 임시 데이터다. 실패한 Audio는 비공개 객체 저장소에서 최대 24시간 보존하고 처리 이후 삭제한다.
 - 모든 모델은 Provider SDK 타입과 분리된 표준 DTO/Domain model이다.
 - 시간은 ISO 8601 offset/Z 표기를 사용한다. Segment 위치는 정수 millisecond다.
@@ -21,8 +24,10 @@
 | Company, AI/Email/Slack 설정 | Backend 환경 설정 | 배포 기간 |
 | Document 연결 설정·credentials·journal | 암호화한 전역 영속 snapshot | 재시작·재배포 유지 |
 | AI/Email/Slack Secret·설정 암호화 키 | Render Secret | 배포 기간, 비응답 |
-| Templates | Backend static resources | 배포 버전 |
+| Template seed | Backend static resource | Bootstrap 초기 seed; 매 회의 source of truth가 아님 |
+| 활성 Templates | Document Provider `Templates` child page | Provider page content/version |
 | Participants | Document Provider `Participants` child page | Provider 정책에 따름. V1 API는 삭제를 제공하지 않음 |
+| Speaker Memory | Document Provider `Speaker Memory` child page | 사용자가 확인한 회의별 mapping. 다음 회의에서 후보만 제공 |
 | 완료 Meeting, Minutes, Transcript | Document Provider `Meetings` child page | Provider 정책에 따름 |
 | 진행 MeetingSession | Backend memory | 완료/실패 또는 프로세스 재시작까지 |
 | 브라우저 대기 Audio chunk | IndexedDB 등 Browser temporary storage | 업로드 ACK/세션 정리까지 |
@@ -58,6 +63,7 @@ Opaque ID의 실제 encoding은 구현 세부사항이다. ID를 순차 수치�
   "status": "REVIEW",
   "meeting": {
     "title": "AX 주간회의",
+    "meetingDate": "2026-10-20",
     "templateId": "default.md",
     "participantIds": ["pt_001", "pt_002"],
     "timezone": "Asia/Seoul",
@@ -92,6 +98,7 @@ Opaque ID의 실제 encoding은 구현 세부사항이다. ID를 순차 수치�
 | `templateId` | enum string | Y | `default.md`, `project.md` 중 하나 |
 | `participantIds` | string[] | Y | 회의 작성자가 선택한 Participant roster ID, 중복 불가 |
 | `timezone` | IANA zone string | Y | 브라우저 표시/현지 시간 변환에 사용 |
+| `meetingDate` | ISO local date | N | 회의 날짜 입력. 제공하면 해당 시간대의 날짜 시작 시각을 회의 시각으로 사용 |
 | `startedAt`, `endedAt` | offset datetime/null | 조건부 | 녹음 시작/종료 기록. 종료 전에는 null 허용 |
 
 Meeting 시작 전에 제목, Template, Participant를 확정한다. 회의 생성 입력에는 PRD API 예시의 `recoveryKey`가 있지만 이는 API 전달용 복구 식별자이며 Provider Meeting 정본의 업무 필드가 아니다.
@@ -108,6 +115,12 @@ TranscriptSegment = { segmentId, speakerId, startMs, endMs, text }
 - 하나의 Speaker mapping 변경은 해당 `speakerId`를 가진 모든 Segment 표시 결과에 즉시 적용한다.
 - `startMs >= 0`, `endMs >= startMs`; segment는 시간순 정렬한다.
 - Transcript text 원문을 오류/일반 로그에 남기지 않는다.
+- Provider `speakerId`는 Session 범위로만 유효하다. Speaker Memory의 과거 기록만으로 다른 회의의 Speaker를 자동 식별하지 않는다.
+- Voiceprint, 음성 embedding, 생체 식별 특징은 저장하지 않는다.
+
+### Speaker Memory
+
+Speaker Memory record는 최소한 확인된 `participantId`, 회의 ID, 회의별 `speakerId`, 확인 시각을 연결한다. 이름/email은 Participants 참조에서 가져오며 중복 복제하지 않는다. 회의별 mapping 화면에서 기존 기록은 후보/힌트로만 보여주고 사용자가 확인해야 한다.
 
 ### Structured Minutes
 

@@ -13,3 +13,5 @@
 Frontend와 Backend는 독립적인 빌드·배포 단위입니다. 설정은 [Frontend 개발 환경](docs/setup/frontend-setup.md)과 [Backend 개발 환경](docs/setup/backend-setup.md)을 참고하세요.
 
 사용자가 로컬에서 설정부터 회의까지 직접 확인할 때는 [사용자 테스트 준비](docs/setup/user-test-checklist.md)를 참고하세요.
+
+Vercel·Render 운영 테스트의 설정값, 확인 순서와 현재 설계 제약은 [운영 테스트 설정 기준](docs/setup/production-test.md)에 모았습니다.

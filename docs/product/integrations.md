@@ -4,7 +4,8 @@
 > **기준 문서:** [PRD.md](./PRD.md)
 > **시스템 구성:** [architecture.md](./architecture.md)
 > **HTTP 경계:** [api-spec.md](./api-spec.md)
-> **기준일:** 2026-10-05
+> **기준일:** 2026-10-16 · PRD v2.1.0 draft
+> **최초 연결·자동 발송:** [기준 흐름](../superpowers/specs/2026-10-16-first-run-and-autodelivery-design.md)
 
 ## 공통 연동 규칙
 
@@ -23,7 +24,7 @@ Application Use Case
   ├─ MinutesGenerationProvider
   ├─ DocumentProvider
   ├─ EmailProvider
-  └─ NotificationProvider
+  └─ NotificationProvider (optional)
        └─ Adapter-specific client and DTO
 ```
 
@@ -92,6 +93,9 @@ generateMinutes(MinutesCommand) -> GroundedMinutesResult -> StructuredMinutes
 ```text
 validateConnection() -> ProviderHealth
 discoverStructure(rootId) -> DocumentStructure
+readDefaultTemplate() -> MeetingTemplate
+listSpeakerMemory(participantIds) -> SpeakerMemoryEntry[]
+saveSpeakerMemory(entries) -> void
 listMeetings(max=100) -> MeetingSummary[]
 getMeeting(documentId) -> MeetingDocument
 findMeetingBySessionId(sessionId) -> Optional<MeetingDocumentRef>
@@ -106,9 +110,11 @@ Provider capability는 root 검증, child page 탐색/생성/읽기, 최소 meta
 ### 초기 구조 검사
 
 1. 설정된 root 식별자 접근 가능 여부를 확인한다.
-2. root 직속 `Meetings`, `Participants` child page를 발견한다.
-3. 일반 Health/업무 조회에서는 누락 구조를 DOCUMENT_STRUCTURE_NOT_FOUND로 실패시키고 생성하지 않는다. 최초 위저드 완료 또는 명시적 재설정 초기화 유스케이스는 root/Meetings/Participants를 생성·재사용한다.
-4. 새 Participant/Meeting은 각 지정 child 아래에만 생성한다.
+2. root 직속 필수 child page `Home`, `Meetings`, `Participants`, `Templates`, `Speaker Memory`를 발견한다.
+3. 일반 Health/업무 조회는 누락 구조를 만들지 않는다. 최초 위저드 Bootstrap은 누락된 page를 생성하고 기존 page를 검증·재사용한다. 다섯 page가 read-back 검증된 뒤에만 연결을 READY로 활성화한다.
+4. Participant/Meeting/Template/Speaker Memory 데이터는 각 지정 page 아래에서만 읽고 쓴다.
+
+`Templates`에는 Backend 기본 Template seed를 최초 생성하고 활성 Provider에서 읽은 본문/version을 Minutes 생성에 전달한다. `Speaker Memory`에는 사용자가 확인한 매핑 기록을 저장하고 매핑 UI 후보로 제공한다. Database/Data Source를 요구하지 않으며 voiceprint나 audio feature를 저장하지 않는다.
 
 ### Publish 멱등성
 
@@ -149,7 +155,7 @@ V1 Email Adapter는 `EMAIL_PROVIDER=GMAIL_API`일 때 Gmail API를 사용한다.
 
 Adapter는 Gmail `users.messages.send`와 RFC 2822 MIME/base64url 메시지 형식을 사용한다. 선택된 수신자마다 별도 메시지 한 건을 보내 다른 수신자 주소가 서로에게 노출되지 않도록 한다. Gmail API 성공 응답은 Gmail의 전송 접수를 뜻하며 수신함 도착/열람까지 보장하지 않는다. Empty recipient list는 발송하지 않고 빈 결과를 반환한다.
 
-Email은 Document 저장 성공 이후에만 발송한다. 전체 주소는 운영 로그/Admin Slack에 노출하지 않는다. Gmail OAuth client secret/refresh token은 Render 환경 secret으로만 저장한다. access token과 Authorization 값은 응답/로그에 쓰지 않는다. `validateConnection()`은 설정과 OAuth token refresh를 검증하며 메일을 발송하지 않는다. Gmail `gmail.send` 범위 외 mailbox read/modify scope는 요청하지 않는다.
+Email은 정상 Minutes 생성과 Document 저장에 성공한 뒤, 현재 회의에서 매핑된 Participant의 주소로 자동 발송한다. 고유 주소마다 한 메시지를 보내며 전체 주소는 운영 로그에 노출하지 않는다. Gmail OAuth client secret/refresh token은 Backend 환경 secret으로만 저장한다. access token과 Authorization 값은 응답/로그에 쓰지 않는다. `validateConnection()`은 설정과 OAuth token refresh를 검증하며 테스트 메일을 발송하지 않는다. Gmail `gmail.send` 범위 외 mailbox read/modify scope는 요청하지 않는다.
 
 ## EXT-005 Notification Provider
 
@@ -163,9 +169,9 @@ sendAdminIncident(command) -> DeliveryResult
 
 회의 알림 입력은 title, meeting date, document URL이다. Admin incident 입력은 오류 분류, sessionId, stage, traceId, 안전한 오류 요약이다.
 
-V1 `NotificationProvider` adapter는 `NOTIFICATION_PROVIDER=SLACK`일 때 `SLACK_MEETING_WEBHOOK_URL` Incoming Webhook을 사용한다. 설치 때 webhook에 고정한 Channel로만 메시지를 보내고 payload에서 channel/username/icon을 변경하지 않는다. Meeting message는 title, meeting date, Document URL만 포함한다. Slack HTTP 200 body `ok`를 받으면 요청 수락으로 기록하며 실제 구성원 열람/보관을 보장하지 않는다.
+Slack Notification은 V1 핵심 회의 흐름의 필수 조건이 아니다. 후속으로 활성화할 때 `NOTIFICATION_PROVIDER=SLACK`과 `SLACK_MEETING_WEBHOOK_URL` Incoming Webhook을 사용한다. 설치 때 webhook에 고정한 Channel로만 메시지를 보내고 payload에서 channel/username/icon을 변경하지 않는다. Meeting message는 title, meeting date, Document URL만 포함한다. Slack HTTP 200 body `ok`를 받으면 요청 수락으로 기록하며 실제 구성원 열람/보관을 보장하지 않는다.
 
-Incoming Webhook URL은 secret이다. `validateConnection()`은 health 조회만으로 test message를 게시하지 않는다. `notification.reachable`은 가장 최근 실제 webhook POST 성공 결과를 뜻하고 아직 발송이 없으면 false다. 회의 알림은 Document 저장 성공 뒤 수행하고 Email과 독립 상태로 기록한다. 알림 실패는 Document/Email 성공을 되돌리지 않는다.
+Incoming Webhook URL은 secret이다. `validateConnection()`은 health 조회만으로 test message를 게시하지 않는다. Slack을 설정하지 않아도 회의록 생성·저장·Gmail 자동 발송은 정상 완료된다. Slack 알림이 활성화된 배포에서만 Document 저장 뒤 추가 실행하며 실패해도 Email delivery를 되돌리지 않는다.
 
 ## Admin Incident 안전 규칙
 
@@ -221,12 +227,10 @@ NOTIFICATION_PROVIDER
 SLACK_MEETING_WEBHOOK_URL
 SLACK_ADMIN_WEBHOOK_URL
 ALLOWED_ORIGINS
-VERCEL_BLOB_CONTROL_URL
-RENDER_AUDIO_STORAGE_SECRET
-RENDER_AUDIO_GRANT_SECRET
+TEMP_AUDIO_DIR
 ```
 
-AI/Email/Slack, Vercel Blob control secrets, 설정 암호화 키는 Render Secret/환경 설정에 저장한다. Audio 저장소는 private Vercel Blob store를 사용한다. Document 연결 입력은 암호화 전역 설정에 저장한다. sample 파일은 실제 자원 값과 secret을 담지 않는다. Frontend에는 Backend public URL 외 Provider 설정을 넣지 않는다.
+AI/Email/Slack과 설정 암호화 키는 Backend Secret/환경 설정에 저장한다. 오디오 조각은 Backend API가 받아 `TEMP_AUDIO_DIR`의 임시 파일로 처리하며, Frontend에는 Backend public URL만 둔다. Document 연결 입력은 현재 암호화 전역 설정 저장소에 둔다. sample 파일은 실제 자원 값과 secret을 담지 않는다. Backend 호스팅·임시 저장소의 영속성 검토는 [Backend 소유 Audio 설계](../superpowers/specs/2026-10-16-backend-owned-audio-design.md), 배포 설정은 [운영 테스트 설정 기준](../setup/production-test.md)에 둔다.
 
 ## 실패 분류와 재시도
 

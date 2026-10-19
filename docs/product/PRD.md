@@ -1,9 +1,9 @@
 # Meeting Automation Product Requirements Document
 
 > **문서 ID:** PRD-MA-001\
-> **버전:** 2.0.0\
-> **기준일:** 2026-10-15\
-> **상태:** Approved Baseline Candidate\
+> **버전:** 2.1.0\
+> **기준일:** 2026-10-16\
+> **상태:** 사용자 검토용 설계 초안\
 > **문서 역할:** Meeting Automation V1의
 > 제품·UX·디자인·아키텍처·데이터·API·개발 일정 Single Source of Truth\
 > **대상:** Product Owner, Frontend, Backend, QA, Codex\
@@ -20,6 +20,7 @@
 - [API Specification](./api-spec.md): Frontend/Backend REST 계약
 - [Integrations](./integrations.md): 외부 Provider Port와 Adapter 계약
 - [문서 연결·이전 설계](./document-setup.md): 전역 설정, 최초 위저드, 구조 생성, 서비스 변경과 자료 이전
+- [최초 연결·자동 발송 기준 흐름](../superpowers/specs/2026-10-16-first-run-and-autodelivery-design.md): 최초 진입부터 자동 이메일까지의 합의된 순서와 구조
 - [UI Design](./ui-design.md): A안 기반 화면·컴포넌트·시각 토큰 명세
 
 개발 PC 설정 순서는 [Frontend Setup](../setup/frontend-setup.md)과 [Backend Setup](../setup/backend-setup.md)을 따른다.
@@ -36,11 +37,14 @@
 > **변경 이력 v1.8.1:** 변환 실패 Audio를 비공개 객체 저장소에 최대 24시간 보존해 재시도·다운로드를 지원하고 만료 정리를 추가\
 > **변경 이력 v1.9.0:** 제품 계정 없이 공유하는 문서 연결 위저드·명시적 구조 생성·자료 복사 후 서비스 전환을 추가하고 TASK-022를 개발 최우선으로 지정\
 > **변경 이력 v1.10.0:** Technology Baseline 확정, Monorepo/Node.js/React/Spring Boot 역할 명시, 실제 모바일·회의실 품질 검증을 개발 선행 Gate에서 Phase 8로 이동\
-> **변경 이력 v2.0.0:** Frontend 런타임 기준을 Node.js 24로 통일하고 저장소 버전 파일, package engine 검사, CI 검증을 연결
+> **변경 이력 v2.0.0:** Frontend 런타임 기준을 Node.js 24로 통일하고 저장소 버전 파일, package engine 검사, CI 검증을 연결\
+> **변경 이력 v2.1.0:** Backend 직접 Audio chunk 수신 방향, 필수 문서 Provider 기반 온보딩, 기본 문서 구조, 화자 매칭 후 Minutes 생성 및 자동 이메일 발송 흐름을 반영. 사용자 최종 검토 대기
 
 ------------------------------------------------------------------------
 
 ## 문서 운영 원칙
+
+PRD v2.1.0은 최초 설정, 기본 Page 구조, Speaker mapping 이후 회의록 생성, 자동 Email 발송의 현재 제품 기준이다. 과거 TASK의 Review/Confirm/수동 Publish, 두 개 static Template, Root 하위 `Meetings`/`Participants`만 생성하는 설명은 새 동작 기준으로 사용하지 않는다. 과거 TASK와 Evidence는 이력으로 보존하며 변경은 새 task에서 추적한다. 상세 순서는 [기준 흐름 설계](../superpowers/specs/2026-10-16-first-run-and-autodelivery-design.md)를 따른다.
 
 이 문서는 Meeting Automation V1 개발의 최상위 구현 기준이다. Codex를
 포함한 개발 주체는 작업 시작 전에 관련 `DEC-*`, `FR-*`, `NFR-*`,
@@ -76,29 +80,25 @@
 
 # 서비스 정의
 
-Meeting Automation은 **사내 오프라인 회의를 스마트폰 웹에서 녹음하고,
-음성을 STT와 Speaker Diarization으로 변환한 뒤 사용자가 화자와 참석자를
-매핑하여 회의록을 생성·검토하고, 지정된 문서 플랫폼에 저장한 후 Email로
-전달하고 Slack으로 알림을 제공하는 내부 서비스**다.
+Meeting Automation은 **문서 서비스를 한 번 연결한 뒤, 참가자 이메일이 등록된 회의를 스마트폰 웹으로 녹음하고, 화자를 참가자에 매핑하여 AI 회의록을 생성·문서에 저장하고, 매칭된 참가자에게 자동 이메일 발송하는 내부 서비스**다.
 
 범용 Meeting Intelligence 플랫폼을 목표로 하지 않는다. 핵심 사용 경험은
 다음과 같다.
 
-> **스마트폰을 회의 테이블 중앙에 놓고 → 회의를 녹음 → 자동으로 정리 →
-> 사람만 확인 → 저장·공유**
+> **문서 서비스를 연결하고 기본 페이지를 준비 → 참가자와 이메일 선택 → 녹음 → 화자를 참가자에 매칭 → 회의록 생성·저장 → 매칭된 참가자에게 자동 발송**
 
 ## 목표
 
 1.  오프라인 회의 기록을 최소 조작으로 시작한다.
 2.  녹음 종료 후 STT, Speaker Diarization, 회의록 생성을 자동화한다.
-3.  자동 실명 음성 인식 대신 `Speaker A/B/C`를 참석자와 간단히 매핑한다.
-4.  생성 결과를 사용자가 검토하고 수정할 수 있다.
-5.  같은 Transcript에서 Template만 변경하여 회의록을 재생성할 수 있다.
-6.  최종 회의록을 Notion 또는 Confluence에 영구 저장한다.
-7.  참석자에게 Email로 전달한다.
-8.  Slack은 보조 알림 채널로 사용한다.
-9.  별도 애플리케이션 DB 없이 100개 미만의 회의 이력을 조회한다.
-10. Document, Email, Notification 연동은 Provider 공통 계약을 통해 교체
+3.  자동 실명 음성 인식 대신 사용자가 `Speaker A/B/C`를 참가자에 매핑한다. 확인된 매핑은 Speaker Memory에 기록하고 다음 회의에서 후보로 보여준다.
+4.  매칭 완료 후 기본 Template으로 회의록을 자동 생성한다.
+5.  정상 생성된 회의록을 Notion 또는 Confluence에 저장한 뒤, 매칭된 이메일로 자동 발송한다.
+6.  최초 연결 시 Home, Meetings, Participants, Templates, Speaker Memory 기본 Page를 준비한다.
+7.  앱 첫 방문은 설정 gate를 제공하고, 초기화 완료 직후 New Meeting으로 이동한다. 이후 방문은 Home에서 새 미팅과 이전 회의록을 제공한다.
+8.  별도 애플리케이션 DB 없이 문서 Provider를 참가자·Template·화자 기억·회의록 Source of Truth로 사용한다.
+9.  Slack은 V1 핵심 회의·이메일 흐름에 필요하지 않은 후속 선택 기능이다.
+10. Document와 Email Provider는 공통 계약을 통해 교체 가능하게 한다.
     가능하게 한다.
 
 ## 비목표
@@ -164,7 +164,7 @@ Monorepo는 소스와 개발 기준을 한 Repository에서 관리하기 위한 
 | Unit/Component Test | Vitest |
 | Deployment | Vercel |
 
-**Node.js는 서비스 Backend가 아니다.** Node.js는 React/Vite의 개발·빌드 Toolchain으로만 사용한다. 업무 API, Secret, OpenAI, Document, Email, Slack 연동은 Spring Boot Backend가 담당한다.
+**Node.js는 업무 Backend가 아니다.** Node.js는 React/Vite의 개발·빌드 Toolchain으로 사용한다. 회의 업무 API, 오디오 chunk 수신·검증·조립, OpenAI, Document, Email, Slack 연동은 Spring Boot Backend가 담당한다. Frontend는 Backend API로 오디오 조각을 전송하며 저장소 credential을 보유하지 않는다. 오디오 저장 방식은 [Backend 소유 Audio 설계](../superpowers/specs/2026-10-16-backend-owned-audio-design.md)를 따른다.
 
 ## Backend Baseline
 
@@ -254,8 +254,10 @@ Spring Boot 4.1.x / Java 25
   `DEC-005`                           V1은 DB, JPA, Redis, Queue, Batch를
                                       사용하지 않는다.
 
-  `DEC-006`                           Notion 또는 Confluence가
-                                      회의록/참석자의 Source of Truth다.
+  `DEC-006`                           Notion 또는 Confluence 중 하나가
+                                      참가자·Template·Speaker Memory·
+                                      회의록의 Source of Truth다. 연결과
+                                      초기화 전에는 회의 생성이 차단된다.
 
   `DEC-007`                           스마트폰을 회의 테이블 중앙에 두고
                                       브라우저 마이크로 녹음한다.
@@ -263,9 +265,9 @@ Spring Boot 4.1.x / Java 25
   `DEC-008`                           STT 후 Speaker Diarization을 수행해
                                       `Speaker A/B/C...`를 얻는다.
 
-  `DEC-009`                           자동 실명 화자 인식은 하지 않는다.
-                                      사용자가 Speaker를 선택된 참석자와
-                                      1회 매핑한다.
+  `DEC-009`                           자동 음성 지문 인식은 하지 않는다.
+                                      사용자가 Speaker를 참가자에 매핑하고
+                                      확인된 매핑을 기억 페이지에 남긴다.
 
   `DEC-010`                           Speaker mapping은 해당 Speaker의
                                       Transcript 전체에 일괄 적용한다.
@@ -276,20 +278,23 @@ Spring Boot 4.1.x / Java 25
                                       실행하지 않고 기존 Transcript로
                                       Minutes만 재생성한다.
 
-  `DEC-012`                           Template은 `default.md`,
-                                      `project.md` 두 개를 Backend static
-                                      resource로 관리한다.
+  `DEC-012`                           Backend bundled default template은
+                                      최초 seed다. 활성 Provider의
+                                      Templates page가 실행 시 Template
+                                      source of truth다.
 
-  `DEC-013`                           Document 계층은
-                                      `Meeting Automation > Meetings`,
-                                      `Participants`만 사용한다.
+  `DEC-013`                           Root `Meeting Automation` 아래
+                                      Home, Meetings, Participants,
+                                      Templates, Speaker Memory page를
+                                      준비한다.
 
   `DEC-014`                           Notion/Confluence 공통화를 위해
                                       Page hierarchy/basic CRUD를
                                       기준으로 한다.
 
-  `DEC-015`                           Email은 기본 전달 수단이고 Slack은
-                                      Secondary Notification이다.
+  `DEC-015`                           정상 Minutes 생성 및 문서 저장 후
+                                      매칭된 참가자에게 Email을 자동
+                                      발송한다. Slack은 후속 선택 기능이다.
 
   `DEC-016`                           과거 회의는 앱에서 읽기 전용이며
                                       수정은 원문 Document Provider에서
@@ -301,8 +306,8 @@ Spring Boot 4.1.x / Java 25
                                       NOTIFICATION 네 종류로 운영
                                       분류한다.
 
-  `DEC-019`                           Admin 운영 오류는 Slack Admin
-                                      채널로 알린다.
+  `DEC-019`                           Slack Admin 오류 알림은 V1 핵심
+                                      회의 흐름의 필수 조건이 아니다.
 
   `DEC-020`                           원본 Audio는 처리용 임시 데이터다.
                                       성공 시 Review 진입 때 삭제하고,
@@ -322,6 +327,11 @@ Spring Boot 4.1.x / Java 25
 | DEC-022 | 활성 설정이 없으면 최초 위저드로 유도하며, 연결 테스트와 명시적 완료 요청으로 기본 Page 구조를 생성·재사용한다. |
 | DEC-023 | 운영 중 같은 위저드로 Provider를 변경한다. 전체 자료 복사 또는 새 시작을 선택하며 검증 전 active는 변경하지 않는다. |
 | DEC-024 | 전역 설정·credential·이전 journal은 단일 Backend 영속 디렉터리에 암호화해 저장한다. 업무 문서는 Provider 정본이고 제품 계정 DB는 없다. |
+| DEC-025 | 활성 연결이나 기본 Page 준비가 없으면 설정 화면으로 보내고 회의 기능을 막는다. 저장소 장애나 기존 Provider의 일시 장애를 미설정으로 처리하지 않는다. |
+| DEC-026 | 초기화 성공 직후 첫 방문은 New Meeting으로 이동한다. 설정된 이후 재방문은 Home에서 New Meeting과 Meetings history를 제공한다. |
+| DEC-027 | STT/diarization 다음에 모든 Speaker를 참가자에 매핑한다. mapping을 Minutes 생성 입력으로 사용하며 완료 전에 자동 발송하지 않는다. |
+| DEC-028 | Minutes 성공 후 Provider Meetings page에 저장하고, 저장 성공 뒤 매칭된 참가자별 Email delivery를 자동 시작한다. 사용자의 Publish/Send action은 정상 경로의 선행 조건이 아니다. |
+| DEC-029 | Speaker Memory에는 사용자가 확인한 매핑을 저장해 다음 회의의 후보로 제공한다. V1은 voiceprint나 회의 간 자동 인물 식별을 하지 않으며 후보는 매번 사용자가 확인한다. |
 
 ## 🧩 연결과 이전 요구사항
 
@@ -331,6 +341,11 @@ Spring Boot 4.1.x / Java 25
 | FR-032 | Settings에서 서비스 전체 연결을 다시 설정하고 동시 Session/쓰기와 전환 충돌을 차단한다. |
 | FR-033 | 이전 선택 시 회의록·Transcript·참석자를 참조 무결성과 함께 복사하고 원본을 보존한다. |
 | FR-034 | 설정·이전 상태를 재시작 후 복원하고 실패 재개·취소·멱등 생성·검증 후 원자 전환을 지원한다. |
+| FR-035 | 앱 진입 상태를 미설정·초기화·준비·저장소 오류·기존 연동 장애로 구분하고, READY 이전에는 회의 기능을 gate한다. |
+| FR-036 | 최초 연결 완료 때 기본 5개 Page를 idempotent하게 생성·재사용하고, 초기화 완료 직후 New Meeting으로 이동한다. |
+| FR-037 | 초기 Template을 Provider Templates page에 seed하고, 활성 Template 내용/version을 회의록 생성에 사용한다. |
+| FR-038 | diarization 이후 모든 Speaker mapping을 먼저 확인·저장하고 그 mapping을 포함해 Minutes를 생성한다. 확인 매핑은 Speaker Memory에 기록한다. |
+| FR-039 | Minutes 생성과 Provider 문서 저장이 성공하면 매칭된 고유 이메일 주소별로 자동 발송하고 각 delivery 결과를 기록한다. |
 
 화면 SCR-013은 공용 연결 위저드, SCR-014는 서비스 전환·자료 이전 진행이다. 신규 API-023~030과 기존 API의 연결 gate는 [API 명세](./api-spec.md)를 따른다. 이 변경의 상세 경계는 [전역 문서 연결 설계](./document-setup.md)가 기준이다.
 
@@ -340,14 +355,12 @@ Spring Boot 4.1.x / Java 25
 
 ### 회의 진행자
 
--   새 회의 생성
--   참석자 선택
+-   최초 연결 화면에서 문서 서비스를 설정하고 기본 Page 구성을 완료
+-   새 회의 생성과 참가자 이메일 확인
 -   녹음
--   Speaker mapping
--   회의록 검토/수정
--   Template 변경 및 재생성
--   수신자 확인
--   저장/공유
+-   Speaker와 참가자 매핑 확인
+-   자동 생성된 회의록과 수신자별 이메일 결과 확인
+-   필요 시 이전 회의록과 참가자 목록 조회/관리
 
 ### 참석자
 
@@ -370,18 +383,18 @@ Spring Boot 4.1.x / Java 25
 
 ``` mermaid
 flowchart TD
-    H[SCR-001 Home] --> N[SCR-002 New Meeting]
+    ENTRY[앱 진입 / App Config] -->|연결 없음·미초기화| SETUP[SCR-013 문서 연결 및 기본 Page 생성]
+    ENTRY -->|READY| H[SCR-001 Home]
+    SETUP -->|첫 초기화 완료| N[SCR-002 New Meeting]
+    H --> N
     N --> R[SCR-003 Recording]
     R --> X[SCR-004 End Confirm]
     X --> P[SCR-005 Processing]
-    P -->|STT + Diarization + Draft| V[SCR-006 Review]
-    V -->|Template 변경| G[Minutes Regenerate]
-    G --> V
-    V --> S[SCR-007 Share]
-    S --> D[Document Save]
-    D --> E[Email Delivery]
-    E --> L[Slack Notification]
-    L --> C[SCR-008 Complete]
+    P -->|STT + diarization 완료| MAP[Speaker를 참가자에 매핑]
+    MAP -->|모든 화자 확인| GEN[기본 Template으로 Minutes 생성]
+    GEN -->|성공| D[Meetings page에 저장]
+    D -->|저장 성공| E[매칭된 이메일로 자동 발송]
+    E --> C[SCR-008 완료 / 수신자별 결과]
     C --> H
 
     H --> M[SCR-009 Meetings]
@@ -402,9 +415,10 @@ sequenceDiagram
     participant A as AI/STT Provider
     participant D as DocumentProvider
     participant E as EmailProvider
-    participant N as NotificationProvider
+    participant SM as Speaker Memory
 
-    U->>W: 회의명/Template/참석자 선택
+    U->>W: 회의명/참가자(이메일 연결) 선택
+    W->>D: 기본 Template과 Speaker Memory 조회
     W->>B: Meeting Session 생성
     U->>W: 녹음 시작
 
@@ -419,29 +433,18 @@ sequenceDiagram
     B->>A: STT + Speaker Diarization
     alt 변환 성공
         A-->>B: Transcript + Speaker labels
-        B->>A: Template 기반 Minutes 생성
-        A-->>B: Structured Minutes
-        B-->>W: Review Data
-        B->>B: private Audio object 삭제
-
         U->>W: Speaker A/B/C ↔ Participant 매핑
         W->>B: Speaker Mapping 저장
-
-        opt Template 변경
-            U->>W: Template 변경
-            W->>B: Minutes Regenerate
-            B->>A: Existing Transcript + New Template
-            A-->>B: New Structured Minutes
-            B-->>W: Regenerated Minutes
-        end
-
-        U->>W: Minutes 수정/확정
-        W->>B: Publish
-        B->>D: Meeting Document 저장
+        B->>SM: 확인된 mapping 기록
+        B->>A: Transcript + mapping + Template으로 Minutes 생성
+        A-->>B: Structured Minutes
+        B->>D: Meetings page에 Meeting 저장
         D-->>B: documentId/documentUrl
-        B->>E: Email 발송
-        B->>N: Slack 알림
-        B-->>W: Channel별 결과
+        B->>E: 매칭된 고유 이메일 주소로 자동 발송
+        E-->>B: 수신자별 Delivery 결과
+        B-->>W: 완료 및 수신자별 결과
+        B->>B: Audio 임시 파일 삭제
+
     else 변환 실패
         B-->>W: 실패 stage, retryability, Audio 만료시각
         loop 사용자가 보존 기간 내 명시 retry
@@ -454,7 +457,7 @@ sequenceDiagram
             end
             W->>B: 실패 종료
             B->>D: 회의 정보 + 변환 실패/disposition 기록
-            Note over B,E: Email 및 Slack 전달을 만들지 않음
+            Note over B,E: 정상 회의록 이메일은 발송하지 않음
             B->>B: private Audio/chunk object 삭제
         end
     end
@@ -576,9 +579,11 @@ Domain/Application 계층은 특정 Notion/Confluence/Slack/OpenAI SDK 타입을
   회사명                                  Backend deployment config     Y
   Document Provider/Root/연결 credential     암호화한 전역 영속 설정        Y
   AI/Email/Slack/설정 암호화 키             Render Secret                 Y
-  Template                                 Backend static resource       Y
-  Participants                             Document Provider             Y
-  Meeting Minutes                          Document Provider             Y
+  Template seed                            Backend static resource       Y
+  Active Template                          Document Provider Templates page Y
+  Participants                             Document Provider Participants page Y
+  Confirmed Speaker Memory                 Document Provider Speaker Memory page Y
+  Meeting Minutes                          Document Provider Meetings page Y
   Transcript                               Meeting Document              Y
   Active MeetingSession                    Spring memory                 N
   Audio chunk/assembled audio              Browser temporary + private object storage   처리 중 유지, 성공 시 삭제, 실패 시 최대 24시간
@@ -643,16 +648,20 @@ Domain/Application 계층은 특정 Notion/Confluence/Slack/OpenAI SDK 타입을
 ``` mermaid
 flowchart TD
     ROOT[Meeting Automation]
+    ROOT --> H[Home]
     ROOT --> M[Meetings]
     ROOT --> P[Participants]
+    ROOT --> T[Templates]
+    ROOT --> SM[Speaker Memory]
     M --> M1[2026-10-04 AX 주간회의]
     M --> M2[2026-10-02 프로젝트 회의]
     P --> P1[김동현]
     P --> P2[홍길동]
+    T --> DT[기본 회의록 Template]
+    SM --> S1[사용자 확인 매핑 기록]
 ```
 
-V1에서 이 외의 `Home`, `Service Info`, `History`, `Processing History`
-문서를 자동 생성하지 않는다.
+Bootstrap은 `Home`, `Meetings`, `Participants`, `Templates`, `Speaker Memory`를 만든다. 그 밖에 `Service Info`, `History`, `Processing History` page는 자동 생성하지 않는다. Home과 history 목록은 앱 UI이며 Provider page `Home`은 안내 내용만 둔다.
 
 ## Meeting Document
 
@@ -1148,11 +1157,11 @@ Bottom Sheet/Modal:
 
 ------------------------------------------------------------------------
 
-## SCR-006 Review
+## SCR-006 Speaker Mapping and Automatic Minutes
 
-**목적:** 자동 결과 중 사람이 확인해야 하는 부분을 한 화면에서 처리한다.
+**목적:** diarization이 끝난 뒤 사람이 Speaker를 참가자에 연결한다. 모든 매핑이 저장되면 Backend가 Minutes 생성·문서 저장·자동 이메일을 이어서 처리한다.
 
-우선순위: 1. Speaker mapping 2. Template 3. Minutes 4. Transcript 원문
+우선순위: 1. Speaker mapping 2. Transcript 원문
 
 ``` text
 ← 회의록 확인
@@ -1172,61 +1181,37 @@ Speaker C
 
 ────────────────────────
 
-회의록 형식
-[ 기본 회의록         ▼ ]
-Template 변경 시 회의록만 다시 작성됩니다.
-
-────────────────────────
-
-회의 요약
-[ ... editable ... ]
-
-주요 논의사항
-[ ... ]
-
-결정사항
-[ ... ]
-
-Action Items
-[ ... ]
-
 [ 원문 대화 보기 ]
 
-[       회의록 확정       ]
+[       매칭 완료       ]
 ```
 
-규칙: - Speaker 후보는 New Meeting에서 선택한 참석자가 우선이다. -
-필요하면 `참석자 추가`를 제공한다. - Speaker 하나의 mapping 변경은 모든
-해당 segment에 적용한다. - Template 변경 시 confirm 후 Minutes
-regenerate. - Transcript는 regenerate하지 않는다.
+규칙: 감지된 모든 Speaker는 회의에서 선택된 Participant 중 하나로 연결한다. Speaker Memory의 기록은 후보로 표시하되 사용자가 현재 회의 mapping을 확인한다. 미매핑 화자가 있으면 `매칭 완료`를 막는다. 완료 시 Backend가 확인된 mapping과 활성 기본 Template으로 Minutes를 만든다. 이후 저장과 이메일 발송은 자동 처리한다. 이 핵심 흐름에는 Minutes confirm/publish/send 버튼이 없다.
 
 ------------------------------------------------------------------------
 
-## SCR-007 Share
+## SCR-007 Delivery Result
 
 ``` text
-회의록 공유
+회의록 전달 결과
 
 문서 저장
 Notion
 Meeting Automation / Meetings
 ✓ 준비 완료
 
-Email
-☑ 김동현
+Email 자동 발송 결과
+✓ 김동현
   user1@example.com
-☑ 홍길동
+✓ 홍길동
   user2@example.com
 
-Slack 알림
-✓ 사용
-
-[      저장하고 공유      ]
+Notion 문서 열기
 ```
 
-순서: 1. Document 저장 2. Email 3. Notification
+이 화면은 자동 처리 결과를 읽기 전용으로 보여준다. 사용자가 저장·발송을 시작하는 버튼은 없다. 순서는 1. Minutes 생성 2. Document 저장 3. 매칭된 이메일 자동 발송이다. Slack은 V1 핵심 흐름에 포함하지 않는다.
 
-Document 저장 실패 시 Email/Notification을 시작하지 않는다.
+Document 저장 실패 시 Email 발송을 시작하지 않는다. Email 실패는 수신자별 결과로 표시하며 성공한 수신자에게 중복 발송하지 않는다.
 
 ------------------------------------------------------------------------
 
@@ -1235,11 +1220,10 @@ Document 저장 실패 시 Email/Notification을 시작하지 않는다.
 ``` text
         ✓
 
-회의록을 공유했습니다
+회의록 작성 및 자동 이메일 발송이 완료되었습니다
 
 Notion        저장 완료
-Email         3명 전송
-Slack         알림 완료
+Email         2명 전송 완료
 
 [ 회의록 보기 ]
 [ 홈으로 ]
@@ -1785,9 +1769,9 @@ Response:
     "sessionId":"ms_xxx",
     "version":3,
     "meeting":{"participantIds":["pt_001","pt_002"]},
-    "status":"REVIEW",
+    "status":"AWAITING_SPEAKER_MAPPING",
     "processing":{
-      "stage":"DRAFT_READY",
+      "stage":"AWAITING_SPEAKER_MAPPING",
       "progressPercent":100
     },
     "speakers":[
@@ -1803,27 +1787,17 @@ Response:
         "text":"회의를 시작하겠습니다."
       }
     ],
-    "minutes":{
-      "templateId":"default.md",
-      "summary":"...",
-      "discussionPoints":[],
-      "decisions":[],
-      "actionItems":[],
-      "followUps":[]
-    },
     "allowedActions":[
       "UPDATE_SPEAKER_MAPPING",
-      "UPDATE_MINUTES",
-      "REGENERATE_MINUTES",
-      "CONFIRM"
+      "COMPLETE_SPEAKER_MAPPING"
     ]
   }
 }
 ```
 
-`PUBLISH` action은 `CONFIRMED` 및 문서 저장 실패 `DOCUMENT_FAILED`에서만 허용한다. Document 저장 성공 뒤 응답에는 `document:{documentId,documentUrl}`를 포함한다. 저장 전 및 저장 실패 응답에는 `document`를 포함하지 않는다.
+화자 매칭이 끝나기 전에는 Minutes가 아직 없으며 편집·확정·Publish action을 제공하지 않는다. 매칭 완료 요청이 접수되면 Backend가 Minutes 생성, 문서 저장, 이메일 발송을 순서대로 수행한다. 문서 저장 성공 뒤에는 `document:{documentId,documentUrl}`와 수신자별 `deliveries` 결과를 포함한다.
 
-`meeting.participantIds`는 Session 생성 때 회의 작성자가 지정한 roster ID의 immutable reference다. Publish 뒤에는 generic `deliveries:[{deliveryId,channel,recipientParticipantId?,status,attemptCount,lastAttemptAt?,errorCode?,retryable}]`를 포함해 recipient별 결과를 조회할 수 있다. 이 응답에는 이메일 주소나 provider 오류 원문을 포함하지 않는다. Publish 전에는 `deliveries`를 생략한다.
+`meeting.participantIds`는 Session 생성 때 회의 작성자가 지정한 roster ID의 immutable reference다. 처리 중 또는 완료 후에는 generic `deliveries:[{deliveryId,channel,recipientParticipantId?,status,attemptCount,lastAttemptAt?,errorCode?,retryable}]`를 포함해 recipient별 결과를 조회할 수 있다. 이 응답에는 이메일 주소나 provider 오류 원문을 포함하지 않는다.
 
 ------------------------------------------------------------------------
 
@@ -2324,6 +2298,8 @@ Meeting UI
 
 # Codex 개발 일정
 
+> **현재 실행 차단 안내:** 아래 개발 tracker와 기존 TASK 표는 PRD v2.0 이하의 Review/Confirm/Publish 및 이전 문서 연결 범위로 작성된 이력 스냅샷이다. 제품 기준 문서 v2.1.0과 충돌하는 TASK 순서·수용 기준은 현재 구현 지시로 사용하지 않는다. 새 기준 흐름을 작업 단위로 재분해하고 검토하기 전에는 이 커서나 우선순위로 개발을 재개하지 않는다. 현재 기준은 [최초 연결·자동 발송 기준 흐름](../superpowers/specs/2026-10-16-first-run-and-autodelivery-design.md)과 본 PRD 상단의 현재 의사결정을 따른다.
+
 ## 공통 작업 및 검증 규칙
 
 ### 상세 설계 추적 기준
@@ -2778,8 +2754,6 @@ Codex는 개발 세션을 시작할 때 다음 순서를 지킨다.
 
 Meeting Automation V1의 제품 경험은 다음 한 문장으로 판단한다.
 
-> **사용자가 스마트폰을 회의 테이블 중앙에 놓고 회의를 녹음한 뒤,
-> Speaker만 사람과 연결하고 생성된 회의록을 확인하여 한 번에 문서
-> 저장·Email 전달·Slack 알림까지 완료할 수 있어야 한다.**
+> **최초 문서 연결을 마친 사용자가 스마트폰으로 회의를 녹음하고, 화자를 참가자에 연결하면 AI 회의록이 문서에 저장된 뒤 매칭된 참가자에게 자동 이메일 발송되어야 한다.**
 
 이 기준에 직접 기여하지 않는 기능은 V1에 추가하지 않는다.

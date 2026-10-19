@@ -1,5 +1,7 @@
 # 🎨 Meeting Automation UI Design
 
+> **현재 제품 흐름:** 최초 연결/기본 Page 준비와 화자 매칭 후 자동 회의록·이메일 처리는 [기준 흐름 설계](../superpowers/specs/2026-10-16-first-run-and-autodelivery-design.md)를 따른다. 이 문서의 예전 Review 표현, SCR 명칭, Slack 표시 중 충돌하는 부분은 구현 지시가 아니다. OpenAI/Gmail 자격 증명은 운영자가 Backend Secret으로 설정하며 앱은 이 값을 입력받지 않는다.
+
 > **문서 역할:** 선택한 A안(Minimal & Clean)을 Meeting Automation V1의 구현 가능한 UI 기준으로 정의한다.
 > **기준 문서:** [PRD](./PRD.md)
 > **시안:** [세 가지 UI 시안](../시안_3.png) 중 A안
@@ -232,7 +234,7 @@ font-family:
 
 ### SCR-001 Home
 
-**목적:** 새 회의를 시작하거나 최근 회의로 돌아간다.
+**목적:** READY 상태에서 새 회의를 시작하거나 이전 회의로 돌아간다. App Config가 READY가 아니면 Home을 열지 않고 설정/오류 상태로 분기한다.
 
 - App title과 서비스 목적을 간단하게 표시한다.
 - 파란색 Primary `새 회의 시작` 버튼을 화면 상단 주요 영역에 둔다.
@@ -286,28 +288,27 @@ font-family:
 - 네트워크 끊김, 처리 실패에는 안전한 오류 요약과 가능한 재시도만 표시한다.
 - Bottom Navigation을 숨긴다.
 
-### SCR-006 Review
+### SCR-006 Speaker Mapping and Minutes
 
-**목적:** 사용자가 필요한 사실 확인과 수정을 한 번에 마친다.
+**목적:** diarization 결과의 각 Speaker를 참가자에 매핑한다. 모든 Speaker 매핑이 저장되면 Backend가 Minutes 생성과 자동 전달을 이어서 실행한다.
 
-- 정보 우선순위는 Speaker mapping → Template → Minutes → Transcript 원문이다.
-- 감지된 각 Speaker에 Participant dropdown을 하나씩 제공한다. 선택한 참석자를 우선 제안한다.
-- Template 변경 시 Minutes만 재생성되며 Transcript/STT는 재실행하지 않는다는 설명을 표시한다.
-- 재생성 전 기존 사용자 수정 Minutes가 교체될 수 있음을 확인한다.
-- Summary, discussion points, decisions, action items, follow-ups는 편집 가능한 구조로 제공한다.
+- 감지된 모든 Speaker에 Participant dropdown을 하나씩 제공한다. 선택한 회의 참가자를 우선 보여준다.
+- Speaker Memory가 제공한 과거 확인 기록은 `제안`으로 표시한다. 사용자는 현재 회의에서 매핑을 확인해야 한다.
+- 미매핑 Speaker가 남아 있으면 `계속`을 비활성화하고 누락 화자를 알린다.
+- 사용자가 `매칭 완료`를 누르면 Backend가 mapping을 저장하고 확인된 mapping을 사용해 활성 Template으로 Minutes를 생성한다.
+- Minutes 생성/문서 저장/자동 이메일 전송 단계와 recipient별 결과를 같은 처리 화면에 표시한다. Publish/Send 버튼은 요구하지 않는다.
 - Transcript 원문은 별도 Sheet/Drawer에서 읽는다. Speaker mapping은 speaker 단위로 유지한다.
-- 화면 하단에 `회의록 확정` Primary action을 제공하고, 누락된 mapping 등 확정 불가 이유를 알려준다.
+- 별도 Minutes 편집·재생성 UI는 자동 발송 순서와 정책이 확정되기 전에는 이 핵심 흐름에 추가하지 않는다.
 
-### SCR-007 Share
+### SCR-007 Delivery Result
 
-**목적:** 저장 위치, Email 수신자, 알림 여부를 확인 후 공유 시작.
+**목적:** Backend가 자동 저장·이메일 발송한 결과를 표시한다.
 
 - Document Provider 및 `Meeting Automation / Meetings` 저장 위치를 표시한다.
-- Email은 선택된 Participant 단위로 checkbox와 주소를 보여준다. 개인정보가 과도하게 노출되지 않게 필요한 범위에서 표시한다.
-- Slack notification은 on/off 선택과 현재 상태를 보여준다.
-- Primary action은 `저장하고 공유`다.
-- Document 저장 실패 시 Email/Notification을 보내지 않는 처리 순서를 사용자에게 혼동 없이 보여준다.
-- 전송 중에는 중복 Publish를 막고 진행 상태를 표시한다.
+- 문서 저장 결과와 Participant별 Email delivery 결과를 독립 행으로 보여준다.
+- 발송 대상은 현재 Session에서 사용자가 매핑한 Participant의 email이다. 중복 주소는 한 건으로 표시한다.
+- 정상 흐름에서 별도의 `저장하고 공유` action은 없다.
+- 문서 저장 실패 시 이메일 미발송 이유를 표시한다. 일부 발송 실패는 성공한 recipient를 재발송하지 않는다.
 
 ### SCR-008 Complete
 
@@ -402,9 +403,9 @@ font-family:
 
 ## 문서 연결 위저드
 
-SCR-013은 `/setup/document`, `/settings/document`에서 재사용한다. 최초 App Config가 setup.required=true면 setup 화면으로 이동한다. 선택→가이드/입력→테스트→구조 확인/완료의 단계 표시와 뒤로/다음/완료를 제공한다. Notion과 Confluence별 입력은 document-setup.md를 따르고 Provider 변경 시 이전 입력을 비운다. 회사 공통 설정임을 첫 화면에 설명한다.
+SCR-013은 `/setup/document`, `/settings/document`에서 재사용한다. App Config가 미설정/미초기화면 설정으로 이동한다. Provider 선택→credential/location 입력→읽기 테스트→기본 구조 확인→생성/검증 순서를 제공한다. Bootstrap 성공 직후 첫 설정은 New Meeting으로 이동한다. 이후 READY로 접속하면 Home에 새 미팅과 회의록 목록을 표시한다. 기존 연결의 Provider 장애나 storage failure를 최초 미설정으로 오인하지 않는다.
 
-Secret은 password 입력 중 메모리에서만 유지하고 단계 이탈/성공/새로고침 시 비운다. TESTED revision이 바뀌면 완료를 비활성화한다. 읽기 테스트 성공과 실제 페이지 생성 권한을 구분한다. 최종 확인은 생성/재사용되는 루트와 Meetings/Participants를 보여준다. HTTP 202 뒤 operationId로 progress를 조회하고 완료까지 중복 요청을 막는다. STORAGE_UNAVAILABLE는 재설정 화면으로 오인시키지 않고 안전한 저장소 복구 안내를 제공한다.
+Secret은 password 입력 중 메모리에서만 유지하고 단계 이탈/성공/새로고침 시 비운다. TESTED revision이 바뀌면 완료를 비활성화한다. 읽기 테스트 성공과 실제 페이지 생성 권한을 구분한다. 최종 확인은 루트와 `Home`, `Meetings`, `Participants`, `Templates`, `Speaker Memory`를 보여준다. HTTP 202 뒤 operationId로 progress를 조회하고 완료까지 중복 요청을 막는다. STORAGE_UNAVAILABLE는 재설정 화면으로 오인시키지 않고 안전한 저장소 복구 안내를 제공한다.
 
 ## 🔄 문서 서비스 변경과 자료 이전
 

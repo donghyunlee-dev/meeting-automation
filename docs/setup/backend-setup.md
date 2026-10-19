@@ -1,6 +1,6 @@
 # ☕ Backend 개발 환경 설정
 
-이 가이드는 Meeting Automation 모노레포의 `backend/` Spring Boot API를 로컬에서 개발하고 실행하는 절차를 설명한다. 제품 요구사항의 기준은 [PRD](../product/PRD.md), 시스템 경계는 [Architecture](../product/architecture.md), REST 계약은 [API Specification](../product/api-spec.md), 연동 설정은 [Integrations](../product/integrations.md)을 따른다.
+이 가이드는 Meeting Automation 모노레포의 `backend/` Spring Boot API를 로컬에서 개발하고 실행하는 절차를 설명한다. Backend가 Frontend에서 오디오 chunk를 직접 받는 방향은 승인됐으며 구체적인 저장·복구 설계는 [Backend 소유 Audio 설계](../superpowers/specs/2026-10-16-backend-owned-audio-design.md)에서 검토 중이다. 제품 요구사항의 기준은 [PRD](../product/PRD.md), 시스템 경계는 [Architecture](../product/architecture.md), REST 계약은 [API Specification](../product/api-spec.md), 연동 설정은 [Integrations](../product/integrations.md)을 따른다.
 
 > **기준 환경:** Eclipse Temurin JDK 25, Spring Boot 4.1.x, Gradle Wrapper 9.x (JDK 25 실행 시 최소 9.1), IntelliJ IDEA
 > **주 개발 OS:** Windows 10/11 + PowerShell
@@ -89,35 +89,31 @@ Wrapper가 지원하는 작업:
 
 ## 환경변수
 
-Backend는 AI/Email/Slack과 저장 기반 설정을 환경변수로 읽는다. Document Provider·Root·인증 정보는 전역 draft API에 입력한다. TASK-022.01은 draft 저장과 읽기 테스트까지 제공하며 초기 구조 생성·활성화와 화면 위저드는 후속 작업에서 연결한다. 로컬 개발에서는 `backend/.env.local` 파일을 사용할 수 있도록 애플리케이션 실행 설정을 구성하거나 IntelliJ Run Configuration에 값을 입력한다. Spring Boot가 `.env` 파일을 자동 로딩한다고 가정하지 않는다. 프로젝트가 로컬 dotenv loader를 포함하지 않으면 Run Configuration의 Environment variables에 직접 설정한다.
+Backend는 AI/Email/Slack과 저장 기반 설정을 환경변수로 읽는다. Document Provider·Root·인증 정보는 화면의 문서 연결 위저드에 입력한다. 로컬 개발에서는 `backend/.env.local` 파일을 사용할 수 있도록 애플리케이션 실행 설정을 구성하거나 IntelliJ Run Configuration에 값을 입력한다. Spring Boot가 `.env` 파일을 자동 로딩한다고 가정하지 않는다. 프로젝트가 로컬 dotenv loader를 포함하지 않으면 Run Configuration의 Environment variables에 직접 설정한다. Render 운영 설정은 [운영 테스트 설정 기준](./production-test.md)을 따른다.
 
-비밀이 아닌 설정의 예:
+환경 변수 이름과 로컬 예시(비밀값은 실제 값이 아닌 placeholder):
 
 ```text
 APP_COMPANY_ID=sfood
 APP_COMPANY_NAME=SFOOD
 APP_TIMEZONE=Asia/Seoul
 DOCUMENT_SETTINGS_DIR=<git-outside-persistent-directory>
-TRANSCRIPTION_MODEL=<configured-model-id>
-MINUTES_MODEL=<configured-model-id>
+TRANSCRIPTION_MODEL=gpt-4o-transcribe-diarize
+MINUTES_MODEL=gpt-6-luna
 EMAIL_PROVIDER=GMAIL_API
 EMAIL_OAUTH_CLIENT_ID=<google-oauth-client-id>
 EMAIL_OAUTH_CLIENT_SECRET=<secret>
 EMAIL_OAUTH_REFRESH_TOKEN=<secret>
 EMAIL_SENDER_ADDRESS=<authorized-gmail-address>
 NOTIFICATION_PROVIDER=SLACK
-ALLOWED_ORIGINS=http://localhost:5173
-VERCEL_BLOB_CONTROL_URL=https://<vercel-project-domain>/api/audio-storage
-RENDER_AUDIO_STORAGE_SECRET=<shared-secret>
-RENDER_AUDIO_GRANT_SECRET=<shared-secret>
+ALLOWED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
+TEMP_AUDIO_DIR=/tmp/meeting-automation-audio
 ```
 
 Secret 설정 이름의 예:
 
 ```text
 DOCUMENT_SETTINGS_ENCRYPTION_KEY
-RENDER_AUDIO_STORAGE_SECRET
-RENDER_AUDIO_GRANT_SECRET
 OPENAI_API_KEY
 EMAIL_*
 SLACK_MEETING_WEBHOOK_URL
@@ -128,7 +124,7 @@ SLACK_ADMIN_WEBHOOK_URL
 
 ### 비공개 Audio 객체 저장소
 
-Audio 업로드와 회의 처리는 Vercel 프로젝트에 연결한 private Blob store를 사용한다. Render에는 `VERCEL_BLOB_CONTROL_URL=https://<vercel-project-domain>/api/audio-storage`, `RENDER_AUDIO_STORAGE_SECRET`, `RENDER_AUDIO_GRANT_SECRET`을 설정한다. 첫 secret은 Render와 Vercel Function이 storage 제어 요청을 인증할 때 사용하고, 둘째 secret은 Render가 발급한 단기 브라우저 업로드 grant를 Vercel Function이 검증할 때 사용한다. Vercel 환경에는 `BLOB_READ_WRITE_TOKEN`과 같은 `RENDER_AUDIO_STORAGE_SECRET`, `RENDER_AUDIO_GRANT_SECRET`을 설정한다. 두 secret은 각각 충분히 긴 임의 값으로 생성하고 로그나 저장소에 기록하지 않는다. Blob store는 private access로 생성해야 하며 오디오를 Backend filesystem에 영속 저장하지 않는다.
+Audio는 Frontend에서 Backend API로 직접 전송한다. Backend는 임시 작업 파일에 chunk를 저장하고 회의 처리가 끝나면 정리한다. `TEMP_AUDIO_DIR`는 로컬 실행에서 쓰기 가능한 경로를 지정한다. 이 경로는 영속 저장을 뜻하지 않으며 Render Free에서는 재시작·재배포·절전 후 파일을 복구할 수 없다. Vercel Blob 설정은 사용하지 않는다. 배포 제약은 [운영 테스트 설정 기준](./production-test.md), Audio 동작은 [Backend 소유 Audio 설계](../superpowers/specs/2026-10-16-backend-owned-audio-design.md)를 따른다.
 
 ## IntelliJ IDEA 설정
 
@@ -213,9 +209,9 @@ Health endpoint 노출 설정이 scaffold에 없다면 PRD의 Actuator 기준을
 
 ## ⚙️ 문서 연결 위저드 운영 준비
 
-TASK-022 이후 문서 연결은 화면에서 설정한다. Render는 Persistent Disk mount 아래 DOCUMENT_SETTINGS_DIR를 사용하고 로컬은 저장소/Git 밖의 디렉터리를 사용한다. 설정 키는 Backend secret으로 유지한다. Disk는 유료·단일 인스턴스·재배포 중단 제약이 있으며 임시 파일로 대체하지 않는다. 이 문서 변경으로 실제 배포/요금 지출을 실행하지 않는다.
+문서 연결은 화면에서 설정한다. 로컬 Backend는 `DOCUMENT_SETTINGS_DIR`의 암호화 파일을 사용한다. Render에서는 실행 중 메모리 설정 저장소를 쓰며 브라우저 localStorage가 연결 입력을 보관해 같은 브라우저가 Backend 재시작 후 설정을 복구한다. localStorage는 브라우저와 기기 사이에 공유되지 않는다. 이 변경으로 실제 배포/요금 지출은 실행하지 않는다.
 
-`DOCUMENT_SETTINGS_DIR`는 미리 생성한 절대 경로여야 한다. Git 저장소 아래, 심볼릭 링크 디렉터리, 쓰기 불가능한 디렉터리는 거절한다. `RENDER=true`에서는 root 파일시스템과 다른 실제 mount가 필요하다. Render 임시 파일시스템은 저장 성공으로 처리하지 않는다. 로컬 운영자는 임시 디렉터리가 아닌 지속 보존되는 경로를 지정한다.
+`DOCUMENT_SETTINGS_DIR`는 로컬 Backend에서만 사용하며, 미리 생성한 절대 경로여야 한다. Git 저장소 아래, 심볼릭 링크 디렉터리, 쓰기 불가능한 디렉터리는 거절한다. Render 메모리 설정 저장소는 프로세스 재시작 후 비어 있으므로, 브라우저에서 자동 재구성되기 전에는 문서 설정이 미완료 상태로 보인다.
 
 `DOCUMENT_SETTINGS_ENCRYPTION_KEY`는 안전하게 생성한 32 bytes를 Base64로 인코딩한 값이다. 키는 상태 디렉터리와 분리한 deployment secret에 저장하고 백업한다. 기존 암호화 파일을 읽으려면 같은 키가 필요하다. 키 누락·손상 snapshot·복호화 실패는 `STORAGE_UNAVAILABLE`이며 기존 파일을 지우거나 빈 설정으로 초기화하지 않는다. 암호화 snapshot `settings.enc`와 키를 별도로 백업한다.
 

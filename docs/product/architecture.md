@@ -3,7 +3,8 @@
 > **문서 역할:** PRD의 시스템 구조, 경계, 런타임 흐름을 구현 가능한 수준으로 정의한다.
 > **기준 문서:** [PRD.md](./PRD.md)
 > **적용 범위:** Meeting Automation V1
-> **기준일:** 2026-10-06
+> **기준일:** 2026-10-16 · PRD v2.1.0 draft
+> **제품 흐름 상세:** [최초 연결·자동 발송 기준 흐름](../superpowers/specs/2026-10-16-first-run-and-autodelivery-design.md)
 
 ## 문서 경계
 
@@ -17,20 +18,19 @@
 
 ```mermaid
 flowchart LR
-  U[회의 진행자 모바일 브라우저] -->|HTTPS /api/v1| FE[React 19 Web on Vercel]
-  FE -->|HTTPS REST, audio chunks| BE[Spring Boot 4.1.x Java 25 on Render]
+  U[회의 진행자 모바일 브라우저] -->|HTTPS| FE[React 19 Web on Vercel]
+  FE -->|chunk upload / status| BE[Spring Boot 4.1.x Java 25 on Render]
   BE --> MEM[휘발성 Session Store]
-  BE --> OBJ[비공개 Audio 객체 저장소]
-  BE --> AI[Transcription / Minutes Provider]
+  BE --> TEMP[Backend 임시 Audio 파일]
+  BE --> AI[OpenAI: Transcription / Minutes]
   BE --> DOC[Document Provider]
   DOC --> NOTION[Notion]
   DOC --> CONF[Confluence]
-  BE --> MAIL[Email Provider]
-  BE --> NOTIFY[Notification Provider]
-  NOTIFY --> SLACK[Slack]
+  BE --> MAIL[Gmail API]
+  BE -. optional .-> SLACK[Slack]
 ```
 
-V1은 단일 회사용 모바일 웹이다. 브라우저는 녹음 권한 획득, MediaRecorder 운용, chunk 임시 보관/전송, 검토 UI를 담당한다. Backend는 업무 규칙, 세션 상태, Audio assembly, AI 호출, 문서/메일/알림 연동을 담당한다. 저장된 Provider Secret은 Backend만 보유한다. 입력 때 브라우저 메모리에서 백엔드로 전달하고 저장/조회 시 원문을 반환하지 않는다. 제품 계정·로그인·사용자별 설정은 없다.
+V1은 단일 회사용 모바일 웹이다. 연결 정보가 없을 때도 Frontend와 설정 API는 열리며 문서 연결 화면을 제공한다. 회의 업무는 문서 연결과 기본 Page 초기화가 READY가 된 뒤에만 허용한다. 첫 Bootstrap 완료 뒤에는 New Meeting으로, 이후 방문은 Home으로 이동한다. 브라우저는 녹음 권한 획득, MediaRecorder 운용, chunk 임시 보관/Backend 전송, Speaker 매핑 UI를 담당한다. Backend는 설정 상태, 세션, Audio 수신·조립, 전사·화자 분리, 매핑 이후 Minutes 생성, 문서 저장과 Gmail 자동 발송을 담당한다. 저장된 Provider Secret은 Backend만 보유한다. 제품 계정·로그인·사용자별 설정은 없다.
 
 ## 런타임 및 배포 단위
 
@@ -40,11 +40,11 @@ V1은 단일 회사용 모바일 웹이다. 브라우저는 녹음 권한 획득
 | Backend | Java 25, Spring Boot 4.1.x, Gradle 9.x (9.1+) | REST API, workflow orchestration, Provider Adapter |
 | Frontend 배포 | Vercel | 정적 웹 자산 제공 |
 | Backend 배포 | Render | Spring Boot 프로세스와 작업 실행 |
-| 임시 Audio 저장 | 비공개 객체 저장소 | Chunk 및 assembled Audio의 실패 복구용 임시 보존, expiry cleanup |
-| 전역 연결 설정 | 단일 Backend 영속 디렉터리 / Render Persistent Disk | 암호화한 연결 설정·초기화/이전 journal, 재시작 복원 |
+| 임시 Audio 저장 | Backend 임시 파일시스템 | 업로드 chunk와 조립 파일을 처리 중 보관하고 이후 정리 |
+| 전역 연결 설정 | Backend 설정 저장소 | 암호화한 연결 설정 및 초기화/이전 journal |
 | 외부 영속 저장 | Notion 또는 Confluence | Participant와 완료된 회의 문서의 Source of Truth |
 
-Frontend와 Backend는 독립 build/deploy한다. Node.js는 Frontend toolchain이며 업무 API 서버가 아니다. 데이터베이스, JPA, Redis, queue, message broker, batch는 도입하지 않는다.
+Frontend와 Backend는 독립 build/deploy한다. Node.js는 Frontend toolchain으로 사용하며 오디오 조각 수신·검증·조립과 업무 API는 Spring Boot가 담당한다. Vercel은 Frontend를 제공하고 오디오 저장소 API는 제공하지 않는다. 임시 파일의 영속성 및 재시작 복구는 호스팅 결정에 따른다. 데이터베이스, JPA, Redis, queue, message broker, batch는 현재 기준으로 도입하지 않는다. 배포 환경 변수와 확인 순서는 [운영 테스트 설정 기준](../setup/production-test.md)에 둔다.
 
 ## Backend 구성과 의존성 방향
 
@@ -81,38 +81,49 @@ configuration/
 | Transcription Port | Audio → 표준 Transcript/Speaker 결과 | 실제 Participant 식별 |
 | Minutes Port | Transcript, mapping, template 입력 → 구조화 Minutes | 근거 없는 사실/담당자 추론 허용 |
 | Document Port | Participant와 Meeting 읽기/쓰기 | 앱 전용 DB 역할 |
+| Bootstrap Service | Home·Meetings·Participants·Templates·Speaker Memory 기본 Page 생성/검증 | 일반 조회 중 묵시적 페이지 생성 |
+| Speaker Memory | 사용자 확인 매핑 저장 및 이후 매핑 UI의 후보 제공 | voiceprint/자동 실명 화자 인식 |
 | Delivery Ports | Email 및 Notification 개별 전송 결과 | 채널 간 결과를 하나로 합치기 |
 
 ## 주요 흐름
 
-### 회의 생성부터 검토까지
+### 최초 진입 및 기본 구조 준비
 
-1. Frontend가 Participant roster와 Template을 조회하고 Session을 생성한다.
+1. Frontend가 App Config를 읽고 `UNCONFIGURED`/미초기화면 문서 연결 위저드로 보낸다. Storage error와 기존 Provider 일시 장애는 최초 설정 상태와 구별한다.
+2. 사용자가 Notion 또는 Confluence 자격 증명과 부모 위치를 입력하고 읽기 전용 테스트를 실행한다.
+3. 사용자가 기본 구조 생성을 실행하면 Backend가 `Home`, `Meetings`, `Participants`, `Templates`, `Speaker Memory`를 생성/재사용하고 read-back 검증한다.
+4. Bootstrap과 active 설정이 완료되어 `READY`가 된 뒤 첫 방문은 New Meeting으로 이동한다. 이후 방문은 새 미팅과 이력 목록이 있는 Home으로 이동한다.
+
+### 회의 생성부터 자동 전달까지
+
+1. Frontend가 Document Provider의 Participants roster, 활성 Template을 조회하고 Session을 생성한다.
 2. Backend는 `CREATED` Session을 메모리에 만들고 upload policy를 반환한다.
 3. Browser는 녹음 데이터를 순서 번호가 있는 chunk로 임시 저장하고 업로드한다. ACK 받은 chunk만 로컬 재전송 대기열에서 제거한다.
 4. 종료 시 Frontend는 expected chunk 수와 녹음 정보를 보내 processing을 시작한다.
 5. Backend는 누락 sequence 확인 후 Audio를 조립하고 STT/diarization을 호출한다.
 6. 변환 실패면 서버는 실패 stage/retryability와 Audio 만료 시각을 저장한다. Chunk와 assembled Audio는 비공개 객체 저장소에 마지막 실패 기준 최대 24시간 보관한다. 사용자가 명시적으로 재시도하면 실패 stage부터 재개한다. 만료 전 사용자는 기존 V1 배포 접근 정책으로 보호되는 Backend API에서 원본 Audio를 내려받고 실패 종료를 선택할 수 있다. 사용자 계정 인증은 현재 API 계약에 포함하지 않는다.
-7. Provider 결과를 표준 Transcript와 internal `speakerId`로 변환한다. Transcript 원문은 `speakerId`를 계속 보존한다.
-8. Minutes Provider에 Transcript, Speaker mapping, 선택 Template을 전달하고 구조화 결과를 Session에 둔다.
-9. Frontend는 상태 polling으로 검토 데이터를 받고 Speaker 단위 mapping 및 Minutes 편집을 수행한다.
+7. Provider 결과를 표준 Transcript와 회의 범위의 internal `speakerId`로 변환한다. Transcript 원문은 `speakerId`를 보존한다.
+8. 사용자는 감지된 모든 Speaker를 현재 Session 참가자에 매핑한다. 저장된 Speaker Memory는 후보를 제공하지만 사용자가 회의별로 확인한다. Backend는 확인된 mapping을 Speaker Memory에 기록한다.
+9. Backend는 Transcript, 확정 mapping, 활성 Provider Template으로 Minutes를 생성한다. 미매핑 Speaker가 남으면 이 단계는 시작하지 않는다.
+10. Minutes 생성이 정상 종료되면 Backend는 `Meetings`에 문서를 멱등 저장한다. 저장 성공 후 mapping된 고유 참가자 이메일별로 Gmail 발송을 자동 시작한다.
+11. Frontend는 생성·저장·발송 상태와 recipient별 결과를 보여준다. 사용자 Publish/Send 조작은 정상 경로에 필요하지 않다.
 
 ### Template 재생성
 
-재생성은 기존 Transcript와 현재 Speaker mapping 및 선택 Template만 입력으로 사용한다. Audio assembly, STT, diarization은 실행하지 않는다. 생성 요청은 기존 사용자 편집 내용을 덮어쓸 수 있으므로 UI가 확인을 받은 뒤 API를 호출한다.
+회의록 생성 입력은 기존 Transcript, 확인된 Speaker mapping, 활성 Template이다. Audio assembly/STT/diarization은 Speaker mapping 이후 실행하는 Minutes 생성 단계에서 다시 호출하지 않는다. V1 핵심 흐름은 생성 후 자동 저장/발송이며 별도 사용자 Publish 버튼을 기다리지 않는다. 수동 수정·Template 재생성은 자동 발송과의 순서가 명확해질 때까지 핵심 흐름에 넣지 않는다.
 
 ### 저장 및 전달
 
-1. Review Confirm은 모든 감지 Speaker mapping과 Minutes 구조를 검증하고 Session을 `CONFIRMED`로 전이한다.
-2. Publish는 먼저 Document를 생성하거나 같은 Session ID의 기존 문서를 찾아 재사용한다.
-3. Document 저장 성공 뒤 Email 수신자별 delivery와 선택적 Slack notification을 실행한다. 두 채널 결과는 서로 독립적이다.
-4. 완료 상태와 실패한 개별 delivery를 기록한다. 재시도는 실패한 단계만 수행한다.
+1. 모든 감지 Speaker mapping과 회의 참가자 roster 참조를 검증한다.
+2. Minutes 생성 성공 뒤 Document를 생성하거나 같은 Session ID의 기존 문서를 재사용한다.
+3. Document 저장 성공 뒤 recipient별 Gmail delivery를 자동 실행한다. 동일 email 주소는 1회만 보낸다.
+4. 수신자별 결과를 기록하고 UI에 표시한다. 안전한 실패만 delivery 단위로 재시도한다.
 5. 업로드 chunk와 처리 중 생성된 assembled Audio에는 write 시점부터 24시간의 durable 임시 만료를 설정해 abandoned upload와 재시작 잔여 객체를 정리한다. 성공 시 Audio 객체는 Review 진입 때 삭제한다. 처리 실패 시 필요한 chunks/Audio 객체를 마지막 실패 뒤 최대 24시간 보존하고, 메모리에 있는 `PROCESSING` Session의 입력은 만료 sweep이 삭제하지 않는다. 명시 retry가 다시 실패하면 만료를 갱신한다. 명시적 실패 종료 또는 만료 후 객체를 삭제한다. 만료 시 Session이 메모리에 있으면 `DISCARDED` 실패 문서로 마무리하지만, Backend 재시작 뒤 Session이 없는 경우에는 객체만 삭제한다. Transcript/Minutes 본문은 일반 로그나 Admin Slack으로 내보내지 않는다.
-6. 변환 실패 종료 시 회의 메타데이터와 실패 요약만 Meeting 문서에 기록한다. Email/Slack을 참석자에게 전달하지 않는다. 정상 변환 회의는 기존 Confirm/Publish 흐름을 따른다.
+6. 처리 실패 시 정상 회의록 자동 이메일은 만들지 않는다. 실패 기록 저장 정책은 기존 실패 lifecycle을 따른다.
 
 ## 세션 상태 및 동시성
 
-Backend는 녹음 중 상태를 별도 API로 저장하지 않는다. 첫 Chunk가 durable하게 저장되면 `CREATED → UPLOADING`으로 전이한다. 이후 허용 상태는 `UPLOADING → PROCESSING → REVIEW → CONFIRMED → PUBLISHING → DOCUMENT_SAVED → DELIVERING → COMPLETED | COMPLETED_WITH_WARNINGS`다. `RECORDING`은 Frontend의 로컬 녹음 상태다. 실패 상태는 `PROCESSING_FAILED`, `DOCUMENT_FAILED`이며 해당 단계 재시도로 진행 상태로 돌아간다.
+Backend는 녹음 중 상태를 별도 API로 저장하지 않는다. 첫 Chunk가 Backend 임시 저장소에 게시되면 `CREATED → UPLOADING`으로 전이한다. 새 핵심 흐름은 `UPLOADING → TRANSCRIPTION → AWAITING_SPEAKER_MAPPING → MINUTES_GENERATION → DOCUMENT_SAVING → EMAIL_DELIVERY → COMPLETED | COMPLETED_WITH_WARNINGS`다. `RECORDING`은 Frontend의 로컬 녹음 상태다. 실패 상태는 `PROCESSING_FAILED`, `DOCUMENT_FAILED`, `EMAIL_FAILED`이며 각 단계에서 재개할 때 성공한 recipient에 중복 발송하지 않는다. 기존 REVIEW/CONFIRMED/PUBLISH 설계는 새 흐름에 대한 후속 정리 대상이며 새 구현 기준으로 사용하지 않는다.
 
 - 상태 변경은 유스케이스 경계에서만 수행한다.
 - 클라이언트가 전달한 `If-Match` Session version이 현재 값과 다르면 변경을 거절한다.
@@ -153,4 +164,4 @@ GlobalSettingsUseCase는 전역 설정/검증을, DocumentBootstrapUseCase는 �
 
 GlobalSettingsStore와 MigrationJournal은 단일 암호화 snapshot/원자 교체를 공유한다. 프로세스 전역 lock으로 Session 생성, roster 쓰기, 전환의 경쟁을 보호한다. source와 candidate Adapter를 동시에 생성할 수 있지만 active 전환은 검증 후 한 번만 수행한다. queue/batch/DB 없이 기존 Backend 작업 실행기를 사용하고 restart 후 외부 쓰기는 사용자 재개 때만 이어간다.
 
-Render Persistent Disk 사용은 단일 인스턴스·재배포 중단을 전제로 한다. 임시 파일시스템을 영속 저장으로 사용하지 않는다. 계정 없이 신뢰된 사내 배포 접근 정책을 적용한다. 상세 상태와 API/복사 불변식은 [문서 연결·이전 설계](./document-setup.md)를 따른다.
+현재 문서 설정 저장은 영속 디렉터리를 요구하지만 Render Free에는 Persistent Disk가 없다. 배포 환경의 영속 저장 방식은 미결이며 [Backend 소유 Audio 설계](../superpowers/specs/2026-10-16-backend-owned-audio-design.md)에서 검토한다. 임시 Audio 디렉터리를 영속 저장소로 간주하지 않는다. 계정 없이 신뢰된 사내 배포 접근 정책을 적용한다. 상세 상태와 API/복사 불변식은 [문서 연결·이전 설계](./document-setup.md)를 따른다.
