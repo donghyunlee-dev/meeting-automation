@@ -372,12 +372,12 @@ button:disabled { cursor: not-allowed; opacity: .6; }
 .recording-unavailable p { margin: 0 0 6px; color: #697586; line-height: 1.6; }
 .recording-page { display: flex; min-height: calc(100dvh - 68px - env(safe-area-inset-bottom)); flex-direction: column; justify-content: space-between; gap: 36px; width: min(100%, 640px); min-width: 0; margin: 0 auto; padding: 28px 24px max(32px, env(safe-area-inset-bottom)); overflow-wrap: anywhere; }
 .recording-page--recording, .recording-page--paused { min-height: 100dvh; justify-content: center; gap: clamp(40px, 12vh, 110px); padding-bottom: max(48px, env(safe-area-inset-bottom)); }
+.app-shell:has(.recording-page--recording), .app-shell:has(.recording-page--paused) { padding-bottom: 0; }
 .recording-heading { min-width: 0; }
 .recording-eyebrow { margin: 0 0 8px; color: #8390a2; font-size: 11px; font-weight: 700; letter-spacing: .1em; }
-.recording-heading h1 { margin: 0; color: #182230; font-size: clamp(25px, 6vw, 36px); letter-spacing: -.04em; overflow-wrap: anywhere; }
-.recording-session-id { margin: 9px 0 0; color: #697586; font-size: 12px; overflow-wrap: anywhere; }
-.recording-session-id span { font-variant-numeric: tabular-nums; }
-.recording-content { display: grid; justify-items: center; gap: 18px; min-width: 0; text-align: center; }
+.recording-heading h1 { display: flex; align-items: center; gap: 11px; margin: 0; color: #182230; font-size: clamp(25px, 6vw, 36px); letter-spacing: -.04em; overflow-wrap: anywhere; }
+.recording-title-icon { width: 30px; height: 30px; flex: 0 0 30px; fill: none; stroke: #5267d9; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.recording-content { display: grid; flex: 1; align-content: center; justify-items: center; gap: 18px; min-width: 0; text-align: center; }
 .recording-upload { display: grid; gap: 8px; width: min(100%, 420px); padding: 14px 16px; border: 1px solid #d0d5dd; border-radius: 12px; background: #fff; text-align: left; }
 .recording-end-state { display: grid; gap: 8px; width: min(100%, 420px); padding: 14px 16px; border: 1px solid #d0d5dd; border-radius: 12px; background: #fff; text-align: left; }
 .recording-end-state p { margin: 0; color: #596578; font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
@@ -396,6 +396,7 @@ button:disabled { cursor: not-allowed; opacity: .6; }
 .recording-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; width: 100%; }
 .recording-actions .button { min-width: min(160px, 100%); min-height: 48px; }
 .recording-actions .recording-primary-action { min-width: min(210px, 100%); }
+.recording-actions .recording-start-action { width: 100%; }
 .button-danger { color: #fff; background: #b93838; box-shadow: 0 2px 5px #b9383826; }
 .button-danger:hover { background: #a22f2f; }
 .recording-dialog-backdrop { position: fixed; z-index: 20; inset: 0; display: flex; align-items: flex-end; justify-content: center; padding: 0; background: #18223070; }

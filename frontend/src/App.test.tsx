@@ -754,7 +754,7 @@ describe('Recording route', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it('shows the created meeting title, session id, ready status, timer, and start action', async () => {
+  it('shows the created meeting title, ready status, timer, and start action without a technical session ID', async () => {
     const track = { stop: vi.fn() };
     const mediaAdapter: MediaRecorderAdapter = {
       isMediaRecorderSupported: () => true,
@@ -805,7 +805,7 @@ describe('Recording route', () => {
     fireEvent.click(screen.getByRole('button', { name: '회의 시작' }));
 
     expect(await screen.findByRole('heading', { name: 'Planning' })).toBeTruthy();
-    expect(screen.getByText('session-ready')).toBeTruthy();
+    expect(screen.queryByText('session-ready')).toBeNull();
     expect(screen.getByText('준비됨')).toBeTruthy();
     expect(screen.getByText('00:00:00')).toBeTruthy();
     expect(screen.getByRole('button', { name: '녹음 시작' })).toBeTruthy();

@@ -26,10 +26,19 @@ describe('RecordingPage', () => {
   ] as const)('renders %s title, status, elapsed time, and primary action', (state, elapsedMs, status, primaryAction) => {
     renderRecording(state, elapsedMs);
     expect(screen.getByRole('heading', { name: 'Planning' })).toBeTruthy();
-    expect(screen.getByText('세션 ID:').textContent).toContain('session-123');
+    expect(screen.queryByText(/세션 ID/)).toBeNull();
     expect(screen.getByRole('status').textContent).toContain(status);
     expect(screen.getByLabelText('경과 시간').textContent).toBe(state === 'Ready' ? '00:00:00' : '00:01:02');
     expect(screen.getByRole('button', { name: primaryAction })).toBeTruthy();
+  });
+
+  it('shows the meeting title with its heading icon and hides the technical session ID', () => {
+    renderRecording('Ready');
+
+    const title = screen.getByRole('heading', { name: 'Planning' });
+    expect(title.querySelector('.recording-title-icon')).toBeTruthy();
+    expect(screen.queryByText(/세션 ID/)).toBeNull();
+    expect(screen.getByRole('button', { name: '녹음 시작' }).className).toContain('recording-start-action');
   });
 
   it('formats durations as padded HH:mm:ss, including hours and fractional seconds', () => {

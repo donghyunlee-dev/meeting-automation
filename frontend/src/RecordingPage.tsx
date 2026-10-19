@@ -38,7 +38,7 @@ const statusByState: Record<RecordingViewState, string> = {
   Paused: '일시정지됨',
 };
 
-export function RecordingPage({ sessionId, title, state, elapsedMs, errorMessage, completed = false, endFlowFailed = false, uploadSnapshot, endSnapshot, onRetryUpload, onRetryProcessing, onStart, onPause, onResume, onRequestEnd, onConfirmEnd, onCancelEnd }: RecordingPageProps) {
+export function RecordingPage({ title, state, elapsedMs, errorMessage, completed = false, endFlowFailed = false, uploadSnapshot, endSnapshot, onRetryUpload, onRetryProcessing, onStart, onPause, onResume, onRequestEnd, onConfirmEnd, onCancelEnd }: RecordingPageProps) {
   const [isConfirmOpen, setConfirmOpen] = useState(false);
   const endTrigger = useRef<HTMLButtonElement>(null);
   const cancelButton = useRef<HTMLButtonElement>(null);
@@ -95,8 +95,13 @@ export function RecordingPage({ sessionId, title, state, elapsedMs, errorMessage
     <main className={`recording-page recording-page--${state.toLowerCase()}`}>
       <header className="recording-heading">
         <p className="recording-eyebrow">회의 녹음</p>
-        <h1>{title}</h1>
-        <p className="recording-session-id">세션 ID: <span>{sessionId}</span></p>
+        <h1>
+          <svg className="recording-title-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <rect x="9" y="3" width="6" height="12" rx="3" />
+            <path d="M5.5 11v1a6.5 6.5 0 0 0 13 0v-1M12 18.5V22m-4 0h8" />
+          </svg>
+          {title}
+        </h1>
       </header>
 
       <section className="recording-content" aria-label="녹음 상태">
@@ -124,7 +129,7 @@ export function RecordingPage({ sessionId, title, state, elapsedMs, errorMessage
           {uploadSnapshot.status === 'retryable' && onRetryUpload && <button className="button button-secondary" type="button" onClick={onRetryUpload}>업로드 재시도</button>}
         </div>}
         <div className="recording-actions">
-          {state === 'Ready' && !completed && !endFlowFailed && <button className="button button-primary recording-primary-action" type="button" onClick={onStart}>녹음 시작</button>}
+          {state === 'Ready' && !completed && !endFlowFailed && <button className="button button-primary recording-primary-action recording-start-action" type="button" onClick={onStart}>녹음 시작</button>}
           {state === 'Ready' && endFlowFailed && <Link className="button button-primary recording-primary-action" to="/meetings/new">새 회의 시작</Link>}
           {state === 'Recording' && <>
             <button className="button button-secondary" type="button" onClick={onPause}>일시정지</button>
