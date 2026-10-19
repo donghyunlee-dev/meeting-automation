@@ -486,7 +486,7 @@ public final class MeetingSessionStore {
         MeetingSession.Meeting updatedMeeting = new MeetingSession.Meeting(
                 current.meeting().title(), templateId, templateVersion,
                 current.meeting().participantIds(), current.meeting().timezone(),
-                current.meeting().participantReferences());
+                current.meeting().participantReferences(), current.meeting().meetingDate());
         MeetingSession updated = new MeetingSession(current.sessionId(), Math.addExact(current.version(), 1),
                 "REVIEW", current.documentConnectionVersion(), updatedMeeting, "DRAFT_READY", 100,
                 current.speakers(), current.transcript(), null, replacementMinutes, current.createdAt());

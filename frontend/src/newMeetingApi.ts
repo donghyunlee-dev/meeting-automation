@@ -1,3 +1,4 @@
+import { getApiBaseUrl } from './apiBase';
 import type { Participant } from './participantsApi';
 
 export type MeetingTemplate = { id: string; name: string; version: string };
@@ -10,6 +11,7 @@ export type DocumentAppConfig = {
 };
 export type MeetingSessionAttempt = {
   title: string;
+  meetingDate: string;
   templateId: string;
   participantIds: readonly string[];
   timezone: string;
@@ -41,6 +43,7 @@ export async function createMeetingSession(attempt: MeetingSessionAttempt): Prom
       headers: { Accept: 'application/json', 'Content-Type': 'application/json', 'Idempotency-Key': attempt.idempotencyKey },
       body: JSON.stringify({
         title: attempt.title,
+        meetingDate: attempt.meetingDate,
         templateId: attempt.templateId,
         participantIds: [...attempt.participantIds],
         timezone: attempt.timezone,
@@ -60,7 +63,7 @@ export async function createMeetingSession(attempt: MeetingSessionAttempt): Prom
 }
 
 function baseUrl(): string {
-  return (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080').replace(/\/$/, '');
+  return getApiBaseUrl();
 }
 
 async function get<T>(path: string): Promise<T> {

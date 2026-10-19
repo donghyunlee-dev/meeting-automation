@@ -16,6 +16,7 @@ import {
 
 export type NewMeetingPayload = {
   title: string;
+  meetingDate: string;
   templateId: string;
   participantIds: string[];
   timezone: string;
@@ -28,18 +29,24 @@ type Resource<T> =
   | { status: 'error'; data?: T };
 
 const QUERY_MESSAGES = {
-  config: '회사 시간대를 불러오지 못했습니다. 다시 시도해 주세요.',
+  config: '연결 정보를 불러오지 못했습니다. 다시 시도해 주세요.',
   templates: 'Template 목록을 불러오지 못했습니다. 다시 시도해 주세요.',
   participants: '참석자 목록을 불러오지 못했습니다. 다시 시도해 주세요.',
 };
 const SAFE_QUERY_ERROR = normalizeApiError({ error: { code: 'REQUEST_FAILED' } });
+
+function localDateString(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+}
 
 export function NewMeetingPage({ onSubmit }: { onSubmit: (attempt: MeetingSessionAttempt) => void | Promise<void> }) {
   const [config, setConfig] = useState<Resource<DocumentAppConfig>>({ status: 'loading' });
   const [templates, setTemplates] = useState<Resource<MeetingTemplate[]>>({ status: 'loading' });
   const [participants, setParticipants] = useState<Resource<Participant[]>>({ status: 'loading' });
   const [title, setTitle] = useState('');
-  const [templateId, setTemplateId] = useState('');
+  const [meetingDate, setMeetingDate] = useState(localDateString());
+  const [templateId, setTemplateId] = useState('default.md');
   const [participantIds, setParticipantIds] = useState<string[]>([]);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -63,14 +70,17 @@ export function NewMeetingPage({ onSubmit }: { onSubmit: (attempt: MeetingSessio
     try {
       const items = await listMeetingTemplates();
       setTemplates({ status: 'ready', data: items });
-      setTemplateId((current) => current || (items.some((item) => item.id === 'default.md') ? 'default.md' : ''));
+      setTemplateId((current) => items.some((item) => item.id === current) ? current : items.find((item) => item.id === 'default.md')?.id ?? items[0]?.id ?? '');
     } catch {
       setTemplates((current) => ({ status: 'error', data: current.data }));
     }
   }, []);
 
   const loadParticipants = useCallback(async (clearSelection = false) => {
-    if (clearSelection) setParticipantIds([]);
+    if (clearSelection) {
+      setParticipantIds([]);
+      setPickerOpen(false);
+    }
     setParticipants((current) => clearSelection ? { status: 'loading' } : { status: 'loading', data: current.data });
     try {
       const items = await listMeetingParticipants();
@@ -91,7 +101,7 @@ export function NewMeetingPage({ onSubmit }: { onSubmit: (attempt: MeetingSessio
     void listMeetingTemplates().then((items) => {
       if (!active) return;
       setTemplates({ status: 'ready', data: items });
-      setTemplateId((current) => current || (items.some((item) => item.id === 'default.md') ? 'default.md' : ''));
+      setTemplateId((current) => items.some((item) => item.id === current) ? current : items.find((item) => item.id === 'default.md')?.id ?? items[0]?.id ?? '');
     }).catch(() => {
       if (active) setTemplates({ status: 'error' });
     });
@@ -127,12 +137,13 @@ export function NewMeetingPage({ onSubmit }: { onSubmit: (attempt: MeetingSessio
     if (anyLoading || unavailable) return;
     const trimmedTitle = title.trim();
     const currentConfig = config.data;
-    if (!trimmedTitle || !templateId || participantIds.length === 0 || !currentConfig?.company.timezone
+    if (!trimmedTitle || !meetingDate || !templateId || participantIds.length === 0 || !currentConfig?.company.timezone
       || currentConfig.setup?.status !== 'READY' || currentConfig.setup.canCreateMeeting !== true
       || !currentConfig.document || currentConfig.document.connectionVersion < 1) return;
 
     const formSnapshot = {
       title: trimmedTitle,
+      meetingDate,
       templateId,
       participantIds: Object.freeze([...participantIds]),
       timezone: currentConfig.company.timezone,
@@ -190,15 +201,20 @@ export function NewMeetingPage({ onSubmit }: { onSubmit: (attempt: MeetingSessio
   }
 
   const titleError = submitted && !title.trim();
+  const meetingDateError = submitted && !meetingDate;
   const templateError = submitted && !templateId;
   const participantError = submitted && participantIds.length === 0;
 
   return (
     <main className="new-meeting-page">
       <header className="new-meeting-heading">
-        <p className="eyebrow">NEW MEETING</p>
-        <h1>새 회의</h1>
-        <p>회의 정보를 입력하고 참석자를 선택해 주세요.</p>
+        <h1>
+          <svg className="new-meeting-title-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <rect x="3.5" y="5" width="17" height="16" rx="3" />
+            <path d="M8 3v4M16 3v4M3.5 10h17M12 13v5M9.5 15.5h5" />
+          </svg>
+          새 회의
+        </h1>
       </header>
 
       <form className="new-meeting-form" onSubmit={handleSubmit} noValidate>
@@ -208,32 +224,40 @@ export function NewMeetingPage({ onSubmit }: { onSubmit: (attempt: MeetingSessio
           {titleError && <p className="meeting-field-error" id="meeting-title-error">회의 제목을 입력해 주세요.</p>}
         </div>
 
-        <section className="meeting-resource" aria-labelledby="timezone-label">
-          <h2 id="timezone-label">회사 시간대</h2>
-          {config.status === 'loading' && !config.data && <AsyncState state={{ status: 'loading', label: '회사 시간대를 불러오는 중…' }} renderReady={() => null} />}
+        <div className="meeting-field">
+          <label htmlFor="meeting-date">회의 날짜</label>
+          <input id="meeting-date" type="date" value={meetingDate} onChange={(event) => setMeetingDate(event.target.value)} aria-invalid={meetingDateError} aria-describedby={meetingDateError ? 'meeting-date-error' : undefined} />
+          {meetingDateError && <p className="meeting-field-error" id="meeting-date-error">회의 날짜를 선택해 주세요.</p>}
+        </div>
+
+        <section className="meeting-resource" aria-label="문서 연결 정보">
+          {config.status === 'loading' && !config.data && <AsyncState state={{ status: 'loading', label: '연결 정보를 확인하는 중…' }} renderReady={() => null} />}
           {config.status === 'error' && (config.data
-            ? <AsyncState state={{ status: 'ready', data: config.data, warning: SAFE_QUERY_ERROR, onRetry: () => void loadConfig(), retryLabel: '회사 시간대 다시 시도' }} renderReady={() => null} />
-            : <AsyncState state={{ status: 'error', title: '회사 시간대 조회에 실패했습니다.', error: SAFE_QUERY_ERROR, description: QUERY_MESSAGES.config, onRetry: () => void loadConfig(), retryLabel: '회사 시간대 다시 시도' }} renderReady={() => null} />)}
-          {config.data && <p className="meeting-timezone">{config.data.company.timezone}</p>}
-          {config.status === 'ready' && (config.data.setup?.status !== 'READY' || !config.data.setup.canCreateMeeting) && <p className="meeting-query-error" role="alert">Document connection setup or switching must finish before a meeting can start. <Link to="/setup/document">Open document settings</Link></p>}
+            ? <AsyncState state={{ status: 'ready', data: config.data, warning: SAFE_QUERY_ERROR, onRetry: () => void loadConfig(), retryLabel: '연결 정보 다시 시도' }} renderReady={() => null} />
+            : <AsyncState state={{ status: 'error', title: '연결 정보를 불러오지 못했습니다.', error: SAFE_QUERY_ERROR, description: QUERY_MESSAGES.config, onRetry: () => void loadConfig(), retryLabel: '연결 정보 다시 시도' }} renderReady={() => null} />)}
+          {config.status === 'ready' && (config.data.setup?.status !== 'READY' || !config.data.setup.canCreateMeeting) && <p className="meeting-query-error" role="alert">문서 서비스 연결 설정을 완료한 뒤 회의를 시작할 수 있습니다.</p>}
         </section>
 
         <div className="meeting-field">
-          <label htmlFor="meeting-template">Template</label>
+          <label htmlFor="meeting-template">회의록 선택</label>
           {templates.status === 'loading' && !templates.data && <AsyncState state={{ status: 'loading', label: 'Template 목록을 불러오는 중…' }} renderReady={() => null} />}
           {templates.status === 'error' && (templates.data
             ? <AsyncState state={{ status: 'ready', data: templates.data, warning: SAFE_QUERY_ERROR, onRetry: () => void loadTemplates(), retryLabel: 'Template 목록 다시 시도' }} renderReady={() => null} />
             : <AsyncState state={{ status: 'error', title: 'Template 목록 조회에 실패했습니다.', error: SAFE_QUERY_ERROR, description: QUERY_MESSAGES.templates, onRetry: () => void loadTemplates(), retryLabel: 'Template 목록 다시 시도' }} renderReady={() => null} />)}
           {templates.status === 'ready' && availableTemplates.length === 0 && <AsyncState state={{ status: 'empty', title: '사용 가능한 Template이 없습니다.', description: '나중에 다시 확인해 주세요.' }} renderReady={() => null} />}
-          <select id="meeting-template" value={templateId} onChange={(event) => setTemplateId(event.target.value)} disabled={templates.status !== 'ready' || availableTemplates.length === 0} aria-invalid={templateError} aria-describedby={templateError ? 'meeting-template-error' : undefined}>
-            <option value="">Template 선택</option>
-            {availableTemplates.map((template) => <option value={template.id} key={template.id}>{template.name}</option>)}
-          </select>
-          {templateError && <p className="meeting-field-error" id="meeting-template-error">Template을 선택해 주세요.</p>}
+          <div className="meeting-select-control">
+            <select id="meeting-template" value={templateId} onChange={(event) => setTemplateId(event.target.value)} disabled={templates.status !== 'ready' || availableTemplates.length === 0} aria-invalid={templateError} aria-describedby={templateError ? 'meeting-template-error' : undefined}>
+              {availableTemplates.map((template) => <option value={template.id} key={template.id}>{template.name}</option>)}
+            </select>
+            <svg className="meeting-dropdown-chevron" viewBox="0 0 20 20" aria-hidden="true"><path d="m5 7.5 5 5 5-5" /></svg>
+          </div>
+          {templateError && <p className="meeting-field-error" id="meeting-template-error">회의록을 선택해 주세요.</p>}
         </div>
 
         <section className="meeting-field participant-selection" aria-labelledby="participant-label">
-          <h2 id="participant-label">참석자</h2>
+          <div className="participant-heading">
+            <h2 id="participant-label">참석자</h2>
+          </div>
           {participants.status === 'loading' && !participants.data && <AsyncState state={{ status: 'loading', label: '참석자 목록을 불러오는 중…' }} renderReady={() => null} />}
           {participants.status === 'error' && (participants.data
             ? <AsyncState state={{ status: 'ready', data: participants.data, warning: SAFE_QUERY_ERROR, onRetry: () => void loadParticipants(), retryLabel: '참석자 목록 다시 시도' }} renderReady={() => null} />

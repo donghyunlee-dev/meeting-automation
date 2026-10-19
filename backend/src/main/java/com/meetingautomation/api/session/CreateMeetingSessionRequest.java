@@ -5,6 +5,7 @@ import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.Positive;
 import java.util.ArrayList;
 import java.util.List;
+import java.time.LocalDate;
 
 public record CreateMeetingSessionRequest(
         @NotBlank String title,
@@ -12,7 +13,8 @@ public record CreateMeetingSessionRequest(
         @NotEmpty List<@NotBlank String> participantIds,
         @NotBlank String timezone,
         @Positive long documentConnectionVersion,
-        @NotBlank String recoveryKey) {
+        @NotBlank String recoveryKey,
+        LocalDate meetingDate) {
     public CreateMeetingSessionRequest {
         participantIds = participantIds == null ? null : new ArrayList<>(participantIds);
     }

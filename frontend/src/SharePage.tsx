@@ -21,14 +21,6 @@ function routeState(value: unknown): RouteState {
   return typeof value === 'object' && value !== null ? value as RouteState : {};
 }
 
-function safeDocumentUrl(value: string | null | undefined): string | null {
-  if (!value) return null;
-  try {
-    const parsed = new URL(value);
-    return parsed.protocol === 'https:' || parsed.protocol === 'http:' ? parsed.href : null;
-  } catch { return null; }
-}
-
 function errorMessage(error: unknown): string {
   if (!(error instanceof PublishApiError)) return '요청을 완료하지 못했습니다. 회의 상태를 다시 확인해 주세요.';
   if (error.code === 'SESSION_VERSION_CONFLICT' || error.status === 412) return '회의가 변경되었습니다. 최신 상태를 확인한 뒤 다시 시도해 주세요.';
@@ -118,7 +110,6 @@ export function SharePage() {
   const notificationConfig = config.data?.notification;
   const notificationReady = Boolean(notificationConfig?.provider) && notificationConfig?.configured === true;
   const notificationNeedsSetup = notificationConfigKnown && !notificationReady;
-  const documentUrl = safeDocumentUrl(snapshot?.document?.documentUrl);
   const documentSaved = Boolean(snapshot?.document?.documentId);
   const retryAllowed = snapshot?.status === 'DOCUMENT_FAILED' && snapshot.allowedActions.includes('PUBLISH');
   const carriedMappingDirty = Boolean(snapshot?.status === 'REVIEW' && carriedState.speakerDrafts
@@ -315,7 +306,6 @@ export function SharePage() {
     await submitPublish(snapshot.version);
   }
 
-  const providerSettingsState = { returnTo: location.pathname, returnState: settingsState };
   const notificationSettingsState = { returnTo: location.pathname, returnState: settingsState, section: 'notification' };
   const canSubmit = providerReady && snapshot?.status === 'REVIEW' && snapshot.allowedActions.includes('CONFIRM') && !shareBlockedByDraft && !busy;
   const rosterIds = snapshot?.meeting?.participantIds ?? [];
@@ -339,7 +329,7 @@ export function SharePage() {
   }
 
   return <main className="share-page">
-    <header className="review-speaker-heading"><p className="eyebrow">SHARE</p><h1>회의록 공유</h1>
+    <header className="review-speaker-heading"><h1><svg className="workflow-heading-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" /><path d="m9 11 6-5M9 13l6 5" /></svg>회의록 공유</h1>
       <p>Review를 확인한 뒤 문서 저장과 공유를 시작합니다.</p></header>
     {config.status === 'loading' && <AsyncState state={{ status: 'loading', label: '문서 설정을 확인하고 있습니다.' }} renderReady={() => null} />}
     {config.status === 'error' && <AsyncState state={{
@@ -350,7 +340,7 @@ export function SharePage() {
     }} renderReady={() => null} />}
     {config.status === 'ready' && !providerReady && <section className="review-speaker-message" role="status">
       <h2>문서 서비스를 연결해 주세요</h2><p>문서 저장을 위해 Settings에서 사용할 서비스를 설정해야 합니다.</p>
-      <Link className="button button-primary" to="/settings" state={providerSettingsState}>문서 설정 열기</Link>
+      <p>설정에서 문서 서비스를 연결한 뒤 다시 시도해 주세요.</p>
     </section>}
     {providerReady && <section className="share-provider-card" aria-label="문서 저장 설정">
       <h2>문서 저장</h2><p>{providerLabel(config.data?.document?.provider)}</p>
@@ -398,8 +388,7 @@ export function SharePage() {
     {snapshot?.status === 'PUBLISHING' && !documentSaved && <p role="status" aria-live="polite">문서 저장 중입니다. 완료 여부를 확인하고 있습니다.</p>}
     {documentSaved && <section className="share-result-card" aria-label="문서 저장 결과">
       <h2>문서 저장 완료</h2>
-      {documentUrl ? <a href={documentUrl} target="_blank" rel="noopener noreferrer">저장된 회의록 열기<span className="visually-hidden"> (새 탭)</span></a>
-        : <p role="status">문서 저장은 완료되었습니다. 문서 링크를 확인할 수 없어 상태를 새로고침해 주세요.</p>}
+      <p>문서 저장이 완료되었습니다.</p>
       <Link className="button button-secondary" to={`/meetings/${encodeURIComponent(sessionId)}/complete`}>전체 결과와 재시도 보기</Link>
       {(snapshot?.status === 'DELIVERING' || (snapshot?.status === 'DOCUMENT_SAVED' && hasPendingEmailDeliveries(snapshot)))
         && <p role="status">선택한 공유 채널의 전달 상태를 확인하고 있습니다.</p>}

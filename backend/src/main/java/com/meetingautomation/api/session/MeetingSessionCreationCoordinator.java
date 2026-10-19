@@ -2,6 +2,7 @@ package com.meetingautomation.api.session;
 
 import com.meetingautomation.api.idempotency.IdempotencyKeyConflictException;
 import java.util.List;
+import java.time.LocalDate;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -33,7 +34,7 @@ public final class MeetingSessionCreationCoordinator {
     }
 
     public record Command(String title, String templateId, List<String> participantIds,
-            String timezone, long documentConnectionVersion, String recoveryKey) {
+            String timezone, long documentConnectionVersion, String recoveryKey, LocalDate meetingDate) {
         public Command {
             participantIds = List.copyOf(participantIds);
         }
@@ -46,7 +47,7 @@ public final class MeetingSessionCreationCoordinator {
                 "CREATED",
                 command.documentConnectionVersion(),
                 new MeetingSession.Meeting(command.title(), command.templateId(),
-                        command.participantIds(), command.timezone()));
+                        command.participantIds(), command.timezone(), command.meetingDate()));
     }
 
     private record Outcome(MeetingSession session, RuntimeException failure) { }

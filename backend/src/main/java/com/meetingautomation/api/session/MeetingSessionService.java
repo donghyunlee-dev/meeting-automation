@@ -143,7 +143,7 @@ public final class MeetingSessionService {
         if (recoveryKey == null || recoveryKey.isBlank()) throw validationFailure("recoveryKey");
         if (request.documentConnectionVersion() < 1) throw validationFailure("documentConnectionVersion");
         return new MeetingSessionCreationCoordinator.Command(title, templateId, participantIds, timezone,
-                request.documentConnectionVersion(), recoveryKey);
+                request.documentConnectionVersion(), recoveryKey, request.meetingDate());
     }
 
     private static boolean isIanaTimezone(String timezone) {

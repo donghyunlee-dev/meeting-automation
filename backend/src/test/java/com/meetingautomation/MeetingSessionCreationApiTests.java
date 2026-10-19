@@ -91,6 +91,8 @@ class MeetingSessionCreationApiTests {
         MeetingSession saved = sessionStore.find(sessionId).orElseThrow();
         org.assertj.core.api.Assertions.assertThat(saved.documentConnectionVersion()).isEqualTo(1L);
         org.assertj.core.api.Assertions.assertThat(saved.meeting().templateVersion()).isEqualTo("1.0.0");
+        org.assertj.core.api.Assertions.assertThat(saved.meeting().meetingDate()).isEqualTo(java.time.LocalDate.parse("2026-10-20"));
+        org.assertj.core.api.Assertions.assertThat(saved.meetingAt()).isEqualTo(java.time.OffsetDateTime.parse("2026-10-20T00:00+09:00"));
         org.assertj.core.api.Assertions.assertThat(saved.meeting().participantReferences())
                 .containsExactly(new MeetingSession.ParticipantReference("participant-1", "Ada Lovelace"));
         org.assertj.core.api.Assertions.assertThat(saved.toString())
@@ -189,6 +191,10 @@ class MeetingSessionCreationApiTests {
         mockMvc.perform(createRequest("conflict-key", validRequest())).andExpect(status().isCreated());
 
         mockMvc.perform(createRequest("conflict-key", validRequest().replace("Sprint Planning", "Retrospective")))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error.code").value("IDEMPOTENCY_KEY_CONFLICT"));
+
+        mockMvc.perform(createRequest("conflict-key", validRequest().replace("2026-10-20", "2026-10-21")))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.error.code").value("IDEMPOTENCY_KEY_CONFLICT"));
         mockServer.verify();
@@ -298,7 +304,7 @@ class MeetingSessionCreationApiTests {
 
     private static String validRequest() {
         return "{\"title\":\"  Sprint Planning  \",\"templateId\":\"default.md\","
-                + "\"participantIds\":[\"participant-1\"],\"timezone\":\"Asia/Seoul\",\"documentConnectionVersion\":1,"
+                + "\"meetingDate\":\"2026-10-20\",\"participantIds\":[\"participant-1\"],\"timezone\":\"Asia/Seoul\",\"documentConnectionVersion\":1,"
                 + "\"recoveryKey\":\"browser-recovery-key\"}";
     }
 

@@ -4,6 +4,9 @@ import com.meetingautomation.document.Speaker;
 import com.meetingautomation.document.StructuredMinutes;
 import com.meetingautomation.document.TranscriptSegment;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.OffsetDateTime;
+import java.time.ZoneId;
 import java.util.List;
 
 public record MeetingSession(
@@ -51,16 +54,23 @@ public record MeetingSession(
     public MeetingSession withParticipantReferences(List<ParticipantReference> references) {
         Meeting updatedMeeting = new Meeting(meeting.title(), meeting.templateId(), meeting.templateVersion(),
                 meeting.participantIds(),
-                meeting.timezone(), references);
+                meeting.timezone(), references, meeting.meetingDate());
         return new MeetingSession(sessionId, version, status, documentConnectionVersion, updatedMeeting,
                 processingStage, progressPercent, speakers, transcript, processingFailure, minutes, createdAt);
     }
 
     public MeetingSession withTemplateVersion(String templateVersion) {
         Meeting updatedMeeting = new Meeting(meeting.title(), meeting.templateId(), templateVersion,
-                meeting.participantIds(), meeting.timezone(), meeting.participantReferences());
+                meeting.participantIds(), meeting.timezone(), meeting.participantReferences(), meeting.meetingDate());
         return new MeetingSession(sessionId, version, status, documentConnectionVersion, updatedMeeting,
                 processingStage, progressPercent, speakers, transcript, processingFailure, minutes, createdAt);
+    }
+
+    public OffsetDateTime meetingAt() {
+        ZoneId zone = ZoneId.of(meeting.timezone());
+        return meeting.meetingDate() == null
+                ? createdAt.atZone(zone).toOffsetDateTime()
+                : meeting.meetingDate().atStartOfDay(zone).toOffsetDateTime();
     }
 
     @Override
@@ -73,7 +83,7 @@ public record MeetingSession(
 
     public record Meeting(String title, String templateId, String templateVersion,
             List<String> participantIds, String timezone,
-            List<ParticipantReference> participantReferences) {
+            List<ParticipantReference> participantReferences, LocalDate meetingDate) {
         public Meeting {
             participantIds = List.copyOf(participantIds);
             participantReferences = List.copyOf(participantReferences);
@@ -92,11 +102,21 @@ public record MeetingSession(
 
         public Meeting(String title, String templateId, List<String> participantIds,
                 String timezone, List<ParticipantReference> participantReferences) {
-            this(title, templateId, null, participantIds, timezone, participantReferences);
+            this(title, templateId, null, participantIds, timezone, participantReferences, null);
+        }
+
+        public Meeting(String title, String templateId, String templateVersion,
+                List<String> participantIds, String timezone, List<ParticipantReference> participantReferences) {
+            this(title, templateId, templateVersion, participantIds, timezone, participantReferences, null);
         }
 
         public Meeting(String title, String templateId, List<String> participantIds, String timezone) {
-            this(title, templateId, null, participantIds, timezone, List.of());
+            this(title, templateId, null, participantIds, timezone, List.of(), null);
+        }
+
+        public Meeting(String title, String templateId, List<String> participantIds, String timezone,
+                LocalDate meetingDate) {
+            this(title, templateId, null, participantIds, timezone, List.of(), meetingDate);
         }
 
         @Override

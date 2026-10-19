@@ -55,25 +55,29 @@ function participantSelector(isDisabled: boolean) {
 }
 
 describe('New Meeting input and selection', () => {
-  it('locks selected-item removal and participant changes during retry, preserving selection', () => {
+  it('shows selected attendees inside the combo and keeps them editable after retry', () => {
     const view = render(participantSelector(true));
-    const removeButton = screen.getByRole('button', { name: 'Ada Lovelace 선택 해제' });
     const adaCheckbox = screen.getByRole('checkbox', { name: 'Ada Lovelace ada@example.com' });
-    const pickerToggle = screen.getByRole('button', { name: '참석자 선택 닫기' });
-    expect(removeButton).toHaveProperty('disabled', true);
+    expect(adaCheckbox).toHaveProperty('checked', true);
     expect(adaCheckbox).toHaveProperty('disabled', true);
-    expect(pickerToggle).toHaveProperty('disabled', true);
+    expect(screen.queryByRole('list', { name: '선택한 참석자' })).toBeNull();
+    expect(screen.getByRole('button', { name: '참석자 선택' })).toHaveProperty('disabled', true);
 
     view.rerender(participantSelector(false));
     expect(screen.getByRole('checkbox', { name: 'Ada Lovelace ada@example.com' })).toHaveProperty('checked', true);
+    expect(screen.getByRole('checkbox', { name: 'Ada Lovelace ada@example.com' })).toHaveProperty('disabled', false);
   });
 
   it('loads the timezone, default template, and existing roster independently', async () => {
     const fetchMock = mockSuccess();
     renderPage();
 
-    expect(await screen.findByText('Asia/Seoul')).toBeTruthy();
-    expect((screen.getByLabelText('Template') as HTMLSelectElement).value).toBe('default.md');
+    await screen.findByLabelText('회의 날짜');
+    expect(screen.queryByText('Asia/Seoul')).toBeNull();
+    expect(screen.queryByText(/회사 시간대/)).toBeNull();
+    const templateSelect = screen.getByLabelText('회의록 선택') as HTMLSelectElement;
+    expect(templateSelect.value).toBe('default.md');
+    expect(within(templateSelect).queryByRole('option', { name: '회의록 선택' })).toBeNull();
     expect(screen.getByText('참석자')).toBeTruthy();
     expect(fetchMock).toHaveBeenCalledTimes(3);
     expect(fetchMock.mock.calls.every(([url]) => String(url).includes('/api/v1/'))).toBe(true);
@@ -98,15 +102,18 @@ describe('New Meeting input and selection', () => {
     expect(screen.getByRole('button', { name: '참석자 목록 다시 시도' })).toBeTruthy();
     failParticipants = false;
     fireEvent.click(screen.getByRole('button', { name: '참석자 목록 다시 시도' }));
-    await screen.findByRole('button', { name: '참석자 추가' });
-    fireEvent.click(screen.getByRole('button', { name: '참석자 추가' }));
+    await screen.findByRole('button', { name: '참석자 선택' });
+    fireEvent.click(screen.getByRole('button', { name: '참석자 선택' }));
     expect(await screen.findByText('Ada Lovelace')).toBeTruthy();
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Ada Lovelace ada@example.com' }));
+    expect(screen.getByRole('button', { name: '참석자 선택' }).textContent).toContain('1명 선택됨');
+    expect(screen.queryByRole('list', { name: '선택한 참석자' })).toBeNull();
     expect((screen.getByLabelText('회의 제목') as HTMLInputElement).value).toBe('  계획 회의  ');
     expect(fetchMock).toHaveBeenCalledTimes(4);
   });
 
   it.each([
-    { path: '/app-config', retryButton: '회사 시간대 다시 시도', readyText: 'Asia/Seoul' },
+    { path: '/app-config', retryButton: '연결 정보 다시 시도', readyText: '회의 날짜' },
     { path: '/templates', retryButton: 'Template 목록 다시 시도', readyText: '기본 회의록' },
   ])('retries $path without replacing the title draft or other query data', async ({ path, retryButton, readyText }) => {
     let shouldFail = true;
@@ -124,57 +131,59 @@ describe('New Meeting input and selection', () => {
     renderPage();
     fireEvent.change(await screen.findByLabelText('회의 제목'), { target: { value: 'Draft stays' } });
     expect((await screen.findByRole('alert')).textContent).toMatch(/다시 시도/);
-    expect(screen.getByRole('button', { name: '참석자 추가' })).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: '참석자 추가' }));
-    fireEvent.click(within(screen.getByRole('group', { name: '참석자 선택' })).getByRole('checkbox', { name: 'Ada Lovelace ada@example.com' }));
-    fireEvent.click(screen.getByRole('button', { name: '참석자 선택 닫기' }));
+    expect(screen.getByRole('button', { name: '참석자 선택' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '참석자 선택' }));
+    fireEvent.click(within(screen.getByRole('group', { name: '참석자 목록' })).getByRole('checkbox', { name: 'Ada Lovelace ada@example.com' }));
+    expect(screen.getByRole('button', { name: '참석자 선택' }).textContent).toContain('1명 선택됨');
+    expect(screen.queryByRole('list', { name: '선택한 참석자' })).toBeNull();
     shouldFail = false;
     fireEvent.click(screen.getByRole('button', { name: retryButton }));
     expect(await screen.findByText(readyText)).toBeTruthy();
     expect((screen.getByLabelText('회의 제목') as HTMLInputElement).value).toBe('Draft stays');
-    expect(within(screen.getByRole('list', { name: '선택한 참석자' })).getByText('Ada Lovelace')).toBeTruthy();
+    expect(screen.queryByRole('list', { name: '선택한 참석자' })).toBeNull();
+    expect(within(screen.getByRole('group', { name: '참석자 목록' })).getByRole('checkbox', { name: 'Ada Lovelace ada@example.com' })).toHaveProperty('checked', true);
     expect(fetchMock).toHaveBeenCalledTimes(4);
   });
 
   it('validates title, template, and at least one participant before callback', async () => {
     mockSuccess();
     const { onSubmit } = renderPage();
-    await screen.findByText('Asia/Seoul');
+    await screen.findByLabelText('회의 날짜');
     fireEvent.change(screen.getByLabelText('회의 제목'), { target: { value: '   ' } });
-    fireEvent.change(screen.getByLabelText('Template'), { target: { value: '' } });
+    fireEvent.change(screen.getByLabelText('회의록 선택'), { target: { value: '' } });
     fireEvent.click(screen.getByRole('button', { name: '회의 시작' }));
     expect(screen.getByText('회의 제목을 입력해 주세요.')).toBeTruthy();
-    expect(screen.getByText('Template을 선택해 주세요.')).toBeTruthy();
+    expect(screen.getByText('회의록을 선택해 주세요.')).toBeTruthy();
     expect(screen.getByText('참석자를 한 명 이상 추가해 주세요.')).toBeTruthy();
-    expect(screen.getByRole('button', { name: '참석자 추가' }).getAttribute('aria-describedby')).toBe('meeting-participants-error');
+    expect(screen.getByRole('button', { name: '참석자 선택' }).getAttribute('aria-describedby')).toBe('meeting-participants-error');
     expect(onSubmit).not.toHaveBeenCalled();
   });
 
-  it('adds and removes roster members then sends only the valid callback payload', async () => {
+  it('applies checkbox changes immediately and sends the selected roster', async () => {
     const fetchMock = mockSuccess();
     const { onSubmit } = renderPage();
-    await screen.findByText('Asia/Seoul');
+    await screen.findByLabelText('회의 날짜');
     fireEvent.change(screen.getByLabelText('회의 제목'), { target: { value: '  주간 계획  ' } });
-    fireEvent.click(screen.getByRole('button', { name: '참석자 추가' }));
-    const picker = screen.getByRole('group', { name: '참석자 선택' });
-    fireEvent.click(within(picker).getByRole('checkbox', { name: 'Ada Lovelace ada@example.com' }));
-    fireEvent.click(screen.getByRole('button', { name: '참석자 선택 닫기' }));
-    expect(within(screen.getByRole('list', { name: '선택한 참석자' })).getByText('Ada Lovelace')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Ada Lovelace 선택 해제' }));
-    fireEvent.click(screen.getByRole('button', { name: '참석자 추가' }));
-    const participantPicker = within(screen.getByRole('group', { name: '참석자 선택' }));
-    const adaCheckbox = participantPicker.getByRole('checkbox', { name: 'Ada Lovelace ada@example.com' });
-    const graceCheckbox = participantPicker.getByRole('checkbox', { name: 'Grace Hopper grace@example.com' });
-    fireEvent.click(graceCheckbox);
+    fireEvent.change(screen.getByLabelText('회의 날짜'), { target: { value: '2026-10-20' } });
+    fireEvent.click(screen.getByRole('button', { name: '참석자 선택' }));
+    const picker = screen.getByRole('group', { name: '참석자 목록' });
+    const adaCheckbox = within(picker).getByRole('checkbox', { name: 'Ada Lovelace ada@example.com' });
+    const graceCheckbox = within(picker).getByRole('checkbox', { name: 'Grace Hopper grace@example.com' });
     fireEvent.click(adaCheckbox);
+    expect(screen.getByRole('button', { name: '참석자 선택' }).textContent).toContain('1명 선택됨');
+    expect(screen.queryByRole('list', { name: '선택한 참석자' })).toBeNull();
     fireEvent.click(graceCheckbox);
-    fireEvent.click(graceCheckbox);
+    expect(screen.getByRole('button', { name: '참석자 선택' }).textContent).toContain('2명 선택됨');
+    fireEvent.click(adaCheckbox);
+    expect(screen.getByRole('button', { name: '참석자 선택' }).textContent).toContain('1명 선택됨');
+    fireEvent.click(adaCheckbox);
     fireEvent.click(screen.getByRole('button', { name: '회의 시작' }));
 
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
     expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
-      title: '주간 계획', templateId: 'default.md', participantIds: ['p1', 'p2'], timezone: 'Asia/Seoul',
-      documentConnectionVersion: 1, recoveryKey: expect.any(String), idempotencyKey: expect.any(String),
+      title: '주간 계획', templateId: 'default.md', participantIds: ['p2', 'p1'], timezone: 'Asia/Seoul',
+      meetingDate: '2026-10-20', documentConnectionVersion: 1,
+      recoveryKey: expect.any(String), idempotencyKey: expect.any(String),
     }));
     expect(fetchMock.mock.calls.map(([url]) => new URL(String(url)).pathname)).toEqual([
       '/api/v1/app-config', '/api/v1/templates', '/api/v1/participants',

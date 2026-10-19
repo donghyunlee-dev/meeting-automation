@@ -87,7 +87,7 @@ final class PublishJobRunner {
         NotificationDelivery outcome;
         try {
             var meeting = job.session().meeting();
-            var meetingAt = job.session().createdAt().atZone(ZoneId.of(meeting.timezone())).toOffsetDateTime();
+            var meetingAt = job.session().meetingAt();
             DeliveryResult result = notificationProvider.sendMeetingPublished(
                     new MeetingPublishedCommand(meeting.title(), meetingAt, ref.documentUrl()));
             outcome = result != null && result.status() == DeliveryResult.Status.SENT
@@ -221,7 +221,7 @@ final class PublishJobRunner {
 
     private static TransferRecord toRecord(MeetingSession session) {
         var meeting = session.meeting();
-        var meetingAt = session.createdAt().atZone(ZoneId.of(meeting.timezone())).toOffsetDateTime();
+        var meetingAt = session.meetingAt();
         List<ParticipantSummary> participants = meeting.participantReferences().stream()
                 .map(p -> new ParticipantSummary(p.id(), p.name())).toList();
         List<TransferMarker.Speaker> speakers = session.speakers().stream()

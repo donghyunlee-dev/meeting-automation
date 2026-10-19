@@ -9,7 +9,7 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 
 public record MeetingSessionStatusResponse(Data data) {
     private static final List<String> REVIEW_ACTIONS = List.of(
-            "UPDATE_SPEAKER_MAPPING", "UPDATE_MINUTES", "REGENERATE_MINUTES", "CONFIRM");
+            "UPDATE_SPEAKER_MAPPING", "UPDATE_MINUTES", "CONFIRM");
     private static final List<String> PUBLISH_ACTIONS = List.of("PUBLISH");
 
     public record Data(
@@ -111,7 +111,7 @@ public record MeetingSessionStatusResponse(Data data) {
                 : List.of();
         StructuredMinutes minutes = reviewReady ? session.minutes() : null;
         List<String> allowedActions = failed ? failureActions(failure, audioAvailable)
-                : reviewReady ? REVIEW_ACTIONS
+                : reviewReady ? reviewActions(session.minutes() != null)
                 : ("CONFIRMED".equals(session.status()) || "DOCUMENT_FAILED".equals(session.status()))
                         ? PUBLISH_ACTIONS : List.of();
         Document document = "DOCUMENT_SAVED".equals(session.status()) && publishSnapshot != null
@@ -148,6 +148,13 @@ public record MeetingSessionStatusResponse(Data data) {
         }
         if (audioAvailable) actions.add("DOWNLOAD_AUDIO");
         actions.add("FINALIZE_PROCESSING_FAILURE");
+        return List.copyOf(actions);
+    }
+
+    private static List<String> reviewActions(boolean hasMinutes) {
+        if (!hasMinutes) return REVIEW_ACTIONS;
+        var actions = new java.util.ArrayList<>(REVIEW_ACTIONS);
+        actions.add(2, "REGENERATE_MINUTES");
         return List.copyOf(actions);
     }
 }

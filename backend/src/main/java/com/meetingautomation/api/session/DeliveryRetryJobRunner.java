@@ -15,7 +15,6 @@ import com.meetingautomation.notification.MeetingPublishedCommand;
 import com.meetingautomation.notification.NotificationProvider;
 import com.meetingautomation.document.DocumentProviderResolver;
 import com.meetingautomation.document.settings.DocumentProviderFactory;
-import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -129,7 +128,7 @@ final class DeliveryRetryJobRunner {
             return;
         try {
             var meeting = session.meeting();
-            var meetingAt = session.createdAt().atZone(ZoneId.of(meeting.timezone())).toOffsetDateTime();
+            var meetingAt = session.meetingAt();
             DeliveryResult result = notificationProvider.sendMeetingPublished(
                     new MeetingPublishedCommand(meeting.title(), meetingAt, snapshot.document().documentUrl()));
             finish(session.sessionId(), deliveryId, result != null && result.status() == DeliveryResult.Status.SENT,

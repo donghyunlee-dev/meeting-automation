@@ -1,3 +1,4 @@
+import { getApiBaseUrl } from './apiBase';
 import { parseReviewSessionData, type ReviewSession } from './reviewApi';
 
 export type PublishStatus = 'REVIEW' | 'CONFIRMED' | 'PUBLISHING' | 'DOCUMENT_SAVED' | 'DELIVERING'
@@ -36,7 +37,7 @@ const STATUSES = new Set<PublishStatus>([
 ]);
 
 function baseUrl(): string {
-  return (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080').replace(/\/$/, '');
+  return getApiBaseUrl();
 }
 
 function parseData(body: unknown): Record<string, unknown> {
