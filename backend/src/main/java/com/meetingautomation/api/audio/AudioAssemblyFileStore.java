@@ -13,13 +13,16 @@ import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.time.Instant;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
 
 /** Filesystem adapter for ordered chunk access and atomically published assembled audio. */
+@Component
 public final class AudioAssemblyFileStore implements AudioAssemblyStorage {
     private static final int BUFFER_SIZE = 8192;
 
@@ -175,6 +178,79 @@ public final class AudioAssemblyFileStore implements AudioAssemblyStorage {
         } catch (IOException | SecurityException failure) {
             throw new AudioAssemblyStorageException();
         }
+    }
+
+    @Override
+    public void setSessionExpiry(String sessionId, Instant expiresAt) {
+        Path sessionDirectory = sessionDirectory(sessionId);
+        Path expiry = sessionDirectory.resolve(AudioChunkFileStore.EXPIRY_FILE);
+        Path temporary = null;
+        try {
+            if (expiresAt == null) {
+                Files.deleteIfExists(expiry);
+                return;
+            }
+            ensureRootAndSession(sessionDirectory);
+            temporary = Files.createTempFile(sessionDirectory, ".expiry-", ".tmp");
+            Files.writeString(temporary, expiresAt.toString(), StandardCharsets.UTF_8,
+                    StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE);
+            Files.move(temporary, expiry, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+            temporary = null;
+        } catch (AtomicMoveNotSupportedException unsupported) {
+            throw new AudioAssemblyStorageException();
+        } catch (IOException | SecurityException failure) {
+            throw new AudioAssemblyStorageException();
+        } finally {
+            if (temporary != null) try { Files.deleteIfExists(temporary); } catch (IOException ignored) { }
+        }
+    }
+
+    @Override
+    public void deleteAllAudio(String sessionId) {
+        Path sessionDirectory = sessionDirectory(sessionId);
+        try {
+            if (!existsOrThrowIfMissing(root)) return;
+            verifyDirectory(root);
+            if (!existsOrThrowIfMissing(sessionDirectory)) return;
+            verifyDirectory(sessionDirectory);
+            deleteTree(sessionDirectory);
+        } catch (IOException | SecurityException failure) {
+            throw new AudioAssemblyStorageException();
+        }
+    }
+
+    void deleteExpiredSessions(Instant now) {
+        if (now == null) throw new AudioAssemblyStorageException();
+        try {
+            if (!existsOrThrowIfMissing(root)) return;
+            verifyDirectory(root);
+            try (var entries = Files.newDirectoryStream(root)) {
+                for (Path sessionDirectory : entries) {
+                    if (!sessionDirectory.getFileName().toString().matches("[a-f0-9]{64}")
+                            || Files.isSymbolicLink(sessionDirectory)
+                            || !Files.isDirectory(sessionDirectory, LinkOption.NOFOLLOW_LINKS)) continue;
+                    Path expiry = sessionDirectory.resolve(AudioChunkFileStore.EXPIRY_FILE);
+                    if (!Files.isRegularFile(expiry, LinkOption.NOFOLLOW_LINKS) || Files.isSymbolicLink(expiry)) continue;
+                    Instant expiresAt = Instant.parse(Files.readString(expiry, StandardCharsets.UTF_8).trim());
+                    if (expiresAt.isAfter(now) || hasActiveWrite(sessionDirectory)) continue;
+                    deleteTree(sessionDirectory);
+                }
+            }
+        } catch (IOException | SecurityException | java.time.format.DateTimeParseException failure) {
+            throw new AudioAssemblyStorageException();
+        }
+    }
+
+    private static boolean hasActiveWrite(Path sessionDirectory) throws IOException {
+        try (var entries = Files.newDirectoryStream(sessionDirectory)) {
+            for (Path entry : entries) {
+                String name = entry.getFileName().toString();
+                if (name.startsWith(".upload-") || name.startsWith(".assembly-") || name.startsWith(".expiry-")) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     private void ensureRootAndSession(Path sessionDirectory) throws IOException {

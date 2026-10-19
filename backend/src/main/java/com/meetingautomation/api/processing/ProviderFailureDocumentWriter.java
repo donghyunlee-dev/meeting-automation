@@ -8,7 +8,6 @@ import com.meetingautomation.document.MeetingDocumentRef;
 import com.meetingautomation.document.MeetingMetadata;
 import com.meetingautomation.document.ParticipantSummary;
 import com.meetingautomation.document.StructuredMinutes;
-import java.time.ZoneId;
 import java.util.List;
 import org.springframework.stereotype.Component;
 
@@ -27,7 +26,7 @@ public final class ProviderFailureDocumentWriter implements FailureDocumentWrite
                     .orElseThrow(FailureDocumentWriteException::new);
             MeetingDocumentRef existing = provider.findMeetingBySessionId(session.sessionId()).orElse(null);
             if (existing != null) return existing;
-            var meetingAt = session.createdAt().atZone(ZoneId.of(session.meeting().timezone())).toOffsetDateTime();
+            var meetingAt = session.meetingAt();
             List<ParticipantSummary> participants = session.meeting().participantReferences().stream()
                     .map(reference -> new ParticipantSummary(reference.id(), reference.name())).toList();
             var failure = session.processingFailure();

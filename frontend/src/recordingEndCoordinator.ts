@@ -124,13 +124,14 @@ export class RecordingEndCoordinator {
 
     const audio = await this.flushAndCheck();
     if (!audio || !audio.session) return;
-    if (audio.nextSequence < 1 || durationMs < 1) {
+    const wholeDurationMs = Math.floor(durationMs);
+    if (audio.nextSequence < 1 || !Number.isFinite(durationMs) || wholeDurationMs < 1) {
       this.publish('failed', MESSAGES.missingAudio);
       return;
     }
     const request: ProcessingStartRequest = {
       expectedChunks: audio.nextSequence,
-      durationMs,
+      durationMs: wholeDurationMs,
       mimeType: audio.session.mimeType,
     };
     const attempt = this.attempts.getOrCreate(this.options.sessionId, request, this.options.createIdempotencyKey);

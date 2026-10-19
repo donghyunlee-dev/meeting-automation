@@ -1,18 +1,16 @@
 # Vercel Blob Audio Storage and Frontend Deployment Design
 
+> **취소됨 / 이전 구현 기록.** 2026-10-16에 사용자가 Vercel Blob 및 오디오 Functions 계획을 취소하고 Backend 직접 수신 방향을 승인했다. 이 문서는 과거 설계를 추적하기 위한 기록이며 현재 기준이 아니다. 현재 설계는 [Backend 소유 Audio 설계](./2026-10-16-backend-owned-audio-design.md), 운영 검토는 [운영 테스트 설정 기준](../../setup/production-test.md)을 따른다.
+
 ## Intent and constraints
 
-The frontend will be hosted on Vercel and audio will use Vercel Blob instead of the current S3-compatible AWS adapter. Audio must remain private. The Java API remains on Render and continues to own upload validation, session state, processing, retry, and expiry decisions. Upstash remains a separate service and is not replaced or treated as audio storage.
+The frontend is hosted on Vercel and the implementation in `origin/master` uses Vercel Blob instead of the former S3-compatible AWS adapter. Audio must remain private. The Java API remains on Render and continues to own upload validation, session state, processing, retry, and expiry decisions. This change introduces no database or external queue.
 
 The current browser upload contract allows chunks up to 5 MiB. The frontend keeps failed or unacknowledged chunks in IndexedDB and resumes by asking the API which sequences it has received. Audio objects receive a renewable 24-hour lease. Processing and failure-finalization flows can extend their availability, and a scheduled cleanup deletes expired objects.
 
-## Current Vercel deployment findings
+## Deployment boundary
 
-The connected Vercel account can see the `meeting-automation` project and its domain, but the project reports no latest deployment and the deployment listing is empty. The account's Git deployment context also reports no linked projects or origin connections. This means there is no deployment to serve at the project domain and no connected Git source currently visible to the account integration.
-
-The repository is a monorepo with the Vite frontend under `frontend/`. Its production build succeeds locally. Vercel project settings should use `frontend` as the Root Directory, `npm ci` for installation, `npm run build` for build, and `dist` as output. The project uses Node.js 24. `VITE_API_BASE_URL` must point at the Render API URL; the current localhost fallback is only suitable for local development. The Render API must allow the Vercel frontend origin through CORS. Project environment-variable visibility was not available during inspection, so current values are unknown.
-
-The immediate site failure is explained by the lack of a deployment in the inspected Vercel project. Reconnecting Git or changing Vercel settings is an external project action and is not part of this code design.
+The repository is a monorepo with the Vite frontend under `frontend/`. The Vercel project uses that directory as its root, Node.js 24, `npm ci`, `npm run build`, and `dist`. `VITE_API_BASE_URL` points to the Render API; Render CORS allows the frontend origin. Current deployment observations belong in the dated [deployment audit](../../evidence/2026-10-16-deployment-audit.md), and operational settings belong in the [production test guide](../../setup/production-test.md).
 
 ## Recommended architecture
 
@@ -30,18 +28,18 @@ The server-to-server trust mechanism must be explicit and short lived. The Verce
 
 ## Storage metadata and lifecycle
 
-Vercel Blob is not an S3-compatible Java SDK, so the current Java adapter cannot be redirected by changing an endpoint. Introduce a Vercel storage control boundary implemented by the Vercel Function, while keeping `PrivateAudioStoragePort` as the Java application's provider-neutral boundary.
+Vercel Blob is not an S3-compatible Java SDK, so the former Java adapter could not be redirected by changing an endpoint. A Vercel storage control boundary is implemented by the Vercel Function, while `PrivateAudioStoragePort` remains the Java application's provider-neutral boundary.
 
 Store one private JSON manifest per session in Vercel Blob. It contains each object's opaque Blob pathname, type (`CHUNK` or `ASSEMBLED`), sequence, MIME type, byte length, SHA-256, and expiry timestamp. The manifest is authoritative for listing objects by session, finding objects, extending leases, and locating expired objects. Manifest writes use Blob conditional writes with ETags (`ifMatch`) and retry on precondition conflicts; first creation uses no-overwrite semantics. This avoids adding a database service while keeping the index durable across Render restarts.
 
 Manifest updates must be safe under retries and concurrent session operations. Upload confirmation is idempotent by session and sequence. A retry with matching size, MIME type, and digest returns the existing acknowledgement; a conflicting object is rejected. Lease extension and deletion must recheck the latest manifest revision so a stale cleanup listing cannot delete an object whose lease was renewed. Cleanup paginates all session manifests and retains the existing safeguards: do not delete while processing is active, finalize expired failures before deletion, and retry metadata or deletion failures on a later sweep.
 
-Private Blob reads by Render use a server-only `BLOB_READ_WRITE_TOKEN` (or a narrowly scoped read credential if the platform supports one). Vercel Function write/delete operations use server-side credentials only. Credentials are environment variables in the respective services and are never exposed with a `VITE_` prefix. The exact token assignment and Blob store linkage are deployment configuration tasks.
+Private Blob reads by Render go through the authenticated Vercel storage Function. `BLOB_READ_WRITE_TOKEN` is used by Vercel Functions; `RENDER_AUDIO_STORAGE_SECRET` authenticates Render's control and read requests, and `RENDER_AUDIO_GRANT_SECRET` verifies browser upload grants. The two shared secrets have matching values in Render and Vercel. None is exposed with a `VITE_` prefix. The exact values and Blob store linkage are deployment configuration tasks.
 
 ## Components and responsibility
 
 - **Frontend (`frontend/`)**: obtains an upload grant, uploads bytes directly to Blob, confirms each upload with Render, and removes the IndexedDB chunk only after Render acknowledges it.
-- **Vercel Function (`frontend/api/` or equivalent Vercel project-root API directory)**: authenticates grant exchange and exposes narrow manifest/object control operations. It never returns Blob read URLs to the browser and never proxies audio bodies.
+- **Vercel Function (`frontend/api/` or equivalent Vercel project-root API directory)**: authenticates grant exchange and exposes narrow manifest/object control operations, including private reads for Render. It never returns Blob read URLs to the browser and never proxies browser audio uploads.
 - **Render Java API (`backend/`)**: owns session authorization, validation, confirmation, processing reads, lease policy, and cleanup scheduling. It adapts the existing storage port to private Vercel Blob and its manifest control API.
 - **Private Vercel Blob**: stores chunk and assembled audio bytes. No object is publicly readable.
 - **Manifest storage**: private per-session JSON manifests in Vercel Blob, updated with conditional ETag writes. They survive Render restarts and support lookup by session and object ID; the cleanup sweep paginates manifests to find expired objects. No in-memory-only metadata or additional database service is introduced.
@@ -71,7 +69,7 @@ The deployment should be checked with a production build and a browser smoke tes
 
 ## Scope and non-goals
 
-This change replaces only the private audio object provider and its required metadata/control integration. It does not move the Java backend to Vercel, move session/job state, replace Upstash, or introduce a new recording product flow. It does not claim that the existing Vercel project has been deployed or reconnected to Git.
+This change replaces only the private audio object provider and its required metadata/control integration. It does not move the Java backend to Vercel, move session/job state, or introduce a new recording product flow.
 
 ## Acceptance criteria
 
@@ -85,8 +83,8 @@ This change replaces only the private audio object provider and its required met
 
 ## Verification approach
 
-Run the frontend unit tests and production build, backend unit/integration tests for storage and upload confirmation, and focused tests for grant validation, manifest concurrency/idempotency, private reads, and expiry cleanup. Use a non-production Vercel Blob store for an end-to-end test. Inspect built frontend assets to ensure server-only tokens are absent. Verify deployment separately in the Vercel project because the current inspected project has no deployments.
+Run the frontend unit tests and production build, backend unit/integration tests for storage and upload confirmation, and focused tests for grant validation, manifest concurrency/idempotency, private reads, and expiry cleanup. Use a non-production Vercel Blob store for an end-to-end test. Inspect built frontend assets to ensure server-only tokens are absent. Verify the deployed versions of both services separately.
 
 ## Implementation configuration
 
-Create a private Blob store linked to the Vercel project so Vercel supplies `BLOB_READ_WRITE_TOKEN` to its Functions. Configure the same token as a secret in the Render service for private reads and service-side object operations. The Vercel Function authenticates Render control requests with a separate shared secret. Both secrets must be created through their respective hosting dashboards or authenticated CLIs and must never enter source control or browser bundles.
+Create a private Blob store linked to the Vercel project so Vercel supplies `BLOB_READ_WRITE_TOKEN` to its Functions. Configure `RENDER_AUDIO_STORAGE_SECRET` and `RENDER_AUDIO_GRANT_SECRET` as matching secrets in Render and Vercel. Render uses the authenticated Vercel Function for private reads and control operations. These secrets must never enter source control or browser bundles.

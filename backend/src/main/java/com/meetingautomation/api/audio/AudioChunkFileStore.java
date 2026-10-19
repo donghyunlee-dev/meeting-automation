@@ -15,6 +15,8 @@ import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.time.Clock;
+import java.time.Duration;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.TreeMap;
@@ -29,17 +31,25 @@ import org.springframework.stereotype.Component;
 @Component
 public final class AudioChunkFileStore {
     private static final int BUFFER_SIZE = 8192;
+    private static final Duration ABANDONED_UPLOAD_RETENTION = Duration.ofHours(24);
+    static final String EXPIRY_FILE = ".expires-at";
 
     private final Path root;
+    private final Clock clock;
     private final ConcurrentMap<ChunkKey, LockEntry> activeLocks = new ConcurrentHashMap<>();
 
     @Autowired
     AudioChunkFileStore(@Value("${TEMP_AUDIO_DIR:${java.io.tmpdir}/meeting-automation-audio}") String directory) {
-        this(configuredRoot(directory));
+        this(configuredRoot(directory), Clock.systemUTC());
     }
 
     AudioChunkFileStore(Path directory) {
+        this(directory, Clock.systemUTC());
+    }
+
+    AudioChunkFileStore(Path directory, Clock clock) {
         this.root = directory.toAbsolutePath().normalize();
+        this.clock = java.util.Objects.requireNonNull(clock);
     }
 
     void store(String sessionId, int sequence, String mimeType, long declaredLength,
@@ -64,7 +74,10 @@ public final class AudioChunkFileStore {
                     expectedSha256, maxChunkBytes, body);
 
             if (Files.exists(completedDirectory, LinkOption.NOFOLLOW_LINKS)) {
-                if (sameChunk(completedDirectory, incoming)) return;
+                if (sameChunk(completedDirectory, incoming)) {
+                    writeExpiry(sessionDirectory, clock.instant().plus(ABANDONED_UPLOAD_RETENTION));
+                    return;
+                }
                 throw new AudioChunkConflictException();
             }
 
@@ -74,6 +87,7 @@ public final class AudioChunkFileStore {
             } catch (AtomicMoveNotSupportedException unsupported) {
                 throw new IOException("Atomic publication is not supported.");
             }
+            writeExpiry(sessionDirectory, clock.instant().plus(ABANDONED_UPLOAD_RETENTION));
         } catch (AudioChunkInvalidException | AudioChunkConflictException failure) {
             throw failure;
         } catch (IOException failure) {
@@ -224,6 +238,20 @@ public final class AudioChunkFileStore {
             for (Path path : paths.sorted(java.util.Comparator.reverseOrder()).toList()) {
                 Files.deleteIfExists(path);
             }
+        }
+    }
+
+    private static void writeExpiry(Path sessionDirectory, java.time.Instant expiresAt) throws IOException {
+        Path temporary = Files.createTempFile(sessionDirectory, ".expiry-", ".tmp");
+        try {
+            Files.writeString(temporary, expiresAt.toString(), StandardCharsets.UTF_8,
+                    StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE);
+            Files.move(temporary, sessionDirectory.resolve(EXPIRY_FILE),
+                    StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+        } catch (AtomicMoveNotSupportedException unsupported) {
+            throw new IOException("Atomic expiry publication is not supported.");
+        } finally {
+            Files.deleteIfExists(temporary);
         }
     }
 

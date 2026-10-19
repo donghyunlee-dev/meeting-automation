@@ -8,6 +8,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.nio.charset.StandardCharsets;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.HexFormat;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
@@ -111,6 +114,44 @@ class AudioAssemblyFileStoreTests {
 
         assertThat(chunkStore.completedChunks("ms_cleanup")).isEmpty();
         assertThat(store.findAssembly("ms_cleanup")).contains(published);
+    }
+
+    @Test
+    void expirySweepRemovesFailedProcessingAudioAfterRestart() throws Exception {
+        Instant failedAt = Instant.parse("2026-10-16T00:00:00Z");
+        AudioChunkFileStore chunkStore = new AudioChunkFileStore(audioRoot, Clock.fixed(failedAt, ZoneOffset.UTC));
+        AudioAssemblyFileStore store = new AudioAssemblyFileStore(audioRoot, chunkStore);
+        byte[] chunk = new byte[] {8, 9};
+        chunkStore.store("ms_expired", 0, "audio/webm", chunk.length, sha256(chunk), 64,
+                new ByteArrayInputStream(chunk));
+        publish(store, "ms_expired", chunk);
+        store.setSessionExpiry("ms_expired", failedAt.plusSeconds(60));
+
+        AudioAssemblyFileStore restarted = new AudioAssemblyFileStore(audioRoot, new AudioChunkFileStore(audioRoot));
+        new TemporaryAudioExpiryCleanupScheduler(restarted,
+                Clock.fixed(failedAt.plusSeconds(61), ZoneOffset.UTC)).sweep();
+
+        assertThat(restarted.findAssembly("ms_expired")).isEmpty();
+        assertThat(new AudioChunkFileStore(audioRoot).completedChunks("ms_expired")).isEmpty();
+    }
+
+    @Test
+    void expirySweepRemovesAbandonedUploadsButPreservesFreshSessions() throws Exception {
+        Instant uploadAt = Instant.parse("2026-10-16T00:00:00Z");
+        AudioChunkFileStore chunkStore = new AudioChunkFileStore(audioRoot, Clock.fixed(uploadAt, ZoneOffset.UTC));
+        byte[] chunk = new byte[] {5, 6};
+        chunkStore.store("ms_abandoned", 0, "audio/webm", chunk.length, sha256(chunk), 64,
+                new ByteArrayInputStream(chunk));
+        chunkStore.store("ms_fresh", 0, "audio/webm", chunk.length, sha256(chunk), 64,
+                new ByteArrayInputStream(chunk));
+        AudioAssemblyFileStore store = new AudioAssemblyFileStore(audioRoot, chunkStore);
+        store.setSessionExpiry("ms_fresh", uploadAt.plusSeconds(48 * 60 * 60));
+
+        new TemporaryAudioExpiryCleanupScheduler(store,
+                Clock.fixed(uploadAt.plusSeconds(24 * 60 * 60 + 1), ZoneOffset.UTC)).sweep();
+
+        assertThat(chunkStore.completedChunks("ms_abandoned")).isEmpty();
+        assertThat(chunkStore.completedChunks("ms_fresh")).hasSize(1);
     }
 
     private static AudioAssemblyStorage.Assembly publish(AudioAssemblyFileStore store, String sessionId,

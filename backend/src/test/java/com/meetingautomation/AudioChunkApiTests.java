@@ -8,8 +8,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.meetingautomation.api.session.MeetingSession;
 import com.meetingautomation.api.session.MeetingSessionStore;
 import com.meetingautomation.api.session.UploadPolicy;
-import com.meetingautomation.api.audio.PrivateAudioStoragePort;
-import com.meetingautomation.api.audio.TestPrivateAudioStorage;
 import com.meetingautomation.document.DocumentConnectionGate;
 import com.meetingautomation.document.settings.GlobalDocumentSettings;
 import com.meetingautomation.document.settings.GlobalSettingsStore;
@@ -60,9 +58,6 @@ class AudioChunkApiTests {
     private GlobalSettingsStore settingsStore;
 
     @Autowired
-    private PrivateAudioStoragePort audioStorage;
-
-    @Autowired
     private DocumentConnectionGate connectionGate;
 
     @DynamicPropertySource
@@ -76,7 +71,6 @@ class AudioChunkApiTests {
     @BeforeEach
     void createUploadSessionAndCleanPreviousChunks() throws IOException {
         sessionStore.remove(SESSION_ID);
-        ((TestPrivateAudioStorage) audioStorage).clearSession(SESSION_ID);
         settingsStore.transaction(current -> new GlobalSettingsStore.Change<>(
                 new GlobalDocumentSettings(1, current.version() + 1,
                         new GlobalDocumentSettings.Connection("audio-chunk-test-connection", 1, "NOTION",
@@ -120,7 +114,6 @@ class AudioChunkApiTests {
     @Test
     void validBinaryChunkIsStoredAndReturnsApi007Acknowledgement() throws Exception {
         byte[] audio = new byte[] {0, 1, 2, 13, 10, (byte) 0xff};
-        java.time.Instant beforeUpload = java.time.Instant.now();
 
         mockMvc.perform(upload(SESSION_ID, "0", audio, "audio/webm", "audio-upload-1"))
                 .andExpect(status().isOk())
@@ -128,12 +121,6 @@ class AudioChunkApiTests {
                 .andExpect(jsonPath("$.data.received").value(true));
 
         org.assertj.core.api.Assertions.assertThat(chunkContentFiles(audio)).hasSize(1);
-        java.time.Instant afterUpload = java.time.Instant.now();
-        org.assertj.core.api.Assertions.assertThat(audioStorage.listForSession(SESSION_ID))
-                .filteredOn(object -> object.type() == PrivateAudioStoragePort.ObjectType.CHUNK)
-                .singleElement()
-                .satisfies(object -> org.assertj.core.api.Assertions.assertThat(object.expiresAt())
-                        .isAfter(beforeUpload).isBefore(afterUpload.plusSeconds(24 * 60 * 60 + 1L)));
     }
 
     @Test
@@ -250,7 +237,8 @@ class AudioChunkApiTests {
         byte[] audio = "status-private-audio-marker".getBytes(java.nio.charset.StandardCharsets.UTF_8);
         mockMvc.perform(upload(SESSION_ID, "0", audio, "audio/webm", "status-storage-failure"))
                 .andExpect(status().isOk());
-        ((TestPrivateAudioStorage) audioStorage).failNextList();
+        deleteRecursively(AUDIO_ROOT);
+        Files.writeString(AUDIO_ROOT, "file prevents directory listing");
 
         mockMvc.perform(get(statusPath(SESSION_ID)))
                 .andExpect(status().isInternalServerError())
@@ -428,7 +416,8 @@ class AudioChunkApiTests {
     @Test
     void storageFailureUsesSafeInternalErrorEnvelopeWithoutLeakingPathOrAudio() throws Exception {
         byte[] audio = "private-audio-marker".getBytes(java.nio.charset.StandardCharsets.UTF_8);
-        ((TestPrivateAudioStorage) audioStorage).failNextStore();
+        deleteRecursively(AUDIO_ROOT);
+        Files.writeString(AUDIO_ROOT, "file prevents directory creation");
 
         mockMvc.perform(upload(SESSION_ID, "7", audio, "audio/webm", "storage-failure-upload"))
                 .andExpect(status().isInternalServerError())
@@ -477,13 +466,12 @@ class AudioChunkApiTests {
         }
     }
 
-    private List<PrivateAudioStoragePort.StoredObject> chunkContentFiles(byte[] expectedBytes) throws IOException {
-        return audioStorage.listForSession(SESSION_ID).stream()
-                .filter(object -> object.type() == PrivateAudioStoragePort.ObjectType.CHUNK)
-                .filter(object -> {
-                    try { return java.util.Arrays.equals(audioStorage.open(object.objectId()).readAllBytes(), expectedBytes); }
-                    catch (IOException failure) { return false; }
-                }).toList();
+    private List<Path> chunkContentFiles(byte[] expectedBytes) throws IOException {
+        try (var paths = Files.walk(AUDIO_ROOT)) {
+            return paths.filter(Files::isRegularFile)
+                    .filter(path -> contentEquals(path, expectedBytes))
+                    .toList();
+        }
     }
 
     private org.springframework.test.web.servlet.MvcResult performTogether(

@@ -1,6 +1,22 @@
 spring:
+  config:
+    import: optional:file:./application-local.yml,optional:file:./backend/application-local.yml
   application:
     name: meeting-automation-backend
+
+openai:
+  api-key: ${OPENAI_API_KEY:}
+
+transcription:
+  model: ${TRANSCRIPTION_MODEL:gpt-4o-transcribe-diarize}
+  max-audio-bytes: ${TRANSCRIPTION_MAX_AUDIO_BYTES:26214400}
+  connect-timeout-seconds: ${TRANSCRIPTION_CONNECT_TIMEOUT_SECONDS:10}
+  timeout-seconds: ${TRANSCRIPTION_TIMEOUT_SECONDS:600}
+
+minutes:
+  model: ${MINUTES_MODEL:gpt-6-luna}
+  connect-timeout-seconds: ${MINUTES_CONNECT_TIMEOUT_SECONDS:10}
+  timeout-seconds: ${MINUTES_TIMEOUT_SECONDS:600}
 
 management:
   endpoints:

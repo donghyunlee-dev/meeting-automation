@@ -14,10 +14,10 @@ import org.springframework.web.client.RestClient;
 public class MinutesGenerationProviderConfiguration {
     @Bean
     MinutesGenerationSettings minutesGenerationSettings(
-            @Value("${MINUTES_MODEL:}") String model,
-            @Value("${OPENAI_API_KEY:}") String apiKey,
-            @Value("${MINUTES_CONNECT_TIMEOUT_SECONDS:10}") int connectTimeoutSeconds,
-            @Value("${MINUTES_TIMEOUT_SECONDS:600}") int timeoutSeconds) {
+            @Value("${minutes.model:gpt-6-luna}") String model,
+            @Value("${openai.api-key:}") String apiKey,
+            @Value("${minutes.connect-timeout-seconds:10}") int connectTimeoutSeconds,
+            @Value("${minutes.timeout-seconds:600}") int timeoutSeconds) {
         if (connectTimeoutSeconds < 1 || timeoutSeconds < 1) {
             throw new IllegalArgumentException("Minutes provider configuration is invalid.");
         }

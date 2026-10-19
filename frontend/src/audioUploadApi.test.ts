@@ -8,8 +8,6 @@ import { Blob as NodeBlob } from 'node:buffer';
 
 afterEach(() => vi.unstubAllGlobals());
 
-const uploadMock = vi.fn();
-
 function chunk(blob: Blob): StoredChunk {
   return {
     sessionId: 'session-1', sequence: 3, chunkId: 'stable-chunk-id', blob,
@@ -26,37 +24,36 @@ async function settleWithin<T>(promise: Promise<T>, timeoutMs = 100): Promise<{ 
 }
 
 describe('API-007 audio chunk upload', () => {
-  it('uploads privately using a Render-issued grant, then asks Render to confirm the Blob metadata', async () => {
+  it('uploads the chunk body directly to Render with its integrity headers', async () => {
     const audio = new NodeBlob(['real audio bytes'], { type: 'audio/webm' }) as Blob;
-    const fetchMock = vi.fn()
-      .mockResolvedValueOnce(new Response(JSON.stringify({ data: { pathname: 'audio/session-1/chunks/3', clientPayload: 'signed-grant' } }), { status: 200 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ data: { sequence: 3, received: true } }), { status: 200 }));
-    uploadMock.mockResolvedValue({ url: 'private-blob', downloadUrl: 'private-blob', pathname: 'audio/session-1/chunks/3', contentType: 'audio/webm;codecs=opus', contentDisposition: '', etag: 'etag' });
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ data: { sequence: 3, received: true } }), { status: 200 }),
+    );
     vi.stubGlobal('fetch', fetchMock);
     vi.stubGlobal('crypto', webcrypto);
 
-    await putAudioChunk(chunk(audio), fetchMock, { blobUpload: uploadMock as never });
+    await putAudioChunk(chunk(audio), fetchMock);
 
-    const [grantUrl, grantInit] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(grantUrl).toContain('/audio/chunks/3/upload-grant');
-    expect(grantInit.method).toBe('POST');
-    expect(JSON.parse(String(grantInit.body))).toEqual({ mimeType: 'audio/webm;codecs=opus', bytes: audio.size, sha256: '99ea8c248a41e3d7b38def6673e0b597730feff902d1f288abd7d01f6aa10d30' });
-    expect(uploadMock).toHaveBeenCalledWith('audio/session-1/chunks/3', audio, expect.objectContaining({ access: 'private', clientPayload: 'signed-grant' }));
-    const [confirmUrl, confirmInit] = fetchMock.mock.calls[1] as [string, RequestInit];
-    expect(confirmUrl).toContain('/audio/chunks/3/confirm');
-    expect(confirmInit.method).toBe('POST');
-    expect(confirmInit.body).toBeUndefined();
-    expect(new Headers(confirmInit.headers).get('X-Audio-SHA256')).toBe('99ea8c248a41e3d7b38def6673e0b597730feff902d1f288abd7d01f6aa10d30');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toContain('/audio/chunks/3');
+    expect(url).not.toContain('upload-grant');
+    expect(init.method).toBe('PUT');
+    expect(init.body).toBe(audio);
+    const headers = new Headers(init.headers);
+    expect(headers.get('Content-Type')).toBe('audio/webm;codecs=opus');
+    expect(headers.get('X-Audio-Byte-Length')).toBe(String(audio.size));
+    expect(headers.get('X-Audio-SHA256')).toBe('99ea8c248a41e3d7b38def6673e0b597730feff902d1f288abd7d01f6aa10d30');
+    expect(headers.get('Idempotency-Key')).toBe('stable-chunk-id');
   });
 
   it('returns the structured received sequence and keeps server errors classifiable', async () => {
-    const fetchMock = vi.fn()
-      .mockResolvedValueOnce(new Response(JSON.stringify({ data: { pathname: 'audio/session-1/chunks/3', clientPayload: 'signed-grant' } }), { status: 200 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ data: { sequence: 3, received: true } }), { status: 200 }));
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ data: { sequence: 3, received: true } }), { status: 200 }),
+    );
     vi.stubGlobal('fetch', fetchMock);
     vi.stubGlobal('crypto', webcrypto);
-    uploadMock.mockResolvedValue({ url: 'private-blob', downloadUrl: 'private-blob', pathname: 'audio/session-1/chunks/3', contentType: 'audio/webm;codecs=opus', contentDisposition: '', etag: 'etag' });
-    await expect(putAudioChunk(chunk(new NodeBlob(['x']) as Blob), fetchMock as typeof fetch, { blobUpload: uploadMock as never })).resolves.toEqual({ sequence: 3, received: true });
+    await expect(putAudioChunk(chunk(new NodeBlob(['x']) as Blob), fetchMock as typeof fetch)).resolves.toEqual({ sequence: 3, received: true });
   });
 });
 

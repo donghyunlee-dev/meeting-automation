@@ -15,7 +15,6 @@ import com.meetingautomation.api.processing.ProcessingJobQueue;
 import com.meetingautomation.api.processing.ProcessingJobRunner;
 import com.meetingautomation.api.processing.AudioAssemblyUseCase;
 import com.meetingautomation.api.audio.AudioAssemblyStorage;
-import com.meetingautomation.api.audio.TestPrivateAudioStorage;
 import com.meetingautomation.minutes.GroundedMinutesResult;
 import com.meetingautomation.minutes.MinutesCommand;
 import com.meetingautomation.minutes.MinutesGenerationProvider;
@@ -77,9 +76,6 @@ class ProcessingStartApiTests {
     private MeetingSessionStore sessionStore;
 
     @Autowired
-    private TestPrivateAudioStorage privateAudioStorage;
-
-    @Autowired
     private ControllableProcessingQueue processingExecutor;
 
     @Autowired
@@ -111,7 +107,6 @@ class ProcessingStartApiTests {
     @BeforeEach
     void createSessionAndResetQueue() throws IOException {
         sessionStore.remove(SESSION_ID);
-        privateAudioStorage.clearSession(SESSION_ID);
         deleteRecursively(AUDIO_ROOT);
         Files.createDirectories(AUDIO_ROOT);
         processingExecutor.reset();
@@ -157,7 +152,8 @@ class ProcessingStartApiTests {
 
     @Test
     void storageFailureLeavesSessionCreatedAtItsOriginalVersion() throws Exception {
-        privateAudioStorage.failNextStore();
+        deleteRecursively(AUDIO_ROOT);
+        Files.writeString(AUDIO_ROOT, "regular file blocks the audio storage root");
 
         upload("0", new byte[] {16, 17}, "storage-failure")
                 .andExpect(status().isInternalServerError())
@@ -194,23 +190,6 @@ class ProcessingStartApiTests {
         assertThat(queued.transcript()).isEmpty();
         assertThat(processingExecutor.jobs()).containsExactly(
                 new ProcessingJob(SESSION_ID, 1, 15000, "audio/webm"));
-    }
-
-    @Test
-    void expiredChunkCannotStartProcessingEvenBeforeTheCleanupSweepRuns() throws Exception {
-        upload("0", new byte[] {8, 9}, "expired-upload").andExpect(status().isOk());
-        var chunk = privateAudioStorage.listForSession(SESSION_ID).stream()
-                .filter(object -> object.type() == com.meetingautomation.api.audio.PrivateAudioStoragePort.ObjectType.CHUNK)
-                .findFirst().orElseThrow();
-        privateAudioStorage.extendExpiry(chunk.objectId(), java.time.Instant.now().minusSeconds(1));
-
-        mockMvc.perform(process("expired-start-key", "{\"expectedChunks\":1,\"durationMs\":15000,"
-                        + "\"mimeType\":\"audio/webm\"}"))
-                .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.error.code").value("AUDIO_CHUNKS_INCOMPLETE"));
-
-        assertThat(processingExecutor.acceptedCount()).isZero();
-        assertThat(sessionStore.find(SESSION_ID).orElseThrow().status()).isEqualTo("UPLOADING");
     }
 
     @Test

@@ -13,11 +13,11 @@ import org.springframework.web.client.RestClient;
 public class TranscriptionProviderConfiguration {
     @Bean
     TranscriptionSettings transcriptionSettings(
-            @Value("${TRANSCRIPTION_MODEL:}") String model,
-            @Value("${OPENAI_API_KEY:}") String apiKey,
-            @Value("${TRANSCRIPTION_MAX_AUDIO_BYTES:26214400}") long maxAudioBytes,
-            @Value("${TRANSCRIPTION_CONNECT_TIMEOUT_SECONDS:10}") int connectTimeoutSeconds,
-            @Value("${TRANSCRIPTION_TIMEOUT_SECONDS:600}") int timeoutSeconds) {
+            @Value("${transcription.model:}") String model,
+            @Value("${openai.api-key:}") String apiKey,
+            @Value("${transcription.max-audio-bytes:26214400}") long maxAudioBytes,
+            @Value("${transcription.connect-timeout-seconds:10}") int connectTimeoutSeconds,
+            @Value("${transcription.timeout-seconds:600}") int timeoutSeconds) {
         if (maxAudioBytes < 1 || connectTimeoutSeconds < 1 || timeoutSeconds < 1) {
             throw new IllegalArgumentException("Transcription provider configuration is invalid.");
         }

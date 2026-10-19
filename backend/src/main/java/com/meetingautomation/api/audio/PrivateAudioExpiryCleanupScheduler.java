@@ -7,14 +7,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.scheduling.annotation.Scheduled;
-import org.springframework.stereotype.Component;
 import com.meetingautomation.api.processing.FailureFinalizeService;
 import com.meetingautomation.api.processing.FailureDocumentWriteException;
 import com.meetingautomation.api.session.MeetingSessionStore;
 
 /** Session-independent expiry sweep; durable object metadata remains discoverable after process restart. */
-@Component
 public final class PrivateAudioExpiryCleanupScheduler {
     private static final Logger LOGGER = LoggerFactory.getLogger(PrivateAudioExpiryCleanupScheduler.class);
 
@@ -48,7 +45,6 @@ public final class PrivateAudioExpiryCleanupScheduler {
         this.sessionStore = sessionStore;
     }
 
-    @Scheduled(fixedDelayString = "${PRIVATE_AUDIO_CLEANUP_DELAY_MS:60000}")
     public void sweep() {
         List<PrivateAudioStoragePort.StoredObject> expired;
         try {

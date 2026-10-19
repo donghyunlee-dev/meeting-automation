@@ -10,6 +10,9 @@ public record MinutesCommand(
         String templateId,
         String templateVersion,
         String templateContent,
+        String meetingTitle,
+        String meetingAt,
+        String timezone,
         List<MeetingSession.ParticipantReference> participants,
         Map<String, String> speakerParticipantMappings,
         List<TranscriptSegment> transcript) {
@@ -18,6 +21,13 @@ public record MinutesCommand(
         participants = List.copyOf(participants);
         speakerParticipantMappings = Map.copyOf(speakerParticipantMappings);
         transcript = List.copyOf(transcript);
+    }
+
+    public MinutesCommand(String templateId, String templateVersion, String templateContent,
+            List<MeetingSession.ParticipantReference> participants, Map<String, String> speakerParticipantMappings,
+            List<TranscriptSegment> transcript) {
+        this(templateId, templateVersion, templateContent, null, null, null,
+                participants, speakerParticipantMappings, transcript);
     }
 
     @Override

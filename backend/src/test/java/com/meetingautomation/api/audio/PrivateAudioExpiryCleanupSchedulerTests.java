@@ -23,10 +23,8 @@ import com.meetingautomation.document.MeetingDocumentRef;
 import java.security.MessageDigest;
 import java.util.HexFormat;
 import org.junit.jupiter.api.Test;
-import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.scheduling.annotation.ScheduledAnnotationBeanPostProcessor;
 
 class PrivateAudioExpiryCleanupSchedulerTests {
     private static final Instant NOW = Instant.parse("2026-10-14T00:00:00Z");
@@ -76,18 +74,6 @@ class PrivateAudioExpiryCleanupSchedulerTests {
         assertThat(sessions.find("ms_processing").orElseThrow().status()).isEqualTo("PROCESSING");
         assertThat(storage.deleted).isEmpty();
         assertThat(storage.find("opaque-processing")).isPresent();
-    }
-
-    @Test
-    void productionConfigurationRegistersTheExpirySchedulerWithoutStartingAService() {
-        try (AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext()) {
-            context.register(PrivateAudioStorageConfiguration.class, PrivateAudioExpiryCleanupScheduler.class,
-                    SyntheticStorageConfiguration.class);
-            context.refresh();
-
-            assertThat(context.getBean(PrivateAudioExpiryCleanupScheduler.class)).isNotNull();
-            assertThat(context.getBean(ScheduledAnnotationBeanPostProcessor.class)).isNotNull();
-        }
     }
 
     @Test

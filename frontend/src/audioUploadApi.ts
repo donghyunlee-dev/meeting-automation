@@ -1,3 +1,4 @@
+import { getApiBaseUrl } from './apiBase';
 import type { StoredChunk } from './chunkRepository';
 import { upload } from '@vercel/blob/client';
 
@@ -169,5 +170,5 @@ function timeoutApiError(error: RequestTimeoutError): AudioUploadApiError {
 }
 
 function baseUrl(): string {
-  return (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080').replace(/\/$/, '');
+  return getApiBaseUrl();
 }

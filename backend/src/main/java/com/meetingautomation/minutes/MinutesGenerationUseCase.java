@@ -61,6 +61,7 @@ public final class MinutesGenerationUseCase {
         MinutesCommand command;
         try {
             command = new MinutesCommand(template.id(), template.version(), template.content(),
+                    session.meeting().title(), session.meetingAt().toString(), session.meeting().timezone(),
                     session.meeting().participantReferences(), speakerMappings, session.transcript());
         } catch (RuntimeException invalidInput) {
             throw failure(MinutesGenerationException.Code.PROCESSING_FAILED, false);
