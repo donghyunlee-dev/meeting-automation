@@ -24,5 +24,13 @@ export default defineConfig(({ mode }) => {
   return {
     envPrefix: publicEnvironmentPrefix,
     plugins: [react(), publicBuildSecurityPlugin()],
+    server: {
+      proxy: {
+        '/api': {
+          target: 'http://127.0.0.1:8080',
+          changeOrigin: true,
+        },
+      },
+    },
   };
 });

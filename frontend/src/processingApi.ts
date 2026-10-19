@@ -1,3 +1,4 @@
+import { getApiBaseUrl } from './apiBase';
 export type ProcessingStage = 'AUDIO_ASSEMBLY' | 'TRANSCRIPTION' | 'DIARIZATION' | 'MINUTES_GENERATION' | 'DRAFT_READY' | 'DRAFT_REGENERATION';
 export type ProcessingStatus = 'PROCESSING' | 'REVIEW' | 'COMPLETED_WITH_WARNINGS' | 'PROCESSING_FAILED';
 export type ProcessingAction = 'RETRY_PROCESSING' | 'DOWNLOAD_AUDIO' | 'FINALIZE_PROCESSING_FAILURE';
@@ -100,5 +101,5 @@ async function postAccepted(url: string, sessionId: string, version: number, ide
 }
 
 function baseUrl(): string {
-  return (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080').replace(/\/$/, '');
+  return getApiBaseUrl();
 }

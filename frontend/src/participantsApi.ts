@@ -1,3 +1,4 @@
+import { getApiBaseUrl } from './apiBase';
 export type Participant = { id: string; name: string; email: string };
 export type ParticipantInput = { name: string; email: string };
 export type ParticipantPatch = Partial<ParticipantInput>;
@@ -32,7 +33,7 @@ function safeMessage(code: string): string {
 }
 
 function baseUrl(): string {
-  return (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080').replace(/\/$/, '');
+  return getApiBaseUrl();
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {

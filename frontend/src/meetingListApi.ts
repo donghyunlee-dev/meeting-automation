@@ -1,4 +1,5 @@
-﻿import { normalizeApiError, type SafeApiError } from './lib/api/normalizeApiError';
+import { getApiBaseUrl } from './apiBase';
+import { normalizeApiError, type SafeApiError } from './lib/api/normalizeApiError';
 
 export type MeetingParticipantSummary = { id: string; name: string };
 export type MeetingSummary = {
@@ -22,7 +23,7 @@ export class MeetingListApiError extends Error {
 const pendingMeetingLists = new Map<string, Promise<MeetingSummary[]>>();
 
 function baseUrl(): string {
-  return (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080').replace(/\/$/, '');
+  return getApiBaseUrl();
 }
 
 function isMeetingSummary(value: unknown): value is MeetingSummary {

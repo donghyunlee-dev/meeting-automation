@@ -1,4 +1,5 @@
-﻿import { normalizeApiError, type SafeApiError } from './lib/api/normalizeApiError';
+import { getApiBaseUrl } from './apiBase';
+import { normalizeApiError, type SafeApiError } from './lib/api/normalizeApiError';
 
 export type MeetingDetail = {
   documentId: string;
@@ -27,7 +28,7 @@ export class MeetingDetailApiError extends Error {
 }
 
 function baseUrl(): string {
-  return (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080').replace(/\/$/, '');
+  return getApiBaseUrl();
 }
 
 function isMeetingDetail(value: unknown): value is MeetingDetail {

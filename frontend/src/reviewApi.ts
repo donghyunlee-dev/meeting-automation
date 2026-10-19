@@ -1,3 +1,4 @@
+import { getApiBaseUrl } from './apiBase';
 export type ReviewSpeaker = { speakerId: string; label: string; participantId: string | null; participantName?: string | null };
 export type TranscriptSegment = { segmentId: string; speakerId: string; startMs: number; endMs: number; text: string };
 export type StructuredMinutesActionItem = { ownerParticipantId: string | null; task: string; dueDate: string | null };
@@ -46,7 +47,7 @@ export class ReviewApiError extends Error {
 }
 
 function baseUrl(): string {
-  return (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080').replace(/\/$/, '');
+  return getApiBaseUrl();
 }
 
 function parseData(body: unknown): Record<string, unknown> {

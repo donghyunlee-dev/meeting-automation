@@ -1,3 +1,4 @@
+import { getApiBaseUrl } from './apiBase';
 import { parseReviewSessionData, type ReviewSession } from './reviewApi';
 import { ProcessingApiError, type ProcessingSnapshot, type ProcessingStatus } from './processingApi';
 
@@ -24,7 +25,7 @@ export type MinutesRegenerationRequestOptions = { timeoutMs?: number };
 const DEFAULT_REGENERATION_REQUEST_TIMEOUT_MS = 15_000;
 
 function baseUrl(): string {
-  return (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080').replace(/\/$/, '');
+  return getApiBaseUrl();
 }
 
 function parseData(body: unknown): Record<string, unknown> {

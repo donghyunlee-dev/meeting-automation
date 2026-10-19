@@ -1,3 +1,4 @@
+import { getApiBaseUrl } from './apiBase';
 export type ProcessingStartRequest = {
   expectedChunks: number;
   durationMs: number;
@@ -33,13 +34,14 @@ export async function startProcessing(
   fetchImpl: typeof fetch = fetch,
   options: ProcessingStartOptions = {},
 ): Promise<ProcessingStartResponse> {
+  const normalizedRequest = { ...request, durationMs: Math.floor(request.durationMs) };
   let response: Response;
   let body: ProcessingStartEnvelope | undefined;
   try {
     ({ response, body } = await requestAndRead(fetchImpl, `${baseUrl()}/api/v1/meeting-sessions/${encodeURIComponent(sessionId)}/process`, {
       method: 'POST',
       headers: { Accept: 'application/json', 'Content-Type': 'application/json', 'Idempotency-Key': idempotencyKey },
-      body: JSON.stringify(request),
+      body: JSON.stringify(normalizedRequest),
     }, options.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS));
   } catch (error) {
     if (error instanceof RequestTimeoutError) {
@@ -99,5 +101,5 @@ async function requestAndRead(fetchImpl: typeof fetch, input: RequestInfo | URL,
 }
 
 function baseUrl(): string {
-  return (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080').replace(/\/$/, '');
+  return getApiBaseUrl();
 }

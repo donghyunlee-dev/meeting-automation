@@ -1,3 +1,4 @@
+import { getApiBaseUrl } from './apiBase';
 export type AppConfig = {
   company: { id: string; name: string; timezone: string };
   document?: { provider: string | null; configured: boolean; connectionVersion: number; rootUrl: string | null } | null;
@@ -21,7 +22,7 @@ export class SettingsApiError extends Error {
 async function readData<T>(path: string): Promise<T> {
   let response: Response;
   try {
-    response = await fetch(`${(import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080').replace(/\/$/, '')}/api/v1${path}`, {
+    response = await fetch(`${getApiBaseUrl()}/api/v1${path}`, {
       headers: { Accept: 'application/json' },
     });
   } catch {
@@ -46,11 +47,11 @@ export function getIntegrationHealth(): Promise<IntegrationHealth> {
 
 export type IntegrationState = 'not-selected' | 'not-configured' | 'unreachable' | 'root-inaccessible' | 'available' | 'not-confirmed' | 'health-unknown';
 export type SettingsSummary = {
-  company: AppConfig['company'];
   document: { provider: string | null; state: IntegrationState };
   email: { state: IntegrationState };
   notification: { provider: string | null; state: IntegrationState };
 };
+type IntegrationConfig = Pick<AppConfig, 'document' | 'email' | 'notification'>;
 
 function providerName(provider: string | null | undefined): string | null {
   if (provider === 'NOTION') return 'Notion';
@@ -77,9 +78,8 @@ function optionalIntegrationState(enabled: boolean, configured: boolean, health:
   return 'available';
 }
 
-export function selectSettingsSummary(config: AppConfig, health: IntegrationHealth | null): SettingsSummary {
+export function selectSettingsSummary(config: IntegrationConfig, health: IntegrationHealth | null): SettingsSummary {
   return {
-    company: { id: config.company.id, name: config.company.name, timezone: config.company.timezone },
     document: { provider: providerName(config.document?.provider), state: documentState(config.document, health?.document) },
     email: { state: optionalIntegrationState(Boolean(config.email?.enabled), Boolean(config.email?.configured), health?.email) },
     notification: {
