@@ -10,7 +10,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
-@SpringBootTest(properties = {"DOCUMENT_SETTINGS_DIR=", "DOCUMENT_SETTINGS_ENCRYPTION_KEY=", "DOCUMENT_PROVIDER=NOTION",
+@SpringBootTest(properties = {"DOCUMENT_SETTINGS_DIR=/missing-document-settings-directory", "DOCUMENT_SETTINGS_ENCRYPTION_KEY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=", "DOCUMENT_PROVIDER=NOTION",
     "NOTION_TOKEN=ignored-secret", "ALLOWED_ORIGINS=http://localhost:5173"})
 @AutoConfigureMockMvc
 @Import(ConstraintViolationProbeService.class)

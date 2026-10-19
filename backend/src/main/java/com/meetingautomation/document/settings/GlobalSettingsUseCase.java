@@ -41,7 +41,7 @@ public final class GlobalSettingsUseCase {
             boolean attention=state.operation()!=null && Set.of("FAILED","INTERRUPTED","RECONCILIATION_REQUIRED").contains(state.operation().status());
             return new Status(state.version(), attention ? "ATTENTION_REQUIRED" : locked ? active == null ? "CONFIGURING" : "SWITCHING"
                 : active != null ? "READY" : draft != null ? "CONFIGURING" : "UNCONFIGURED",
-                active == null ? null : new ActiveSummary(active.provider(), active.connectionVersion(), active.rootUrl()),
+                active == null ? null : new ActiveSummary(active.provider(), active.connectionVersion(), active.rootUrl(), active.rootId()),
                 draft == null ? null : new DraftSummary(draft.draftId(), draft.revision(), draft.provider(), draft.state()),
                 state.operation()==null ? null : new OperationSummary(state.operation().operationId(),state.operation().type(),state.operation().status()), active != null && !locked);
         } catch (SettingsException failure) {
@@ -132,6 +132,6 @@ public final class GlobalSettingsUseCase {
     public record Status(Long version, String status, ActiveSummary active, DraftSummary draft,
             OperationSummary operation, boolean canCreateMeeting) { }
     public record OperationSummary(String operationId,String type,String status) { }
-    public record ActiveSummary(String provider, long connectionVersion, String rootUrl) { }
+    public record ActiveSummary(String provider, long connectionVersion, String rootUrl, String rootId) { }
     public record DraftSummary(String draftId, long revision, String provider, String state) { }
 }

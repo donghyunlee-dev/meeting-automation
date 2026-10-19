@@ -61,6 +61,7 @@ class DocumentBootstrapApiTests {
             .andReturn().getResponse().getContentAsString();
         assertFalse(body.contains("synthetic"));
         mvc.perform(get("/api/v1/document-setup")).andExpect(jsonPath("$.data.status").value("READY"))
+            .andExpect(jsonPath("$.data.active.rootId").value("page1"))
             .andExpect(jsonPath("$.data.operation.stage").doesNotExist()).andExpect(jsonPath("$.data.operation.journal").doesNotExist());
     }
     @Test void bootApiRequiresConfirmationAndTrustedOriginBeforeWrites() throws Exception {

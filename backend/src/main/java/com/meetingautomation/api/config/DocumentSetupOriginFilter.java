@@ -19,9 +19,11 @@ import tools.jackson.databind.json.JsonMapper;
 @Order(Ordered.HIGHEST_PRECEDENCE)
 public final class DocumentSetupOriginFilter extends OncePerRequestFilter {
     private static final JsonMapper JSON = JsonMapper.builder().build();
+    private static final String LOCAL_ORIGINS = "http://localhost:5173,http://127.0.0.1:5173";
     private final Set<String> origins;
     public DocumentSetupOriginFilter(@Value("${ALLOWED_ORIGINS:}") String origins) {
-        this.origins = new HashSet<>(Arrays.stream(origins.split(",")).map(String::trim).filter(s -> !s.isEmpty()).toList());
+        String configuredOrigins = origins.isBlank() ? LOCAL_ORIGINS : origins;
+        this.origins = new HashSet<>(Arrays.stream(configuredOrigins.split(",")).map(String::trim).filter(s -> !s.isEmpty()).toList());
     }
     @Override protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {

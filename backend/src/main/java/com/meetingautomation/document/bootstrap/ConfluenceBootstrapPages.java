@@ -72,10 +72,13 @@ public final class ConfluenceBootstrapPages implements BootstrapPages {
         return new Page(numeric(BootstrapHttp.required(page,"id")),parent,BootstrapHttp.required(page,"title"),"page",marker);
     }
     @Override public String create(String parent, String title, String marker) {
+        return create(parent, title, marker, "");
+    }
+    @Override public String create(String parent, String title, String marker, String markdownContent) {
         Map<String,Object> body = new LinkedHashMap<>();
         body.put("spaceId",spaceId); body.put("status","current"); body.put("title",title);
         if (parent != null) body.put("parentId",numeric(parent));
-        body.put("body",Map.of("representation","storage","value","<p>"+marker+"</p>"));
+        body.put("body",Map.of("representation","storage","value",BootstrapTemplateRenderer.confluenceStorage(marker, markdownContent)));
         JsonNode created=http.post("/wiki/api/v2/pages"+(parent==null?"?root-level=true":""),body);
         try { return numeric(BootstrapHttp.required(created,"id")); }
         catch (DocumentProviderException unusableResponse) { throw BootstrapHttp.reconciliation(); }

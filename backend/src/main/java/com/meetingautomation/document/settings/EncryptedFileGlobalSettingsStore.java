@@ -12,9 +12,11 @@ import javax.crypto.spec.SecretKeySpec;
 import tools.jackson.databind.json.JsonMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Conditional;
 import org.springframework.stereotype.Component;
 
 @Component
+@Conditional(GlobalSettingsStoreConditions.FileSettingsConfigured.class)
 public final class EncryptedFileGlobalSettingsStore implements GlobalSettingsStore {
     private static final Object PROCESS_LOCK = new Object();
     private static final byte[] AAD = "meeting-automation-settings/schema-1".getBytes(StandardCharsets.UTF_8);

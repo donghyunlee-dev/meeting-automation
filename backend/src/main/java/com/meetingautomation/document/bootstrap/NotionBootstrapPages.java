@@ -47,10 +47,12 @@ public final class NotionBootstrapPages implements BootstrapPages {
         return new Page(id(BootstrapHttp.required(page,"id")), parent, title, "page", markers.size() == 1 ? markers.getFirst() : null);
     }
     @Override public String create(String parent, String title, String marker) {
+        return create(parent, title, marker, "");
+    }
+    @Override public String create(String parent, String title, String marker, String markdownContent) {
         var body = Map.of("parent", Map.of("page_id",id(parent)),
             "properties", Map.of("title",Map.of("title",List.of(Map.of("type","text","text",Map.of("content",title))))),
-            "children",List.of(Map.of("object","block","type","paragraph","paragraph",Map.of("rich_text",
-                List.of(Map.of("type","text","text",Map.of("content",marker)))))));
+            "children",BootstrapTemplateRenderer.notionBlocks(marker, markdownContent));
         JsonNode created=http.post("/v1/pages",body);
         try { return id(BootstrapHttp.required(created,"id")); }
         catch (DocumentProviderException unusableResponse) { throw BootstrapHttp.reconciliation(); }

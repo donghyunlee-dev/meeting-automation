@@ -23,21 +23,25 @@ class DocumentBootstrapProviderTests {
     @Test void bootNotionHttpUsesPagePayloadParentAndInitialMarkerOnly() {
         var fixture=new HttpPages(true,null);
         var structure=new DocumentStructureInitializer(fixture.pages).initializeStructure(fixture.parent,null,"operation",new DocumentStructureInitializerTests.Journal());
-        assertThat(fixture.posts).hasSize(3);
+        assertThat(fixture.posts).hasSize(4);
         assertThat(fixture.posts.getFirst().path("parent").path("page_id").asText()).isEqualTo(fixture.parent);
         assertThat(fixture.posts.get(1).path("parent").path("page_id").asText()).isEqualTo(structure.rootId());
         assertThat(fixture.posts).allSatisfy(body -> assertThat(body.toString()).contains("meeting-automation/bootstrap/operation/").doesNotContain("database_id","data_source_id"));
+        assertThat(fixture.posts.get(3).toString()).contains("Templates", "AI 작성 지침", "회의 개요", "확인이 필요한 사항", "비고");
         fixture.server.verify();
     }
     @ParameterizedTest @ValueSource(strings={"22","TOP"})
     void bootConfluenceHttpUsesSpaceAndOptionalParentAndOnlyPageCreates(String parent) {
         var fixture=new HttpPages(false,"TOP".equals(parent)?null:parent);
         var structure=new DocumentStructureInitializer(fixture.pages).initializeStructure(fixture.parent,null,"operation",new DocumentStructureInitializerTests.Journal());
-        assertThat(fixture.posts).hasSize(3);
+        assertThat(fixture.posts).hasSize(4);
         assertThat(fixture.posts).allSatisfy(body -> assertThat(body.path("spaceId").asText()).isEqualTo("1"));
         assertThat(fixture.posts.getFirst().path("parentId").asText(null)).isEqualTo(fixture.parent);
         assertThat(fixture.posts.get(1).path("parentId").asText()).isEqualTo(structure.rootId());
         assertThat(fixture.posts.getFirst().path("body").path("value").asText()).contains("meeting-automation/bootstrap/operation/ROOT");
+        assertThat(fixture.posts.get(3).path("body").path("value").asText())
+            .contains("<h1>기본 회의록 템플릿</h1>", "<h2>AI 작성 지침</h2>", "<h2>회의 개요</h2>", "<h2>비고</h2>")
+            .contains("<ul><li>주제: 회의 제목</li></ul>");
         fixture.server.verify();
     }
     @Test void bootConfluenceCqlPaginationDetectsWrongTypeRootBeforeAnyCreate() {
@@ -76,6 +80,7 @@ class DocumentBootstrapProviderTests {
         fixture.nodes.put("9",new BootstrapPages.Page("9",null,"Meeting Automation","page",null));
         fixture.nodes.put("10",new BootstrapPages.Page("10","9","Meetings","page",null));
         fixture.nodes.put("11",new BootstrapPages.Page("11","9","Participants","page",null));
+        fixture.nodes.put("12",new BootstrapPages.Page("12","9","Templates","page",null));
         var structure=new DocumentStructureInitializer(fixture.pages).initializeStructure(null,"9","operation",new DocumentStructureInitializerTests.Journal());
         assertThat(structure.rootId()).isEqualTo("9");
         assertThat(structure.meetingsPageId()).isEqualTo("10");
@@ -179,8 +184,12 @@ class DocumentBootstrapProviderTests {
                     String id=notion?String.format("%08d-0000-0000-0000-000000000000",posts.size()):Integer.toString(posts.size()+100);
                     String nodeParent=notion?payload.path("parent").path("page_id").asText():payload.path("parentId").asText(null);
                     String title=notion?payload.path("properties").path("title").path("title").get(0).path("text").path("content").asText():payload.path("title").asText();
-                    String marker=notion?payload.path("children").get(0).path("paragraph").path("rich_text").get(0).path("text").path("content").asText()
-                        :payload.path("body").path("value").asText().replace("<p>","").replace("</p>","");
+                    String marker;
+                    if (notion) marker=payload.path("children").get(0).path("paragraph").path("rich_text").get(0).path("text").path("content").asText();
+                    else {
+                        var markerMatcher=java.util.regex.Pattern.compile("<p>(meeting-automation/bootstrap/[A-Za-z0-9_\\-/]+)</p>").matcher(payload.path("body").path("value").asText());
+                        marker=markerMatcher.find()?markerMatcher.group(1):"";
+                    }
                     if(!notion && nodeParent==null) assertThat(request.getURI().getQuery()).isEqualTo("root-level=true");
                     nodes.put(id,new BootstrapPages.Page(id,nodeParent,title,"page",marker)); body=Map.of("id",id);
                 } else if(path.equals("/wiki/api/v2/spaces/1")) body=Map.of("id","1","key","TEST");

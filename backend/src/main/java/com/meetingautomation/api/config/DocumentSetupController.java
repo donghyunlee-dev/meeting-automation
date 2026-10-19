@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/v1/document-setup")
 public final class DocumentSetupController {
+    private static final String LOCAL_ORIGINS = "http://localhost:5173,http://127.0.0.1:5173";
     private final GlobalSettingsUseCase settings;
     private final com.meetingautomation.document.bootstrap.DocumentBootstrapUseCase bootstrap;
     private final com.meetingautomation.document.transfer.DocumentSwitchUseCase switching;
@@ -20,7 +21,8 @@ public final class DocumentSetupController {
         this.settings = settings;
         this.bootstrap = bootstrap;
         this.switching = switching;
-        this.origins = new HashSet<>(Arrays.stream(origins.split(",")).map(String::trim).filter(s -> !s.isEmpty()).toList());
+        String configuredOrigins = origins.isBlank() ? LOCAL_ORIGINS : origins;
+        this.origins = new HashSet<>(Arrays.stream(configuredOrigins.split(",")).map(String::trim).filter(s -> !s.isEmpty()).toList());
     }
     @GetMapping public ResponseEntity<Map<String, Object>> status() {
         var status = settings.status();
@@ -57,13 +59,19 @@ public final class DocumentSetupController {
     public ResponseEntity<String> retry(HttpServletRequest request, @PathVariable String operationId,
             @RequestBody(required = false) Map<String, Object> input) {
         long version = validate(request);
+        if (isInitializationOperation(operationId)) return result(bootstrap.retryInterrupted(version,request.getHeader("Idempotency-Key"),operationId));
         return result(switching.retry(version, request.getHeader("Idempotency-Key"), operationId));
     }
     @PostMapping(value = "/operations/{operationId}/cancel", consumes = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<String> cancel(HttpServletRequest request, @PathVariable String operationId,
             @RequestBody(required = false) Map<String, Object> input) {
         long version = validate(request);
+        if (isInitializationOperation(operationId)) return result(bootstrap.cancelInterrupted(version,request.getHeader("Idempotency-Key"),operationId));
         return result(switching.cancel(version, request.getHeader("Idempotency-Key"), operationId));
+    }
+    private boolean isInitializationOperation(String operationId) {
+        var operation=settings.status().operation();
+        return operation!=null && "INITIALIZE".equals(operation.type()) && operationId.equals(operation.operationId());
     }
     @GetMapping("/operations/{operationId}")
     public ResponseEntity<Map<String,Object>> operation(@PathVariable String operationId) {

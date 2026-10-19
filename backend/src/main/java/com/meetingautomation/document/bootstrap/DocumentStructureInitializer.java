@@ -2,16 +2,26 @@ package com.meetingautomation.document.bootstrap;
 
 import com.meetingautomation.document.DocumentStructure;
 import com.meetingautomation.document.settings.SettingsException;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
+import org.springframework.core.io.ClassPathResource;
 
 /** Explicit initialization is intentionally separate from read-only hierarchy discovery. */
 public final class DocumentStructureInitializer {
     private final BootstrapPages pages;
-    public DocumentStructureInitializer(BootstrapPages pages) { this.pages = pages; }
+    private final String defaultTemplate;
+    public DocumentStructureInitializer(BootstrapPages pages) {
+        this(pages, loadDefaultTemplate());
+    }
+    DocumentStructureInitializer(BootstrapPages pages, String defaultTemplate) {
+        this.pages = pages;
+        this.defaultTemplate = Objects.requireNonNull(defaultTemplate);
+    }
 
     public DocumentStructure initializeStructure(String parent, String reuseRoot, String operationId, BootstrapJournal journal) {
         // Resolve every possibly-sent write before considering any new page creation.
-        for (String step : List.of("ROOT","MEETINGS","PARTICIPANTS")) {
+        for (String step : List.of("ROOT","MEETINGS","PARTICIPANTS","TEMPLATES")) {
             if (journal.find(step)!=null) reconcile(step,journal);
         }
         String root;
@@ -31,20 +41,27 @@ public final class DocumentStructureInitializer {
         // Validate both titles before partially completing an explicitly reused hierarchy.
         var meetings = journal.find("MEETINGS")==null ? unique(children, "Meetings", null) : null;
         var participants = journal.find("PARTICIPANTS")==null ? unique(children, "Participants", null) : null;
+        var templates = journal.find("TEMPLATES")==null ? unique(children, "Templates", null) : null;
         String meetingsId = ensure("MEETINGS", root, "Meetings", operationId, journal, meetings);
         String participantsId = ensure("PARTICIPANTS", root, "Participants", operationId, journal, participants);
+        String templatesId = ensure("TEMPLATES", root, "Templates", operationId, journal, templates, defaultTemplate);
         verify(pages.read(root), parent, "Meeting Automation", null, false);
         unique(pages.children(root), "Meetings", meetingsId);
         unique(pages.children(root), "Participants", participantsId);
+        unique(pages.children(root), "Templates", templatesId);
         verify(pages.read(meetingsId), root, "Meetings", null, false);
         verify(pages.read(participantsId), root, "Participants", null, false);
         return new DocumentStructure(root, meetingsId, participantsId);
     }
     private String ensure(String step, String parent, String title, String operationId, BootstrapJournal journal, BootstrapPages.Page existing) {
+        return ensure(step, parent, title, operationId, journal, existing, "");
+    }
+    private String ensure(String step, String parent, String title, String operationId, BootstrapJournal journal,
+            BootstrapPages.Page existing, String markdownContent) {
         if (journal.find(step) != null) return reconcile(step, journal);
         String marker = existing == null ? "meeting-automation/bootstrap/" + operationId + "/" + step : null;
         journal.intent(step, parent, title, marker);
-        String id = existing == null ? pages.create(parent, title, marker) : existing.id();
+        String id = existing == null ? pages.create(parent, title, marker, markdownContent) : existing.id();
         verify(pages.read(id), parent, title, marker, true);
         journal.completed(step, id);
         return id;
@@ -73,4 +90,9 @@ public final class DocumentStructureInitializer {
     }
     private static SettingsException conflict() { return new SettingsException("DOCUMENT_STRUCTURE_CONFLICT",409); }
     private static SettingsException reconciliation() { return new SettingsException("DOCUMENT_RECONCILIATION_REQUIRED",409); }
+
+    private static String loadDefaultTemplate() {
+        try { return new ClassPathResource("templates/default.md").getContentAsString(StandardCharsets.UTF_8); }
+        catch (IOException failure) { throw new IllegalStateException("Default meeting template is unavailable.", failure); }
+    }
 }

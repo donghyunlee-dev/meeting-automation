@@ -52,6 +52,120 @@ class DocumentBootstrapUseCaseTests {
             .isInstanceOf(SettingsException.class).extracting("code").isEqualTo("DOCUMENT_CHANGE_BUSY");
         assertThat(fixture.queue.tasks).isEmpty();
     }
+    @Test void bootLinkageFailureDoesNotLeaveOperationRunningForever() {
+        var fixture=new Fixture(); fixture.test(); fixture.pages.createLinkageError=new NoSuchMethodError("bootstrap provider signature changed");
+        fixture.initialize(); fixture.queue.run();
+
+        assertThat(fixture.store.read().operation().status()).isEqualTo("FAILED");
+        assertThat(fixture.store.read().operation().errorCode()).isEqualTo("DOCUMENT_FAILED");
+        assertThat(fixture.store.read().active()).isNull();
+        assertThat(fixture.pages.created).isEmpty();
+    }
+    @Test void bootInterruptedInitializationCanBeSafelyDismissedToUnlockSetup() {
+        var fixture=new Fixture(); fixture.test(); fixture.initialize();
+        var operationId=fixture.store.read().operation().operationId();
+        var restarted=fixture.newUseCase();
+        assertThat(restarted.operation(operationId).status()).isEqualTo("INTERRUPTED");
+
+        restarted.cancelInterrupted(fixture.store.read().version(),"cancel-initialize",operationId);
+
+        assertThat(fixture.store.read().operation().status()).isEqualTo("CANCELLED");
+        assertThat(fixture.store.read().draft()).isNull();
+        assertThat(fixture.settings.status().status()).isEqualTo("UNCONFIGURED");
+    }
+    @Test void bootOrphanedRunningInitializationCanBeRecoveredAndDismissedToUnlockSetup() {
+        var fixture=new Fixture(); fixture.test(); fixture.initialize();
+        var operationId=fixture.store.read().operation().operationId();
+        fixture.store.transaction(current -> new GlobalSettingsStore.Change<>(new GlobalDocumentSettings(
+                1,current.version()+1,current.active(),current.draft(),
+                current.operation().transition("RUNNING","STRUCTURE",current.operation().journal(),null,false,fixture.clock.instant()),
+                current.idempotencyRecords(),current.operationHistory()),null));
+
+        var operation=fixture.bootstrap.operation(operationId);
+        assertThat(operation.status()).isEqualTo("INTERRUPTED");
+        assertThat(operation.allowedActions()).containsExactly("RETRY","CANCEL");
+
+        fixture.bootstrap.cancelInterrupted(fixture.store.read().version(),"cancel-orphaned",operationId);
+        fixture.queue.run();
+
+        assertThat(fixture.store.read().operation().status()).isEqualTo("CANCELLED");
+        assertThat(fixture.store.read().draft()).isNull();
+        assertThat(fixture.settings.status().status()).isEqualTo("UNCONFIGURED");
+        assertThat(fixture.pages.created).isEmpty();
+    }
+    @Test void bootActiveInitializationStopsAtTheNextSafeBoundaryAfterCancel() throws Exception {
+        var fixture=new Fixture(); fixture.test();
+        var providerEntered=new CountDownLatch(1); var continueProvider=new CountDownLatch(1);
+        var executor=Executors.newSingleThreadExecutor();
+        var active=new DocumentBootstrapUseCase(fixture.store,draft -> {
+            providerEntered.countDown();
+            try { if (!continueProvider.await(2,TimeUnit.SECONDS)) throw new IllegalStateException("test provider timed out"); }
+            catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); throw new IllegalStateException(interrupted); }
+        },draft -> fixture.providerPages,executor,fixture.clock);
+        try {
+            active.initialize(fixture.store.read().version(),"active-initialize",fixture.draftId,1,true);
+            assertThat(providerEntered.await(2,TimeUnit.SECONDS)).isTrue();
+            var operationId=fixture.store.read().operation().operationId();
+
+            assertThat(active.operation(operationId).status()).isEqualTo("RUNNING");
+            active.cancelInterrupted(fixture.store.read().version(),"cancel-active",operationId);
+            assertThat(fixture.store.read().operation().status()).isEqualTo("CANCELLED");
+        } finally {
+            continueProvider.countDown(); executor.shutdown();
+            assertThat(executor.awaitTermination(5,TimeUnit.SECONDS)).isTrue();
+        }
+        assertThat(fixture.store.read().operation().status()).isEqualTo("CANCELLED");
+        assertThat(fixture.store.read().active()).isNull();
+        assertThat(fixture.store.read().draft()).isNull();
+        assertThat(fixture.pages.created).isEmpty();
+    }
+    @Test void bootCancellationDuringCreateKeepsTheIntentAndStopsBeforeCreatingTheNextPage() throws Exception {
+        var fixture=new Fixture(); fixture.test();
+        var providerEntered=new CountDownLatch(1); var continueProvider=new CountDownLatch(1);
+        var backingPages=new DocumentStructureInitializerTests.Pages();
+        var blockedPages=new BootstrapPages() {
+            public List<Page> children(String parent) { return backingPages.children(parent); }
+            public Page read(String id) { return backingPages.read(id); }
+            public String create(String parent,String title,String marker) {
+                providerEntered.countDown();
+                try { if (!continueProvider.await(2,TimeUnit.SECONDS)) throw new IllegalStateException("test provider timed out"); }
+                catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); throw new IllegalStateException(interrupted); }
+                return backingPages.create(parent,title,marker);
+            }
+        };
+        fixture.providerPages=blockedPages;
+        var executor=Executors.newSingleThreadExecutor();
+        var active=new DocumentBootstrapUseCase(fixture.store,fixture::verify,draft -> fixture.providerPages,executor,fixture.clock);
+        try {
+            active.initialize(fixture.store.read().version(),"cancel-during-create",fixture.draftId,1,true);
+            assertThat(providerEntered.await(2,TimeUnit.SECONDS)).isTrue();
+            var operationId=fixture.store.read().operation().operationId();
+            active.cancelInterrupted(fixture.store.read().version(),"cancel-active-create",operationId);
+        } finally {
+            continueProvider.countDown(); executor.shutdown();
+            assertThat(executor.awaitTermination(5,TimeUnit.SECONDS)).isTrue();
+        }
+
+        var operation=fixture.store.read().operation();
+        assertThat(operation.status()).isEqualTo("CANCELLED");
+        assertThat(operation.journal()).containsKey("ROOT");
+        assertThat(operation.journal().get("ROOT").pageId()).isNull();
+        assertThat(backingPages.created).containsExactly("Meeting Automation");
+    }
+    @Test void bootInterruptedInitializationCanResumeTheSameIdempotentOperation() {
+        var fixture=new Fixture(); fixture.test(); fixture.initialize();
+        var operationId=fixture.store.read().operation().operationId();
+        fixture.queue.tasks.clear();
+        var restarted=fixture.newUseCase();
+        var result=restarted.retryInterrupted(fixture.store.read().version(),"retry-initialize",operationId);
+
+        assertThat(result.status()).isEqualTo(202);
+        assertThat(fixture.store.read().operation().status()).isEqualTo("PENDING");
+        assertThat(fixture.queue.tasks).hasSize(1);
+        fixture.queue.run();
+        assertThat(fixture.store.read().operation().status()).isEqualTo("SUCCEEDED");
+        assertThat(fixture.pages.created).containsExactly("Meeting Automation","Meetings","Participants","Templates");
+    }
     @Test void bootOperationFailureActionsFollowRetryabilityAndReconciliation() {
         var fixture=new Fixture(); fixture.test(); fixture.initialize();
         var operation=fixture.store.read().operation();
@@ -63,6 +177,19 @@ class DocumentBootstrapUseCaseTests {
             .containsExactly("REVIEW_PROVIDER","CANCEL");
         assertThat(DocumentBootstrapUseCase.summary(operation.transition("INTERRUPTED","STRUCTURE",Map.of(),null,false,fixture.clock.instant()),1).allowedActions())
             .containsExactly("RETRY","CANCEL");
+    }
+    @Test void bootOperationSummaryExposesCompletedAndCurrentStructureSteps() {
+        var fixture=new Fixture(); fixture.test(); fixture.initialize();
+        var operation=fixture.store.read().operation();
+        var journal=new LinkedHashMap<String,GlobalDocumentSettings.Creation>();
+        journal.put("ROOT",new GlobalDocumentSettings.Creation("parent","Meeting Automation","marker-root","root-id"));
+        journal.put("MEETINGS",new GlobalDocumentSettings.Creation("root-id","Meetings","marker-meetings",null));
+        var progress=operation.transition("RUNNING","STRUCTURE",journal,null,false,fixture.clock.instant());
+
+        var summary=DocumentBootstrapUseCase.summary(progress,fixture.store.read().version());
+
+        assertThat(summary.completedSteps()).containsExactly("ROOT");
+        assertThat(summary.currentStep()).isEqualTo("MEETINGS");
     }
     @Test void bootProviderPermissionFailureRemainsNonRetryableInDurableOperation() {
         var fixture=new Fixture(); fixture.test();
@@ -124,7 +251,7 @@ class DocumentBootstrapUseCaseTests {
         assertThatThrownBy(() -> resumed.initialize(fixture.store.read().version(),"new-initialize",fixture.draftId,1,true))
             .isInstanceOf(SettingsException.class).extracting("code").isEqualTo("DOCUMENT_CHANGE_BUSY");
         resumed.resumeInterrupted(failed.operationId()); fixture.queue.run();
-        assertThat(fixture.pages.created).containsExactly("Meeting Automation","Meetings","Participants");
+        assertThat(fixture.pages.created).containsExactly("Meeting Automation","Meetings","Participants","Templates");
         assertThat(fixture.store.read().active()).isNotNull();
     }
     @Test void bootOperationPublicSummaryNeverSerializesJournalOrCredentials() {
@@ -180,10 +307,10 @@ class DocumentBootstrapUseCaseTests {
         var guarded=new GuardedStore(DocumentSettingsFixtures.empty()); var fixture=new Fixture(guarded); fixture.test();
         guarded.rejectActivation=true; fixture.initialize(); fixture.queue.run();
         assertThat(fixture.store.read().active()).isNull();
-        assertThat(fixture.store.read().operation().journal()).hasSize(3);
+        assertThat(fixture.store.read().operation().journal()).hasSize(4);
         guarded.rejectActivation=false;
         fixture.bootstrap.resumeInterrupted(fixture.store.read().operation().operationId()); fixture.queue.run();
-        assertThat(fixture.pages.created).containsExactly("Meeting Automation","Meetings","Participants");
+        assertThat(fixture.pages.created).containsExactly("Meeting Automation","Meetings","Participants","Templates");
         assertThat(fixture.store.read().active()).isNotNull();
     }
     static final class Fixture {
