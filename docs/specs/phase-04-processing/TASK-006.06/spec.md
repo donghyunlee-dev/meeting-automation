@@ -1,3 +1,5 @@
+> **기준 변경 안내 (2026-10-16):** 이 TASK 설계는 이전 PRD 기준의 이력이며 현재 구현 지시로 사용하지 않습니다. 현재 제품 흐름은 [최초 연결·자동 발송 기준](../../superpowers/specs/2026-10-16-first-run-and-autodelivery-design.md)과 [PRD v2.1.0](../../product/PRD.md)을 따릅니다. 구현 전 새 TASK 설계가 게시될 때까지 대기하세요.
+
 # Processing 상태 및 Review 데이터 조회 API
 
 > **계약 갱신:** 이 패키지가 작성될 당시 `PROCESSING_FAILED`의 `allowedActions`는 빈 배열이었다. 사용자 승인으로 추가된 변환 retry/download/finalize action과 Audio 보존 metadata는 [TASK-017.02](../../phase-07-security/TASK-017.02/spec.md) Issue #61 및 후속 UI task가 해당 기준을 대체한다. 현재 task는 기존 API-010의 안전한 `errorCode`, `retryable`, `audioAvailable` 필드를 유지하고 Audio 복구 기능이 없으므로 `audioAvailable:false`, 빈 `allowedActions`를 반환한다. 실패 응답의 안전한 오류 경계와 partial Review data 비노출은 계속 유효하다.

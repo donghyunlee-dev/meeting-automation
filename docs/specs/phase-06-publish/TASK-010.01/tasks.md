@@ -1,3 +1,5 @@
+> **기준 변경 안내 (2026-10-16):** 이 TASK 설계는 이전 PRD 기준의 이력이며 현재 구현 지시로 사용하지 않습니다. 현재 제품 흐름은 [최초 연결·자동 발송 기준](../../superpowers/specs/2026-10-16-first-run-and-autodelivery-design.md)과 [PRD v2.1.0](../../product/PRD.md)을 따릅니다. 구현 전 새 TASK 설계가 게시될 때까지 대기하세요.
+
 # Review 확정 API 구현 작업
 
 1. API-010 Session DTO/store, API-011 mapping, API-012 Minutes validator, action calculator, common error mapper와 idempotency repository를 추적한다. 완료 결과: validator reuse 및 atomic transition 경계가 PR에 기록된다.

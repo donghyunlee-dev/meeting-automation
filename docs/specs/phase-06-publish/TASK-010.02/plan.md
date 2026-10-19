@@ -1,3 +1,5 @@
+> **기준 변경 안내 (2026-10-16):** 이 TASK 설계는 이전 PRD 기준의 이력이며 현재 구현 지시로 사용하지 않습니다. 현재 제품 흐름은 [최초 연결·자동 발송 기준](../../superpowers/specs/2026-10-16-first-run-and-autodelivery-design.md)과 [PRD v2.1.0](../../product/PRD.md)을 따릅니다. 구현 전 새 TASK 설계가 게시될 때까지 대기하세요.
+
 # 구현 계획
 
 > 📌 v1.9.0 변경 계약: TASK-022.04/.05의 공통 문서 codec과 활성 connection snapshot을 사용한다. 전환 lock 중 Publish를 차단하며 export/import와 같은 metadata/본문 round-trip 계약을 따른다. 이전으로 전달을 재발송하지 않는다. 상세 기준은 [문서 연결·이전 설계](../../../product/document-setup.md)다. 아래의 과거 기준과 충돌하면 이 변경 계약을 우선 적용한다.

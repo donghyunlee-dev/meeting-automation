@@ -1,3 +1,5 @@
+> **기준 변경 안내 (2026-10-16):** 이 TASK 설계는 이전 PRD 기준의 이력이며 현재 구현 지시로 사용하지 않습니다. 현재 제품 흐름은 [최초 연결·자동 발송 기준](../../superpowers/specs/2026-10-16-first-run-and-autodelivery-design.md)과 [PRD v2.1.0](../../product/PRD.md)을 따릅니다. 구현 전 새 TASK 설계가 게시될 때까지 대기하세요.
+
 # Processing 화면과 상태 조회 연결
 
 > **계약 갱신:** 이 패키지가 작성될 당시 processing retry API와 retry button은 없었다. 사용자가 승인한 변환 retry, Audio download, 실패 종료 흐름은 [TASK-017.02](../../phase-07-security/TASK-017.02/spec.md) Issue #61과 후속 TASK-017.03이 해당 기준을 대체한다. 조회 polling, API-010 기반 상태 연결, provider 오류 원문 비노출은 계속 유효하다.
