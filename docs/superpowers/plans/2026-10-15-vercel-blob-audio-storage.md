@@ -1,10 +1,12 @@
 # Vercel Blob Audio Storage Implementation Plan
 
+> **취소됨 / 실행 금지.** 2026-10-16에 사용자가 Vercel Blob 및 오디오 Functions 계획을 취소했다. 아래 항목은 과거 기록이며 현재 작업 지시가 아니다. 대체 방향은 [Backend 소유 Audio 설계](../specs/2026-10-16-backend-owned-audio-design.md)에서 검토한다.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Replace the AWS S3-compatible audio adapter with private Vercel Blob while restoring the Vercel frontend deployment and preserving Render's current upload, processing, and retention contracts.
+**Goal:** Replace the AWS S3-compatible audio adapter with private Vercel Blob while deploying the Vercel frontend and preserving Render's current upload, processing, and retention contracts.
 
-**Architecture:** The Vite frontend uploads chunks directly to private Blob using the Vercel client-upload flow. Vercel Functions authorize uploads and provide authenticated metadata/multipart operations; the Render Java API remains authoritative for session validation and processing, reads private objects with server credentials, and delegates metadata operations through the Functions. A per-session Blob JSON manifest uses ETag conditional writes, avoiding another database service.
+**Architecture:** The Vite frontend uploads chunks directly to private Blob using the Vercel client-upload flow. Vercel Functions authorize uploads and provide authenticated private reads, metadata, and multipart operations; the Render Java API remains authoritative for session validation and processing. A per-session Blob JSON manifest uses ETag conditional writes, avoiding another database service.
 
 **Tech Stack:** Java 25, Spring Boot, Node.js 24, Vite, TypeScript, `@vercel/blob`, Vercel Functions, private Vercel Blob, Render Docker web service.
 
@@ -17,7 +19,7 @@
 - Audio object leases remain renewable for 24 hours; processing and failure-finalization cleanup safeguards remain in force.
 - Vercel project root is `frontend`; Node.js is `24.x`; install/build/output are `npm ci`, `npm run build`, and `dist`.
 - Render Java API remains the authority for session validation, upload confirmation, processing reads, and expiry decisions.
-- Upstash remains a separate service and is not used as audio storage or manifest storage.
+- No database or external queue is introduced for audio storage or manifest storage.
 - No AWS audio-storage bucket or credential remains required after migration.
 
 ## Review Focus
@@ -33,7 +35,7 @@
 ### Task 1: Configure and verify the Vercel frontend project
 
 **Files:**
-- Modify: Vercel project settings (already set to `frontend`, Vite, Node 24, `npm ci`, `npm run build`, `dist`)
+- Verify: Vercel project settings use `frontend`, Vite, Node 24, `npm ci`, `npm run build`, `dist`
 - Create: `frontend/vercel.json` only if SPA fallback or function routing requires explicit configuration
 - Test: `frontend` production build
 
@@ -57,7 +59,7 @@
 - Test: `frontend/api/audio-upload-token.test.ts`
 
 **Interfaces:**
-- Consumes: `BLOB_READ_WRITE_TOKEN` and a server-only Render shared secret.
+- Consumes: `BLOB_READ_WRITE_TOKEN`, `RENDER_AUDIO_STORAGE_SECRET`, and `RENDER_AUDIO_GRANT_SECRET` in Vercel Functions.
 - Produces: authenticated endpoints for upload grants, manifest get/update, object deletion, and multipart upload part control. Session manifests contain object path, type, sequence, MIME type, byte length, SHA-256, and expiry.
 
 - [ ] Add the smallest compatible `@vercel/blob` dependency and tests for manifest create, update, ETag conflict retry, sequence idempotency, conflicting metadata, lease extension, and expiry listing.
@@ -76,11 +78,11 @@
 - Test: storage adapter and configuration tests under `backend/src/test/java/com/meetingautomation/api/audio/`
 
 **Interfaces:**
-- Consumes: `PrivateAudioStoragePort`, Vercel Function base URL, server-only Blob token, Render shared secret.
+- Consumes: `PrivateAudioStoragePort`, Vercel Function URL, `RENDER_AUDIO_STORAGE_SECRET`, and `RENDER_AUDIO_GRANT_SECRET`.
 - Produces: the same `PrivateAudioStoragePort` operations backed by private Blob and durable manifests.
 
 - [ ] Write failing adapter tests for store/open/find/list/listExpired/extendExpiry/delete, idempotent chunk store, and Blob/Function error mapping.
-- [ ] Implement authenticated manifest/control calls and direct authenticated private Blob reads using streaming Java HTTP clients.
+- [ ] Implement authenticated manifest/control calls and private reads through the Vercel Function using streaming Java HTTP clients.
 - [ ] Implement large assembled-object writes by streaming parts through the multipart Function API; do not buffer the full object in memory.
 - [ ] Replace S3-specific configuration and dependencies required only by this adapter; remove AWS credential/bucket requirements from Docker/runtime configuration.
 - [ ] Run focused backend tests, then `./gradlew test`.
@@ -114,7 +116,7 @@
 - Produces: a deployed frontend and Render backend that exchange private audio through Vercel Blob.
 
 - [ ] Create/link a private Blob store in the Vercel project and set the token and shared secret in Vercel Functions and Render without replacing unrelated environment variables.
-- [ ] Configure Render with the Vercel Function URL and private Blob token; remove AWS audio bucket/credential variables after the new adapter is verified.
+- [ ] Configure Render with the Vercel Function URL and the two shared secrets; keep `BLOB_READ_WRITE_TOKEN` in Vercel only. Remove AWS audio bucket/credential variables after the new adapter is verified.
 - [ ] Deploy Render from `master` and confirm its health endpoint responds.
 - [ ] Deploy the Vercel frontend from `master`; smoke-test the production page and API connectivity.
 - [ ] Run a small authenticated upload, status resume, processing read, lease extension, and expiry cleanup against a non-production/test session.
