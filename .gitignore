@@ -8,6 +8,7 @@
 # Backend generated files
 /backend/.gradle/
 /backend/build/
+/backend/application-local.yml
 
 # Local environment files
 **/.env

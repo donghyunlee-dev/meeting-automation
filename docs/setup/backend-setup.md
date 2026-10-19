@@ -91,6 +91,8 @@ Wrapper가 지원하는 작업:
 
 Backend는 AI/Email/Slack과 저장 기반 설정을 환경변수로 읽는다. Document Provider·Root·인증 정보는 화면의 문서 연결 위저드에 입력한다. 로컬 개발에서는 `backend/.env.local` 파일을 사용할 수 있도록 애플리케이션 실행 설정을 구성하거나 IntelliJ Run Configuration에 값을 입력한다. Spring Boot가 `.env` 파일을 자동 로딩한다고 가정하지 않는다. 프로젝트가 로컬 dotenv loader를 포함하지 않으면 Run Configuration의 Environment variables에 직접 설정한다. Render 운영 설정은 [운영 테스트 설정 기준](./production-test.md)을 따른다.
 
+OpenAI 키는 `application.yml`에 직접 기록하지 않는다. 로컬에서는 `backend/application-local.yml`에 `openai.api-key`를 설정할 수 있으며, 기본 설정이 이 파일을 선택적으로 불러온다. 이 파일은 `.gitignore`에 포함된다. Render에서는 `OPENAI_API_KEY` 환경변수를 사용한다.
+
 환경 변수 이름과 로컬 예시(비밀값은 실제 값이 아닌 placeholder):
 
 ```text
