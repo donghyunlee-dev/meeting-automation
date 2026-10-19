@@ -374,10 +374,10 @@ button:disabled { cursor: not-allowed; opacity: .6; }
 .recording-page--recording, .recording-page--paused { min-height: 100dvh; justify-content: center; gap: clamp(40px, 12vh, 110px); padding-bottom: max(48px, env(safe-area-inset-bottom)); }
 .app-shell:has(.recording-page--recording), .app-shell:has(.recording-page--paused) { padding-bottom: 0; }
 .recording-heading { min-width: 0; }
-.recording-eyebrow { margin: 0 0 8px; color: #8390a2; font-size: 11px; font-weight: 700; letter-spacing: .1em; }
 .recording-heading h1 { display: flex; align-items: center; gap: 11px; margin: 0; color: #182230; font-size: clamp(25px, 6vw, 36px); letter-spacing: -.04em; overflow-wrap: anywhere; }
 .recording-title-icon { width: 30px; height: 30px; flex: 0 0 30px; fill: none; stroke: #5267d9; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .recording-content { display: grid; flex: 1; align-content: center; justify-items: center; gap: 18px; min-width: 0; text-align: center; }
+.recording-meeting-title { max-width: 100%; margin: 0; color: #182230; font-size: clamp(22px, 5vw, 30px); font-weight: 650; letter-spacing: -.035em; line-height: 1.25; overflow-wrap: anywhere; }
 .recording-upload { display: grid; gap: 8px; width: min(100%, 420px); padding: 14px 16px; border: 1px solid #d0d5dd; border-radius: 12px; background: #fff; text-align: left; }
 .recording-end-state { display: grid; gap: 8px; width: min(100%, 420px); padding: 14px 16px; border: 1px solid #d0d5dd; border-radius: 12px; background: #fff; text-align: left; }
 .recording-end-state p { margin: 0; color: #596578; font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }

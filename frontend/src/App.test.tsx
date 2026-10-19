@@ -128,7 +128,8 @@ describe('Participants settings', () => {
     fireEvent.click(within(screen.getByRole('group', { name: '참석자 선택' })).getByRole('checkbox', { name: 'Ada Lovelace ada@example.com' }));
     fireEvent.click(screen.getByRole('button', { name: '회의 시작' }));
 
-    expect(await screen.findByRole('heading', { name: 'Planning' })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: '회의 녹음', level: 1 })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Planning', level: 2 })).toBeTruthy();
     const post = fetchMock.mock.calls.find(([url]) => new URL(String(url)).pathname.endsWith('/meeting-sessions'));
     expect(post).toBeTruthy();
     const request = post?.[1];

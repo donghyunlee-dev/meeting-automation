@@ -94,17 +94,17 @@ export function RecordingPage({ title, state, elapsedMs, errorMessage, completed
   return (
     <main className={`recording-page recording-page--${state.toLowerCase()}`}>
       <header className="recording-heading">
-        <p className="recording-eyebrow">회의 녹음</p>
         <h1>
           <svg className="recording-title-icon" viewBox="0 0 24 24" aria-hidden="true">
             <rect x="9" y="3" width="6" height="12" rx="3" />
             <path d="M5.5 11v1a6.5 6.5 0 0 0 13 0v-1M12 18.5V22m-4 0h8" />
           </svg>
-          {title}
+          회의 녹음
         </h1>
       </header>
 
       <section className="recording-content" aria-label="녹음 상태">
+        <h2 className="recording-meeting-title">{title}</h2>
         <p className="recording-status" role="status" aria-live="polite">
           {state === 'Recording' && <span className="recording-indicator" aria-hidden="true" />}
           {completed ? '녹음이 종료되었습니다.' : statusByState[state]}
