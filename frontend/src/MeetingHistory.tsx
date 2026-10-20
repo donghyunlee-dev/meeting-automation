@@ -207,14 +207,14 @@ export function HomePage() {
 export function MeetingsPage() {
   const navigate = useNavigate();
   return (
-    <main className="meetings-page">
+    <main className="meetings-page page-scroll-layout">
       <header className="meetings-heading">
         <h1><svg className="meetings-heading-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
           <path d="M9 6h11M9 12h11M9 18h11" />
           <path d="M4 6h.01M4 12h.01M4 18h.01" />
         </svg>회의 기록</h1>
       </header>
-      <div className="meetings-list-viewport">
+      <div className="meetings-list-viewport page-scroll-content">
         <MeetingList emptyMessage="회의 기록이 없습니다. 회의를 완료하면 여기에 표시됩니다." enableFilters quietEmpty />
       </div>
       <div className="meetings-create-dock"><button className="button button-primary" type="button" onClick={() => navigate('/meetings/new')}>새 회의 시작</button></div>

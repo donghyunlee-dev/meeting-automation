@@ -252,7 +252,7 @@ function ParticipantsPage() {
 
   return (
     <main className="participants-main">
-      <section className="participants-page" id="participants" aria-labelledby="page-title">
+      <section className="participants-page page-scroll-layout" id="participants" aria-labelledby="page-title">
         <div className="page-heading">
           <h1 id="page-title">
             <svg className="participants-heading-icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -262,6 +262,8 @@ function ParticipantsPage() {
             참석자
           </h1>
         </div>
+
+        <div className="page-scroll-content">
 
         {notice && <p className="notice" role="status">{notice}</p>}
 
@@ -325,6 +327,7 @@ function ParticipantsPage() {
             </div>
           </section>
         </div>}
+        </div>
       </section>
       <div className="participants-create-dock">
         <button className="button button-primary" type="button" aria-label="참석자 추가" onClick={(event) => openCreate(event.currentTarget)}>

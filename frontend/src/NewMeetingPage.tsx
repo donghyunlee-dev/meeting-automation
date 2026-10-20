@@ -206,7 +206,7 @@ export function NewMeetingPage({ onSubmit }: { onSubmit: (attempt: MeetingSessio
   const participantError = submitted && participantIds.length === 0;
 
   return (
-    <main className="new-meeting-page">
+    <main className="new-meeting-page page-scroll-layout">
       <header className="new-meeting-heading">
         <h1>
           <svg className="new-meeting-title-icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -217,6 +217,7 @@ export function NewMeetingPage({ onSubmit }: { onSubmit: (attempt: MeetingSessio
         </h1>
       </header>
 
+      <div className="page-scroll-content">
       <form className="new-meeting-form" onSubmit={handleSubmit} noValidate>
         <div className="meeting-field">
           <label htmlFor="meeting-title">회의 제목</label>
@@ -282,6 +283,7 @@ export function NewMeetingPage({ onSubmit }: { onSubmit: (attempt: MeetingSessio
           <button className="button button-primary meeting-submit" type="submit" disabled={anyLoading || unavailable || submitting}>{submitting ? '회의 시작 중…' : '회의 시작'}</button>
         </div>
       </form>
+      </div>
     </main>
   );
 }

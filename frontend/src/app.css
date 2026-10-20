@@ -820,7 +820,7 @@ button:disabled { cursor: not-allowed; opacity: .6; }
 .backend-recovery-close { position: absolute; z-index: 2; top: 12px; right: 14px; display: grid; width: 44px; height: 44px; place-items: center; border: 0; padding: 0; color: #748095; background: transparent; font-size: 28px; font-weight: 350; line-height: 1; }
 .backend-recovery-close:hover { color: #253044; }
 
-/* Keep the app header in place and scroll each route inside a shared viewport. */
+/* App shell keeps the brand and page title in place; each page scrolls its own body. */
 .app-shell {
   display: flex;
   height: 100dvh;
@@ -831,49 +831,93 @@ button:disabled { cursor: not-allowed; opacity: .6; }
 }
 .product-header { position: relative; top: auto; flex: 0 0 auto; }
 .app-route-viewport {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+  padding-bottom: calc(68px + env(safe-area-inset-bottom));
+}
+.app-shell:has(.setup-page) .app-route-viewport { padding-bottom: 0; }
+.app-shell:has(.home-page) { padding-bottom: calc(74px + env(safe-area-inset-bottom)); }
+.app-shell:has(.home-page) .app-route-viewport { padding-bottom: 0; }
+.app-shell:has(.recording-page--recording) .app-route-viewport,
+.app-shell:has(.recording-page--paused) .app-route-viewport,
+.app-shell:has(.processing-page) .app-route-viewport { padding-bottom: 0; }
+.home-page {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  justify-content: center;
+  overflow: hidden;
+}
+.home-content {
+  display: flex;
+  width: min(100%, 820px);
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+}
+.home-toolbar, .home-message, .home-cta { flex: 0 0 auto; }
+.home-recent { display: flex; min-height: 0; flex: 1 1 auto; flex-direction: column; overflow: hidden; }
+.home-recent-heading { flex: 0 0 auto; }
+.home-recent .meeting-summary-list { min-height: 0; flex: 1 1 auto; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; }
+.home-recent > .state-card { min-height: 0; flex: 1 1 auto; }
+.meetings-page {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  overflow: hidden;
+  padding-bottom: 12px;
+}
+.meetings-heading { flex: 0 0 auto; }
+.meetings-list-viewport {
+  min-height: 0;
   flex: 1 1 auto;
   overflow-x: hidden;
   overflow-y: auto;
-  overscroll-behavior-y: contain;
-  padding-bottom: calc(68px + env(safe-area-inset-bottom));
-  -webkit-overflow-scrolling: touch;
-}
-.app-shell:has(.setup-page) .app-route-viewport { padding-bottom: 0; }
-.home-page {
-  min-height: calc(100dvh - 126px - env(safe-area-inset-bottom));
-}
-.home-content {
-  width: min(100%, 820px);
-  margin: 0 auto;
-}
-.home-recent { overflow: visible; }
-.home-recent .meeting-summary-list { overflow: visible; }
-.meetings-page {
-  display: block;
-  min-height: 100%;
-  padding-bottom: 12px;
-}
-.meetings-list-viewport {
-  overflow: visible;
+  overscroll-behavior: contain;
   padding-bottom: 96px;
 }
-.home-message,
-.meetings-heading,
-.new-meeting-heading,
-.setup-settings-heading,
-.setup-heading,
-.settings-heading,
-.page-heading,
-.processing-heading,
-.recording-heading,
-.review-speaker-heading,
-.complete-page-heading,
-.meeting-detail-heading {
-  position: sticky;
-  z-index: 4;
-  top: 0;
-  background: #f7f8fa;
+.page-scroll-layout {
+  display: flex !important;
+  flex: 1 1 auto;
+  height: 100%;
+  min-height: 0 !important;
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 0 !important;
+  overflow: hidden;
 }
+.recording-page.page-scroll-layout,
+.setup-page.setup-first-run.page-scroll-layout { min-height: 0 !important; }
+.page-scroll-layout > header,
+.page-scroll-layout > .page-fixed-heading,
+.participants-page > .page-heading { flex: 0 0 auto; }
+.page-fixed-heading { display: grid; flex: 0 0 auto; align-content: start; }
+.page-scroll-content {
+  display: block;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+.settings-page .page-scroll-content,
+.setup-settings-page .page-scroll-content,
+.processing-page .page-scroll-content,
+.review-speaker-page .page-scroll-content,
+.meeting-detail-page .page-scroll-content {
+  display: grid;
+  align-content: start;
+  gap: 18px;
+}
+.settings-page .page-scroll-content,
+.setup-settings-page .page-scroll-content { gap: 20px; }
+.participants-main { display: flex; height: 100%; min-height: 0; flex: 1 1 auto; flex-direction: column; }
+.participants-page { display: flex; height: 100%; min-height: 0; flex: 1 1 auto; flex-direction: column; overflow: hidden; }
 @media (max-width: 680px) {
   .meetings-page { padding: 28px 18px 12px; }
 }

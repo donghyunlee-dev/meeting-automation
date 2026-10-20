@@ -182,8 +182,9 @@ export function ProcessingPage() {
   const stageForFailure = snapshot?.processing?.stage;
 
   return (
-    <main className="processing-page" aria-labelledby="processing-title">
+    <main className="processing-page page-scroll-layout" aria-labelledby="processing-title">
       <header className="processing-heading"><h1 id="processing-title"><svg className="workflow-heading-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h10M4 18h7" /><circle cx="18" cy="16" r="3" /></svg>회의 처리</h1></header>
+      <div className="page-scroll-content">
       {!snapshot && failure === null && <AsyncState state={{ status: 'loading', label: '회의 처리 상태를 확인하고 있습니다.' }} renderReady={() => null} />}
       {failure === 'network' && !snapshot && <AsyncState state={{
         status: 'error',
@@ -232,6 +233,7 @@ export function ProcessingPage() {
           <progress aria-label="전체 처리 단계" value={activeStep} max={stageNames.length}>{activeStep}/{stageNames.length}</progress>
         </div> : <p className="processing-current" role="status">처리 상태를 확인하고 있습니다.</p>}</section>
       )}
+      </div>
     </main>
   );
 }

@@ -626,12 +626,15 @@ export function ReviewSpeakerPage({ drafts, onInitialize, onChange, onCommit, on
   }
 
   return (
-    <main className="review-speaker-page">
+    <main className="review-speaker-page page-scroll-layout">
+      <div className="page-fixed-heading">
       <MeetingListBackLink />
       <header className="review-speaker-heading">
         <h1><svg className="workflow-heading-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h10l4 4v12H5zM14 4v5h5M8 13h8M8 17h6" /></svg>회의록 검토</h1>
       </header>
+      </div>
 
+      <div className="page-scroll-content">
       {reviewIsLoading && regenerationResume?.sessionId !== sessionId && <p role="status">회의의 화자 정보를 불러오는 중입니다.</p>}
       {regenerationResume?.sessionId === sessionId && <section className="review-speaker-message" role="status" aria-live="polite">
         <h2>Minutes 재생성 진행 중</h2>
@@ -760,6 +763,7 @@ export function ReviewSpeakerPage({ drafts, onInitialize, onChange, onCommit, on
           </div>
         </section>
       </div>}
+      </div>
     </main>
   );
 }

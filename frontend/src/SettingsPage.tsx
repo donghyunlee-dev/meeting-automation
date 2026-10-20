@@ -305,8 +305,9 @@ export function SettingsPage() {
   const emailStatus = summary?.email.state;
   const notificationStatus = summary?.notification.state;
 
-  return <main className="settings-page">
+  return <main className="settings-page page-scroll-layout">
     <header className="settings-heading"><h1><svg className="settings-heading-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h8m4 0h4M4 12h3m4 0h9M4 18h10m4 0h2" /><circle cx="14" cy="6" r="2" /><circle cx="9" cy="12" r="2" /><circle cx="16" cy="18" r="2" /></svg>설정</h1></header>
+    <div className="page-scroll-content">
     {bothQueriesFailed && <SettingsQueryError title="설정과 연결 상태를 불러오지 못했습니다." description="오류 세부 정보는 표시하지 않습니다." retryLabel="전체 설정 다시 불러오기" onRetry={() => { void refreshConfig(); void refreshHealth(); }} />}
     {health.status === 'loading' && !health.data && <SettingsQueryLoading label="연결 상태를 불러오는 중…" />}
     {health.status === 'error' && !health.data && !bothQueriesFailed && <SettingsQueryError title="연결 상태를 불러오지 못했습니다." description="서비스 연결 상태를 다시 확인해 주세요." retryLabel="연결 상태 다시 확인" onRetry={() => void refreshHealth()} />}
@@ -336,5 +337,6 @@ export function SettingsPage() {
       </section>
     </div>
     {config.status === 'ready' && health.status === 'ready' && <button className="button button-secondary settings-refresh" type="button" onClick={() => { void refreshConfig(); void refreshHealth(); }}>모든 연결 상태 새로고침</button>}
+    </div>
   </main>;
 }

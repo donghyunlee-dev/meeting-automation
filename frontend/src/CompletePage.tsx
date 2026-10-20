@@ -285,15 +285,15 @@ export function CompletePage() {
     }
   }
 
-  if (loading) return <main className="share-page complete-page"><CompletePageHeader/><AsyncState state={{ status: 'loading', label: '회의 결과를 불러오는 중…', fullPage: true }} renderReady={() => null} /></main>;
-  if (!viewSnapshot) return <main className="share-page complete-page"><CompletePageHeader/><AsyncState state={{
+  if (loading) return <main className="share-page complete-page page-scroll-layout"><CompletePageHeader/><div className="page-scroll-content"><AsyncState state={{ status: 'loading', label: '회의 결과를 불러오는 중…', fullPage: true }} renderReady={() => null} /></div></main>;
+  if (!viewSnapshot) return <main className="share-page complete-page page-scroll-layout"><CompletePageHeader/><div className="page-scroll-content"><AsyncState state={{
     status: 'error',
     title: '회의 결과를 불러오지 못했습니다.',
     error: normalizeApiError(error ? { error: { code: 'REQUEST_FAILED' } } : undefined),
     description: error || '회의 결과를 불러오지 못했습니다. 다시 시도해 주세요.',
     onRetry: () => { setReloadLoading(true); setError(''); void refresh().catch(() => setError('회의 결과를 불러오지 못했습니다. 다시 시도해 주세요.')).finally(() => setReloadLoading(false)); },
     retryLabel: '다시 시도',
-  }} renderReady={() => null} /></main>;
+  }} renderReady={() => null} /></div></main>;
 
   const people = new Map(participants.map((participant) => [participant.id, participant]));
   const emailRows = (viewSnapshot.deliveries ?? []).filter((delivery) => delivery.channel === 'EMAIL');
@@ -347,8 +347,9 @@ export function CompletePage() {
     </li>;
   });
 
-  return <main className="share-page complete-page">
+  return <main className="share-page complete-page page-scroll-layout">
     <CompletePageHeader/>
+    <div className="page-scroll-content">
     <h2 className="complete-result-heading">{resultHeading(viewSnapshot)}</h2>
     <section className="processing-card complete-publish-card" aria-label="회의 결과 처리 단계" aria-live="polite">
       <ol className="processing-steps complete-publish-steps">{steps.map(({ title, state, detail, errorCode, recovery }, index) => <li key={`${title}-${index}`} className={`is-${state}`} aria-current={state === 'current' ? 'step' : undefined}>
@@ -366,6 +367,7 @@ export function CompletePage() {
         {publishing ? '저장 요청 중…' : viewSnapshot.status === 'DOCUMENT_FAILED' ? '문서 저장 재시도' : '저장 및 전달 재시도'}
       </button>}
       <button type="button" className="button button-secondary" onClick={() => { setError(''); void refresh().catch((requestError) => setError(requestFailureMessage(requestError))); }}>상태 새로고침</button>
+    </div>
     </div>
   </main>;
 }

@@ -113,7 +113,7 @@ export function RecordingPage({ title, state, elapsedMs, microphoneStatus = 'che
   }
 
   return (
-    <main className={`recording-page recording-page--${state.toLowerCase()}${completed ? ' recording-page--completed' : ''}${isRecovering ? ' recording-page--recovering' : ''}`}>
+    <main className={`recording-page page-scroll-layout recording-page--${state.toLowerCase()}${completed ? ' recording-page--completed' : ''}${isRecovering ? ' recording-page--recovering' : ''}`}>
       <header className="recording-heading">
         <h1>
           <svg className="recording-title-icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -124,6 +124,7 @@ export function RecordingPage({ title, state, elapsedMs, microphoneStatus = 'che
         </h1>
       </header>
 
+      <div className="page-scroll-content">
       <section className="recording-content" aria-label="녹음 상태">
         <h2 className="recording-meeting-title">{title}</h2>
         {(state !== 'Ready' || completed) && <p className="recording-status" role="status" aria-live="polite">
@@ -205,6 +206,7 @@ export function RecordingPage({ title, state, elapsedMs, microphoneStatus = 'che
           </div>
         </div>
       )}
+      </div>
     </main>
   );
 }
