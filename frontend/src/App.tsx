@@ -684,21 +684,23 @@ export function App({ onNewMeetingSubmit = () => undefined, onMinutesSave, minut
           <span className="product-header-product">Minutes</span>
         </Link>
       </header>}
-      <Routes>
-        <Route path="/" element={<SetupGate><HomePage /></SetupGate>} />
-        <Route path="/setup/document" element={<DocumentSetupWizard />} />
-        <Route path="/settings" element={<SettingsPage />} />
-        <Route path="/settings/document" element={<DocumentSetupWizard settings />} />
-        <Route path="/meetings" element={<MeetingsPage />} />
-        <Route path="/meetings/new" element={<SetupGate><NewMeetingRoute onCreated={(session) => { setCreatedSession(session); saveRecordingSession(session); setRecordingState('Ready'); setRecordingNavigationLocked(false); }} onSubmitted={onNewMeetingSubmit} /></SetupGate>} />
-        <Route path="/meetings/:documentId" element={<MeetingDetailPage />} />
-        <Route path="/meetings/:sessionId/recording" element={<MeetingRecordingRoute session={createdSession} setState={setRecordingState} setNavigationLocked={setRecordingNavigationLocked} mediaAdapter={mediaAdapter} />} />
-        <Route path="/meetings/:sessionId/processing" element={<ProcessingPage />} />
-        <Route path="/meetings/:sessionId/review" element={<ReviewSpeakerPage drafts={speakerDrafts} onInitialize={initializeSpeakerDraft} onChange={updateSpeakerDraft} onCommit={commitSpeakerMappings} onMinutesSave={onMinutesSave} minutesSaveState={minutesSaveState} />} />
-        <Route path="/meetings/:sessionId/complete" element={<CompletePage />} />
-        <Route path="/settings/participants" element={<SetupGate><ParticipantsPage /></SetupGate>} />
-        <Route path="*" element={<FutureRouteNotice />} />
-      </Routes>
+      <div className="app-route-viewport">
+        <Routes>
+          <Route path="/" element={<SetupGate><HomePage /></SetupGate>} />
+          <Route path="/setup/document" element={<DocumentSetupWizard />} />
+          <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/settings/document" element={<DocumentSetupWizard settings />} />
+          <Route path="/meetings" element={<MeetingsPage />} />
+          <Route path="/meetings/new" element={<SetupGate><NewMeetingRoute onCreated={(session) => { setCreatedSession(session); saveRecordingSession(session); setRecordingState('Ready'); setRecordingNavigationLocked(false); }} onSubmitted={onNewMeetingSubmit} /></SetupGate>} />
+          <Route path="/meetings/:documentId" element={<MeetingDetailPage />} />
+          <Route path="/meetings/:sessionId/recording" element={<MeetingRecordingRoute session={createdSession} setState={setRecordingState} setNavigationLocked={setRecordingNavigationLocked} mediaAdapter={mediaAdapter} />} />
+          <Route path="/meetings/:sessionId/processing" element={<ProcessingPage />} />
+          <Route path="/meetings/:sessionId/review" element={<ReviewSpeakerPage drafts={speakerDrafts} onInitialize={initializeSpeakerDraft} onChange={updateSpeakerDraft} onCommit={commitSpeakerMappings} onMinutesSave={onMinutesSave} minutesSaveState={minutesSaveState} />} />
+          <Route path="/meetings/:sessionId/complete" element={<CompletePage />} />
+          <Route path="/settings/participants" element={<SetupGate><ParticipantsPage /></SetupGate>} />
+          <Route path="*" element={<FutureRouteNotice />} />
+        </Routes>
+      </div>
       {!isActiveRecording && !isDocumentConnectionRoute && <BottomNavigation />}
       <BackendRecoveryOverlay />
     </div>
