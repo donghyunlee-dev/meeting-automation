@@ -214,7 +214,9 @@ export function MeetingsPage() {
           <path d="M4 6h.01M4 12h.01M4 18h.01" />
         </svg>회의 기록</h1>
       </header>
-      <MeetingList emptyMessage="회의 기록이 없습니다. 회의를 완료하면 여기에 표시됩니다." enableFilters quietEmpty />
+      <div className="meetings-list-viewport">
+        <MeetingList emptyMessage="회의 기록이 없습니다. 회의를 완료하면 여기에 표시됩니다." enableFilters quietEmpty />
+      </div>
       <div className="meetings-create-dock"><button className="button button-primary" type="button" onClick={() => navigate('/meetings/new')}>새 회의 시작</button></div>
     </main>
   );

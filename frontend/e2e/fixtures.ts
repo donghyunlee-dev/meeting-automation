@@ -61,14 +61,14 @@ export function requestCapture(): CapturedRequests {
 }
 
 export const screens: Screen[] = [
-  { id: 'SCR-001', route: '/', heading: /Meeting Automation/, contentSelector: '.home-content', paddingSelector: '.home-page' },
+  { id: 'SCR-001', route: '/', heading: /회의를 시작할까요\?/, headingLevel: 2, contentSelector: '.home-content', paddingSelector: '.home-page' },
   { id: 'SCR-002', route: '/meetings/new', heading: /새 회의/, contentSelector: '.new-meeting-page', paddingSelector: '.new-meeting-page' },
   { id: 'SCR-003', route: `/meetings/${sessionId}/recording`, heading: new RegExp(longKoreanTitle), contentSelector: '.recording-page', paddingSelector: '.recording-page' },
   { id: 'SCR-005', route: `/meetings/${sessionId}/processing`, heading: /회의 처리/, contentSelector: '.processing-page', paddingSelector: '.processing-page', apiState: 'processing' },
   { id: 'SCR-006', route: `/meetings/${sessionId}/review`, heading: /회의록 검토/, contentSelector: '.review-speaker-page', paddingSelector: '.review-speaker-page', apiState: 'review' },
   { id: 'SCR-007', route: `/meetings/${sessionId}/share`, heading: /회의록 공유/, contentSelector: '.share-page', paddingSelector: '.share-page', apiState: 'review' },
   { id: 'SCR-008', route: `/meetings/${sessionId}/complete`, heading: /회의 결과/, contentSelector: '.share-page.complete-page', paddingSelector: '.complete-page', apiState: 'complete' },
-  { id: 'SCR-009', route: '/meetings', heading: /회의록 목록|회의록/, contentSelector: '.meetings-page', paddingSelector: '.meetings-page' },
+  { id: 'SCR-009', route: '/meetings', heading: /회의 기록/, contentSelector: '.meetings-page', paddingSelector: '.meetings-page' },
   { id: 'SCR-010', route: '/meetings/fixture-document', heading: new RegExp(longKoreanTitle), contentSelector: '.meeting-detail-page', paddingSelector: '.meeting-detail-page' },
   { id: 'SCR-011', route: '/settings', heading: /설정/, contentSelector: '.settings-page', paddingSelector: '.settings-page' },
   { id: 'SCR-012', route: '/settings/participants', heading: /참석자/, headingLevel: 2, contentSelector: '.participants-page', paddingSelector: '.participants-page' },

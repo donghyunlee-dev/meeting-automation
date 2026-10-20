@@ -16,6 +16,7 @@ const SAFE_MESSAGES: Record<string, { kind: ApiErrorKind; message: string }> = {
   SESSION_NOT_FOUND: { kind: 'not-found', message: '회의를 찾을 수 없습니다.' },
   MEETING_LIST_FAILED: { kind: 'unavailable', message: '회의 목록을 불러오지 못했습니다. 연결을 확인한 뒤 다시 시도해 주세요.' },
   MEETING_DETAIL_FAILED: { kind: 'unavailable', message: '회의 상세를 불러오지 못했습니다. 연결을 확인한 뒤 다시 시도해 주세요.' },
+  DOCUMENT_RATE_LIMITED: { kind: 'unavailable', message: '문서 서비스 요청이 많습니다. 잠시 후 다시 시도해 주세요.' },
   VALIDATION_FAILED: { kind: 'validation', message: '입력 내용을 확인해 주세요.' },
   SESSION_VERSION_CONFLICT: { kind: 'conflict', message: '회의가 변경되었습니다. 최신 상태를 확인한 뒤 다시 시도해 주세요.' },
   SESSION_STATE_CONFLICT: { kind: 'conflict', message: '현재 회의 상태에서 요청할 수 없습니다. 최신 상태를 확인해 주세요.' },

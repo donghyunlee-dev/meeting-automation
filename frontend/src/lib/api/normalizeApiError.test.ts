@@ -25,6 +25,16 @@ describe('normalizeApiError', () => {
     expect(malformed.code).toBe('UNKNOWN_ERROR');
   });
 
+  it('explains that a document provider rate limit can be retried later', () => {
+    const error = normalizeApiError({ error: {
+      code: 'DOCUMENT_RATE_LIMITED', category: 'DOCUMENT_FAILURE', retryable: true,
+    } }, 429);
+
+    expect(error.message).toBe('문서 서비스 요청이 많습니다. 잠시 후 다시 시도해 주세요.');
+    expect(error.retryable).toBe(true);
+    expect(error.status).toBe(429);
+  });
+
   it('does not treat an unknown HTTP 404 as a missing meeting', () => {
     const missingMeeting = normalizeApiError({ error: { code: 'MEETING_NOT_FOUND' } }, 404);
     const unknown404 = normalizeApiError({ error: { code: 'UNEXPECTED_PROXY_404', message: 'proxy internals' } }, 404);

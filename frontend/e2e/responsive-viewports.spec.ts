@@ -64,7 +64,7 @@ for (const screen of screens) {
           expect(controlBounds!.x + controlBounds!.width, `${screen.id} core control ends outside the viewport`).toBeLessThanOrEqual(width);
         }
         if (width >= 768) {
-          expect(geometry.content.width, `${screen.id} desktop content exceeds 640px`).toBeLessThanOrEqual(640);
+          expect(geometry.content.width, `${screen.id} desktop content exceeds the shared 868px width`).toBeLessThanOrEqual(868);
           expect(Math.abs((geometry.content.left + geometry.content.right) / 2 - width / 2), `${screen.id} desktop content is not centered`).toBeLessThanOrEqual(2);
         }
         expect(runtimeErrors, `${screen.id} raised browser runtime errors`).toEqual([]);
@@ -133,11 +133,15 @@ test('SCR-009 filters synthetic meetings by title and date and reports an invali
   await expect(productMeeting).toBeVisible();
   await expect(supportMeeting).toBeVisible();
 
-  await page.getByLabel('회의 검색').fill('제품 전략');
+  const search = page.getByRole('searchbox', { name: '회의 검색' });
+  await search.fill('제품 전략');
+  await search.press('Enter');
   await expect(productMeeting).toBeVisible();
   await expect(supportMeeting).toHaveCount(0);
-  await page.getByLabel('회의 검색').fill('');
+  await search.fill('');
+  await search.press('Enter');
   await expect(supportMeeting).toBeVisible();
+  await page.getByRole('button', { name: '상세 조건' }).click();
 
   await page.getByLabel('시작일').fill('2026-10-13');
   await page.getByLabel('종료일').fill('2026-10-15');
@@ -151,12 +155,43 @@ test('SCR-009 filters synthetic meetings by title and date and reports an invali
   await expect(productMeeting).toBeVisible();
   await expect(supportMeeting).toBeVisible();
 
-  await page.getByRole('button', { name: '필터 초기화' }).first().click();
-  await expect(page.getByLabel('회의 검색')).toHaveValue('');
+  await page.getByLabel('시작일').fill('');
+  await page.getByLabel('종료일').fill('');
+  await expect(search).toHaveValue('');
   await expect(page.getByLabel('시작일')).toHaveValue('');
   await expect(page.getByLabel('종료일')).toHaveValue('');
   await expect(productMeeting).toBeVisible();
   await expect(supportMeeting).toBeVisible();
+});
+
+test('SCR-001 and SCR-009 keep page titles fixed while meeting rows scroll', async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 430 });
+  const manyMeetings = Array.from({ length: 20 }, (_, index) => ({
+    ...meetingFixtures[index % meetingFixtures.length],
+    documentId: `scroll-document-${index}`,
+    title: `회의 기록 ${index + 1}`,
+  }));
+  await installSyntheticApi(page, screens[0], { meetings: manyMeetings });
+  await page.goto('/');
+
+  const homeTitle = page.getByRole('heading', { name: '회의를 시작할까요?' });
+  const recentList = page.locator('.home-recent .meeting-summary-list');
+  await expect(homeTitle).toBeVisible();
+  await expect.poll(() => recentList.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
+  const homeTitleTop = await homeTitle.evaluate((element) => element.getBoundingClientRect().top);
+  await recentList.evaluate((element) => { element.scrollTop = element.scrollHeight; });
+  expect(await homeTitle.evaluate((element) => element.getBoundingClientRect().top)).toBe(homeTitleTop);
+  expect(await page.evaluate(() => document.documentElement.scrollTop)).toBe(0);
+
+  await page.goto('/meetings');
+  const meetingsTitle = page.getByRole('heading', { name: '회의 기록', exact: true });
+  const meetingsViewport = page.locator('.meetings-list-viewport');
+  await expect(meetingsTitle).toBeVisible();
+  await expect.poll(() => meetingsViewport.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
+  const meetingsTitleTop = await meetingsTitle.evaluate((element) => element.getBoundingClientRect().top);
+  await meetingsViewport.evaluate((element) => { element.scrollTop = element.scrollHeight; });
+  expect(await meetingsTitle.evaluate((element) => element.getBoundingClientRect().top)).toBe(meetingsTitleTop);
+  expect(await page.evaluate(() => document.documentElement.scrollTop)).toBe(0);
 });
 
 test('SCR-012 searches the roster and clears the query to restore both fixture participants', async ({ page }) => {

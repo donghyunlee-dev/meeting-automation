@@ -64,7 +64,7 @@ function EmailSettingsForm({ onChanged }: { onChanged: () => void }) {
 
   useEffect(() => {
     mounted.current = true;
-    void Promise.resolve().then(refresh).finally(() => { if (mounted.current) onChanged(); });
+    void Promise.resolve().then(refresh);
     return () => { mounted.current = false; };
   }, [onChanged, refresh]);
 
@@ -186,7 +186,7 @@ function SlackWebhookSettingsForm({ onChanged }: { onChanged: () => void }) {
 
   useEffect(() => {
     mounted.current = true;
-    void Promise.resolve().then(refresh).finally(() => { if (mounted.current) onChanged(); });
+    void Promise.resolve().then(refresh);
     return () => { mounted.current = false; };
   }, [onChanged, refresh]);
 
@@ -275,6 +275,10 @@ export function SettingsPage() {
     try { setHealth({ status: 'ready', data: await getIntegrationHealth() }); }
     catch { setHealth((current) => ({ status: 'error', data: current.data })); }
   }, []);
+  const onIntegrationChanged = useCallback(() => {
+    void refreshConfig();
+    void refreshHealth();
+  }, [refreshConfig, refreshHealth]);
 
   useEffect(() => {
     let live = true;
@@ -318,11 +322,11 @@ export function SettingsPage() {
         </section>
         <section className="settings-card" aria-labelledby="settings-email-heading">
           <div className="settings-card-heading"><h2 id="settings-email-heading">이메일</h2><ProviderStatus state={emailStatus ?? 'health-unknown'} configuredLabel="연결 확인됨" /></div>
-          <EmailSettingsForm onChanged={() => { void refreshConfig(); void refreshHealth(); }} />
+          <EmailSettingsForm onChanged={onIntegrationChanged} />
         </section>
         <section className="settings-card" aria-labelledby="settings-notification-heading">
           <div className="settings-card-heading"><h2 id="settings-notification-heading">알림</h2><ProviderStatus state={notificationStatus ?? 'health-unknown'} configuredLabel="연결 확인됨" /></div>
-          <SlackWebhookSettingsForm onChanged={() => { void refreshConfig(); void refreshHealth(); }} />
+          <SlackWebhookSettingsForm onChanged={onIntegrationChanged} />
         </section>
       </>}
       <section className="settings-card" aria-labelledby="settings-participants-heading">

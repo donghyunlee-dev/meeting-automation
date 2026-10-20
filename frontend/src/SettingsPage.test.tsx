@@ -56,6 +56,7 @@ describe('Settings page', () => {
     expect(screen.queryByText(/시간대:/)).toBeNull();
     expect(screen.queryByRole('region', { name: '회사' })).toBeNull();
     expect(screen.getByRole('region', { name: '참석자' })).toBeTruthy();
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(4));
   });
 
   it('keeps public configuration visible when health fails and refreshes current settings with GET', async () => {
@@ -81,9 +82,9 @@ describe('Settings page', () => {
     expect(await screen.findByLabelText('Slack 알림 주소')).toBeTruthy();
     const initialConfigCalls = fetchMock.mock.calls.filter(([input]) => new URL(String(input)).pathname.endsWith('/app-config')).length;
     await waitFor(() => expect(healthCalls).toBeGreaterThan(0));
-    fireEvent.click(screen.getByRole('button', { name: '모든 연결 상태 새로고침' }));
+    fireEvent.click(screen.getByRole('button', { name: '연결 상태 다시 확인' }));
     await waitFor(() => expect(healthCalls).toBeGreaterThan(1));
-    await waitFor(() => expect(fetchMock.mock.calls.filter(([input]) => new URL(String(input)).pathname.endsWith('/app-config')).length).toBeGreaterThan(initialConfigCalls));
+    expect(fetchMock.mock.calls.filter(([input]) => new URL(String(input)).pathname.endsWith('/app-config')).length).toBe(initialConfigCalls);
     expect(fetchMock.mock.calls.some(([, init]) => init?.method && init.method !== 'GET')).toBe(false);
   });
 
