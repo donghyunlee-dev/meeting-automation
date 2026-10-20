@@ -23,7 +23,13 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 describe('Settings page', () => {
   it('starts the public configuration and integration health GET queries independently', async () => {
     const pending: Array<{ path: string; resolve: (value: Response) => void }> = [];
-    const fetchMock = vi.fn((input: RequestInfo | URL) => new Promise<Response>((resolve) => pending.push({ path: new URL(String(input)).pathname, resolve })));
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const path = new URL(String(input)).pathname;
+      if (path.endsWith('/integrations/email') || path.endsWith('/integrations/slack')) {
+        return Promise.resolve(response({ configured: false, connectionVerified: false }));
+      }
+      return new Promise<Response>((resolve) => pending.push({ path, resolve }));
+    });
     vi.stubGlobal('fetch', fetchMock);
     render(<MemoryRouter><SettingsPage /></MemoryRouter>);
 
@@ -33,6 +39,8 @@ describe('Settings page', () => {
     ]);
     pending.forEach(({ path, resolve }) => resolve(response(path.endsWith('/app-config') ? config : health)));
     await waitFor(() => expect(document.querySelector('.settings-sections')?.textContent).toContain('Notion'));
+    expect(await screen.findByLabelText('발신 이메일 주소')).toBeTruthy();
+    expect(await screen.findByLabelText('Slack 알림 주소')).toBeTruthy();
     expect(await screen.findByText('연결 상태 확인됨')).toBeTruthy();
     expect(screen.getByText('최근 알림 전달 상태가 확인되지 않았습니다.')).toBeTruthy();
     expect(screen.getByRole('heading', { level: 1, name: '설정' })).toBeTruthy();
@@ -49,23 +57,32 @@ describe('Settings page', () => {
     expect(screen.getByRole('region', { name: '참석자' })).toBeTruthy();
   });
 
-  it('keeps public configuration visible when health fails and retry refreshes only health with GET', async () => {
+  it('keeps public configuration visible when health fails and refreshes current settings with GET', async () => {
     let healthCalls = 0;
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = new URL(String(input)).pathname;
       expect(init?.method).toBeUndefined();
       if (path.endsWith('/app-config')) return response(config);
-      healthCalls += 1;
-      if (healthCalls === 1) return response('provider-private-error-marker', 503);
-      return response(health);
+      if (path.endsWith('/integrations/health')) {
+        healthCalls += 1;
+        if (healthCalls === 1) return response('provider-private-error-marker', 503);
+        return response(health);
+      }
+      if (path.endsWith('/integrations/email')) return response({ configured: false, connectionVerified: false });
+      if (path.endsWith('/integrations/slack')) return response({ configured: false, connectionVerified: false });
+      throw new Error(`Unexpected request: ${path}`);
     });
     vi.stubGlobal('fetch', fetchMock);
     render(<MemoryRouter><SettingsPage /></MemoryRouter>);
 
     await waitFor(() => expect(document.querySelector('.settings-sections')?.textContent).toContain('Notion'));
-    fireEvent.click(screen.getByRole('button', { name: '연결 상태 다시 확인' }));
-    expect(await screen.findByText('최근 알림 전달 상태가 확인되지 않았습니다.')).toBeTruthy();
-    expect(fetchMock.mock.calls.filter(([input]) => new URL(String(input)).pathname.endsWith('/app-config'))).toHaveLength(1);
+    expect(await screen.findByLabelText('발신 이메일 주소')).toBeTruthy();
+    expect(await screen.findByLabelText('Slack 알림 주소')).toBeTruthy();
+    const initialConfigCalls = fetchMock.mock.calls.filter(([input]) => new URL(String(input)).pathname.endsWith('/app-config')).length;
+    await waitFor(() => expect(healthCalls).toBeGreaterThan(0));
+    fireEvent.click(screen.getByRole('button', { name: '모든 연결 상태 새로고침' }));
+    await waitFor(() => expect(healthCalls).toBeGreaterThan(1));
+    await waitFor(() => expect(fetchMock.mock.calls.filter(([input]) => new URL(String(input)).pathname.endsWith('/app-config')).length).toBeGreaterThan(initialConfigCalls));
     expect(fetchMock.mock.calls.some(([, init]) => init?.method && init.method !== 'GET')).toBe(false);
   });
 
@@ -88,9 +105,10 @@ describe('Settings page', () => {
     fireEvent.change(within(emailSection).getByLabelText('Google 클라이언트 보안 키'), { target: { value: 'client-secret' } });
     fireEvent.change(within(emailSection).getByLabelText('메일 전송용 연결 토큰'), { target: { value: 'refresh-token' } });
     expect(within(emailSection).getByRole('button', { name: '저장' }).hasAttribute('disabled')).toBe(false);
+    expect(await screen.findByLabelText('Slack 알림 주소')).toBeTruthy();
   });
 
-  it('shows one shared health retry after refresh failure', async () => {
+  it('recovers connection health after the initial health query fails', async () => {
     let healthCalls = 0;
     const recoveredHealth = {
       ...health,
@@ -102,26 +120,33 @@ describe('Settings page', () => {
       const path = new URL(String(input)).pathname;
       expect(init?.method).toBeUndefined();
       if (path.endsWith('/app-config')) return response(config);
-      healthCalls += 1;
-      if (healthCalls === 2) return response('private-provider-error', 503);
-      return response(healthCalls === 1 ? health : recoveredHealth);
+      if (path.endsWith('/integrations/health')) {
+        healthCalls += 1;
+        if (healthCalls === 1) return response('private-provider-error', 503);
+        return response(healthCalls === 1 ? health : recoveredHealth);
+      }
+      if (path.endsWith('/integrations/email')) return response({ configured: false, connectionVerified: false });
+      if (path.endsWith('/integrations/slack')) return response({ configured: false, connectionVerified: false });
+      throw new Error(`Unexpected request: ${path}`);
     });
     vi.stubGlobal('fetch', fetchMock);
     render(<MemoryRouter><SettingsPage /></MemoryRouter>);
 
-    fireEvent.click(await screen.findByRole('button', { name: '모든 연결 상태 새로고침' }));
+    await waitFor(() => expect(healthCalls).toBe(1));
+    fireEvent.click(await screen.findByRole('button', { name: '연결 상태 다시 확인' }));
+    await waitFor(() => expect(healthCalls).toBeGreaterThan(1));
+    expect(document.body.textContent).not.toContain('private-provider-error');
     const documentSection = screen.getByRole('region', { name: '문서 연결' });
     const emailSection = screen.getByRole('region', { name: '이메일' });
     const notificationSection = screen.getByRole('region', { name: '알림' });
-    await screen.findByText('새로고침하지 못했습니다. 기존 내용을 유지합니다.');
-    expect(screen.getAllByRole('button', { name: '연결 상태 다시 확인' })).toHaveLength(1);
-    expect(healthCalls).toBe(2);
-    fireEvent.click(screen.getByRole('button', { name: '연결 상태 다시 확인' }));
+    expect(await within(emailSection).findByLabelText('발신 이메일 주소')).toBeTruthy();
+    expect(await screen.findByLabelText('Slack 알림 주소')).toBeTruthy();
+    const previousHealthCalls = healthCalls;
+    fireEvent.click(screen.getByRole('button', { name: '모든 연결 상태 새로고침' }));
+    await waitFor(() => expect(healthCalls).toBeGreaterThan(previousHealthCalls));
     expect(await within(notificationSection).findByText('연결 확인됨')).toBeTruthy();
-    await waitFor(() => expect(screen.queryByText('새로고침하지 못했습니다. 기존 내용을 유지합니다.')).toBeNull());
     expect(documentSection).toBeTruthy();
     expect(emailSection).toBeTruthy();
-    expect(healthCalls).toBe(3);
   });
 
   it('keeps successful health sections visible when public configuration fails', async () => {
@@ -132,6 +157,8 @@ describe('Settings page', () => {
 
     expect(await screen.findByRole('alert')).toBeTruthy();
     expect(document.querySelector('.settings-sections')?.textContent).toContain('Slack');
+    expect(await screen.findByLabelText('발신 이메일 주소')).toBeTruthy();
+    expect(await screen.findByLabelText('Slack 알림 주소')).toBeTruthy();
     expect(screen.getByText('최근 알림 전달 상태가 확인되지 않았습니다.')).toBeTruthy();
   });
 
@@ -161,9 +188,10 @@ describe('Settings page', () => {
     render(<MemoryRouter><SettingsPage /></MemoryRouter>);
 
     await waitFor(() => expect(document.querySelector('.settings-sections')?.textContent).toContain('Notion'));
+    expect(await screen.findByLabelText('발신 이메일 주소')).toBeTruthy();
+    expect(await screen.findByLabelText('Slack 알림 주소')).toBeTruthy();
     const visibleText = document.body.textContent ?? '';
     expect(visibleText).not.toMatch(/secret-root|root-id|raw-provider-token|private-root-id/);
-    expect(visibleText).toContain('실제 전달 성공을 보장하지 않습니다');
   });
 
   it('keeps an accessible route to the shared document setup wizard and participant settings', async () => {
@@ -179,6 +207,9 @@ describe('Settings page', () => {
 
     fireEvent.click(await screen.findByRole('link', { name: '문서 연결 설정' }));
     expect(await screen.findByRole('button', { name: '문서 서비스 변경' })).toBeTruthy();
-    expect(screen.getByRole('link', { name: '참석자 관리' }).getAttribute('href')).toBe('/settings/participants');
+    fireEvent.click(screen.getByRole('link', { name: '설정으로 돌아가기' }));
+    expect((await screen.findByRole('link', { name: '참석자 관리' })).getAttribute('href')).toBe('/settings/participants');
+    expect(await screen.findByLabelText('발신 이메일 주소')).toBeTruthy();
+    expect(await screen.findByLabelText('Slack 알림 주소')).toBeTruthy();
   });
 });

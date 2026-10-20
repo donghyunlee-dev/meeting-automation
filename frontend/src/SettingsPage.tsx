@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link } from 'react-router';
 import { AsyncState } from './components/async-state/AsyncState';
 import { normalizeApiError } from './lib/api/normalizeApiError';
@@ -38,6 +38,7 @@ function SettingsQueryError({ title, description, retryLabel, onRetry }: { title
 }
 
 function EmailSettingsForm({ onChanged }: { onChanged: () => void }) {
+  const mounted = useRef(false);
   const [settings, setSettings] = useState<EmailSettings | null>(null);
   const [form, setForm] = useState<StoredEmailSettings>({ clientId: '', clientSecret: '', refreshToken: '', senderAddress: '' });
   const [editing, setEditing] = useState(false);
@@ -46,19 +47,26 @@ function EmailSettingsForm({ onChanged }: { onChanged: () => void }) {
   const [error, setError] = useState('');
 
   const refresh = useCallback(async () => {
+    if (!mounted.current) return;
     setLoading(true);
     setError('');
     try {
       const current = await restoreEmailSettings();
+      if (!mounted.current) return;
       setSettings(current);
       setEditing(!current.configured);
     } catch (failure) {
+      if (!mounted.current) return;
       setEditing(true);
       setError(failure instanceof EmailSettingsApiError ? failure.message : '이메일 설정을 불러오지 못했습니다.');
-    } finally { setLoading(false); }
+    } finally { if (mounted.current) setLoading(false); }
   }, []);
 
-  useEffect(() => { void refresh().finally(onChanged); }, [refresh]);
+  useEffect(() => {
+    mounted.current = true;
+    void Promise.resolve().then(refresh).finally(() => { if (mounted.current) onChanged(); });
+    return () => { mounted.current = false; };
+  }, [onChanged, refresh]);
 
   function clearForm() {
     setForm({ clientId: '', clientSecret: '', refreshToken: '', senderAddress: '' });
@@ -151,6 +159,7 @@ function EmailSettingsForm({ onChanged }: { onChanged: () => void }) {
 }
 
 function SlackWebhookSettingsForm({ onChanged }: { onChanged: () => void }) {
+  const mounted = useRef(false);
   const [settings, setSettings] = useState<SlackWebhookSettings | null>(null);
   const [webhookUrl, setWebhookUrl] = useState('');
   const [loading, setLoading] = useState(true);
@@ -159,18 +168,27 @@ function SlackWebhookSettingsForm({ onChanged }: { onChanged: () => void }) {
   const [error, setError] = useState('');
 
   const refresh = useCallback(async () => {
+    if (!mounted.current) return;
     setLoading(true);
     setError('');
     try {
       const restored = await restoreSlackWebhookSettings();
+      if (!mounted.current) return;
       setSettings(restored);
       setEditing(!restored.configured);
     }
-    catch (failure) { setError(failure instanceof SlackSettingsApiError ? failure.message : 'Slack 설정을 불러오지 못했습니다.'); }
-    finally { setLoading(false); }
+    catch (failure) {
+      if (!mounted.current) return;
+      setError(failure instanceof SlackSettingsApiError ? failure.message : 'Slack 설정을 불러오지 못했습니다.');
+    }
+    finally { if (mounted.current) setLoading(false); }
   }, []);
 
-  useEffect(() => { void refresh().finally(onChanged); }, [refresh]);
+  useEffect(() => {
+    mounted.current = true;
+    void Promise.resolve().then(refresh).finally(() => { if (mounted.current) onChanged(); });
+    return () => { mounted.current = false; };
+  }, [onChanged, refresh]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

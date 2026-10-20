@@ -139,7 +139,6 @@ export function CompletePage() {
     snapshotRef.current = null;
     busyRef.current.clear();
     retryKeysRef.current.clear();
-    setEmailConfigured(false);
     Promise.allSettled([getPublishSnapshot(sessionId), listParticipants(), getDocumentAppConfig()]).then(([snapshotResult, participantResult, configResult]) => {
       if (!active) return;
       if (snapshotResult.status === 'fulfilled') applySnapshot(snapshotResult.value);
@@ -147,7 +146,8 @@ export function CompletePage() {
         ? '회의를 찾을 수 없습니다.' : requestFailureMessage(snapshotResult.reason));
       if (participantResult.status === 'fulfilled') setParticipants(participantResult.value);
       else setParticipants([]);
-      if (configResult.status === 'fulfilled') setEmailConfigured(configResult.value.email?.enabled === true && configResult.value.email.configured === true);
+      setEmailConfigured(configResult.status === 'fulfilled'
+        && configResult.value.email?.enabled === true && configResult.value.email.configured === true);
       setLoadedSessionId(sessionId);
     });
     return () => { active = false; };

@@ -5,8 +5,14 @@ import { ProcessingPage } from './ProcessingPage';
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); sessionStorage.clear(); });
 
+function returnFromAudioDownload() {
+  Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' });
+  fireEvent(window, new Event('focus'));
+  fireEvent(document, new Event('visibilitychange'));
+}
+
 function apiSnapshot(status: string, actions: string[] = [], stage = 'TRANSCRIPTION', version = 4) {
-  return { data: { sessionId: 's-1', version, status, processing: { stage, retryable: true, audioAvailable: true, audioExpiresAt: '2026-10-15T00:00:00Z', errorCode: 'PRIVATE_PROVIDER_FAILURE' }, allowedActions: actions } };
+  return { data: { sessionId: 's-1', version, status, processing: { stage, retryable: true, audioAvailable: true, audioExpiresAt: '2026-10-30T00:00:00Z', errorCode: 'PRIVATE_PROVIDER_FAILURE' }, allowedActions: actions } };
 }
 
 function renderPage() {
@@ -72,7 +78,7 @@ describe('ProcessingPage failure recovery', () => {
     vi.stubGlobal('fetch', fetchMock);
     renderPage();
     expect(await screen.findByRole('button', { name: '오디오 다운로드 준비' })).toBeTruthy();
-    fireEvent.focus(window);
+    returnFromAudioDownload();
     await waitFor(() => expect(screen.queryByRole('button', { name: '오디오 다운로드 준비' })).toBeNull());
     expect(statusReads).toBeGreaterThan(1);
   });
@@ -143,7 +149,9 @@ describe('ProcessingPage failure recovery', () => {
     expect(link.getAttribute('rel')).toContain('noopener');
     fireEvent.click(link);
     expect(fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(0);
-    fireEvent.focus(window);
+    const readsBeforeReturn = fetchMock.mock.calls.length;
+    returnFromAudioDownload();
+    await waitFor(() => expect(fetchMock.mock.calls.length).toBeGreaterThan(readsBeforeReturn));
     const savedButton = await screen.findByRole('button', { name: '저장했어요' });
     expect(document.activeElement).toBe(savedButton);
     fireEvent.click(savedButton);
@@ -154,23 +162,28 @@ describe('ProcessingPage failure recovery', () => {
 
   it('does not confirm an audio download when the refreshed API-010 removes DOWNLOAD_AUDIO', async () => {
     let statusReads = 0;
+    let returnedFromDownload = false;
     const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
       if (init?.method === 'POST') return new Response('', { status: 202 });
       statusReads += 1;
-      const actions = statusReads <= 2 ? ['DOWNLOAD_AUDIO', 'FINALIZE_PROCESSING_FAILURE'] : ['FINALIZE_PROCESSING_FAILURE'];
-      const body = apiSnapshot('PROCESSING_FAILED', actions);
-      if (statusReads > 2) body.data.processing.audioAvailable = false;
+      const downloadReturned = returnedFromDownload;
+      const actions = downloadReturned ? ['FINALIZE_PROCESSING_FAILURE'] : ['DOWNLOAD_AUDIO', 'FINALIZE_PROCESSING_FAILURE'];
+      const body = apiSnapshot('PROCESSING_FAILED', actions, 'TRANSCRIPTION', downloadReturned ? 5 : 4);
+      if (downloadReturned) body.data.processing.audioAvailable = false;
       return new Response(JSON.stringify(body), { status: 200 });
     });
     vi.stubGlobal('fetch', fetchMock);
     renderPage();
-    fireEvent.click((await screen.findAllByRole('button'))[0]);
+    fireEvent.click(await screen.findByRole('button', { name: '오디오 다운로드 준비' }));
     await waitFor(() => expect(document.querySelector('a[download]')).not.toBeNull());
     const link = document.querySelector<HTMLAnchorElement>('a[download]')!;
     fireEvent.click(link);
-    fireEvent.focus(window);
-    await waitFor(() => expect(screen.getAllByRole('alert').length).toBeGreaterThan(1));
-    expect(screen.queryByRole('dialog')).toBeNull();
+    const readsBeforeReturn = statusReads;
+    returnedFromDownload = true;
+    returnFromAudioDownload();
+    await waitFor(() => expect(statusReads).toBeGreaterThan(readsBeforeReturn));
+    expect(await screen.findByText('오디오를 사용할 수 없거나 보관 기한이 지났습니다. 최신 상태를 확인해 주세요.')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '저장했어요' })).toBeNull();
     expect(fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(0);
   });
 

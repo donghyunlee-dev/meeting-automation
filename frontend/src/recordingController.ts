@@ -188,7 +188,7 @@ export class RecordingController {
   }
 
   async start(): Promise<void> {
-    if (this.disposed || this.snapshot.state !== 'Ready' || this.startInProgress || this.recorder || this.stream) {
+    if (this.disposed || this.snapshot.state !== 'Ready' || this.startInProgress || this.recorder) {
       if (this.snapshot.state !== 'Ready') this.publish({ errorMessage: ERRORS.invalid });
       return;
     }

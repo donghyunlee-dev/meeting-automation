@@ -37,15 +37,15 @@ function installListFetch(items: MeetingSummary[]) {
 }
 
 describe('Home recent meetings', () => {
-  it('requests five and renders only the first five API-ordered summaries without private fields or status badges', async () => {
+  it('requests and renders only the first three API-ordered summaries without private fields or status badges', async () => {
     const fetchMock = installListFetch(meetings);
     render(<MemoryRouter><HomePage /></MemoryRouter>);
 
     expect(await screen.findByText('Meeting 1')).toBeTruthy();
-    expect(screen.getByText('Meeting 5')).toBeTruthy();
-    expect(screen.queryByText('Meeting 6')).toBeNull();
-    expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/api/v1/meetings?limit=5'))).toBe(true);
-    expect(screen.getAllByText('참석자 1명')).toHaveLength(5);
+    expect(screen.getByText('Meeting 3')).toBeTruthy();
+    expect(screen.queryByText('Meeting 4')).toBeNull();
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/api/v1/meetings?limit=3'))).toBe(true);
+    expect(screen.getAllByText('참석자 1명')).toHaveLength(3);
     expect(screen.queryByText('Person 1')).toBeNull();
     expect(screen.queryByText(/private\.example|private-\d+@example\.com|COMPLETED|private provider details/)).toBeNull();
     expect(screen.getByRole('button', { name: '전체 보기' })).toBeTruthy();
@@ -93,7 +93,7 @@ describe('Home recent meetings', () => {
     fireEvent.click(screen.getByRole('button', { name: '다시 시도' }));
 
     expect(await screen.findByText('Meeting 2')).toBeTruthy();
-    expect(fetchMock.mock.calls.filter(([url]) => String(url).includes('limit=5'))).toHaveLength(2);
+    expect(fetchMock.mock.calls.filter(([url]) => String(url).includes('limit=3'))).toHaveLength(2);
   });
 
   it('announces the loading state while the list request is pending', async () => {
@@ -110,27 +110,19 @@ describe('Home recent meetings', () => {
 });
 
 describe('Meetings page', () => {
-  it('ASYNC-STALE / ASYNC-GET-RETRY preserves loaded meetings and retries only after the user asks', async () => {
-    const fetchMock = vi.fn<(input: RequestInfo | URL) => Promise<Response>>(() => Promise.resolve(response({ data: { items: meetings.slice(0, 2) } })))
-      .mockResolvedValueOnce(response({ data: { items: meetings.slice(0, 2) } }))
+  it('offers a retry after the initial meeting list request fails', async () => {
+    const fetchMock = vi.fn<(input: RequestInfo | URL) => Promise<Response>>()
       .mockResolvedValueOnce(response({ error: { code: 'PROVIDER_FAILURE', message: 'token=private-provider-secret' } }, 502))
       .mockResolvedValueOnce(response({ data: { items: meetings.slice(0, 3) } }));
     vi.stubGlobal('fetch', fetchMock);
     render(<MemoryRouter initialEntries={['/meetings']}><Routes><Route path="/meetings" element={<MeetingsPage />} /></Routes></MemoryRouter>);
 
+    fireEvent.click(await screen.findByRole('button', { name: '다시 시도' }));
     expect(await screen.findByRole('button', { name: /Meeting 1 상세 보기/ })).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: '회의 목록 새로고침' }));
-
-    expect(await screen.findByRole('status')).toBeTruthy();
-    expect(screen.getByRole('button', { name: /Meeting 1 상세 보기/ })).toBeTruthy();
     expect(screen.getByRole('button', { name: /Meeting 2 상세 보기/ })).toBeTruthy();
-    expect(screen.getByText('새로고침하지 못했습니다. 기존 내용을 유지합니다.')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Meeting 3 상세 보기/ })).toBeTruthy();
     expect(document.body.textContent).not.toContain('private-provider-secret');
     expect(fetchMock).toHaveBeenCalledTimes(2);
-
-    fireEvent.click(screen.getByRole('button', { name: '다시 시도' }));
-    expect(await screen.findByRole('button', { name: /Meeting 3 상세 보기/ })).toBeTruthy();
-    expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
   it('deduplicates StrictMode effect replay by query key while keeping Home and Meetings requests independent', async () => {
@@ -144,7 +136,7 @@ describe('Meetings page', () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
     const requestedUrls = fetchMock.mock.calls.map(([input]) => String(input));
     expect(requestedUrls).toHaveLength(4);
-    expect(requestedUrls.filter((url) => url.endsWith('/meetings?limit=5'))).toHaveLength(1);
+    expect(requestedUrls.filter((url) => url.endsWith('/meetings?limit=3'))).toHaveLength(1);
     expect(requestedUrls.filter((url) => url.endsWith('/meetings'))).toHaveLength(1);
     expect(requestedUrls.filter((url) => url.endsWith('/document-setup'))).toHaveLength(2);
 

@@ -27,7 +27,8 @@ export function ProcessingPage() {
   const [actionError, setActionError] = useState('');
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [confirmDownload, setConfirmDownload] = useState(false);
-  const [downloadReady, setDownloadReady] = useState(false);
+  const [downloadReadySessionId, setDownloadReadySessionId] = useState<string | null>(null);
+  const downloadReady = downloadReadySessionId === sessionId;
   const [clockNow, setClockNow] = useState(() => Date.now());
   const navigated = useRef(false);
   const inFlight = useRef(false);
@@ -42,8 +43,16 @@ export function ProcessingPage() {
 
   const applySnapshot = useCallback((next: ProcessingSnapshot) => {
     if (next.sessionId !== sessionId) { setFailure('session-mismatch'); return; }
+    if (snapshotRef.current && next.version < snapshotRef.current.version) return;
+    snapshotRef.current = next;
     setSnapshot(next);
-    setDownloadReady(false);
+    setDownloadReadySessionId((readySessionId) => readySessionId === sessionId
+      && next.status === 'PROCESSING_FAILED'
+      && next.processing.audioAvailable === true
+      && next.allowedActions.includes('DOWNLOAD_AUDIO') ? sessionId : null);
+    if (next.status !== 'PROCESSING_FAILED' || next.processing.audioAvailable !== true || !next.allowedActions.includes('DOWNLOAD_AUDIO')) {
+      setConfirmDownload(false);
+    }
     setFailure(null);
     if (next.status === 'REVIEW' && !navigated.current) {
       navigated.current = true;
@@ -150,11 +159,11 @@ export function ProcessingPage() {
     } finally { inFlight.current = false; setBusy(false); }
   };
   const checkDownloadAvailability = async () => {
-    setBusy(true); setActionError(''); setDownloadReady(false);
+    setBusy(true); setActionError(''); setDownloadReadySessionId(null);
     try {
       const latest = await getProcessingStatus(sessionId);
       applySnapshot(latest);
-      if (latest.status === 'PROCESSING_FAILED' && latest.processing.audioAvailable === true && latest.allowedActions.includes('DOWNLOAD_AUDIO')) setDownloadReady(true);
+      if (latest.status === 'PROCESSING_FAILED' && latest.processing.audioAvailable === true && latest.allowedActions.includes('DOWNLOAD_AUDIO')) setDownloadReadySessionId(sessionId);
       else setActionError('오디오를 사용할 수 없거나 보관 기한이 지났습니다. 최신 상태를 확인해 주세요.');
     } catch (error) {
       const mapped = error instanceof ProcessingApiError ? error : new ProcessingApiError('NETWORK_ERROR');

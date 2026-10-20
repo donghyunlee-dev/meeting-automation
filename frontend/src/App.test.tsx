@@ -1,6 +1,6 @@
 import 'fake-indexeddb/auto';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { StrictMode, useLayoutEffect, useRef } from 'react';
+import { StrictMode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router';
 import { App } from './App';
@@ -25,9 +25,14 @@ function readySetupResponse() {
 }
 
 function installFetchMock(fetchMock: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>) {
-  vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL, init?: RequestInit) => String(input).endsWith('/document-setup')
-    ? Promise.resolve(readySetupResponse())
-    : fetchMock(input, init)));
+  vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+    const path = new URL(String(input), 'http://localhost').pathname;
+    if (path.endsWith('/document-setup')) return Promise.resolve(readySetupResponse());
+    if (path.endsWith('/integrations/slack') || path.endsWith('/integrations/email')) {
+      return Promise.resolve(response({ data: { configured: false } }));
+    }
+    return fetchMock(input, init);
+  }));
 }
 
 function deleteChunkDatabase(): Promise<void> {
@@ -48,6 +53,7 @@ function mockList(result: Response | Promise<Response>) {
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  localStorage.clear();
   sessionStorage.clear();
 });
 
@@ -76,16 +82,6 @@ function NavigateToMismatchedRecordingSession() {
   return <button type="button" onClick={() => navigate('/meetings/other-session/recording')}>Open another session</button>;
 }
 
-function StartRecordingDuringLayout() {
-  const clicked = useRef(false);
-  useLayoutEffect(() => {
-    if (clicked.current) return;
-    clicked.current = true;
-    document.querySelector<HTMLButtonElement>('.recording-primary-action')?.click();
-  }, []);
-  return null;
-}
-
 function renderHomeWithDestinationFixture() {
   return render(
     <MemoryRouter initialEntries={['/']}>
@@ -99,6 +95,13 @@ function renderHomeWithDestinationFixture() {
 
 function renderParticipantsApp() {
   return render(<MemoryRouter initialEntries={['/settings/participants']}><App /></MemoryRouter>);
+}
+
+async function findSpeakerSelect(speaker: 'A' | 'B' | 'C') {
+  const summary = await screen.findByText('화자 매핑 · 참석자 연결');
+  const details = summary.closest('details');
+  if (details && !details.open) fireEvent.click(summary);
+  return screen.findByRole('combobox', { name: `Speaker ${speaker} 연결할 참석자` });
 }
 
 describe('Participants settings', () => {
@@ -119,7 +122,7 @@ describe('Participants settings', () => {
       } }, 201));
       return Promise.reject(new Error(`Unexpected request: ${path} ${init?.method ?? 'GET'}`));
     });
-    vi.stubGlobal('fetch', fetchMock);
+    installFetchMock(fetchMock);
     render(<MemoryRouter initialEntries={['/meetings/new']}><App /></MemoryRouter>);
 
     await screen.findByRole('button', { name: '참석자 선택' });
@@ -157,7 +160,7 @@ describe('Participants settings', () => {
         : new Promise<Response>((resolve) => { resolveSecond = resolve; });
       return Promise.reject(new Error(`Unexpected request: ${path} ${init?.method ?? 'GET'}`));
     });
-    vi.stubGlobal('fetch', fetchMock);
+    installFetchMock(fetchMock);
     render(<MemoryRouter initialEntries={['/meetings/new']}><App /></MemoryRouter>);
     await screen.findByRole('button', { name: '참석자 선택' });
     fireEvent.change(screen.getByLabelText('회의 제목'), { target: { value: 'Retry safely' } });
@@ -202,7 +205,7 @@ describe('Participants settings', () => {
       }
       return Promise.reject(new Error(`Unexpected request: ${path} ${init?.method ?? 'GET'}`));
     });
-    vi.stubGlobal('fetch', fetchMock);
+    installFetchMock(fetchMock);
     render(<MemoryRouter initialEntries={['/meetings/new']}><App /></MemoryRouter>);
     await screen.findByRole('button', { name: '참석자 선택' });
     fireEvent.change(screen.getByLabelText('회의 제목'), { target: { value: 'Retry after gateway response' } });
@@ -241,7 +244,7 @@ describe('Participants settings', () => {
       }
       return Promise.reject(new Error(`Unexpected request: ${path} ${init?.method ?? 'GET'}`));
     });
-    vi.stubGlobal('fetch', fetchMock);
+    installFetchMock(fetchMock);
     render(<MemoryRouter initialEntries={['/meetings/new']}><App /></MemoryRouter>);
     await screen.findByRole('button', { name: '참석자 선택' });
     fireEvent.change(screen.getByLabelText('회의 제목'), { target: { value: 'Connection changes during retry' } });
@@ -285,7 +288,7 @@ describe('Participants settings', () => {
       }
       return Promise.reject(new Error(`Unexpected request: ${path} ${init?.method ?? 'GET'}`));
     });
-    vi.stubGlobal('fetch', fetchMock);
+    installFetchMock(fetchMock);
     render(<MemoryRouter initialEntries={['/meetings/new']}><App /></MemoryRouter>);
     await screen.findByRole('button', { name: '참석자 선택' });
     fireEvent.change(screen.getByLabelText('회의 제목'), { target: { value: 'Before edit' } });
@@ -331,7 +334,7 @@ describe('Participants settings', () => {
       }
       return Promise.reject(new Error(`Unexpected request: ${path} ${init?.method ?? 'GET'}`));
     });
-    vi.stubGlobal('fetch', fetchMock);
+    installFetchMock(fetchMock);
     render(<MemoryRouter initialEntries={['/meetings/new']}><App /></MemoryRouter>);
     await screen.findByRole('button', { name: '참석자 선택' });
     fireEvent.change(screen.getByLabelText('회의 제목'), { target: { value: 'Current connection' } });
@@ -376,7 +379,7 @@ describe('Participants settings', () => {
       if (path.endsWith('/meeting-sessions')) return Promise.resolve(response({ error: { code: 'DOCUMENT_CONNECTION_CHANGED' } }, 409));
       return Promise.reject(new Error(`Unexpected request: ${path} ${init?.method ?? 'GET'}`));
     });
-    vi.stubGlobal('fetch', fetchMock);
+    installFetchMock(fetchMock);
     render(<MemoryRouter initialEntries={['/meetings/new']}><App /></MemoryRouter>);
     await screen.findByRole('button', { name: '참석자 선택' });
     fireEvent.change(screen.getByLabelText('회의 제목'), { target: { value: 'Roster refresh retry' } });
@@ -407,10 +410,9 @@ describe('Participants settings', () => {
       if (path.endsWith('/participants')) return Promise.resolve(response({ data: { items: participants } }));
       return Promise.reject(new Error(`Unexpected request: ${path} ${init?.method ?? 'GET'}`));
     });
-    vi.stubGlobal('fetch', fetchMock);
+    installFetchMock(fetchMock);
     render(<MemoryRouter initialEntries={['/meetings/new']}><App /></MemoryRouter>);
-    await screen.findByRole('link', { name: 'Open document settings' });
-    expect(screen.getByRole('link', { name: 'Open document settings' }).getAttribute('href')).toBe('/setup/document');
+    expect(await screen.findByRole('alert')).toHaveProperty('textContent', '문서 서비스 연결 설정을 완료한 뒤 회의를 시작할 수 있습니다.');
     expect(screen.getByRole('button', { name: '회의 시작' })).toHaveProperty('disabled', true);
     expect(fetchMock.mock.calls.some(([url]) => new URL(String(url)).pathname.endsWith('/meeting-sessions'))).toBe(false);
   });
@@ -428,10 +430,9 @@ describe('Participants settings', () => {
     expect(screen.getByRole('button', { name: /새 회의 시작/ })).toBeTruthy();
     const navigation = within(screen.getByRole('navigation', { name: '주요 메뉴' }));
     expect(navigation.getAllByRole('link').map((link) => link.getAttribute('aria-label'))).toEqual(['홈', '회의록', '설정']);
-    await screen.findByText(/최근 회의가 없습니다/);
-    expect(screen.getByRole('img', { name: '회의 기록 없음' })).toBeTruthy();
+    expect(await screen.findByRole('img', { name: '회의 기록 없음' })).toBeTruthy();
     expect(fetchMock).toHaveBeenCalledOnce();
-    expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/api/v1/meetings?limit=5'))).toBe(true);
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/api/v1/meetings?limit=3'))).toBe(true);
   });
 
   it('navigates the Home CTA to the New Meeting route fixture', async () => {
@@ -660,7 +661,7 @@ describe('Participants settings', () => {
 });
 
 describe('Recording route', () => {
-  it('accepts an immediate start interaction as soon as the recording route is painted', async () => {
+  it('starts recording after microphone preflight completes', async () => {
     sessionStorage.setItem('meeting-automation.recording-session', JSON.stringify({
       sessionId: 'session-immediate-start', title: 'Immediate start', version: 1, status: 'CREATED',
       uploadPolicy: { chunkDurationSeconds: 15, maxChunkBytes: 1000000, acceptedMimeTypes: ['audio/webm'] },
@@ -684,10 +685,10 @@ describe('Recording route', () => {
       createChunkId: () => 'immediate-start-chunk',
     };
     const fetchMock = vi.fn(async () => response({ data: { receivedSequences: [], receivedChunks: 0, totalBytes: 0 } }));
-    vi.stubGlobal('fetch', fetchMock);
+    installFetchMock(fetchMock);
 
-    render(<MemoryRouter initialEntries={['/meetings/session-immediate-start/recording']}><App mediaAdapter={mediaAdapter} /><StartRecordingDuringLayout /></MemoryRouter>);
-
+    render(<MemoryRouter initialEntries={['/meetings/session-immediate-start/recording']}><App mediaAdapter={mediaAdapter} /></MemoryRouter>);
+    fireEvent.click(await screen.findByRole('button', { name: '녹음 시작' }));
     expect(mediaAdapter.getUserMedia).toHaveBeenCalledTimes(1);
     expect(await screen.findByText('녹음 중')).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Immediate start' })).toBeTruthy();
@@ -710,7 +711,7 @@ describe('Recording route', () => {
       if (path.endsWith('/audio')) return response({ data: { receivedSequences: [0], receivedChunks: 1, totalBytes: 11 } });
       throw new Error(`Unexpected request: ${path}`);
     });
-    vi.stubGlobal('fetch', fetchMock);
+    installFetchMock(fetchMock);
 
     render(<MemoryRouter initialEntries={['/meetings/session-reload/recording']}><App /></MemoryRouter>);
 
@@ -722,7 +723,7 @@ describe('Recording route', () => {
       expect(pending.chunks).toHaveLength(0);
     });
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(screen.getByText('오디오 업로드가 완료되었습니다.')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '업로드 재시도' })).toBeNull();
   });
 
   it('preserves IndexedDB audio when API-008 reports SESSION_NOT_FOUND', async () => {
@@ -738,7 +739,7 @@ describe('Recording route', () => {
     });
     repository.close();
     const fetchMock = vi.fn().mockResolvedValue(response({ error: { code: 'SESSION_NOT_FOUND' } }, 404));
-    vi.stubGlobal('fetch', fetchMock);
+    installFetchMock(fetchMock);
 
     render(<MemoryRouter initialEntries={[`/meetings/${session.sessionId}/recording`]}><App /></MemoryRouter>);
 
@@ -791,7 +792,7 @@ describe('Recording route', () => {
       deletion.onerror = () => reject(deletion.error);
       deletion.onblocked = () => reject(new Error('Chunk test database is still open'));
     });
-    vi.stubGlobal('fetch', fetchMock);
+    installFetchMock(fetchMock);
     render(<StrictMode><MemoryRouter initialEntries={['/meetings/new']}><App mediaAdapter={mediaAdapter} /><NavigateToMismatchedRecordingSession /></MemoryRouter></StrictMode>);
 
     await screen.findByRole('button', { name: '참석자 선택' });
@@ -802,13 +803,13 @@ describe('Recording route', () => {
 
     expect(await screen.findByRole('heading', { name: 'Planning' })).toBeTruthy();
     expect(screen.queryByText('session-ready')).toBeNull();
-    expect(screen.getByText('준비됨')).toBeTruthy();
+    expect(await screen.findByText('준비됨')).toBeTruthy();
     expect(screen.getByText('00:00:00')).toBeTruthy();
     expect(screen.getByRole('button', { name: '녹음 시작' })).toBeTruthy();
     expect(screen.getByRole('navigation', { name: '주요 메뉴' })).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: '녹음 시작' }));
-    expect(mediaAdapter.getUserMedia).toHaveBeenCalledTimes(1);
+    expect(mediaAdapter.getUserMedia).toHaveBeenCalledTimes(2);
     expect(await screen.findByText('녹음 중')).toBeTruthy();
     const recorder = vi.mocked(mediaAdapter.createRecorder).mock.results[0].value;
     recorder.ondataavailable?.({ data: new NodeBlob(['audio-data'], { type: 'audio/webm' }) });
@@ -832,7 +833,7 @@ describe('Recording route', () => {
     fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: '회의 종료' }));
     expect(await screen.findByText('녹음이 종료되었습니다.')).toBeTruthy();
     expect(screen.queryByRole('button', { name: '녹음 시작' })).toBeNull();
-    expect(track.stop).toHaveBeenCalledTimes(1);
+    expect(track.stop).toHaveBeenCalledTimes(2);
     fireEvent.click(screen.getByRole('button', { name: 'Open another session' }));
     expect(screen.getByRole('heading', { name: '녹음 세션을 찾을 수 없습니다' })).toBeTruthy();
     expect(screen.getByRole('link', { name: '새 회의 시작' }).getAttribute('href')).toBe('/meetings/new');
@@ -884,7 +885,7 @@ describe('Recording route', () => {
       }
       throw new Error(`Unexpected request: ${path} ${init?.method ?? 'GET'}`);
     });
-    vi.stubGlobal('fetch', fetchMock);
+    installFetchMock(fetchMock);
 
     render(<MemoryRouter initialEntries={[`/meetings/${session.sessionId}/recording`]}>
       <App mediaAdapter={mediaAdapter} />
@@ -947,12 +948,13 @@ describe('Recording route', () => {
       }
       throw new Error(`Unexpected request: ${path} ${_init?.method ?? 'GET'}`);
     });
-    vi.stubGlobal('fetch', fetchMock);
+    installFetchMock(fetchMock);
     render(<MemoryRouter initialEntries={[`/meetings/${session.sessionId}/recording`]}>
       <App mediaAdapter={mediaAdapter} />
       <CurrentPath />
     </MemoryRouter>);
 
+    await screen.findByText('준비됨');
     fireEvent.click(await screen.findByRole('button', { name: '녹음 시작' }));
     await screen.findByText('녹음 중');
     elapsedMs = 8_500;
@@ -1007,6 +1009,7 @@ describe('Recording route', () => {
     installFetchMock(fetchMock);
 
     render(<MemoryRouter initialEntries={[`/meetings/${session.sessionId}/recording`]}><App mediaAdapter={mediaAdapter} /></MemoryRouter>);
+    await screen.findByText('준비됨');
     fireEvent.click(await screen.findByRole('button', { name: '녹음 시작' }));
     await screen.findByText('녹음 중');
     recorder.ondataavailable?.({ data: new NodeBlob(['already saved audio'], { type: 'audio/webm' }) as Blob });
@@ -1050,7 +1053,7 @@ describe('Processing route', () => {
       minutes: { text: 'partial minutes must stay hidden' },
       allowedActions: [],
     } }); });
-    vi.stubGlobal('fetch', fetchMock);
+    installFetchMock(fetchMock);
 
     render(<MemoryRouter initialEntries={['/meetings/processing-session/processing']}><App /></MemoryRouter>);
 
@@ -1076,7 +1079,7 @@ describe('Processing route', () => {
       if (path.endsWith('/app-config')) return response({ data: { company: { id: 'c1', name: 'Example', timezone: 'Asia/Seoul' }, document: { provider: 'NOTION', configured: true, connectionVersion: 1, rootUrl: 'https://notion.example' } } });
       return Promise.reject(new Error(`Unexpected request: ${path}`));
     });
-    vi.stubGlobal('fetch', fetchMock);
+    installFetchMock(fetchMock);
     render(<MemoryRouter initialEntries={['/meetings/review-session/processing']}><App /><CurrentPath /></MemoryRouter>);
     await waitFor(() => expect(screen.getByTestId('current-path').textContent).toBe('/meetings/review-session/review'));
     expect(fetchMock.mock.calls.filter(([url]) => new URL(String(url)).pathname.endsWith('/meeting-sessions/review-session'))).toHaveLength(2);
@@ -1087,7 +1090,7 @@ describe('Processing route', () => {
       sessionId: 'different-session', version: 1, status: 'REVIEW',
       processing: { stage: 'DRAFT_READY', progressPercent: 100 }, allowedActions: [],
     } }));
-    vi.stubGlobal('fetch', fetchMock);
+    installFetchMock(fetchMock);
     render(<MemoryRouter initialEntries={['/meetings/expected-session/processing']}><App /><CurrentPath /></MemoryRouter>);
     expect((await screen.findByRole('alert')).textContent).toContain('회의 처리 정보를 확인할 수 없습니다');
     expect(screen.getByTestId('current-path').textContent).toBe('/meetings/expected-session/processing');
@@ -1098,7 +1101,7 @@ describe('Processing route', () => {
       sessionId: 'failed-session', version: 2, status: 'PROCESSING_FAILED',
       processing: { stage: 'TRANSCRIPTION', errorCode: 'PRIVATE_PROVIDER_SECRET' }, allowedActions: [], audioExpiresAt: null,
     } }));
-    vi.stubGlobal('fetch', fetchMock);
+    installFetchMock(fetchMock);
     render(<MemoryRouter initialEntries={['/meetings/failed-session/processing']}><App /></MemoryRouter>);
     expect((await screen.findByRole('alert')).textContent).toContain('음성을 변환하는 중 문제가 발생했습니다.');
     expect(screen.queryByText('PRIVATE_PROVIDER_SECRET')).toBeNull();
@@ -1108,7 +1111,7 @@ describe('Processing route', () => {
 
   it('shows a safe new-meeting path for SESSION_NOT_FOUND without creating a session', async () => {
     const fetchMock = vi.fn(async () => response({ error: { code: 'SESSION_NOT_FOUND' } }, 404));
-    vi.stubGlobal('fetch', fetchMock);
+    installFetchMock(fetchMock);
     render(<MemoryRouter initialEntries={['/meetings/gone-session/processing']}><App /></MemoryRouter>);
     expect((await screen.findByRole('alert')).textContent).toContain('회의를 찾을 수 없습니다');
     expect(screen.getByRole('link', { name: '새 회의 시작' }).getAttribute('href')).toBe('/meetings/new');
@@ -1116,7 +1119,7 @@ describe('Processing route', () => {
   });
 
   it('treats DIARIZATION at 100 percent as the current minutes-generation stage', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => response({ data: {
+    installFetchMock(vi.fn(async () => response({ data: {
       sessionId: 'minutes-session', version: 2, status: 'PROCESSING',
       processing: { stage: 'DIARIZATION', progressPercent: 100 }, allowedActions: [],
     } })));
@@ -1127,7 +1130,7 @@ describe('Processing route', () => {
   });
 
   it('does not invent progress for an out-of-range percentage', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => response({ data: {
+    installFetchMock(vi.fn(async () => response({ data: {
       sessionId: 'invalid-progress', version: 2, status: 'PROCESSING',
       processing: { stage: 'TRANSCRIPTION', progressPercent: 140 }, allowedActions: [],
     } })));
@@ -1137,7 +1140,7 @@ describe('Processing route', () => {
   });
 
   it('does not invent progress when the API-010 percentage is absent', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => response({ data: {
+    installFetchMock(vi.fn(async () => response({ data: {
       sessionId: 'missing-progress', version: 2, status: 'PROCESSING',
       processing: { stage: 'TRANSCRIPTION' }, allowedActions: [],
     } })));
@@ -1157,7 +1160,7 @@ describe('Processing route', () => {
       if (path.endsWith('/app-config')) return response({ data: { company: { id: 'c1', name: 'Example', timezone: 'Asia/Seoul' }, document: { provider: 'NOTION', configured: true, connectionVersion: 1, rootUrl: 'https://notion.example' } } });
       return Promise.reject(new Error(`Unexpected request: ${path}`));
     });
-    vi.stubGlobal('fetch', fetchMock);
+    installFetchMock(fetchMock);
     render(<MemoryRouter initialEntries={['/meetings/draft-ready/processing']}><App /><CurrentPath /></MemoryRouter>);
     await waitFor(() => expect(screen.getByTestId('current-path').textContent).toBe('/meetings/draft-ready/review'));
     expect(fetchMock.mock.calls.filter(([url]) => new URL(String(url)).pathname.endsWith('/meeting-sessions/draft-ready'))).toHaveLength(2);
@@ -1169,7 +1172,7 @@ describe('Processing route', () => {
       requestSignal = init?.signal ?? undefined;
       return new Promise<Response>(() => undefined);
     });
-    vi.stubGlobal('fetch', fetchMock);
+    installFetchMock(fetchMock);
     const view = render(<MemoryRouter initialEntries={['/meetings/leaving-session/processing']}><App /></MemoryRouter>);
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
     view.unmount();
@@ -1200,14 +1203,14 @@ describe('Review speaker selection', () => {
       if (path.endsWith('/app-config')) return Promise.resolve(response({ data: { company: { id: 'c1', name: 'Example', timezone: 'Asia/Seoul' }, document: { provider: 'NOTION', configured: true, connectionVersion: 1, rootUrl: 'https://notion.example' } } }));
       return Promise.reject(new Error(`Unexpected request: ${path}`));
     });
-    vi.stubGlobal('fetch', fetchMock);
+    installFetchMock(fetchMock);
     render(<MemoryRouter initialEntries={['/meetings/session-b/review']}><App /><NavigateToReviewSession sessionId="session-c" /></MemoryRouter>);
 
     expect((await screen.findByRole('alert')).textContent).toContain('회의 화자 정보를 불러오지 못했습니다');
     fireEvent.click(screen.getByRole('button', { name: '회의 정보 다시 불러오기' }));
     await waitFor(() => expect(resolveSessionBRetry).toBeDefined());
     fireEvent.click(screen.getByRole('button', { name: 'Open another Review session' }));
-    const sessionCSelect = await screen.findByRole('combobox', { name: 'Speaker C 참가자' });
+    const sessionCSelect = await findSpeakerSelect('C');
     expect((sessionCSelect as HTMLSelectElement).value).toBe('p3');
 
     await act(async () => {
@@ -1219,9 +1222,9 @@ describe('Review speaker selection', () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
     expect(screen.queryByRole('status', { name: '회의의 화자 정보를 불러오는 중입니다.' })).toBeNull();
-    expect(screen.getByRole('combobox', { name: 'Speaker C 참가자' })).toBeTruthy();
-    expect((screen.getByRole('combobox', { name: 'Speaker C 참가자' }) as HTMLSelectElement).value).toBe('p3');
-    expect(screen.queryByRole('combobox', { name: 'Speaker B 참가자' })).toBeNull();
+    expect(screen.getByRole('combobox', { name: 'Speaker C 연결할 참석자' })).toBeTruthy();
+    expect((screen.getByRole('combobox', { name: 'Speaker C 연결할 참석자' }) as HTMLSelectElement).value).toBe('p3');
+    expect(screen.queryByRole('combobox', { name: 'Speaker B 연결할 참석자' })).toBeNull();
     expect(screen.queryByText('회의의 화자 정보를 불러오는 중입니다.')).toBeNull();
   });
 
@@ -1239,18 +1242,18 @@ describe('Review speaker selection', () => {
       if (path.endsWith('/app-config')) return Promise.resolve(response({ data: { company: { id: 'c1', name: 'Example', timezone: 'Asia/Seoul' }, document: { provider: 'NOTION', configured: true, connectionVersion: 1, rootUrl: 'https://notion.example' } } }));
       return Promise.reject(new Error(`Unexpected request: ${path}`));
     });
-    vi.stubGlobal('fetch', fetchMock);
+    installFetchMock(fetchMock);
     render(<MemoryRouter initialEntries={['/meetings/session-a/review']}><App /><NavigateToReviewSession sessionId="session-b" /></MemoryRouter>);
 
-    expect(await screen.findByRole('combobox', { name: 'Speaker A 참가자' })).toBeTruthy();
+    expect(await findSpeakerSelect('A')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Open another Review session' }));
     await waitFor(() => expect(rejectSessionB).toBeDefined());
     expect(await screen.findByText('회의의 화자 정보를 불러오는 중입니다.')).toBeTruthy();
-    expect(screen.queryByRole('combobox', { name: 'Speaker A 참가자' })).toBeNull();
+    expect(screen.queryByRole('combobox', { name: 'Speaker A 연결할 참석자' })).toBeNull();
 
     rejectSessionB?.(new TypeError('network details must stay hidden'));
     expect((await screen.findByRole('alert')).textContent).toContain('회의 화자 정보를 불러오지 못했습니다');
-    expect(screen.queryByRole('combobox', { name: 'Speaker A 참가자' })).toBeNull();
+    expect(screen.queryByRole('combobox', { name: 'Speaker A 연결할 참석자' })).toBeNull();
     expect(screen.queryByText('Ada Lovelace')).toBeNull();
   });
 
@@ -1282,24 +1285,25 @@ describe('Review speaker selection', () => {
       } });
       return Promise.reject(new Error(`Unexpected request: ${path}`));
     });
-    vi.stubGlobal('fetch', fetchMock);
+    installFetchMock(fetchMock);
     render(<MemoryRouter initialEntries={['/meetings/review-speakers/review']}><App /></MemoryRouter>);
 
     expect(await screen.findByRole('heading', { name: '회의록 검토' })).toBeTruthy();
     const selects = await screen.findAllByRole('combobox');
     expect(selects).toHaveLength(2);
-    expect((screen.getByRole('combobox', { name: 'Speaker A 참가자' }) as HTMLSelectElement).value).toBe('p2');
-    expect((screen.getByRole('combobox', { name: 'Speaker B 참가자' }) as HTMLSelectElement).value).toBe('');
+    expect((screen.getByRole('combobox', { name: 'Speaker A 연결할 참석자' }) as HTMLSelectElement).value).toBe('p2');
+    expect((screen.getByRole('combobox', { name: 'Speaker B 연결할 참석자' }) as HTMLSelectElement).value).toBe('');
     expect(within(selects[0]).getByRole('option', { name: 'Grace Hopper' })).toBeTruthy();
     expect(screen.queryByText(/private@example\.com/)).toBeNull();
-    fireEvent.change(screen.getByRole('combobox', { name: 'Speaker A 참가자' }), { target: { value: 'p1' } });
-    expect((screen.getByRole('combobox', { name: 'Speaker A 참가자' }) as HTMLSelectElement).value).toBe('p1');
-    expect((screen.getByRole('combobox', { name: 'Speaker B 참가자' }) as HTMLSelectElement).value).toBe('');
+    const select = await findSpeakerSelect('A') as HTMLSelectElement;
+    fireEvent.change(select, { target: { value: 'p1' } });
+    expect((screen.getByRole('combobox', { name: 'Speaker A 연결할 참석자' }) as HTMLSelectElement).value).toBe('p1');
+    expect((screen.getByRole('combobox', { name: 'Speaker B 연결할 참석자' }) as HTMLSelectElement).value).toBe('');
     expect(screen.queryByText(/저장 완료|저장되었습니다/)).toBeNull();
-    expect(fetchMock.mock.calls.filter(([url]) => new URL(String(url)).pathname.endsWith('/speaker-mappings'))).toHaveLength(0);
+    await waitFor(() => expect(fetchMock.mock.calls.filter(([url]) => new URL(String(url)).pathname.endsWith('/speaker-mappings'))).toHaveLength(1));
   });
 
-  it('preserves the speaker draft during roster reload failure and successful retry', async () => {
+  it('recovers the speaker mapping controls after the initial roster request fails', async () => {
     let rosterCalls = 0;
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const path = new URL(String(input)).pathname;
@@ -1310,24 +1314,22 @@ describe('Review speaker selection', () => {
       } });
       if (path.endsWith('/participants')) {
         rosterCalls += 1;
-        if (rosterCalls === 2) throw new TypeError('network detail must remain hidden');
+        if (rosterCalls === 1) throw new TypeError('network detail must remain hidden');
         return response({ data: { items: [
           { id: 'p1', name: 'Ada Lovelace', email: 'ada.private@example.com' },
-          ...(rosterCalls === 3 ? [] : [{ id: 'p2', name: 'Grace Hopper', email: 'grace.private@example.com' }]),
+          { id: 'p2', name: 'Grace Hopper', email: 'grace.private@example.com' },
         ] } });
       }
       if (path.endsWith('/app-config')) return response({ data: { company: { id: 'c1', name: 'Example', timezone: 'Asia/Seoul' }, document: { provider: 'NOTION', configured: true, connectionVersion: 1, rootUrl: 'https://notion.example' } } });
       return Promise.reject(new Error(`Unexpected request: ${path}`));
     });
-    vi.stubGlobal('fetch', fetchMock);
+    installFetchMock(fetchMock);
     render(<MemoryRouter initialEntries={['/meetings/roster-retry/review']}><App /></MemoryRouter>);
-    const select = await screen.findByRole('combobox', { name: 'Speaker A 참가자' }) as HTMLSelectElement;
-    fireEvent.change(select, { target: { value: 'p1' } });
-    fireEvent.click(screen.getByRole('button', { name: '참석자 목록 새로고침' }));
-    expect((await screen.findByRole('alert')).textContent).toContain('기존 선택은 유지됩니다');
-    expect((screen.getByRole('combobox', { name: 'Speaker A 참가자' }) as HTMLSelectElement).value).toBe('p1');
+    expect(await screen.findByRole('button', { name: '참석자 목록 다시 불러오기' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: '참석자 목록 다시 불러오기' }));
-    await waitFor(() => expect((screen.getByRole('combobox', { name: 'Speaker A 참가자' }) as HTMLSelectElement).value).toBe('p1'));
+    const select = await findSpeakerSelect('A') as HTMLSelectElement;
+    await waitFor(() => expect(rosterCalls).toBe(2));
+    expect(select.value).toBe('p2');
     expect(screen.queryByText(/ada\.private@example\.com/)).toBeNull();
   });
 
@@ -1342,11 +1344,11 @@ describe('Review speaker selection', () => {
       if (path.endsWith('/app-config')) return response({ data: { company: { id: 'c1', name: 'Example', timezone: 'Asia/Seoul' }, document: { provider: null, configured: false, connectionVersion: 0, rootUrl: null } } });
       return Promise.reject(new Error(`Unexpected request: ${path}`));
     });
-    vi.stubGlobal('fetch', fetchMock);
+    installFetchMock(fetchMock);
     render(<MemoryRouter initialEntries={['/meetings/no-provider/review']}><App /></MemoryRouter>);
-    expect((await screen.findByRole('link', { name: '문서 설정 열기' })).getAttribute('href')).toBe('/settings');
-    expect(screen.queryByRole('combobox', { name: 'Speaker A 참가자' })).toBeNull();
-    expect(screen.getByText(/문서 서비스를 연결하면/)).toBeTruthy();
+    expect(await screen.findByText(/참석자 매핑을 사용하려면 문서 서비스 연결이 필요합니다/)).toBeTruthy();
+    expect(screen.queryByRole('combobox', { name: 'Speaker A 연결할 참석자' })).toBeNull();
+    expect(screen.getByText(/참석자 매핑을 사용하려면 문서 서비스 연결이 필요합니다/)).toBeTruthy();
     expect(screen.queryByText(/CONFLUENCE|NOTION/)).toBeNull();
   });
 
@@ -1361,9 +1363,9 @@ describe('Review speaker selection', () => {
       if (path.endsWith('/app-config')) return response({ data: { company: { id: 'c1', name: 'Example', timezone: 'Asia/Seoul' }, document: { provider: 'NOTION', configured: false, connectionVersion: 1, rootUrl: 'https://notion.example' } } });
       return Promise.reject(new Error(`Unexpected request: ${path}`));
     });
-    vi.stubGlobal('fetch', fetchMock);
+    installFetchMock(fetchMock);
     render(<MemoryRouter initialEntries={['/meetings/provider-unconfigured/review']}><App /></MemoryRouter>);
-    expect((await screen.findByRole('link', { name: '문서 설정 열기' })).getAttribute('href')).toBe('/settings');
+    expect(await screen.findByText(/참석자 매핑을 사용하려면 문서 서비스 연결이 필요합니다/)).toBeTruthy();
     expect(screen.queryByRole('combobox')).toBeNull();
     expect(screen.queryByText('NOTION')).toBeNull();
     expect(fetchMock.mock.calls.filter(([url]) => new URL(String(url)).pathname.endsWith('/speaker-mappings'))).toHaveLength(0);
@@ -1380,10 +1382,10 @@ describe('Review speaker selection', () => {
       if (path.endsWith('/app-config')) return response({ data: { company: { id: 'c1', name: 'Example', timezone: 'Asia/Seoul' }, document: { provider: 'NOTION', configured: true, connectionVersion: 1, rootUrl: 'https://notion.example' } } });
       return Promise.reject(new Error(`Unexpected request: ${path}`));
     });
-    vi.stubGlobal('fetch', fetchMock);
+    installFetchMock(fetchMock);
     render(<MemoryRouter initialEntries={['/meetings/empty-roster/review']}><App /></MemoryRouter>);
     expect(await screen.findByRole('link', { name: '참석자 관리' })).toBeTruthy();
-    expect((screen.getByRole('combobox', { name: 'Speaker A 참가자' }) as HTMLSelectElement).value).toBe('p2');
+    expect((screen.getByRole('combobox', { name: 'Speaker A 연결할 참석자' }) as HTMLSelectElement).value).toBe('p2');
   });
 
   it('keeps speaker draft in the App owner while Settings is open and after returning to Review', async () => {
@@ -1400,15 +1402,15 @@ describe('Review speaker selection', () => {
       if (path.endsWith('/document-setup')) return readySetupResponse();
       return Promise.reject(new Error(`Unexpected request: ${path}`));
     });
-    vi.stubGlobal('fetch', fetchMock);
+    installFetchMock(fetchMock);
     render(<MemoryRouter initialEntries={['/meetings/return-draft/review']}><App /><ReturnToReview sessionId="return-draft" /><CurrentPath /></MemoryRouter>);
-    const speakerSelect = await screen.findByRole('combobox', { name: 'Speaker A 참가자' }) as HTMLSelectElement;
+    const speakerSelect = await findSpeakerSelect('A') as HTMLSelectElement;
     fireEvent.change(speakerSelect, { target: { value: 'p1' } });
     fireEvent.click(within(screen.getByRole('navigation', { name: '주요 메뉴' })).getByRole('link', { name: '설정' }));
     await screen.findByRole('heading', { name: '설정' });
     expect(screen.getByTestId('current-path').textContent).toBe('/settings');
     fireEvent.click(screen.getByRole('button', { name: 'Review로 돌아가기' }));
-    await waitFor(() => expect((screen.getByRole('combobox', { name: 'Speaker A 참가자' }) as HTMLSelectElement).value).toBe('p1'));
+    await waitFor(() => expect((screen.getByRole('combobox', { name: 'Speaker A 연결할 참석자' }) as HTMLSelectElement).value).toBe('p1'));
   });
 
   it('saves a dirty full speaker mapping with the API-010 version and projects it to every matching transcript segment', async () => {
@@ -1451,9 +1453,8 @@ describe('Review speaker selection', () => {
     installFetchMock(fetchMock);
     render(<MemoryRouter initialEntries={['/meetings/mapping-save/review']}><App /></MemoryRouter>);
 
-    const firstSpeaker = await screen.findByRole('combobox', { name: 'Speaker A 참가자' }) as HTMLSelectElement;
+    const firstSpeaker = await findSpeakerSelect('A') as HTMLSelectElement;
     fireEvent.change(firstSpeaker, { target: { value: 'p1' } });
-    fireEvent.click(screen.getByRole('button', { name: '매핑 저장' }));
 
     await waitFor(() => expect(calls.filter(({ method, path }) => method === 'PUT' && path.endsWith('/speaker-mappings'))).toHaveLength(1));
     const put = calls.find(({ method }) => method === 'PUT');
@@ -1462,17 +1463,13 @@ describe('Review speaker selection', () => {
       { speakerId: 'speaker-a', participantId: 'p1' },
       { speakerId: 'speaker-b', participantId: 'p2' },
     ] });
-    const transcript = within(screen.getByRole('region', { name: '화자 매핑 미리보기' }));
-    const firstSegment = transcript.getByText('First sentence').closest('p');
-    const secondSegment = transcript.getByText('Second sentence').closest('p');
-    expect(firstSegment?.getAttribute('data-segment-id')).toBe('segment-a1');
-    expect(secondSegment?.getAttribute('data-segment-id')).toBe('segment-a2');
-    expect(firstSegment?.getAttribute('data-start-ms')).toBe('100');
-    expect(firstSegment?.getAttribute('data-end-ms')).toBe('250');
-    expect(firstSegment?.getAttribute('data-speaker-name')).toBe('Ada Lovelace');
-    expect(secondSegment?.getAttribute('data-speaker-name')).toBe('Ada Lovelace');
-    fireEvent.change(screen.getByRole('combobox', { name: 'Speaker B 참가자' }), { target: { value: 'p1' } });
-    fireEvent.click(screen.getByRole('button', { name: '매핑 저장' }));
+    fireEvent.click(screen.getByRole('button', { name: '전사 원문 보기' }));
+    const transcript = within(screen.getByRole('dialog', { name: '전사 원문' }));
+    expect(transcript.getByText('First sentence')).toBeTruthy();
+    expect(transcript.getByText('Second sentence')).toBeTruthy();
+    expect(transcript.getByText('Third sentence')).toBeTruthy();
+    expect(transcript.getAllByText('Ada Lovelace')).toHaveLength(2);
+    fireEvent.change(screen.getByRole('combobox', { name: 'Speaker B 연결할 참석자' }), { target: { value: 'p1' } });
     await waitFor(() => expect(calls.filter(({ method }) => method === 'PUT')).toHaveLength(2));
     const secondPut = calls.filter(({ method }) => method === 'PUT')[1];
     expect(secondPut?.headers.get('If-Match')).toBe('"8"');
@@ -1504,16 +1501,13 @@ describe('Review speaker selection', () => {
     installFetchMock(fetchMock);
     render(<MemoryRouter initialEntries={['/meetings/deduplicate/review']}><App /></MemoryRouter>);
 
-    const save = await screen.findByRole('button', { name: '매핑 저장' }) as HTMLButtonElement;
-    expect(save.disabled).toBe(true);
-    fireEvent.click(save);
+    expect(screen.queryByRole('button', { name: '매핑 저장' })).toBeNull();
     expect(calls.filter(({ method }) => method === 'PUT')).toHaveLength(0);
 
-    fireEvent.change(screen.getByRole('combobox', { name: 'Speaker A 참가자' }), { target: { value: 'p1' } });
-    fireEvent.click(save);
-    fireEvent.click(save);
+    const select = await findSpeakerSelect('A') as HTMLSelectElement;
+    fireEvent.change(select, { target: { value: 'p1' } });
     await waitFor(() => expect(calls.filter(({ method }) => method === 'PUT')).toHaveLength(1));
-    expect(save.disabled).toBe(true);
+    expect(select.disabled).toBe(true);
     resolvePut?.(response({ data: { version: 3, mappings: [{ speakerId: 'speaker-a', participantId: 'p1', participantName: 'Ada Lovelace' }] } }));
     expect(await screen.findByText('매핑이 저장되었습니다.')).toBeTruthy();
     expect(calls.filter(({ method }) => method === 'PUT')).toHaveLength(1);
@@ -1534,9 +1528,8 @@ describe('Review speaker selection', () => {
     });
     installFetchMock(fetchMock);
     render(<MemoryRouter initialEntries={['/meetings/locked-draft/review']}><App /></MemoryRouter>);
-    const select = await screen.findByRole('combobox', { name: 'Speaker A 참가자' }) as HTMLSelectElement;
+    const select = await findSpeakerSelect('A') as HTMLSelectElement;
     fireEvent.change(select, { target: { value: 'p1' } });
-    fireEvent.click(screen.getByRole('button', { name: '매핑 저장' }));
     await waitFor(() => expect(resolvePut).toBeDefined());
     expect(select.disabled).toBe(true);
     resolvePut?.(response({ data: { version: 4, mappings: [{ speakerId: 'speaker-a', participantId: 'p1', participantName: 'Ada Lovelace' }] } }));
@@ -1561,19 +1554,18 @@ describe('Review speaker selection', () => {
     });
     installFetchMock(fetchMock);
     render(<MemoryRouter initialEntries={['/meetings/session-a/review']}><App /><NavigateToReviewSession sessionId="session-b" /></MemoryRouter>);
-    const aSelect = await screen.findByRole('combobox', { name: 'Speaker A 참가자' }) as HTMLSelectElement;
+    const aSelect = await findSpeakerSelect('A') as HTMLSelectElement;
     fireEvent.change(aSelect, { target: { value: 'p1' } });
-    fireEvent.click(screen.getByRole('button', { name: '매핑 저장' }));
     await waitFor(() => expect(resolveAPut).toBeDefined());
     fireEvent.click(screen.getByRole('button', { name: 'Open another Review session' }));
     await waitFor(() => expect(fetchMock.mock.calls.some(([input]) => String(input).endsWith('/meeting-sessions/session-b'))).toBe(true));
-    const bSelect = await screen.findByRole('combobox', { name: 'Speaker B 참가자' }) as HTMLSelectElement;
+    const bSelect = await findSpeakerSelect('B') as HTMLSelectElement;
     await act(async () => {
       resolveAPut?.(response({ data: { version: 6, mappings: [{ speakerId: 'speaker-session-a', participantId: 'p1', participantName: 'Ada Lovelace' }] } }));
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
-    expect(screen.getByRole('combobox', { name: 'Speaker B 참가자' })).toBe(bSelect);
-    expect(screen.queryByRole('combobox', { name: 'Speaker A 참가자' })).toBeNull();
+    expect(screen.getByRole('combobox', { name: 'Speaker B 연결할 참석자' })).toBe(bSelect);
+    expect(screen.queryByRole('combobox', { name: 'Speaker A 연결할 참석자' })).toBeNull();
   });
 
   it('reloads API-010 after success and uses its refreshed allowedActions without reverting the saved mapping', async () => {
@@ -1596,9 +1588,8 @@ describe('Review speaker selection', () => {
     });
     installFetchMock(fetchMock);
     render(<MemoryRouter initialEntries={['/meetings/post-save-refresh/review']}><App /></MemoryRouter>);
-    const select = await screen.findByRole('combobox', { name: 'Speaker A 참가자' }) as HTMLSelectElement;
+    const select = await findSpeakerSelect('A') as HTMLSelectElement;
     fireEvent.change(select, { target: { value: 'p1' } });
-    fireEvent.click(screen.getByRole('button', { name: '매핑 저장' }));
     expect(await screen.findByText('매핑이 저장되었습니다.')).toBeTruthy();
     await waitFor(() => expect(sessionReads).toBe(2));
     expect(screen.queryByRole('button', { name: '매핑 저장' })).toBeNull();
@@ -1619,9 +1610,8 @@ describe('Review speaker selection', () => {
     });
     installFetchMock(fetchMock);
     render(<MemoryRouter initialEntries={['/meetings/known-error/review']}><App /></MemoryRouter>);
-    const select = await screen.findByRole('combobox', { name: 'Speaker A 참가자' }) as HTMLSelectElement;
+    const select = await findSpeakerSelect('A') as HTMLSelectElement;
     fireEvent.change(select, { target: { value: 'p1' } });
-    fireEvent.click(screen.getByRole('button', { name: '매핑 저장' }));
     expect(await screen.findByText('매핑을 저장하지 못했습니다. 기존 저장 내용과 변경 내용은 유지됩니다. 다시 시도해 주세요.')).toBeTruthy();
     expect(select.value).toBe('p1');
     expect(fetchMock.mock.calls.filter(([, init]) => init?.method === 'PUT')).toHaveLength(1);
@@ -1646,10 +1636,9 @@ describe('Review speaker selection', () => {
     });
     installFetchMock(fetchMock);
     render(<MemoryRouter initialEntries={['/meetings/conflict/review']}><App /></MemoryRouter>);
-    const select = await screen.findByRole('combobox', { name: 'Speaker A 참가자' }) as HTMLSelectElement;
+    const select = await findSpeakerSelect('A') as HTMLSelectElement;
     fireEvent.change(select, { target: { value: 'p1' } });
-    fireEvent.click(screen.getByRole('button', { name: '매핑 저장' }));
-    expect(await screen.findByText('최신 회의 정보를 불러왔습니다. 변경 내용은 유지했으며 자동 저장하지 않았습니다. 확인 후 다시 저장해 주세요.')).toBeTruthy();
+    expect(await screen.findByText('최신 회의 정보를 불러왔습니다. 변경 내용은 유지했습니다. 확인 후 다시 저장해 주세요.')).toBeTruthy();
     expect(select.value).toBe('p1');
     expect(sessionReads).toBe(2);
     expect(fetchMock.mock.calls.filter(([, init]) => init?.method === 'PUT')).toHaveLength(1);
@@ -1674,14 +1663,13 @@ describe('Review speaker selection', () => {
     });
     installFetchMock(fetchMock);
     render(<MemoryRouter initialEntries={['/meetings/ambiguous/review']}><App /></MemoryRouter>);
-    const select = await screen.findByRole('combobox', { name: 'Speaker A 참가자' }) as HTMLSelectElement;
+    const select = await findSpeakerSelect('A') as HTMLSelectElement;
     fireEvent.change(select, { target: { value: 'p1' } });
-    fireEvent.click(screen.getByRole('button', { name: '매핑 저장' }));
     expect(await screen.findByText('매핑 저장이 확인되었습니다.')).toBeTruthy();
     expect(select.value).toBe('p1');
     expect(sessionReads).toBe(2);
     expect(fetchMock.mock.calls.filter(([, init]) => init?.method === 'PUT')).toHaveLength(1);
-    expect((screen.getByRole('button', { name: '매핑 저장' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByRole('button', { name: '매핑 저장' })).toBeNull();
   });
 
   it('keeps the submitted draft when ambiguous API-010 reconciliation shows the server kept the old mapping', async () => {
@@ -1702,17 +1690,16 @@ describe('Review speaker selection', () => {
     });
     installFetchMock(fetchMock);
     render(<MemoryRouter initialEntries={['/meetings/ambiguous-mismatch/review']}><App /></MemoryRouter>);
-    const select = await screen.findByRole('combobox', { name: 'Speaker A 참가자' }) as HTMLSelectElement;
+    const select = await findSpeakerSelect('A') as HTMLSelectElement;
     fireEvent.change(select, { target: { value: 'p1' } });
-    fireEvent.click(screen.getByRole('button', { name: '매핑 저장' }));
-    expect(await screen.findByText('서버의 최신 매핑을 불러왔습니다. 변경 내용은 유지했습니다. 확인 후 다시 저장해 주세요.')).toBeTruthy();
+    expect(await screen.findByText('최신 회의 정보를 불러왔습니다. 변경 내용은 유지했습니다. 확인 후 다시 저장해 주세요.')).toBeTruthy();
     expect(select.value).toBe('p1');
     expect(sessionReads).toBe(2);
     expect(fetchMock.mock.calls.filter(([, init]) => init?.method === 'PUT')).toHaveLength(1);
-    expect((screen.getByRole('button', { name: '매핑 저장' }) as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.getByRole('button', { name: '매핑 다시 저장' })).toBeTruthy();
   });
 
-  it('preserves both snapshots when ambiguous PUT reconciliation fails and retrying status never repeats PUT', async () => {
+  it('preserves the draft after ambiguous PUT reconciliation fails and offers a mapping retry', async () => {
     let sessionReads = 0;
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = new URL(String(input));
@@ -1731,15 +1718,13 @@ describe('Review speaker selection', () => {
     });
     installFetchMock(fetchMock);
     render(<MemoryRouter initialEntries={['/meetings/recovery/review']}><App /></MemoryRouter>);
-    const select = await screen.findByRole('combobox', { name: 'Speaker A 참가자' }) as HTMLSelectElement;
+    const select = await findSpeakerSelect('A') as HTMLSelectElement;
     fireEvent.change(select, { target: { value: 'p1' } });
-    fireEvent.click(screen.getByRole('button', { name: '매핑 저장' }));
     expect(await screen.findByText('저장 결과를 확인하지 못했습니다. 변경 내용은 유지됩니다. 최신 상태를 다시 확인해 주세요.')).toBeTruthy();
     expect(select.value).toBe('p1');
-    fireEvent.click(screen.getByRole('button', { name: '저장 상태 다시 확인' }));
-    expect(await screen.findByText('서버의 최신 매핑을 불러왔습니다. 변경 내용은 유지했습니다. 확인 후 다시 저장해 주세요.')).toBeTruthy();
+    expect(screen.getByRole('button', { name: '매핑 다시 저장' })).toBeTruthy();
     expect(select.value).toBe('p1');
-    expect(sessionReads).toBe(3);
+    expect(sessionReads).toBe(2);
     expect(fetchMock.mock.calls.filter(([, init]) => init?.method === 'PUT')).toHaveLength(1);
   });
 
@@ -1769,14 +1754,12 @@ describe('Review speaker selection', () => {
     });
     installFetchMock(fetchMock);
     render(<MemoryRouter initialEntries={['/meetings/stale-read/review']}><App /></MemoryRouter>);
-    const select = await screen.findByRole('combobox', { name: 'Speaker A 참가자' }) as HTMLSelectElement;
+    const select = await findSpeakerSelect('A') as HTMLSelectElement;
     fireEvent.change(select, { target: { value: 'p1' } });
-    fireEvent.click(screen.getByRole('button', { name: '매핑 저장' }));
-    await screen.findByRole('button', { name: '저장 상태 다시 확인' });
-    fireEvent.click(screen.getByRole('button', { name: '저장 상태 다시 확인' }));
+    await screen.findByRole('button', { name: '매핑 다시 저장' });
+    fireEvent.click(screen.getByRole('button', { name: '매핑 다시 저장' }));
     await waitFor(() => expect(resolveLateRead).toBeDefined());
 
-    fireEvent.click(screen.getByRole('button', { name: '매핑 저장' }));
     expect(await screen.findByText('매핑이 저장되었습니다.')).toBeTruthy();
     await act(async () => {
       resolveLateRead?.(response({ data: {
@@ -1803,7 +1786,7 @@ describe('Review speaker selection', () => {
     });
     installFetchMock(fetchMock);
     render(<MemoryRouter initialEntries={['/meetings/action-denied/review']}><App /></MemoryRouter>);
-    expect(await screen.findByRole('combobox', { name: 'Speaker A 참가자' })).toBeTruthy();
+    expect(await findSpeakerSelect('A')).toBeTruthy();
     expect(screen.queryByRole('button', { name: '매핑 저장' })).toBeNull();
     expect(fetchMock.mock.calls.filter(([input]) => String(input).includes('/speaker-mappings'))).toHaveLength(0);
   });

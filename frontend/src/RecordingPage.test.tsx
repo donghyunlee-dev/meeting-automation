@@ -14,7 +14,8 @@ function renderRecording(state: RecordingViewState, elapsedMs = 0) {
     onConfirmEnd: vi.fn(),
     onCancelEnd: vi.fn(),
   };
-  const result = render(<RecordingPage sessionId="session-123" title="Planning" state={state} elapsedMs={elapsedMs} {...callbacks} />);
+  const result = render(<RecordingPage sessionId="session-123" title="Planning" state={state} elapsedMs={elapsedMs}
+    microphoneStatus="ready" microphoneInputDetected {...callbacks} />);
   return { ...result, callbacks };
 }
 
@@ -28,7 +29,7 @@ describe('RecordingPage', () => {
     expect(screen.getByRole('heading', { name: '회의 녹음', level: 1 })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Planning', level: 2 })).toBeTruthy();
     expect(screen.queryByText(/세션 ID/)).toBeNull();
-    expect(screen.getByRole('status').textContent).toContain(status);
+    expect(screen.getByText(status).textContent).toContain(status);
     expect(screen.getByLabelText('경과 시간').textContent).toBe(state === 'Ready' ? '00:00:00' : '00:01:02');
     expect(screen.getByRole('button', { name: primaryAction })).toBeTruthy();
   });
@@ -147,7 +148,7 @@ describe('RecordingPage', () => {
     expect(document.activeElement).toBe(cancel);
     fireEvent.click(cancel);
     expect(screen.queryByRole('dialog')).toBeNull();
-    expect(screen.getByRole('status').textContent).toBe('녹음 중');
+    expect(screen.getByText('녹음 중').textContent).toBe('녹음 중');
     expect(screen.getByLabelText('경과 시간').textContent).toBe('00:01:02');
     expect(document.activeElement).toBe(trigger);
     expect(callbacks.onCancelEnd).toHaveBeenCalledTimes(1);
@@ -171,7 +172,7 @@ describe('RecordingPage', () => {
     fireEvent.click(trigger);
     fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
     expect(screen.queryByRole('dialog')).toBeNull();
-    expect(screen.getByRole('status').textContent).toBe('일시정지됨');
+    expect(screen.getByText('일시정지됨').textContent).toBe('일시정지됨');
     expect(screen.getByLabelText('경과 시간').textContent).toBe('00:01:02');
     expect(document.activeElement).toBe(trigger);
     expect(callbacks.onCancelEnd).toHaveBeenCalledTimes(1);
@@ -199,7 +200,7 @@ describe('RecordingPage', () => {
 
   it('announces state through a live status but leaves the second-by-second timer outside live regions', () => {
     renderRecording('Recording', 62018);
-    expect(screen.getByRole('status').getAttribute('aria-live')).toBe('polite');
+    expect(screen.getByText('녹음 중').getAttribute('aria-live')).toBe('polite');
     expect(screen.getByLabelText('경과 시간').closest('[aria-live]')).toBeNull();
   });
 

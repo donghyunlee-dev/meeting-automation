@@ -17,29 +17,32 @@ describe('Meetings filters and detail', () => {
     const fetchMock = vi.fn(async () => ok({ items: list }));
     vi.stubGlobal('fetch', fetchMock);
     render(<MemoryRouter initialEntries={['/meetings']}><Routes><Route path="/meetings" element={<MeetingsPage />} /></Routes></MemoryRouter>);
-    expect(await screen.findByRole('link', { name: /Planning/i })).toBeTruthy();
-    expect(screen.getByRole('heading', { name: '2026년 10월' })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: /Planning 상세 보기/i })).toBeTruthy();
     const before = fetchMock.mock.calls.length;
-    fireEvent.change(screen.getByRole('searchbox', { name: '회의 검색' }), { target: { value: 'ADA' } });
-    expect(screen.getByRole('link', { name: /Planning/i })).toBeTruthy();
-    expect(screen.queryByRole('link', { name: /Retrospective/i })).toBeNull();
-    fireEvent.change(screen.getByRole('searchbox', { name: '회의 검색' }), { target: { value: 'absent' } });
+    const query = screen.getByRole('searchbox', { name: '회의 검색' });
+    fireEvent.change(query, { target: { value: 'ADA' } });
+    fireEvent.blur(query);
+    expect(screen.getByRole('button', { name: /Planning 상세 보기/i })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Retrospective 상세 보기/i })).toBeNull();
+    fireEvent.change(query, { target: { value: 'absent' } });
+    fireEvent.blur(query);
     expect(screen.getByText('검색 결과가 없습니다.')).toBeTruthy();
-    expect(screen.getAllByRole('button', { name: '필터 초기화' })).toHaveLength(2);
-    fireEvent.click(screen.getAllByRole('button', { name: '필터 초기화' })[0]!);
-    expect(screen.getByRole('link', { name: /Retrospective/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '검색어 초기화' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '검색어 초기화' }));
+    expect(screen.getByRole('button', { name: /Retrospective 상세 보기/i })).toBeTruthy();
     expect(fetchMock).toHaveBeenCalledTimes(before);
   });
 
   it('shows reversed date guidance while leaving the result set visible', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => ok({ items: list })));
     render(<MemoryRouter initialEntries={['/meetings']}><Routes><Route path="/meetings" element={<MeetingsPage />} /></Routes></MemoryRouter>);
-    expect(await screen.findByRole('link', { name: /Planning/ })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: /Planning 상세 보기/ })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /상세 조건/ }));
     fireEvent.change(screen.getByLabelText('시작일'), { target: { value: '2026-10-20' } });
     fireEvent.change(screen.getByLabelText('종료일'), { target: { value: '2026-10-01' } });
     expect(screen.getByRole('alert').textContent).toContain('시작일은 종료일보다 늦을 수 없습니다');
-    expect(screen.getByRole('link', { name: /Planning/ })).toBeTruthy();
-    expect(screen.getByRole('link', { name: /Retrospective/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Planning 상세 보기/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Retrospective 상세 보기/ })).toBeTruthy();
   });
 
   it('loads read-only Minutes, opens and closes an accessible transcript drawer, and uses a safe external link', async () => {
@@ -53,10 +56,7 @@ describe('Meetings filters and detail', () => {
     expect(screen.getByText('Follow up text')).toBeTruthy();
     expect(screen.queryByText(/@/)).toBeNull();
     expect(screen.queryByRole('button', { name: /편집|삭제/ })).toBeNull();
-    const external = screen.getByRole('link', { name: 'Notion/Confluence에서 열기' });
-    expect(external.getAttribute('href')).toBe('https://docs.example/meeting');
-    expect(external.getAttribute('target')).toBe('_blank');
-    expect(external.getAttribute('rel')).toBe('noopener noreferrer');
+    expect(screen.queryByRole('link', { name: 'Notion/Confluence에서 열기' })).toBeNull();
     const transcriptTrigger = screen.getByRole('button', { name: 'Transcript 보기' });
     fireEvent.click(transcriptTrigger);
     expect(await screen.findByRole('dialog', { name: 'Transcript' })).toBeTruthy();

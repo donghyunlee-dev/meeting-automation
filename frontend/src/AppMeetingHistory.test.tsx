@@ -32,7 +32,7 @@ describe('meeting history routes', () => {
     fireEvent.click(screen.getByRole('link', { name: '홈' }));
 
     expect(await screen.findByRole('button', { name: /새 회의 시작/ })).toBeTruthy();
-    expect(fetchMock.mock.calls.some(([input]) => String(input).endsWith('/meetings?limit=5'))).toBe(true);
+    expect(fetchMock.mock.calls.some(([input]) => String(input).endsWith('/meetings?limit=3'))).toBe(true);
     expect(screen.getByRole('link', { name: '회의록' }).getAttribute('href')).toBe('/meetings');
   });
 });

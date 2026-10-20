@@ -61,11 +61,15 @@ async function startRecording(fixture: ReturnType<typeof createFixture>) {
 }
 
 describe('RecordingController', () => {
-  it('requests microphone access only after the explicit start command', async () => {
+  it('reuses the microphone stream acquired during the preflight when recording starts', async () => {
     const fixture = createFixture();
     expect(fixture.adapter.getUserMedia).not.toHaveBeenCalled();
+    await fixture.controller.prepareMicrophone();
+    expect(fixture.adapter.getUserMedia).toHaveBeenCalledTimes(1);
+    expect(fixture.controller.getSnapshot()).toMatchObject({ microphoneStatus: 'ready', microphoneInputDetected: true });
     await fixture.controller.start();
     expect(fixture.adapter.getUserMedia).toHaveBeenCalledTimes(1);
+    expect(fixture.track.stop).not.toHaveBeenCalled();
     expect(fixture.recorder.start).toHaveBeenCalledTimes(1);
     expect(fixture.recorder.timeslice).toBe(15_000);
     expect(fixture.controller.getSnapshot().state).toBe('Ready');

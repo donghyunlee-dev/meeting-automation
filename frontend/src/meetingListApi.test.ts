@@ -44,10 +44,29 @@ describe('listMeetings', () => {
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
+  it('does not share a pending response across different fetch clients', async () => {
+    let resolveFirst: ((response: Response) => void) | undefined;
+    let resolveSecond: ((response: Response) => void) | undefined;
+    const firstFetch = vi.fn(() => new Promise<Response>((resolve) => { resolveFirst = resolve; }));
+    vi.stubGlobal('fetch', firstFetch);
+    const firstRequest = listMeetings(5);
+
+    const secondFetch = vi.fn(() => new Promise<Response>((resolve) => { resolveSecond = resolve; }));
+    vi.stubGlobal('fetch', secondFetch);
+    const secondRequest = listMeetings(5);
+
+    expect(firstFetch).toHaveBeenCalledOnce();
+    expect(secondFetch).toHaveBeenCalledOnce();
+    const response = () => new Response(JSON.stringify({ data: { items: [] } }), { status: 200 });
+    resolveFirst?.(response());
+    resolveSecond?.(response());
+    await Promise.all([firstRequest, secondRequest]);
+  });
+
   it('returns a safe error without exposing provider response details', async () => {
     const fetchMock = vi.fn<(input: RequestInfo | URL) => Promise<Response>>(async () => new Response(JSON.stringify({ error: { code: 'PROVIDER_FAILURE', message: 'secret provider payload' } }), { status: 502 }));
     vi.stubGlobal('fetch', fetchMock);
 
-    await expect(listMeetings()).rejects.toMatchObject({ name: 'MeetingListApiError', code: 'MEETING_LIST_FAILED' } satisfies Partial<MeetingListApiError>);
+    await expect(listMeetings()).rejects.toMatchObject({ name: 'MeetingListApiError', code: 'PROVIDER_FAILURE' } satisfies Partial<MeetingListApiError>);
   });
 });
