@@ -1,4 +1,4 @@
-import { getApiHealthUrl } from './apiBase';
+import { getApiBaseUrl, getApiHealthUrl } from './apiBase';
 
 export type ApiRecoveryState =
   | { status: 'idle' }
@@ -10,9 +10,11 @@ export type ApiRecoveryResult = 'already-ready' | 'recovered' | 'dismissed';
 const HEALTH_TIMEOUT_MS = 3_000;
 const HEALTH_POLL_INTERVAL_MS = 4_000;
 const READY_ANIMATION_MS = 1_050;
+const DISMISS_COOLDOWN_MS = 15_000;
 
 let state: ApiRecoveryState = { status: 'idle' };
 let startingRecovery: Promise<ApiRecoveryResult> | null = null;
+let dismissedUntil = 0;
 let activeRecovery: {
   promise: Promise<ApiRecoveryResult>;
   finish: (result: ApiRecoveryResult) => void;
@@ -33,6 +35,7 @@ export function subscribeApiRecovery(listener: () => void): () => void {
 export function recoverBackendAvailability(fetchImpl: typeof fetch = fetch): Promise<ApiRecoveryResult> {
   if (activeRecovery) return activeRecovery.promise;
   if (startingRecovery) return startingRecovery;
+  if (Date.now() < dismissedUntil) return Promise.resolve('dismissed');
 
   startingRecovery = probeBackend(fetchImpl).then((ready) => {
     if (ready) return 'already-ready' as const;
@@ -56,17 +59,26 @@ async function probeBackend(fetchImpl: typeof fetch): Promise<boolean> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), HEALTH_TIMEOUT_MS);
   try {
-    const response = await fetchImpl(getApiHealthUrl(), {
+    let response = await fetchImpl(getApiHealthUrl(), {
       method: 'GET',
       headers: { Accept: 'application/json' },
       signal: controller.signal,
       cache: 'no-store',
     });
+    if (response.status === 404) {
+      response = await fetchImpl(`${getApiBaseUrl()}/actuator/health`, {
+        method: 'GET',
+        headers: { Accept: 'application/json' },
+        signal: controller.signal,
+        cache: 'no-store',
+      });
+    }
     if (!response.ok) return false;
     const body: unknown = await response.json();
-    return typeof body === 'object' && body !== null
-      && 'data' in body && typeof body.data === 'object' && body.data !== null
-      && 'status' in body.data && body.data.status === 'UP';
+    if (typeof body !== 'object' || body === null) return false;
+    if ('data' in body && typeof body.data === 'object' && body.data !== null
+      && 'status' in body.data && body.data.status === 'UP') return true;
+    return 'status' in body && body.status === 'UP';
   } catch {
     return false;
   } finally {
@@ -103,7 +115,10 @@ function startRecovery(fetchImpl: typeof fetch): Promise<ApiRecoveryResult> {
     promise,
     finish,
     wake,
-    dismiss: () => finish('dismissed'),
+    dismiss: () => {
+      dismissedUntil = Date.now() + DISMISS_COOLDOWN_MS;
+      finish('dismissed');
+    },
   };
   activeRecovery = recovery;
   setState({ status: 'recovering', visible: true });
