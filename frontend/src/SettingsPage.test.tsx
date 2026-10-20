@@ -1,3 +1,4 @@
+import { withHealthyBackend } from './testUtils/withHealthyBackend';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router';
@@ -30,7 +31,7 @@ describe('Settings page', () => {
       }
       return new Promise<Response>((resolve) => pending.push({ path, resolve }));
     });
-    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('fetch', withHealthyBackend(fetchMock));
     render(<MemoryRouter><SettingsPage /></MemoryRouter>);
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
@@ -72,7 +73,7 @@ describe('Settings page', () => {
       if (path.endsWith('/integrations/slack')) return response({ configured: false, connectionVerified: false });
       throw new Error(`Unexpected request: ${path}`);
     });
-    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('fetch', withHealthyBackend(fetchMock));
     render(<MemoryRouter><SettingsPage /></MemoryRouter>);
 
     await waitFor(() => expect(document.querySelector('.settings-sections')?.textContent).toContain('Notion'));
@@ -94,7 +95,7 @@ describe('Settings page', () => {
       if (path.endsWith('/integrations/email')) return response('email settings unavailable', 503);
       throw new Error(`Unexpected request: ${path}`);
     });
-    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('fetch', withHealthyBackend(fetchMock));
     render(<MemoryRouter><SettingsPage /></MemoryRouter>);
 
     const emailSection = await screen.findByRole('region', { name: '이메일' });
@@ -129,7 +130,7 @@ describe('Settings page', () => {
       if (path.endsWith('/integrations/slack')) return response({ configured: false, connectionVerified: false });
       throw new Error(`Unexpected request: ${path}`);
     });
-    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('fetch', withHealthyBackend(fetchMock));
     render(<MemoryRouter><SettingsPage /></MemoryRouter>);
 
     await waitFor(() => expect(healthCalls).toBe(1));
@@ -152,7 +153,7 @@ describe('Settings page', () => {
   it('keeps successful health sections visible when public configuration fails', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => new URL(String(input)).pathname.endsWith('/app-config')
       ? response('configuration-private-error', 503) : response(health));
-    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('fetch', withHealthyBackend(fetchMock));
     render(<MemoryRouter><SettingsPage /></MemoryRouter>);
 
     expect(await screen.findByRole('alert')).toBeTruthy();
@@ -167,7 +168,7 @@ describe('Settings page', () => {
       expect(['/api/v1/app-config', '/api/v1/integrations/health']).toContain(new URL(String(input)).pathname);
       return response('raw-provider-secret', 503);
     });
-    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('fetch', withHealthyBackend(fetchMock));
     render(<MemoryRouter><SettingsPage /></MemoryRouter>);
 
     const retry = await screen.findByRole('button', { name: '전체 설정 다시 불러오기' });
@@ -184,7 +185,7 @@ describe('Settings page', () => {
   it('does not render secrets, root identifiers, or raw provider errors', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => new URL(String(input)).pathname.endsWith('/app-config')
       ? response(config) : response('raw-provider-token private-root-id', 502));
-    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('fetch', withHealthyBackend(fetchMock));
     render(<MemoryRouter><SettingsPage /></MemoryRouter>);
 
     await waitFor(() => expect(document.querySelector('.settings-sections')?.textContent).toContain('Notion'));
@@ -202,7 +203,7 @@ describe('Settings page', () => {
       if (path.endsWith('/document-setup')) return response({ version: 1, status: 'READY', active: { provider: 'NOTION', connectionVersion: 1, rootUrl: 'https://notion.example' }, draft: null, operation: null, canCreateMeeting: true });
       throw new Error(`Unexpected request: ${path}`);
     });
-    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('fetch', withHealthyBackend(fetchMock));
     render(<MemoryRouter initialEntries={['/settings']}><App /></MemoryRouter>);
 
     fireEvent.click(await screen.findByRole('link', { name: '문서 연결 설정' }));

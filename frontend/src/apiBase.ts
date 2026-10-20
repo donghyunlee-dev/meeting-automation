@@ -9,3 +9,7 @@ export function getApiBaseUrl(): string {
 
   return baseUrl.replace(/\/$/, '');
 }
+
+export function getApiHealthUrl(): string {
+  return `${getApiBaseUrl()}/api/v1/system/health`;
+}

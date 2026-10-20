@@ -1,3 +1,4 @@
+import { withHealthyBackend } from './testUtils/withHealthyBackend';
 import 'fake-indexeddb/auto';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { StrictMode } from 'react';
@@ -25,14 +26,14 @@ function readySetupResponse() {
 }
 
 function installFetchMock(fetchMock: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>) {
-  vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+  vi.stubGlobal('fetch', withHealthyBackend(vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
     const path = new URL(String(input), 'http://localhost').pathname;
     if (path.endsWith('/document-setup')) return Promise.resolve(readySetupResponse());
     if (path.endsWith('/integrations/slack') || path.endsWith('/integrations/email')) {
       return Promise.resolve(response({ data: { configured: false } }));
     }
     return fetchMock(input, init);
-  }));
+  })));
 }
 
 function deleteChunkDatabase(): Promise<void> {

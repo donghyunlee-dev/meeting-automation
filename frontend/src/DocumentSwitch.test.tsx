@@ -1,3 +1,4 @@
+import { withHealthyBackend } from './testUtils/withHealthyBackend';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -48,7 +49,7 @@ function harness(initial: SetupSnapshot = ready, initialOperation = op('RUNNING'
     if (path.endsWith('/participants')) return json({ items: [{ id: 'target-person-1', name: 'Synthetic Ada', email: 'ada@example.test' }] });
     throw new Error(`Unexpected request ${path}`);
   });
-  vi.stubGlobal('fetch', fetchMock);
+  vi.stubGlobal('fetch', withHealthyBackend(fetchMock));
   return { fetchMock, setSnapshot: (value: SetupSnapshot) => { snapshot = value; }, failSwitch: () => { switchFailure = failure('DOCUMENT_SETTINGS_VERSION_CONFLICT', 412); }, loseSwitch: () => { switchLost = true; }, configUnavailable: (value: boolean) => { configUnavailable = value; }, failAction: () => { actionFailure = failure('DOCUMENT_CHANGE_BUSY', 409); } };
 }
 function settings() { return render(<MemoryRouter initialEntries={['/settings/document']}><App /></MemoryRouter>); }
@@ -176,7 +177,7 @@ describe('document service change', () => {
       if (path.endsWith('/operations/switch-1')) return json(op('RUNNING', ['CANCEL']));
       throw new Error(`Unexpected request ${path} ${init?.method}`);
     });
-    vi.stubGlobal('fetch', fetchMock); settings(); fireEvent.click(await screen.findByRole('button', { name: '문서 서비스 변경' }));
+    vi.stubGlobal('fetch', withHealthyBackend(fetchMock)); settings(); fireEvent.click(await screen.findByRole('button', { name: '문서 서비스 변경' }));
     expect(screen.getByText('대상 연결: Notion')).toBeTruthy(); fireEvent.click(screen.getByRole('button', { name: '문서 서비스 전환' })); await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith('/operations/switch-1'))).toBe(true));
     expect(screen.getByText('현재 연결: Confluence Cloud')).toBeTruthy(); expect(screen.getByText('연결 버전: 8')).toBeTruthy();
     expect(JSON.parse(String(writes(fetchMock, '/switch')[0][1]?.body))).toEqual({ draftId: 'notion-target', draftRevision: 4, mode: 'COPY_ALL', confirmSourcePreserved: true });

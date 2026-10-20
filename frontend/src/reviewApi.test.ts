@@ -1,3 +1,4 @@
+import { withHealthyBackend } from './testUtils/withHealthyBackend';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ReviewApiError, updateReviewMinutes, type StructuredMinutes } from './reviewApi';
 
@@ -27,7 +28,7 @@ describe('updateReviewMinutes', () => {
       void init;
       return new Response(JSON.stringify({ data: { version: 8, minutes } }), { status: 200 });
     });
-    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('fetch', withHealthyBackend(fetchMock));
 
     const result = await updateReviewMinutes('review/42', 7, minutes);
 
@@ -44,7 +45,7 @@ describe('updateReviewMinutes', () => {
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({ error: {
       code: 'SESSION_VERSION_CONFLICT', message: 'private provider response', details: { fieldErrors: [] },
     } }), { status: 412 }));
-    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('fetch', withHealthyBackend(fetchMock));
 
     await expect(updateReviewMinutes('review-42', 7, minutes)).rejects.toMatchObject({
       name: 'ReviewApiError', code: 'MINUTES_UPDATE_FAILED', apiCode: 'SESSION_VERSION_CONFLICT', status: 412,
@@ -53,7 +54,7 @@ describe('updateReviewMinutes', () => {
 
   it('marks a lost or malformed successful response as an unknown update outcome', async () => {
     const fetchMock = vi.fn(async () => new Response('{not-json', { status: 200 }));
-    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('fetch', withHealthyBackend(fetchMock));
 
     await expect(updateReviewMinutes('review-42', 7, minutes)).rejects.toMatchObject({
       name: 'ReviewApiError', code: 'MINUTES_UPDATE_FAILED', outcomeUnknown: true,
@@ -66,7 +67,7 @@ describe('updateReviewMinutes', () => {
       requestInit = init;
       return new Promise<Response>(() => undefined);
     });
-    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('fetch', withHealthyBackend(fetchMock));
 
     const outcome = await settleWithin(updateReviewMinutes('review-42', 7, minutes, undefined, { timeoutMs: 5 }), 100);
 

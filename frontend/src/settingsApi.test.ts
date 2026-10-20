@@ -1,3 +1,4 @@
+import { withHealthyBackend } from './testUtils/withHealthyBackend';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { getAppConfig, getIntegrationHealth, SettingsApiError } from './settingsApi';
 
@@ -12,7 +13,7 @@ describe('settings API queries', () => {
       if (path.endsWith('/integrations/health')) return new Response(JSON.stringify({ data: { document: null } }));
       throw new Error(`Unexpected URL ${path}`);
     });
-    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('fetch', withHealthyBackend(fetchMock));
 
     const [config, health] = await Promise.all([getAppConfig(), getIntegrationHealth()]);
 
@@ -24,7 +25,7 @@ describe('settings API queries', () => {
   });
 
   it('hides server error bodies and reports a stable safe error for a failed query', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ error: { detail: 'private-token-marker' } }), { status: 503 })));
+    vi.stubGlobal('fetch', withHealthyBackend(vi.fn().mockResolvedValue(new Response(JSON.stringify({ error: { detail: 'private-token-marker' } }), { status: 503 }))));
 
     await expect(getIntegrationHealth()).rejects.toMatchObject({ name: 'SettingsApiError', code: 'REQUEST_FAILED' });
     try { await getAppConfig(); } catch (error) {

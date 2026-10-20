@@ -1,3 +1,4 @@
+import { withHealthyBackend } from './testUtils/withHealthyBackend';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -33,7 +34,7 @@ function mockSuccess() {
     if (path.endsWith('/participants')) return Promise.resolve(response({ data: { items: participants } }));
     return Promise.reject(new Error(`Unexpected request: ${path}`));
   });
-  vi.stubGlobal('fetch', fetchMock);
+  vi.stubGlobal('fetch', withHealthyBackend(fetchMock));
   return fetchMock;
 }
 
@@ -94,7 +95,7 @@ describe('New Meeting input and selection', () => {
         : response({ data: { items: participants } }));
       return Promise.reject(new Error(`Unexpected request: ${path}`));
     });
-    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('fetch', withHealthyBackend(fetchMock));
     renderPage();
     fireEvent.change(await screen.findByLabelText('회의 제목'), { target: { value: '  계획 회의  ' } });
     expect((await screen.findByRole('alert')).textContent).toMatch(/참석자 목록/);
@@ -127,7 +128,7 @@ describe('New Meeting input and selection', () => {
         : Promise.resolve(response({ data: { items: templates } }));
       return Promise.resolve(response({ data: { items: participants } }));
     });
-    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('fetch', withHealthyBackend(fetchMock));
     renderPage();
     fireEvent.change(await screen.findByLabelText('회의 제목'), { target: { value: 'Draft stays' } });
     expect((await screen.findByRole('alert')).textContent).toMatch(/다시 시도/);
@@ -198,7 +199,7 @@ describe('New Meeting input and selection', () => {
       if (path.endsWith('/templates')) return Promise.resolve(response({ data: { items: [] } }));
       return Promise.resolve(response({ data: { items: [] } }));
     });
-    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('fetch', withHealthyBackend(fetchMock));
     const { onSubmit } = renderPage();
     expect(await screen.findByText(/사용 가능한 Template이 없습니다/)).toBeTruthy();
     expect(await screen.findByText(/참석자 관리에서 목록을 준비/)).toBeTruthy();

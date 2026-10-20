@@ -1,3 +1,4 @@
+import { withHealthyBackend } from './testUtils/withHealthyBackend';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes, useNavigate } from 'react-router';
@@ -10,7 +11,7 @@ function response(data: unknown, status = 200): Response {
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 function renderComplete(fetchMock: ReturnType<typeof vi.fn>) {
-  vi.stubGlobal('fetch', fetchMock);
+  vi.stubGlobal('fetch', withHealthyBackend(fetchMock));
   return render(<MemoryRouter initialEntries={['/meetings/s1/complete']}>
     <Routes><Route path="/meetings/:sessionId/complete" element={<CompletePage />} /></Routes>
   </MemoryRouter>);
@@ -338,7 +339,7 @@ describe('CompletePage', () => {
       }
       throw new Error(`Unexpected request: ${path}`);
     });
-    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('fetch', withHealthyBackend(fetchMock));
     render(<MemoryRouter initialEntries={['/meetings/session-A/complete']}><Routes>
       <Route path="/meetings/:sessionId/complete" element={<><CompletePage /><SwitchToOtherSession /></>} />
     </Routes></MemoryRouter>);

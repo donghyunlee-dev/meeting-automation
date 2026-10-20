@@ -1,4 +1,5 @@
 import { getApiBaseUrl } from './apiBase';
+import { apiFetch } from './apiFetch';
 import { parseReviewSessionData, type ReviewSession } from './reviewApi';
 
 export type PublishStatus = 'REVIEW' | 'CONFIRMED' | 'PUBLISHING' | 'DOCUMENT_SAVED' | 'DELIVERING'
@@ -88,7 +89,7 @@ function parseError(body: unknown, status: number): PublishApiError {
 async function request(path: string, init: RequestInit): Promise<{ response: Response; body: unknown }> {
   let response: Response;
   try {
-    response = await fetch(`${baseUrl()}${path}`, { ...init, headers: { Accept: 'application/json', ...init.headers } });
+    response = await apiFetch(`${baseUrl()}${path}`, { ...init, headers: { Accept: 'application/json', ...init.headers } });
   } catch {
     throw new PublishApiError('NETWORK_ERROR', undefined, [], true);
   }
@@ -151,7 +152,7 @@ export async function retryDelivery(sessionId: string, deliveryId: string, idemp
 export async function getPublishSnapshot(sessionId: string, signal?: AbortSignal): Promise<PublishSnapshot> {
   let response: Response;
   try {
-    response = await fetch(`${baseUrl()}/api/v1/meeting-sessions/${encodeURIComponent(sessionId)}`, { signal, headers: { Accept: 'application/json' } });
+    response = await apiFetch(`${baseUrl()}/api/v1/meeting-sessions/${encodeURIComponent(sessionId)}`, { signal, headers: { Accept: 'application/json' } });
   } catch {
     if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
     throw new PublishApiError('NETWORK_ERROR');

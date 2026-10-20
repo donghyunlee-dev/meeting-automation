@@ -1,3 +1,4 @@
+import { withHealthyBackend } from './testUtils/withHealthyBackend';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { getReceivedAudioStatus, putAudioChunk } from './audioUploadApi';
 import type { StoredChunk } from './chunkRepository';
@@ -29,7 +30,7 @@ describe('API-007 audio chunk upload', () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ data: { sequence: 3, received: true } }), { status: 200 }),
     );
-    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('fetch', withHealthyBackend(fetchMock));
     vi.stubGlobal('crypto', webcrypto);
 
     await putAudioChunk(chunk(audio), fetchMock);
@@ -51,7 +52,7 @@ describe('API-007 audio chunk upload', () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ data: { sequence: 3, received: true } }), { status: 200 }),
     );
-    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('fetch', withHealthyBackend(fetchMock));
     vi.stubGlobal('crypto', webcrypto);
     await expect(putAudioChunk(chunk(new NodeBlob(['x']) as Blob), fetchMock as typeof fetch)).resolves.toEqual({ sequence: 3, received: true });
   });
@@ -60,7 +61,7 @@ describe('API-007 audio chunk upload', () => {
 describe('API-008 received audio reconciliation', () => {
   it('reads the received sequences and normalizes duplicates into ascending order', async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: { receivedSequences: [3, 1, 3], receivedChunks: 2, totalBytes: 99 } }), { status: 200 }));
-    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('fetch', withHealthyBackend(fetchMock));
 
     await expect(getReceivedAudioStatus('session-1')).resolves.toEqual({ receivedSequences: [1, 3], receivedChunks: 2, totalBytes: 99 });
     expect(fetchMock.mock.calls[0][1]).toMatchObject({ headers: { Accept: 'application/json' } });
@@ -73,7 +74,7 @@ describe('API-008 received audio reconciliation', () => {
       return new Promise<Response>(() => undefined);
     });
 
-    const outcome = await settleWithin(getReceivedAudioStatus('session-1', fetchMock as typeof fetch, { timeoutMs: 5 }));
+    const outcome = await settleWithin(getReceivedAudioStatus('session-1', withHealthyBackend(fetchMock as typeof fetch), { timeoutMs: 5 }));
 
     expect(outcome.kind).toBe('error');
     if (outcome.kind === 'error') expect(outcome.error).toMatchObject({ code: 'REQUEST_TIMEOUT', responseUncertain: true });
@@ -81,27 +82,29 @@ describe('API-008 received audio reconciliation', () => {
     expect(signal?.aborted).toBe(true);
   });
 
-  it('bounds response.json() after PUT headers arrive and aborts the request with an uncertain result', async () => {
+  it('bounds a stalled response body and cancels it with an uncertain result', async () => {
     let signal: AbortSignal | undefined;
+    const cancelBody = vi.fn().mockResolvedValue(undefined);
     const fetchMock = vi.fn((_input: RequestInfo | URL, init?: RequestInit) => {
       signal = init?.signal as AbortSignal;
-      return Promise.resolve({ ok: true, status: 200, json: () => new Promise<unknown>(() => undefined) } as Response);
+      return Promise.resolve({ ok: true, status: 200, body: { cancel: cancelBody }, json: () => new Promise<unknown>(() => undefined) } as unknown as Response);
     });
     vi.stubGlobal('crypto', webcrypto);
 
-    const outcome = await settleWithin(putAudioChunk(chunk(new NodeBlob(['audio']) as Blob), fetchMock as typeof fetch, { timeoutMs: 5 }));
+    const outcome = await settleWithin(putAudioChunk(chunk(new NodeBlob(['audio']) as Blob), withHealthyBackend(fetchMock as typeof fetch), { timeoutMs: 5 }));
 
     expect(outcome.kind).toBe('error');
     if (outcome.kind === 'error') expect(outcome.error).toMatchObject({ code: 'REQUEST_TIMEOUT', responseUncertain: true });
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(signal?.aborted).toBe(true);
+    expect(signal?.aborted).toBe(false);
+    expect(cancelBody).toHaveBeenCalledOnce();
   });
 
   it('preserves terminal HTTP 4xx status when its response body stalls', async () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 422, json: () => new Promise<unknown>(() => undefined) } as Response);
     vi.stubGlobal('crypto', webcrypto);
 
-    const outcome = await settleWithin(putAudioChunk(chunk(new NodeBlob(['audio']) as Blob), fetchMock as typeof fetch, { timeoutMs: 5 }));
+    const outcome = await settleWithin(putAudioChunk(chunk(new NodeBlob(['audio']) as Blob), withHealthyBackend(fetchMock as typeof fetch), { timeoutMs: 5 }));
 
     expect(outcome.kind).toBe('error');
     if (outcome.kind === 'error') expect(outcome.error).toMatchObject({ code: 'REQUEST_TIMEOUT', status: 422, responseUncertain: true });

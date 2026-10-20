@@ -1,4 +1,5 @@
 import { getApiBaseUrl } from './apiBase';
+import { apiFetch } from './apiFetch';
 import { loadStoredDocumentConnection, saveReadyDocumentConnection, type StoredDocumentConnection } from './documentConnectionStorage';
 export type DocumentProvider = 'NOTION' | 'CONFLUENCE';
 export type SwitchMode = 'COPY_ALL' | 'START_EMPTY';
@@ -34,7 +35,7 @@ function newKey() { return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-$
 
 async function request<T>(path: string, init?: RequestInit): Promise<{ data: T; etag: string | null }> {
   let response: Response;
-  try { response = await fetch(`${apiBase()}${path}`, { ...init, headers: { Accept: 'application/json', ...(init?.body ? { 'Content-Type': 'application/json' } : {}), ...init?.headers } }); }
+  try { response = await apiFetch(`${apiBase()}${path}`, { ...init, headers: { Accept: 'application/json', ...(init?.body ? { 'Content-Type': 'application/json' } : {}), ...init?.headers } }); }
   catch { throw new DocumentSetupError('NETWORK_ERROR', 0); }
   let body: { data?: T; error?: { code?: string } } = {};
   try { body = await response.json() as typeof body; } catch { /* handled below */ }

@@ -1,3 +1,4 @@
+import { withHealthyBackend } from './testUtils/withHealthyBackend';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router';
@@ -32,7 +33,7 @@ describe('ProcessingPage failure recovery', () => {
       expect(!init?.method || init.method === 'GET').toBe(true);
       return new Response(JSON.stringify(apiSnapshot('PROCESSING', [], 'TRANSCRIPTION')), { status: 200 });
     });
-    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('fetch', withHealthyBackend(fetchMock));
     renderPage();
 
     expect(await screen.findByRole('heading', { name: '처리 상태를 불러오지 못했습니다.' })).toBeTruthy();
@@ -44,7 +45,7 @@ describe('ProcessingPage failure recovery', () => {
   });
 
   it('shows safe Korean stage copy and only actions allowed by API-010', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(apiSnapshot('PROCESSING_FAILED', ['DOWNLOAD_AUDIO', 'FINALIZE_PROCESSING_FAILURE'])), { status: 200 })));
+    vi.stubGlobal('fetch', withHealthyBackend(vi.fn(async () => new Response(JSON.stringify(apiSnapshot('PROCESSING_FAILED', ['DOWNLOAD_AUDIO', 'FINALIZE_PROCESSING_FAILURE'])), { status: 200 }))));
     renderPage();
     expect(await screen.findByRole('heading', { name: '처리를 완료하지 못했습니다' })).toBeTruthy();
     expect(screen.getByRole('region').querySelector('p:not(.visually-hidden)')?.textContent).toContain('음성을 변환하는 중 문제가 발생했습니다');
@@ -59,7 +60,7 @@ describe('ProcessingPage failure recovery', () => {
     const body = apiSnapshot('PROCESSING_FAILED', ['RETRY_PROCESSING', 'DOWNLOAD_AUDIO']);
     body.data.processing.retryable = false;
     body.data.processing.audioAvailable = false;
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(body), { status: 200 })));
+    vi.stubGlobal('fetch', withHealthyBackend(vi.fn(async () => new Response(JSON.stringify(body), { status: 200 }))));
     renderPage();
     await screen.findByRole('heading', { name: '처리를 완료하지 못했습니다' });
     expect(screen.queryByRole('button', { name: '다시 변환' })).toBeNull();
@@ -75,7 +76,7 @@ describe('ProcessingPage failure recovery', () => {
       if (statusReads > 1) body.data.processing.audioAvailable = false;
       return new Response(JSON.stringify(body), { status: 200 });
     });
-    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('fetch', withHealthyBackend(fetchMock));
     renderPage();
     expect(await screen.findByRole('button', { name: '오디오 다운로드 준비' })).toBeTruthy();
     returnFromAudioDownload();
@@ -88,7 +89,7 @@ describe('ProcessingPage failure recovery', () => {
       if (init?.method === 'POST') return new Response(JSON.stringify({ data: { sessionId: 's-1', status: 'PROCESSING', stage: 'TRANSCRIPTION' } }), { status: 202 });
       return new Response(JSON.stringify(apiSnapshot(fetchMock.mock.calls.some(([, request]) => request?.method === 'POST') ? 'PROCESSING' : 'PROCESSING_FAILED', ['RETRY_PROCESSING'], 'TRANSCRIPTION', 7)), { status: 200 });
     });
-    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('fetch', withHealthyBackend(fetchMock));
     renderPage();
     const retry = await screen.findByRole('button', { name: '다시 변환' });
     fireEvent.click(retry);
@@ -107,7 +108,7 @@ describe('ProcessingPage failure recovery', () => {
       statusReads += 1;
       return new Response(JSON.stringify(apiSnapshot(statusReads === 1 ? 'PROCESSING_FAILED' : 'PROCESSING', ['RETRY_PROCESSING'], 'TRANSCRIPTION', 5)), { status: 200 });
     });
-    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('fetch', withHealthyBackend(fetchMock));
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: '다시 변환' }));
     expect(await screen.findByText('전체 4단계 중 2단계 · 음성 인식 진행 중')).toBeTruthy();
@@ -119,7 +120,7 @@ describe('ProcessingPage failure recovery', () => {
     const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => init?.method === 'POST'
       ? new Response('', { status: 202 })
       : new Response(JSON.stringify(apiSnapshot(fetchMock.mock.calls.some(([, request]) => request?.method === 'POST') ? 'COMPLETED_WITH_WARNINGS' : 'PROCESSING_FAILED', ['FINALIZE_PROCESSING_FAILURE'], 'DIARIZATION', 3)), { status: 200 }));
-    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('fetch', withHealthyBackend(fetchMock));
     renderPage();
     const discardTrigger = await screen.findByRole('button', { name: '오디오 없이 실패 마무리' });
     fireEvent.click(discardTrigger);
@@ -140,7 +141,7 @@ describe('ProcessingPage failure recovery', () => {
     const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => init?.method === 'POST'
       ? new Response('', { status: 202 })
       : new Response(JSON.stringify(apiSnapshot(fetchMock.mock.calls.some(([, request]) => request?.method === 'POST') ? 'COMPLETED_WITH_WARNINGS' : 'PROCESSING_FAILED', ['DOWNLOAD_AUDIO', 'FINALIZE_PROCESSING_FAILURE'])), { status: 200 }));
-    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('fetch', withHealthyBackend(fetchMock));
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: '오디오 다운로드 준비' }));
     const link = await screen.findByRole('link', { name: '원본 오디오 다운로드' });
@@ -172,7 +173,7 @@ describe('ProcessingPage failure recovery', () => {
       if (downloadReturned) body.data.processing.audioAvailable = false;
       return new Response(JSON.stringify(body), { status: 200 });
     });
-    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('fetch', withHealthyBackend(fetchMock));
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: '오디오 다운로드 준비' }));
     await waitFor(() => expect(document.querySelector('a[download]')).not.toBeNull());
@@ -188,7 +189,7 @@ describe('ProcessingPage failure recovery', () => {
   });
 
   it('does not offer recovery after the Session disappears', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => new Response('', { status: 404 })));
+    vi.stubGlobal('fetch', withHealthyBackend(vi.fn(async () => new Response('', { status: 404 }))));
     renderPage();
     expect(await screen.findByRole('heading', { name: '회의를 찾을 수 없습니다' })).toBeTruthy();
     expect(screen.getByRole('link', { name: '새 회의 시작' })).toBeTruthy();

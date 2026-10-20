@@ -1,4 +1,5 @@
-﻿import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { withHealthyBackend } from './testUtils/withHealthyBackend';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { MeetingsPage } from './MeetingHistory';
@@ -15,7 +16,7 @@ const ok = (data: unknown) => new Response(JSON.stringify({ data }), { status: 2
 describe('Meetings filters and detail', () => {
   it('filters locally by text/date, distinguishes no matches, resets, preserves order, and links rows accessibly', async () => {
     const fetchMock = vi.fn(async () => ok({ items: list }));
-    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('fetch', withHealthyBackend(fetchMock));
     render(<MemoryRouter initialEntries={['/meetings']}><Routes><Route path="/meetings" element={<MeetingsPage />} /></Routes></MemoryRouter>);
     expect(await screen.findByRole('button', { name: /Planning 상세 보기/i })).toBeTruthy();
     const before = fetchMock.mock.calls.length;
@@ -34,7 +35,7 @@ describe('Meetings filters and detail', () => {
   });
 
   it('shows reversed date guidance while leaving the result set visible', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => ok({ items: list })));
+    vi.stubGlobal('fetch', withHealthyBackend(vi.fn(async () => ok({ items: list }))));
     render(<MemoryRouter initialEntries={['/meetings']}><Routes><Route path="/meetings" element={<MeetingsPage />} /></Routes></MemoryRouter>);
     expect(await screen.findByRole('button', { name: /Planning 상세 보기/ })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /상세 조건/ }));
@@ -46,7 +47,7 @@ describe('Meetings filters and detail', () => {
   });
 
   it('loads read-only Minutes, opens and closes an accessible transcript drawer, and uses a safe external link', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => ok(detail)));
+    vi.stubGlobal('fetch', withHealthyBackend(vi.fn(async () => ok(detail))));
     render(<MemoryRouter initialEntries={['/meetings/doc%2Fa']}><Routes><Route path="/meetings/:documentId" element={<MeetingDetailPage />} /></Routes></MemoryRouter>);
     expect(await screen.findByText('Summary text')).toBeTruthy();
     expect(screen.getByText('Discussion text')).toBeTruthy();
@@ -67,7 +68,7 @@ describe('Meetings filters and detail', () => {
   });
 
   it('contains forward and reverse keyboard focus inside the transcript modal', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => ok(detail)));
+    vi.stubGlobal('fetch', withHealthyBackend(vi.fn(async () => ok(detail))));
     const backgroundButton = document.createElement('button');
     backgroundButton.textContent = 'Background action';
     document.body.append(backgroundButton);
@@ -93,7 +94,7 @@ describe('Meetings filters and detail', () => {
     const fetchMock = vi.fn(async () => ok({ ...detail, documentUrl: 'javascript:alert(1)' }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ error: { code: 'PROVIDER_FAILURE', message: 'secret provider text' } }), { status: 502 }))
       .mockResolvedValueOnce(ok({ ...detail, documentUrl: 'data:text/html,unsafe' }));
-    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('fetch', withHealthyBackend(fetchMock));
     render(<MemoryRouter initialEntries={['/meetings/doc-b']}><Routes><Route path="/meetings/:documentId" element={<MeetingDetailPage />} /><Route path="/meetings" element={<h1>회의록</h1>} /></Routes></MemoryRouter>);
     expect(await screen.findByRole('alert')).toBeTruthy();
     expect(screen.queryByText(/secret provider text/)).toBeNull();
@@ -104,7 +105,7 @@ describe('Meetings filters and detail', () => {
   });
 
   it('explains missing records and returns to the Meetings list', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: { code: 'MEETING_NOT_FOUND' } }), { status: 404 })));
+    vi.stubGlobal('fetch', withHealthyBackend(vi.fn(async () => new Response(JSON.stringify({ error: { code: 'MEETING_NOT_FOUND' } }), { status: 404 }))));
     render(<MemoryRouter initialEntries={['/meetings/missing']}><Routes><Route path="/meetings/:documentId" element={<MeetingDetailPage />} /><Route path="/meetings" element={<h1>회의록</h1>} /></Routes></MemoryRouter>);
     expect(await screen.findByText('회의 기록을 찾을 수 없습니다.')).toBeTruthy();
     fireEvent.click(screen.getByRole('link', { name: '회의록 목록으로' }));

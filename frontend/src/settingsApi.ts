@@ -1,4 +1,5 @@
 import { getApiBaseUrl } from './apiBase';
+import { apiFetch } from './apiFetch';
 export type AppConfig = {
   company: { id: string; name: string; timezone: string };
   document?: { provider: string | null; configured: boolean; connectionVersion: number; rootUrl: string | null } | null;
@@ -22,7 +23,7 @@ export class SettingsApiError extends Error {
 async function readData<T>(path: string): Promise<T> {
   let response: Response;
   try {
-    response = await fetch(`${getApiBaseUrl()}/api/v1${path}`, {
+    response = await apiFetch(`${getApiBaseUrl()}/api/v1${path}`, {
       headers: { Accept: 'application/json' },
     });
   } catch {

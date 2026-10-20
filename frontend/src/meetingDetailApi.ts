@@ -1,4 +1,5 @@
 import { getApiBaseUrl } from './apiBase';
+import { apiFetch } from './apiFetch';
 import { normalizeApiError, type SafeApiError } from './lib/api/normalizeApiError';
 
 export type MeetingDetail = {
@@ -45,7 +46,7 @@ function isMeetingDetail(value: unknown): value is MeetingDetail {
 
 export async function getMeetingDetail(documentId: string): Promise<MeetingDetail> {
   try {
-    const response = await fetch(`${baseUrl()}/api/v1/meetings/${encodeURIComponent(documentId)}`, { headers: { Accept: 'application/json' } });
+    const response = await apiFetch(`${baseUrl()}/api/v1/meetings/${encodeURIComponent(documentId)}`, { headers: { Accept: 'application/json' } });
     const body: unknown = await response.json();
     const code = body && typeof body === 'object' && 'error' in body
       && (body.error as { code?: unknown } | null)?.code === 'MEETING_NOT_FOUND' ? 'MEETING_NOT_FOUND' : null;

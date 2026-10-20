@@ -1,3 +1,4 @@
+import { withHealthyBackend } from './testUtils/withHealthyBackend';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { restoreSlackWebhookSettings } from './slackSettingsApi';
 import { SLACK_WEBHOOK_STORAGE_KEY } from './slackWebhookStorage';
@@ -30,7 +31,7 @@ describe('Slack webhook restoration', () => {
       }
       throw new Error(`Unexpected request: ${method} ${path}`);
     });
-    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('fetch', withHealthyBackend(fetchMock));
 
     const restored = await restoreSlackWebhookSettings();
 

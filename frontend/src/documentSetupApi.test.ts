@@ -1,3 +1,4 @@
+import { withHealthyBackend } from './testUtils/withHealthyBackend';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getSetupSnapshot } from './documentSetupApi';
 import { loadStoredDocumentConnection, savePendingDocumentConnection, saveReadyDocumentConnection } from './documentConnectionStorage';
@@ -37,7 +38,7 @@ describe('document setup browser restoration', () => {
       if (path.endsWith('/drafts/draft/initialize') && init?.method === 'POST') return response({ operationId: 'op', status: 'PENDING', version: 3 }, 202);
       return Promise.reject(new Error(`Unexpected request: ${path}`));
     });
-    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('fetch', withHealthyBackend(fetchMock));
 
     const snapshot = await getSetupSnapshot();
 
@@ -64,7 +65,7 @@ describe('document setup browser restoration', () => {
       if (path.endsWith('/initialize') && init?.method === 'POST') { configured = true; return response({ operationId: 'op', status: 'PENDING', version: 3 }, 202); }
       return Promise.reject(new Error(`Unexpected request: ${path}`));
     });
-    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('fetch', withHealthyBackend(fetchMock));
 
     const snapshot = await getSetupSnapshot();
 
@@ -89,7 +90,7 @@ describe('document setup browser restoration', () => {
       if (path.endsWith('/initialize') && init?.method === 'POST') { configured = true; return response({ operationId: 'op', status: 'PENDING', version: 3 }, 202); }
       return Promise.reject(new Error(`Unexpected request: ${path}`));
     });
-    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('fetch', withHealthyBackend(fetchMock));
 
     await Promise.all([getSetupSnapshot(), getSetupSnapshot()]);
 
@@ -148,7 +149,7 @@ describe('document setup browser restoration', () => {
         }
         return Promise.reject(new Error(`Unexpected request: ${path}`));
       });
-      vi.stubGlobal('fetch', fetchMock);
+      vi.stubGlobal('fetch', withHealthyBackend(fetchMock));
 
       expect((await getSetupSnapshot()).snapshot.status).not.toBe('READY');
       expect((await getSetupSnapshot()).snapshot.status).toBe('READY');
@@ -167,14 +168,14 @@ describe('document setup browser restoration', () => {
       location: { baseUrl: 'https://example.atlassian.net', spaceId: '42' },
       credentials: { accountEmail: 'owner@example.test', apiToken: 'synthetic-confluence-secret' },
     });
-    vi.stubGlobal('fetch', vi.fn(() => response({
+    vi.stubGlobal('fetch', withHealthyBackend(vi.fn(() => response({
       version: 18,
       status: 'READY',
       active: { provider: 'CONFLUENCE', connectionVersion: 5, rootUrl: 'https://example.atlassian.net/wiki/spaces/TEST', rootId: '42' },
       draft: null,
       operation: { operationId: 'switch-1', type: 'SWITCH', status: 'SUCCEEDED' },
       canCreateMeeting: true,
-    })));
+    }))));
 
     await getSetupSnapshot();
 

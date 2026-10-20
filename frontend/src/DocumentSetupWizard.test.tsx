@@ -1,3 +1,4 @@
+import { withHealthyBackend } from './testUtils/withHealthyBackend';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router';
@@ -21,7 +22,7 @@ afterEach(() => { cleanup(); window.localStorage.clear(); vi.unstubAllGlobals();
 describe('document setup wizard', () => {
   it('routes an unconfigured meeting entry to setup without requesting meeting data', async () => {
     const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(response({ version: 0, status: 'UNCONFIGURED', active: null, draft: null, operation: null, canCreateMeeting: false })));
-    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('fetch', withHealthyBackend(fetchMock));
     render(<MemoryRouter initialEntries={['/meetings/new']}><App /></MemoryRouter>);
 
     expect(await screen.findByRole('heading', { name: '문서 서비스 연결' }, { timeout: 5000 })).toBeTruthy();
@@ -30,7 +31,7 @@ describe('document setup wizard', () => {
 
   it('gates the home route during first run and removes the loop-back action', async () => {
     const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(response({ version: 0, status: 'UNCONFIGURED', active: null, draft: null, operation: null, canCreateMeeting: false })));
-    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('fetch', withHealthyBackend(fetchMock));
     render(<MemoryRouter initialEntries={['/']}><App /></MemoryRouter>);
 
     expect(await screen.findByRole('heading', { name: '문서 서비스 연결' })).toBeTruthy();
@@ -40,7 +41,7 @@ describe('document setup wizard', () => {
 
   it('gates unconfigured participant settings and redirects to the first-run wizard', async () => {
     const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(response({ version: 0, status: 'UNCONFIGURED', active: null, draft: null, operation: null, canCreateMeeting: false })));
-    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('fetch', withHealthyBackend(fetchMock));
     render(<MemoryRouter initialEntries={['/settings/participants']}><App /></MemoryRouter>);
 
     expect(await screen.findByRole('heading', { name: '문서 서비스 연결' })).toBeTruthy();
@@ -49,7 +50,7 @@ describe('document setup wizard', () => {
 
   it('clears provider-specific fields when the provider changes', async () => {
     const fetchMock = vi.fn().mockResolvedValue(response({ version: 0, status: 'UNCONFIGURED', active: null, draft: null, operation: null, canCreateMeeting: false }));
-    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('fetch', withHealthyBackend(fetchMock));
     render(<MemoryRouter initialEntries={['/setup/document']}><App /></MemoryRouter>);
     await screen.findByRole('heading', { name: '문서 서비스 연결' }, { timeout: 5000 });
     fireEvent.click(screen.getByRole('button', { name: 'Notion 선택' }));
@@ -64,7 +65,7 @@ describe('document setup wizard', () => {
   });
 
   it('returns from the Notion connection form to provider selection', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response({ version: 0, status: 'UNCONFIGURED', active: null, draft: null, operation: null, canCreateMeeting: false })));
+    vi.stubGlobal('fetch', withHealthyBackend(vi.fn().mockResolvedValue(response({ version: 0, status: 'UNCONFIGURED', active: null, draft: null, operation: null, canCreateMeeting: false }))));
     render(<MemoryRouter initialEntries={['/setup/document']}><App /></MemoryRouter>);
     await screen.findByRole('heading', { name: '문서 서비스 연결' }, { timeout: 5000 });
     fireEvent.click(screen.getByRole('button', { name: 'Notion 선택' }));
@@ -86,14 +87,14 @@ describe('document setup wizard', () => {
   });
 
   it('shows recovery guidance for unavailable settings storage', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response({ version: null, status: 'STORAGE_UNAVAILABLE', active: null, draft: null, operation: null, canCreateMeeting: false })));
+    vi.stubGlobal('fetch', withHealthyBackend(vi.fn().mockResolvedValue(response({ version: null, status: 'STORAGE_UNAVAILABLE', active: null, draft: null, operation: null, canCreateMeeting: false }))));
     render(<MemoryRouter initialEntries={['/settings/document']}><App /></MemoryRouter>);
     expect(await screen.findByRole('alert')).toBeTruthy();
     expect(screen.getByRole('heading', { name: '저장소 설정을 확인할 수 없습니다' })).toBeTruthy();
   });
 
   it('shows document connection status with clear settings navigation', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response({ version: 5, status: 'READY', active: { provider: 'NOTION', connectionVersion: 2, rootUrl: 'https://notion.example' }, draft: null, operation: null, canCreateMeeting: true })));
+    vi.stubGlobal('fetch', withHealthyBackend(vi.fn().mockResolvedValue(response({ version: 5, status: 'READY', active: { provider: 'NOTION', connectionVersion: 2, rootUrl: 'https://notion.example' }, draft: null, operation: null, canCreateMeeting: true }))));
     render(<MemoryRouter initialEntries={['/settings/document']}><App /></MemoryRouter>);
 
     await screen.findByRole('heading', { name: '문서 연결' });
@@ -105,7 +106,7 @@ describe('document setup wizard', () => {
 
   it('CHANGE-ENTRY reopens provider selection from READY while preserving the active source', async () => {
     const fetchMock = vi.fn().mockResolvedValue(response({ version: 5, status: 'READY', active: { provider: 'NOTION', connectionVersion: 2, rootUrl: 'https://notion.example' }, draft: { draftId: 'pending-draft', revision: 1, provider: 'CONFLUENCE', state: 'DRAFT' }, operation: null, canCreateMeeting: true }));
-    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('fetch', withHealthyBackend(fetchMock));
     render(<MemoryRouter initialEntries={['/settings/document']}><App /></MemoryRouter>);
 
     expect(await screen.findByRole('heading', { name: '문서 연결' })).toBeTruthy();
@@ -130,7 +131,7 @@ describe('document setup wizard', () => {
       if (path.endsWith('/test')) return Promise.resolve(response({ draftId: 'd1', revision: 1, testedAt: '2026-10-11T10:00:00Z', expiresAt: '2099-10-11T10:10:00Z', authenticated: true, parentAccessible: true, writeCapability: 'UNVERIFIED', version: 2 }));
       throw new Error(`Unexpected request: ${path}`);
     });
-    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('fetch', withHealthyBackend(fetchMock));
     render(<MemoryRouter initialEntries={['/setup/document']}><App /></MemoryRouter>);
     await screen.findByRole('heading', { name: '문서 서비스 연결' });
     fireEvent.click(screen.getByRole('button', { name: 'Notion 선택' }));
@@ -157,7 +158,7 @@ describe('document setup wizard', () => {
       if (path.endsWith('/operations/op-1')) return Promise.resolve(response({ ...operation('op-1', 'RUNNING'), stage: 'STRUCTURE', currentStep: 'ROOT', completedSteps: [] }));
       throw new Error(`Unexpected request: ${path}`);
     });
-    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('fetch', withHealthyBackend(fetchMock));
     render(<MemoryRouter initialEntries={['/setup/document']}><App /></MemoryRouter>);
 
     expect(await screen.findByRole('heading', { name: 'Notion 문서를 생성하고 있습니다' })).toBeTruthy();
@@ -176,7 +177,7 @@ describe('document setup wizard', () => {
         : errorResponse('INTERNAL_ERROR', 503));
       throw new Error(`Unexpected request: ${path}`);
     });
-    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('fetch', withHealthyBackend(fetchMock));
     render(<MemoryRouter initialEntries={['/setup/document']}><App /></MemoryRouter>);
 
     expect(await screen.findByRole('heading', { name: 'Notion 문서를 생성하고 있습니다' })).toBeTruthy();
@@ -201,7 +202,7 @@ describe('document setup wizard', () => {
       if (path.endsWith('/operations/op-1')) return Promise.resolve(errorResponse('INTERNAL_ERROR', 503));
       throw new Error(`Unexpected request: ${path}`);
     });
-    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('fetch', withHealthyBackend(fetchMock));
     render(<MemoryRouter initialEntries={['/setup/document']}><App /></MemoryRouter>);
 
     const closeButton = await screen.findByRole('button', { name: '연결 작업 종료 후 다시 연결' });
@@ -222,7 +223,7 @@ describe('document setup wizard', () => {
       if (path.endsWith('/operations/op-1')) return Promise.resolve(response({ ...operation('op-1', cancelled ? 'CANCELLED' : 'INTERRUPTED'), stage: 'STRUCTURE', allowedActions: cancelled ? [] : ['RETRY', 'CANCEL'] }));
       throw new Error(`Unexpected request: ${path}`);
     });
-    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('fetch', withHealthyBackend(fetchMock));
     render(<MemoryRouter initialEntries={['/setup/document']}><App /></MemoryRouter>);
 
     fireEvent.click(await screen.findByRole('button', { name: '중단된 연결 작업 종료' }));
@@ -241,7 +242,7 @@ describe('document setup wizard', () => {
       if (path.endsWith('/test')) return Promise.resolve(response({ draftId: 'd1', revision: 0, testedAt: '2026-10-11T10:00:00Z', expiresAt: '2099-10-11T10:10:00Z', authenticated: true, parentAccessible: true, writeCapability: 'UNVERIFIED', version: 2 }));
       throw new Error(`Unexpected request: ${path}`);
     });
-    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('fetch', withHealthyBackend(fetchMock));
     render(<MemoryRouter initialEntries={['/setup/document']}><App /></MemoryRouter>);
     await screen.findByLabelText('Notion 내부 연결 토큰');
     fireEvent.change(screen.getByLabelText('Notion 내부 연결 토큰'), { target: { value: 'synthetic-secret' } });
@@ -277,7 +278,7 @@ describe('document setup wizard', () => {
       if (path.endsWith('/meetings')) return Promise.resolve(response({ items: [] }));
       throw new Error(`Unexpected request: ${path}`);
     });
-    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('fetch', withHealthyBackend(fetchMock));
     render(<MemoryRouter initialEntries={['/setup/document']}><App /></MemoryRouter>);
     await screen.findByRole('heading', { name: '문서 서비스 연결' });
     fireEvent.click(screen.getByRole('button', { name: 'Notion 선택' }));
@@ -320,7 +321,7 @@ describe('document setup wizard', () => {
       if (path.endsWith('/operations/lost-op-9')) return Promise.resolve(response(operation('lost-op-9', 'RUNNING')));
       throw new Error(`Unexpected request: ${path}`);
     });
-    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('fetch', withHealthyBackend(fetchMock));
     render(<MemoryRouter initialEntries={['/setup/document']}><App /></MemoryRouter>);
     await screen.findByRole('heading', { name: '문서 서비스 연결' });
     fireEvent.click(screen.getByRole('button', { name: 'Notion 선택' }));
@@ -345,7 +346,7 @@ describe('document setup wizard', () => {
       if (path.endsWith('/operations/public-op-7')) return Promise.resolve(response(operation('public-op-7', 'RUNNING')));
       throw new Error(`Unexpected request: ${path}`);
     });
-    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('fetch', withHealthyBackend(fetchMock));
     render(<MemoryRouter initialEntries={['/setup/document']}><App /></MemoryRouter>);
     expect(await screen.findByRole('heading', { name: 'Notion 문서를 생성하고 있습니다' })).toBeTruthy();
     expect(await screen.findByText('Notion에 문서 구조 페이지를 생성하고 있습니다.')).toBeTruthy();
@@ -366,7 +367,7 @@ describe('document setup wizard', () => {
       if (path.endsWith('/operations/failed-op-3/retry') && init?.method === 'POST') return Promise.resolve(response({ operationId: 'failed-op-3', status: 'PENDING', version: 4 }, 202));
       throw new Error(`Unexpected request: ${path}`);
     });
-    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('fetch', withHealthyBackend(fetchMock));
     render(<MemoryRouter initialEntries={['/setup/document']}><App /></MemoryRouter>);
 
     expect(await screen.findByText('DOCUMENT_FAILED')).toBeTruthy();
@@ -386,7 +387,7 @@ describe('document setup wizard', () => {
       if (path.endsWith('/operations/review-op-4')) return Promise.resolve(response({ ...operation('review-op-4', 'RECONCILIATION_REQUIRED'), errorCode: 'PROVIDER_STATE_UNCERTAIN', retryable: false, allowedActions: ['REVIEW_PROVIDER', 'CANCEL'], version: 5 }));
       throw new Error(`Unexpected request: ${path}`);
     });
-    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('fetch', withHealthyBackend(fetchMock));
     render(<MemoryRouter initialEntries={['/setup/document']}><App /></MemoryRouter>);
 
     expect(await screen.findByText('PROVIDER_STATE_UNCERTAIN')).toBeTruthy();
@@ -412,7 +413,7 @@ describe('document setup wizard', () => {
       if (path.endsWith('/test')) return Promise.resolve(response({ draftId: 'd2', revision: 1, testedAt: '2026-10-11T10:00:00Z', expiresAt: '2099-10-11T10:10:00Z', authenticated: true, parentAccessible: true, writeCapability: 'UNVERIFIED', version: 7 }));
       throw new Error(`Unexpected request: ${path}`);
     });
-    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('fetch', withHealthyBackend(fetchMock));
     render(<MemoryRouter initialEntries={['/setup/document']}><App /></MemoryRouter>);
     await screen.findByRole('heading', { name: '문서 서비스 연결' });
     fireEvent.click(screen.getByRole('button', { name: 'Notion 선택' }));

@@ -1,3 +1,4 @@
+import { withHealthyBackend } from './testUtils/withHealthyBackend';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { getMinutesRegenerationSnapshot, regenerateMinutes } from './minutesRegenerationApi';
 
@@ -21,7 +22,7 @@ describe('minutes regeneration API', () => {
         sessionId: 'review-42', status: 'PROCESSING', stage: 'DRAFT_REGENERATION', templateId: 'weekly',
       } }), { status: 202 });
     });
-    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('fetch', withHealthyBackend(fetchMock));
 
     await expect(regenerateMinutes('review-42', 8, 'weekly', 'intent-key-1')).resolves.toEqual({
       sessionId: 'review-42', status: 'PROCESSING', stage: 'DRAFT_REGENERATION', templateId: 'weekly',
@@ -37,7 +38,7 @@ describe('minutes regeneration API', () => {
 
   it('returns a complete API-010 Review snapshot with regeneration outcome for terminal correlation', async () => {
     const fetchMock = vi.fn(async () => new Response(JSON.stringify(reviewResponse()), { status: 200 }));
-    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('fetch', withHealthyBackend(fetchMock));
 
     await expect(getMinutesRegenerationSnapshot('review-42', new AbortController().signal)).resolves.toMatchObject({
       sessionId: 'review-42', version: 9, status: 'REVIEW',
@@ -57,7 +58,7 @@ describe('minutes regeneration API', () => {
       signal = init?.signal ?? undefined;
       return new Promise<Response>(() => undefined);
     });
-    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('fetch', withHealthyBackend(fetchMock));
 
     await expect(regenerateMinutes('review-42', 8, 'weekly', 'intent-key-2', { timeoutMs: 2 })).rejects.toMatchObject({
       name: 'MinutesRegenerationApiError', code: 'NETWORK_ERROR', outcomeUnknown: true,

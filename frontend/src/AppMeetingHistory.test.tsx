@@ -1,3 +1,4 @@
+import { withHealthyBackend } from './testUtils/withHealthyBackend';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router';
@@ -23,7 +24,7 @@ describe('meeting history routes', () => {
       } }), { status: 200, headers: { 'Content-Type': 'application/json' } });
       throw new Error(`Unexpected request: ${url.pathname}`);
     });
-    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('fetch', withHealthyBackend(fetchMock));
     render(<MemoryRouter initialEntries={['/meetings']}><App /></MemoryRouter>);
 
     expect(await screen.findByRole('heading', { name: '회의 기록' })).toBeTruthy();

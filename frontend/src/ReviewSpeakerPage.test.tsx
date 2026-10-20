@@ -1,3 +1,4 @@
+import { withHealthyBackend } from './testUtils/withHealthyBackend';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { useState, type ComponentProps, type ComponentType } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -45,7 +46,7 @@ function httpResponse(body: unknown, status = 200): Response {
 }
 
 function renderReview(fetchMock: ReturnType<typeof vi.fn>, props: Partial<ReviewTestProps> = {}) {
-  vi.stubGlobal('fetch', fetchMock);
+  vi.stubGlobal('fetch', withHealthyBackend(fetchMock));
   const page = (nextProps: Partial<ReviewTestProps>) => (
     <MemoryRouter initialEntries={['/meetings/review-minutes/review']}>
       <Routes>
@@ -120,7 +121,7 @@ function minutesIntegrationFetch(options: {
 
 describe('Review minutes and transcript', () => {
   beforeEach(() => {
-    vi.stubGlobal('fetch', mockApiFetch());
+    vi.stubGlobal('fetch', withHealthyBackend(mockApiFetch()));
   });
 
   afterEach(() => {
@@ -315,7 +316,7 @@ describe('Review minutes and transcript', () => {
       if (url.pathname.endsWith('/participants')) return apiResponse({ data: { items: [{ id: 'p1', name: 'Ada Lovelace', email: 'private@example.com' }] } });
       throw new Error(`Unexpected request: ${url.pathname}`);
     });
-    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('fetch', withHealthyBackend(fetchMock));
     function SwitchableReview() {
       const navigate = useNavigate();
       const [minutesSaveState, setMinutesSaveState] = useState<MinutesSaveState>({ sessionId: '', status: 'idle' });

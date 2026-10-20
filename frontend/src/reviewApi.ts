@@ -1,4 +1,5 @@
 import { getApiBaseUrl } from './apiBase';
+import { apiFetch, ApiRequestTimeoutError } from './apiFetch';
 export type ReviewSpeaker = { speakerId: string; label: string; participantId: string | null; participantName?: string | null };
 export type TranscriptSegment = { segmentId: string; speakerId: string; startMs: number; endMs: number; text: string };
 export type StructuredMinutesActionItem = { ownerParticipantId: string | null; task: string; dueDate: string | null };
@@ -28,10 +29,6 @@ export type MinutesUpdate = { version: number; minutes: StructuredMinutes };
 export type ReviewMinutesRequestOptions = { timeoutMs?: number };
 
 const DEFAULT_MINUTES_REQUEST_TIMEOUT_MS = 15_000;
-
-class MinutesRequestTimeoutError extends Error {
-  constructor(readonly status?: number) { super('Minutes update request timed out'); }
-}
 
 export class ReviewApiError extends Error {
   constructor(
@@ -105,7 +102,7 @@ function parseError(body: unknown): { apiCode?: string; fieldErrors: string[] } 
 export async function getReviewSession(sessionId: string): Promise<ReviewSession> {
   let response: Response;
   try {
-    response = await fetch(`${baseUrl()}/api/v1/meeting-sessions/${encodeURIComponent(sessionId)}`, { headers: { Accept: 'application/json' } });
+    response = await apiFetch(`${baseUrl()}/api/v1/meeting-sessions/${encodeURIComponent(sessionId)}`, { headers: { Accept: 'application/json' } });
   } catch {
     throw new ReviewApiError('REQUEST_FAILED', undefined, true);
   }
@@ -180,7 +177,7 @@ export async function updateReviewMinutes(
       body: JSON.stringify(minutes),
     }, options.timeoutMs ?? DEFAULT_MINUTES_REQUEST_TIMEOUT_MS));
   } catch (error) {
-    const status = error instanceof MinutesRequestTimeoutError ? error.status : undefined;
+    const status = error instanceof ApiRequestTimeoutError ? error.status : undefined;
     throw new ReviewApiError('MINUTES_UPDATE_FAILED', status, true);
   }
   if (!response.ok) {
@@ -204,39 +201,16 @@ async function requestAndRead(
   init: RequestInit,
   timeoutMs: number,
 ): Promise<{ response: Response; body: unknown }> {
-  const controller = new AbortController();
-  let response: Response | undefined;
-  let timeoutTriggered = false;
-  let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<never>((_resolve, reject) => {
-    timeoutHandle = setTimeout(() => {
-      timeoutTriggered = true;
-      reject(new MinutesRequestTimeoutError(response?.status));
-      controller.abort();
-    }, timeoutMs);
-  });
-  const request = (async () => {
-    try {
-      response = await fetchImpl(input, { ...init, signal: controller.signal });
-      const body = await response.json();
-      return { response, body };
-    } catch (error) {
-      if (timeoutTriggered) throw new MinutesRequestTimeoutError(response?.status);
-      if (response) return { response, body: undefined };
-      throw error;
-    }
-  })();
-  try {
-    return await Promise.race([request, timeout]);
-  } finally {
-    if (timeoutHandle !== undefined) clearTimeout(timeoutHandle);
-  }
+  const response = await apiFetch(input, init, { timeoutMs }, fetchImpl);
+  let body: unknown;
+  try { body = await response.json(); } catch { body = undefined; }
+  return { response, body };
 }
 
 export async function updateSpeakerMappings(sessionId: string, version: number, mappings: SpeakerMappingInput[]): Promise<SpeakerMappingUpdate> {
   let response: Response;
   try {
-    response = await fetch(`${baseUrl()}/api/v1/meeting-sessions/${encodeURIComponent(sessionId)}/speaker-mappings`, {
+    response = await apiFetch(`${baseUrl()}/api/v1/meeting-sessions/${encodeURIComponent(sessionId)}/speaker-mappings`, {
       method: 'PUT',
       headers: { Accept: 'application/json', 'Content-Type': 'application/json', 'If-Match': `"${version}"` },
       body: JSON.stringify({ mappings }),

@@ -1,3 +1,4 @@
+import { withHealthyBackend } from './testUtils/withHealthyBackend';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { StrictMode } from 'react';
@@ -32,7 +33,7 @@ function installListFetch(items: MeetingSummary[]) {
     } });
     return response({ data: { items } });
   });
-  vi.stubGlobal('fetch', fetchMock);
+  vi.stubGlobal('fetch', withHealthyBackend(fetchMock));
   return fetchMock;
 }
 
@@ -85,7 +86,7 @@ describe('Home recent meetings', () => {
         ? response({ error: { code: 'PROVIDER_FAILURE', message: 'sensitive provider data' } }, 502)
         : response({ data: { items: meetings.slice(0, 2) } }));
     });
-    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('fetch', withHealthyBackend(fetchMock));
     render(<MemoryRouter><HomePage /></MemoryRouter>);
 
     expect(await screen.findByRole('alert')).toBeTruthy();
@@ -98,9 +99,9 @@ describe('Home recent meetings', () => {
 
   it('announces the loading state while the list request is pending', async () => {
     const pending: Array<{ path: string; resolve: (value: Response) => void }> = [];
-    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => new Promise<Response>((resolve) => {
+    vi.stubGlobal('fetch', withHealthyBackend(vi.fn((input: RequestInfo | URL) => new Promise<Response>((resolve) => {
       pending.push({ path: new URL(String(input)).pathname, resolve });
-    })));
+    }))));
     render(<MemoryRouter><HomePage /></MemoryRouter>);
 
     expect(screen.getByRole('heading', { name: '최근 회의' })).toBeTruthy();
@@ -114,7 +115,7 @@ describe('Meetings page', () => {
     const fetchMock = vi.fn<(input: RequestInfo | URL) => Promise<Response>>()
       .mockResolvedValueOnce(response({ error: { code: 'PROVIDER_FAILURE', message: 'token=private-provider-secret' } }, 502))
       .mockResolvedValueOnce(response({ data: { items: meetings.slice(0, 3) } }));
-    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('fetch', withHealthyBackend(fetchMock));
     render(<MemoryRouter initialEntries={['/meetings']}><Routes><Route path="/meetings" element={<MeetingsPage />} /></Routes></MemoryRouter>);
 
     fireEvent.click(await screen.findByRole('button', { name: '다시 시도' }));
@@ -130,7 +131,7 @@ describe('Meetings page', () => {
     const fetchMock = vi.fn<(input: RequestInfo | URL) => Promise<Response>>((input) => new Promise((resolve) => {
       pendingResponses.push({ url: String(input), resolve });
     }));
-    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('fetch', withHealthyBackend(fetchMock));
     render(<StrictMode><MemoryRouter><HomePage /><MeetingsPage /></MemoryRouter></StrictMode>);
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
@@ -165,7 +166,7 @@ describe('Meetings page', () => {
       .mockResolvedValueOnce(response({ data: { items: [] } }))
       .mockResolvedValueOnce(response({ error: { code: 'PROVIDER_FAILURE', message: 'private detail' } }, 502))
       .mockResolvedValueOnce(response({ data: { items: meetings.slice(0, 1) } }));
-    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('fetch', withHealthyBackend(fetchMock));
     const view = render(<MemoryRouter initialEntries={['/meetings']}><Routes><Route path="/meetings" element={<MeetingsPage />} /></Routes></MemoryRouter>);
 
     expect(await screen.findByText(/회의 기록이 없습니다/)).toBeTruthy();

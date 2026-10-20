@@ -1,4 +1,5 @@
 import { getApiBaseUrl } from './apiBase';
+import { apiFetch } from './apiFetch';
 import { parseReviewSessionData, type ReviewSession } from './reviewApi';
 import { ProcessingApiError, type ProcessingSnapshot, type ProcessingStatus } from './processingApi';
 
@@ -42,29 +43,17 @@ export async function regenerateMinutes(
   options: MinutesRegenerationRequestOptions = {},
 ): Promise<MinutesRegenerationAccepted> {
   let response: Response;
-  const controller = new AbortController();
-  let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<never>((_resolve, reject) => {
-    timeoutHandle = setTimeout(() => {
-      controller.abort();
-      reject(new MinutesRegenerationApiError('NETWORK_ERROR', undefined, true));
-    }, options.timeoutMs ?? DEFAULT_REGENERATION_REQUEST_TIMEOUT_MS);
-  });
   try {
-    const request = fetch(`${baseUrl()}/api/v1/meeting-sessions/${encodeURIComponent(sessionId)}/minutes/regenerate`, {
+    response = await apiFetch(`${baseUrl()}/api/v1/meeting-sessions/${encodeURIComponent(sessionId)}/minutes/regenerate`, {
       method: 'POST',
       headers: {
         Accept: 'application/json', 'Content-Type': 'application/json',
         'If-Match': `"${version}"`, 'Idempotency-Key': idempotencyKey,
       },
       body: JSON.stringify({ templateId }),
-      signal: controller.signal,
-    });
-    response = await Promise.race([request, timeout]);
+    }, { timeoutMs: options.timeoutMs ?? DEFAULT_REGENERATION_REQUEST_TIMEOUT_MS });
   } catch {
     throw new MinutesRegenerationApiError('NETWORK_ERROR', undefined, true);
-  } finally {
-    if (timeoutHandle !== undefined) clearTimeout(timeoutHandle);
   }
   let body: unknown;
   try { body = await response.json(); } catch { body = undefined; }
@@ -87,7 +76,7 @@ export async function regenerateMinutes(
 export async function getMinutesRegenerationSnapshot(sessionId: string, signal: AbortSignal): Promise<MinutesRegenerationSnapshot> {
   let response: Response;
   try {
-    response = await fetch(`${baseUrl()}/api/v1/meeting-sessions/${encodeURIComponent(sessionId)}`, {
+    response = await apiFetch(`${baseUrl()}/api/v1/meeting-sessions/${encodeURIComponent(sessionId)}`, {
       signal, headers: { Accept: 'application/json' },
     });
   } catch (error) {
