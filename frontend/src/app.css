@@ -896,7 +896,6 @@ button:disabled { cursor: not-allowed; opacity: .6; }
 .page-scroll-layout > .page-fixed-heading,
 .participants-page > .page-heading { flex: 0 0 auto; }
 .page-fixed-heading { display: grid; flex: 0 0 auto; align-content: start; }
-.setup-settings-page > .page-fixed-heading { padding-bottom: 20px; }
 .page-scroll-content {
   display: block;
   flex: 1 1 auto;
@@ -917,6 +916,8 @@ button:disabled { cursor: not-allowed; opacity: .6; }
 }
 .settings-page .page-scroll-content,
 .setup-settings-page .page-scroll-content { gap: 20px; }
+.settings-page .page-scroll-content,
+.setup-settings-page .page-scroll-content { padding-top: 20px; }
 .participants-main { display: flex; height: 100%; min-height: 0; flex: 1 1 auto; flex-direction: column; }
 .participants-page { display: flex; height: 100%; min-height: 0; flex: 1 1 auto; flex-direction: column; overflow: hidden; }
 @media (max-width: 680px) {
