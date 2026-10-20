@@ -473,9 +473,11 @@ button:disabled { cursor: not-allowed; opacity: .6; }
 .setup-confirm { margin-bottom: 20px; }
 
 .review-speaker-page { display: grid; align-content: start; gap: 18px; width: min(100%, 868px); min-width: 0; margin: 0 auto; padding: 38px 24px 136px; overflow-wrap: anywhere; }
-.review-speaker-heading { margin-bottom: 24px; }
-.review-speaker-heading h1 { display: flex; align-items: center; gap: 10px; margin: 8px 0; color: #182230; font-size: clamp(26px, 6vw, 34px); letter-spacing: -.04em; }
-.review-speaker-heading > p:last-child { margin: 0; color: #697586; font-size: 14px; line-height: 1.6; }
+.review-page-heading { position: sticky; z-index: 4; top: 0; display: flex; min-height: 58px; align-items: center; gap: 10px; margin: -1px 0 0; padding: 8px 0 14px; background: #f7f8fa; }
+.review-page-heading h1 { display: flex; min-width: 0; align-items: center; gap: 11px; margin: 0; color: #182230; font-size: clamp(28px, 5vw, 34px); letter-spacing: -.04em; }
+.review-page-back { display: grid; flex: 0 0 24px; width: 24px; min-height: 44px; place-items: center start; color: #344054; text-decoration: none; }
+.review-page-back svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.review-page-back:focus-visible { border-radius: 5px; outline: 3px solid #3b82f6; outline-offset: 2px; }
 .review-speaker-card, .review-speaker-message { display: grid; gap: 16px; min-width: 0; border: 1px solid #e5e9ef; border-radius: 14px; padding: 20px; background: #fff; }
 .review-speaker-details > summary { display: flex; min-height: 48px; align-items: center; justify-content: space-between; gap: 12px; color: #344054; font-size: 14px; font-weight: 650; cursor: pointer; list-style: none; }
 .review-speaker-details > summary::-webkit-details-marker { display: none; }
@@ -530,6 +532,8 @@ button:disabled { cursor: not-allowed; opacity: .6; }
 .review-transcript time { color: #697586; font-size: 12px; }
 .review-flow-dock { position: fixed; z-index: 6; right: 0; bottom: calc(68px + env(safe-area-inset-bottom)); left: 0; display: grid; justify-items: stretch; gap: 8px; width: min(100%, 868px); margin: 0 auto; padding: 12px 24px; background: linear-gradient(0deg, #f7f8fa 72%, #f7f8fa00); }
 .review-flow-dock .button { width: 100%; min-height: 52px; }
+.review-minutes-editor { display: grid; gap: 16px; min-width: 0; }
+.review-minutes-description { margin: 0; color: #596578; font-size: 13px; line-height: 1.6; }
 .review-notice-backdrop { position: fixed; z-index: 50; inset: 0; display: grid; place-items: center; padding: 20px; background: #18223070; }
 .review-notice-dialog { width: min(100%, 440px); border: 1px solid #e1e7ef; border-radius: 18px; padding: 24px; background: #fff; box-shadow: 0 24px 80px #11182733; }
 .review-notice-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }

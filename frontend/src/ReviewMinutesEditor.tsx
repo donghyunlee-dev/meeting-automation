@@ -49,8 +49,7 @@ export function ReviewMinutesEditor({ sessionId, minutes, baseline, participants
   const failed = saveState.sessionId === sessionId && saveState.status === 'error';
 
   if (!minutes) {
-    return <section className="review-speaker-card" aria-labelledby="minutes-heading">
-      <div className="review-speaker-card-heading"><div><h2 id="minutes-heading">회의록</h2></div></div>
+    return <section className="review-minutes-editor" aria-label="회의록 항목">
       <p role="status">표시할 회의록이 없습니다.</p>
       {footerContent}
       {actionContent && <div className="review-flow-dock" role="group" aria-label="회의록 저장 및 전달">{actionContent}</div>}
@@ -70,16 +69,11 @@ export function ReviewMinutesEditor({ sessionId, minutes, baseline, participants
     onChange({ ...minutes, [field]: nextValues });
   };
 
-  return <section className="review-speaker-card review-minutes-card" aria-labelledby="minutes-heading">
-    <div className="review-speaker-card-heading">
-      <div>
-        <h2 id="minutes-heading">회의록</h2>
-        <p>생성된 회의 내용을 항목별로 검토하고 수정합니다.</p>
-      </div>
-    </div>
+  return <section className="review-minutes-editor" aria-label="회의록 항목">
+    <p className="review-minutes-description">생성된 회의 내용을 항목별로 검토하고 수정합니다.</p>
 
     <div className="review-minutes-fields" aria-disabled={disabled}>
-        <details className="review-minutes-section">
+        <details className="review-minutes-section" open>
           <summary className="review-minutes-section-heading"><h4 id="minutes-summary-heading">회의 요약</h4></summary>
           <div className="review-minutes-field">
             <label className="visually-hidden" htmlFor="minutes-summary">회의 요약 내용</label>
@@ -88,7 +82,7 @@ export function ReviewMinutesEditor({ sessionId, minutes, baseline, participants
           </div>
         </details>
 
-      {LIST_FIELDS.map(({ key, title }) => <details className="review-minutes-section" key={key}>
+      {LIST_FIELDS.map(({ key, title }) => <details className="review-minutes-section" key={key} open>
         <summary className="review-minutes-section-heading">
           <h4 id={`minutes-section-${key}`}>{title}</h4>
         </summary>
@@ -112,7 +106,7 @@ export function ReviewMinutesEditor({ sessionId, minutes, baseline, participants
         </div>
       </details>)}
 
-      <details className="review-minutes-section review-action-items">
+      <details className="review-minutes-section review-action-items" open>
         <summary className="review-minutes-section-heading">
           <h4 id="minutes-action-items-heading">실행 항목</h4>
         </summary>
