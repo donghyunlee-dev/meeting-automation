@@ -442,7 +442,7 @@ export function SharePage() {
         void refreshStatus().then((latest) => { if (latest) setPolling(isPending(latest)); })
           .catch((error) => setMessage(errorMessage(error)));
       }}>회의 상태 새로고침</button>
-      <Link className="button button-secondary" to={reviewPath} state={settingsState}>Review로 돌아가기</Link>
+      <Link className="back-link" to={reviewPath} state={settingsState}><span aria-hidden="true">←</span> Review로 돌아가기</Link>
     </div>
   </main>;
 }

@@ -475,7 +475,7 @@ export function DocumentSetupWizard({ settings = false }: { settings?: boolean }
   const initializationInProgress = !preparedTarget && !initializationFailed && (setupProgressStarted || snapshot.operation?.type === 'INITIALIZE' && ['PENDING', 'RUNNING', 'SUCCEEDED'].includes(operationStatus));
   const activeSummary = snapshot.active && <section className="setup-card" aria-label="현재 활성 문서 연결"><h2>문서 서비스</h2><p>현재 연결: {snapshot.active.provider === 'NOTION' ? 'Notion' : 'Confluence Cloud'}</p><p>연결 버전: {snapshot.active.connectionVersion}</p></section>;
   if (snapshot.status === 'READY' && settings && !changing) return <main className="setup-page setup-settings-page">
-    <Link className="button button-secondary setup-settings-back" to="/settings"><span aria-hidden="true">←</span> 설정으로 돌아가기</Link>
+    <Link className="back-link" to="/settings"><span aria-hidden="true">←</span> 설정으로 돌아가기</Link>
     <header className="setup-settings-heading">
       <h1><svg className="setup-settings-heading-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8.5 15.5 6 18a4 4 0 0 1-5.7-5.7l4-4A4 4 0 0 1 10 8m5.5.5L18 6a4 4 0 0 1 5.7 5.7l-4 4A4 4 0 0 1 14 16m-6 0 8-8" /></svg>문서 연결</h1>
       <p>현재 연결된 문서 서비스와 저장 위치를 확인합니다.</p>
@@ -491,7 +491,7 @@ export function DocumentSetupWizard({ settings = false }: { settings?: boolean }
     {error && <p role="alert" className="setup-error">{error}</p>}
     {consumerRefreshFailed && retryConsumerRefresh}
     {notice && <p role="status">{notice}</p>}
-    {returnTo && <Link className="button button-secondary setup-link-action" to={returnTo} state={returnState?.returnState}>이전 화면으로 돌아가기 <span aria-hidden="true">←</span></Link>}
+    {returnTo && <Link className="back-link" to={returnTo} state={returnState?.returnState}><span aria-hidden="true">←</span> 이전 화면으로 돌아가기</Link>}
     <button className="button button-primary setup-settings-change" type="button" onClick={beginChange}>문서 서비스 변경</button>
   </main>;
 
@@ -504,7 +504,7 @@ export function DocumentSetupWizard({ settings = false }: { settings?: boolean }
     ? STRUCTURE_STEPS.find((step) => !completedStructureSteps.includes(step)) ?? null : null);
   return <main className={`setup-page${firstRun ? ' setup-first-run' : ''}`}>
     <header className="setup-heading"><h1>{changing ? '문서 서비스 선택' : '문서 서비스 연결'}</h1><p>{provider ? '서비스 연결 정보를 입력해 주세요.' : '연결된 문서 서비스가 없습니다. 회의록을 저장하려면 먼저 서비스를 연결해 주세요.'}</p></header>
-    {provider && !hasBlockingOperation && !preparedTarget && !initializationUncertain && !setupProgressStarted && <button className="button button-secondary setup-provider-back" type="button" aria-label="서비스 선택으로 돌아가기" onClick={() => chooseProvider(null)}><span aria-hidden="true">←</span> 서비스 선택</button>}
+    {provider && !hasBlockingOperation && !preparedTarget && !initializationUncertain && !setupProgressStarted && <button className="back-link setup-provider-back" type="button" aria-label="서비스 선택으로 돌아가기" onClick={() => chooseProvider(null)}><span aria-hidden="true">←</span> 서비스 선택</button>}
     {!initializationSucceeded && activeSummary}
     {error && !operationReadFailed && <p className="setup-error" role="alert">{error}</p>}{notice && <p className="setup-notice" role="status">{notice}</p>}
     {consumerRefreshFailed && retryConsumerRefresh}
@@ -601,7 +601,7 @@ export function DocumentSetupWizard({ settings = false }: { settings?: boolean }
         {tested && <section className="setup-card"><h2>생성될 구조</h2><p>Meeting Automation 아래 Meetings, Participants, Templates 페이지를 만들고 Templates에는 기본 회의록을 넣습니다. 템플릿 페이지는 문서 서비스에서 직접 수정할 수 있습니다.</p><p>서비스 연결을 확인했습니다. 쓰기 권한은 최종 페이지 생성 중 확인됩니다.</p></section>}
       </>}
     </>}
-    {snapshot.status === 'READY' && <p><Link className="button button-secondary setup-link-action" to="/settings/document" onClick={() => { setChanging(false); setCredentials(EMPTY_CREDENTIALS); }}>문서 서비스 설정으로 돌아가기 <span aria-hidden="true">→</span></Link></p>}
+    {snapshot.status === 'READY' && <p><Link className="back-link" to="/settings/document" onClick={() => { setChanging(false); setCredentials(EMPTY_CREDENTIALS); }}><span aria-hidden="true">←</span> 문서 서비스 설정으로 돌아가기</Link></p>}
     {initializationUncertain && <section className="setup-card" aria-labelledby="uncertain-operation-title"><h2 id="uncertain-operation-title">요청 상태 확인</h2><p>요청 결과가 불명확하므로 새 요청을 보내지 않습니다. 서버의 공개 작업 상태를 먼저 확인해 주세요.</p><button className="button button-secondary" type="button" onClick={() => void recheckUncertainInitialization()} disabled={busy}>{busy ? '확인 중…' : '다시 확인'}</button></section>}
   </main>;
 }
