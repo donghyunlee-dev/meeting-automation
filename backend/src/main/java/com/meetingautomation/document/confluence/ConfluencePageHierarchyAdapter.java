@@ -8,6 +8,7 @@ import com.meetingautomation.document.Participant;
 import com.meetingautomation.document.ParticipantCreationProvider;
 import com.meetingautomation.document.ParticipantUpdateCommand;
 import com.meetingautomation.document.ParticipantUpdatingProvider;
+import com.meetingautomation.document.ParticipantDeletingProvider;
 import com.meetingautomation.document.ParticipantPageMapper;
 import com.meetingautomation.document.MeetingDocumentRef;
 import com.meetingautomation.document.transfer.*;
@@ -32,13 +33,14 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
 /** Confluence Cloud implementation of the document hierarchy and health slice. */
-public final class ConfluencePageHierarchyAdapter implements ParticipantCreationProvider, ParticipantUpdatingProvider, DocumentTransferPort {
+public final class ConfluencePageHierarchyAdapter implements ParticipantCreationProvider, ParticipantUpdatingProvider, ParticipantDeletingProvider, DocumentTransferPort {
     private static final int PAGE_LIMIT = 100;
     private static final String TRANSFER_PARTICIPANT_TITLE_PREFIX = "Participant: ";
     private static final TransferCodec TRANSFER_CODEC = new TransferCodec();
     private static final String DIRECT_CHILDREN_PATH = "/wiki/api/v2/pages/{id}/direct-children";
     private static final Pattern NEXT_LINK = Pattern.compile("<([^>]+)>\\s*;\\s*rel\\s*=\\s*\"?next\"?",
             Pattern.CASE_INSENSITIVE);
+    private static final Pattern STORAGE_CODE_BLOCK = Pattern.compile("(?is)<(?:pre|code|ac:structured-macro)\\b");
     private static final JsonMapper JSON_MAPPER = JsonMapper.builder().build();
 
     private final RestClient restClient;
@@ -51,6 +53,8 @@ public final class ConfluencePageHierarchyAdapter implements ParticipantCreation
     private final ProviderTransferSupport transfer = new ProviderTransferSupport() {
         @Override protected String fingerprint() { return codec.connectionFingerprint("confluence", baseUri.getHost() + "/" + configuredRootId); }
         @Override protected DocumentStructure structure() { return discoverStructure(configuredRootId); }
+        @Override protected String meetingDataPageId() { return findMeetingDataPageId(configuredRootId); }
+        @Override protected String ensureMeetingDataPageId() { return ensureMeetingDataPage(configuredRootId); }
         @Override protected List<String> children(String root) { return transferChildren(root); }
         @Override protected TransferRecord read(String id) { return readTransferPage(id, pages); }
         @Override protected TransferRecord readMeeting(String id) { return readTransferPage(id, pages, true); }
@@ -98,7 +102,9 @@ public final class ConfluencePageHierarchyAdapter implements ParticipantCreation
         }
         if (!id.equals(transferText(page.get("id")))) throw transferInvalid();
         JsonNode version = page.path("version").path("number"); if (!version.isIntegralNumber() || version.longValue() <= 0) throw transferInvalid();
-        List<TransferPageCodec.Block> blocks = storageBlocks(transferText(page.path("body").path("storage").get("value")));
+        String storage = transferText(page.path("body").path("storage").get("value"));
+        if (!STORAGE_CODE_BLOCK.matcher(storage).find()) return null;
+        List<TransferPageCodec.Block> blocks = storageBlocks(storage);
         String title = transferText(page.get("title"));
         List<String> markers = blocks.stream().filter(block -> block.type().equals("code")).map(TransferPageCodec.Block::text).toList();
         TransferMarker marker = TRANSFER_CODEC.parseMarker(markers);
@@ -114,8 +120,13 @@ public final class ConfluencePageHierarchyAdapter implements ParticipantCreation
         return mapper.decode(id, version.asString(), baseUri.resolve("/wiki/pages/" + id).toASCIIString(), title, blocks);
     }
     private String createTransferPage(String parent, TransferRecord record, TransferPageCodec mapper) {
-        JsonNode root = parseBody(get(baseUri.resolve("/wiki/api/v2/pages/" + encodePathSegment(parent) + "?body-format=storage")));
-        String space = transferText(root.get("spaceId")); StringBuilder storage = new StringBuilder();
+        if (record.participant() == null && record.renderedMarkdown() != null && record.storageKey() == null) {
+            String meetingPageId = discoverStructure(configuredRootId).meetingsPageId();
+            String humanPageId = createConfluencePage(meetingPageId, record.title(), renderMarkdownStorage(record.renderedMarkdown()));
+            record = record.withStorage(baseUri.resolve("/wiki/pages/" + humanPageId).toASCIIString(),
+                    record.marker().externalSessionId());
+        }
+        StringBuilder storage = new StringBuilder();
         for (var block : mapper.encode(record)) {
             String tag = switch (block.type()) { case "heading_2" -> "h2"; case "bulleted_list_item" -> "li"; case "code" -> "pre"; default -> "p"; };
             if (tag.equals("li")) storage.append("<ul>");
@@ -124,13 +135,55 @@ public final class ConfluencePageHierarchyAdapter implements ParticipantCreation
         }
         try {
             String title = record.participant() == null ? record.title() : TRANSFER_PARTICIPANT_TITLE_PREFIX + record.participant().name();
+            return createConfluencePage(parent, record.storageKey() == null ? title : record.storageKey(), storage.toString());
+        } catch (Exception e) { throw transferInvalid(); }
+    }
+
+    private String findMeetingDataPageId(String rootId) {
+        List<String> matches = childIdsNamed(readAllChildren(rootId), "Meeting Data");
+        if (matches.size() > 1) throw transferInvalid();
+        return matches.isEmpty() ? null : matches.getFirst();
+    }
+
+    private String ensureMeetingDataPage(String rootId) {
+        String existing = findMeetingDataPageId(rootId);
+        if (existing != null) return existing;
+        return createConfluencePage(rootId, "Meeting Data", "<p>meeting-automation/bootstrap/meeting-data/MEETING_DATA</p>");
+    }
+
+    private String createConfluencePage(String parent, String title, String storage) {
+        JsonNode parentPage = parseBody(get(baseUri.resolve("/wiki/api/v2/pages/" + encodePathSegment(parent) + "?body-format=storage")));
+        String space = transferText(parentPage.get("spaceId"));
+        try {
             String payload = JSON_MAPPER.writeValueAsString(Map.of("spaceId", space, "status", "current", "title", title, "parentId", parent,
-                    "body", Map.of("representation", "storage", "value", storage.toString())));
+                    "body", Map.of("representation", "storage", "value", storage)));
             String response = restClient.post().uri(baseUri.resolve("/wiki/api/v2/pages")).headers(headers -> {
                 headers.setBasicAuth(accountEmail, authToken, StandardCharsets.UTF_8); headers.setContentType(org.springframework.http.MediaType.APPLICATION_JSON);
             }).body(payload).exchange((request, result) -> { if (result.getStatusCode().isError()) throw transferInvalid(); return StreamUtils.copyToString(result.getBody(), StandardCharsets.UTF_8); });
-            String id = transferText(JSON_MAPPER.readTree(response).get("id")); if (!isNumericId(id)) throw transferInvalid(); return id;
+            String id = transferText(JSON_MAPPER.readTree(response).get("id"));
+            if (!isNumericId(id)) throw transferInvalid();
+            return id;
         } catch (Exception e) { throw transferInvalid(); }
+    }
+
+    private static String renderMarkdownStorage(String markdown) {
+        StringBuilder storage = new StringBuilder();
+        for (var block : new MeetingMarkdownRenderer().blocks(markdown)) {
+            String tag = switch (block.type()) {
+                case "heading_1" -> "h1";
+                case "heading_2" -> "h2";
+                case "heading_3" -> "h3";
+                case "bulleted_list_item" -> "li";
+                case "numbered_list_item" -> "li";
+                default -> "p";
+            };
+            if (block.type().equals("bulleted_list_item")) storage.append("<ul>");
+            if (block.type().equals("numbered_list_item")) storage.append("<ol>");
+            storage.append('<').append(tag).append('>').append(escapeHtml(block.text())).append("</").append(tag).append('>');
+            if (block.type().equals("bulleted_list_item")) storage.append("</ul>");
+            if (block.type().equals("numbered_list_item")) storage.append("</ol>");
+        }
+        return storage.toString();
     }
     private static List<TransferPageCodec.Block> storageBlocks(String storage) {
         try {
@@ -385,6 +438,46 @@ public final class ConfluencePageHierarchyAdapter implements ParticipantCreation
             mutate("/wiki/api/v2/pages/" + encodePathSegment(participantId), requestBody);
         }
         return new Participant(participantId, command.updatedName(), command.updatedEmail());
+    }
+
+    @Override
+    public void deleteParticipant(String participantsPageId, Participant participant) {
+        if (!configured || !isNumericId(participant.id())) throw DocumentProviderException.documentFailed(false);
+        URI pageUri = baseUri.resolve("/wiki/api/v2/pages/" + encodePathSegment(participant.id()) + "?body-format=storage");
+        JsonNode page;
+        try {
+            page = parseBody(get(pageUri));
+        } catch (ConfluenceApiFailure failure) {
+            if (failure.statusCode() == 404) throw DocumentProviderException.participantNotFound();
+            throw DocumentProviderException.documentFailed(isParticipantRetryable(failure.statusCode()), failure);
+        }
+        JsonNode parent = page.get("parentId");
+        JsonNode title = page.get("title");
+        JsonNode body = page.path("body").path("storage").get("value");
+        if (parent == null || !participantsPageId.equals(parent.asText()) || title == null || body == null || !title.isTextual() || !body.isTextual()) {
+            throw DocumentProviderException.documentFailed(false);
+        }
+        TransferMarker marker = new TransferCodec().parseMarker(storageBlocks(body.stringValue()).stream()
+                .filter(block -> block.type().equals("code")).map(TransferPageCodec.Block::text).toList());
+        try {
+            ParticipantTransferMarkers.validateCurrent(participant, marker);
+        } catch (TransferCodec.ValidationException stalePageId) {
+            ParticipantTransferMarkers.validateCreatedPendingId(participant, marker);
+        }
+        if (!isNumericId(parent.asText())) throw DocumentProviderException.documentFailed(false);
+        try {
+            restClient.delete().uri(baseUri.resolve("/wiki/api/v2/pages/" + encodePathSegment(participant.id())))
+                    .headers(headers -> headers.setBasicAuth(accountEmail, authToken, StandardCharsets.UTF_8))
+                    .exchange((request, response) -> {
+                        if (response.getStatusCode().value() == 404) throw DocumentProviderException.participantNotFound();
+                        if (response.getStatusCode().isError()) throw new ConfluenceApiFailure(true, response.getStatusCode().value());
+                        return null;
+                    });
+        } catch (DocumentProviderException failure) {
+            throw failure;
+        } catch (Exception failure) {
+            throw DocumentProviderException.documentFailed(false, failure);
+        }
     }
 
     private void mutate(String path, Object body) {

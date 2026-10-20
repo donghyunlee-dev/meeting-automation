@@ -2,9 +2,12 @@ package com.meetingautomation.document.transfer;
 
 import com.meetingautomation.document.*;
 import java.util.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /** Shared provider validation and verified create. Transport remains provider-specific. */
 public abstract class ProviderTransferSupport implements DocumentTransferPort {
+    private static final Logger log = LoggerFactory.getLogger(ProviderTransferSupport.class);
     protected final TransferCodec codec = new TransferCodec();
     protected final TransferPageCodec pages = new TransferPageCodec();
     protected abstract String fingerprint();
@@ -13,12 +16,20 @@ public abstract class ProviderTransferSupport implements DocumentTransferPort {
     protected abstract TransferRecord read(String id);
     protected TransferRecord readMeeting(String id) { return read(id); }
     protected abstract String create(String parent, TransferRecord record);
+    protected String meetingDataPageId() { return null; }
+    protected String ensureMeetingDataPageId() { return meetingDataPageId(); }
 
     @Override public TransferManifest readManifest() {
         DocumentStructure structure = structure(); List<TransferRecord> participants = new ArrayList<>(); List<TransferRecord> meetings = new ArrayList<>();
         Set<String> ids = new HashSet<>(); Set<String> participantIds = new HashSet<>(); Set<String> sessions = new HashSet<>(); Set<String> keys = new HashSet<>();
         for (String id : children(structure.participantsPageId())) { if (!ids.add(id)) throw invalid(); TransferRecord p = read(id); if (p.participant() == null) throw invalid(); participants.add(p); participantIds.add(id); validateTransfer(p, keys); }
-        for (String id : children(structure.meetingsPageId())) { if (!ids.add(id)) throw invalid(); TransferRecord m = read(id); if (m.participant() != null || !sessions.add(m.marker().externalSessionId())) throw invalid(); TransferPageCodec.validateReferences(m, participantIds); meetings.add(m); validateTransfer(m, keys); }
+        for (String id : meetingRecordPages(structure)) {
+            if (!ids.add(id)) throw invalid();
+            TransferRecord m = read(id);
+            if (m == null) continue;
+            if (m.participant() != null || !sessions.add(m.marker().externalSessionId())) throw invalid();
+            TransferPageCodec.validateReferences(m, participantIds); meetings.add(m); validateTransfer(m, keys);
+        }
         String fingerprint = fingerprint();
         return new TransferManifest(fingerprint, participants, meetings.stream().map(m -> new TransferManifest.Entry(m.sourceDocumentId(), m.sourceRevision(), codec.canonicalDigest(m),
                 m.marker().transfer() == null ? codec.transferKey(fingerprint, m.sourceDocumentId()) : m.marker().transfer().transferKey(), m.marker().externalSessionId(), m.marker().participantIds())).toList());
@@ -29,24 +40,76 @@ public abstract class ProviderTransferSupport implements DocumentTransferPort {
         Set<String> meetingIds = new HashSet<>();
         Set<String> sessions = new HashSet<>();
         Set<String> keys = new HashSet<>();
-        for (String id : children(structure.participantsPageId())) {
-            if (id == null || !participantIds.add(id)) throw invalid();
-            TransferRecord participant = read(id);
-            if (participant == null || participant.participant() == null) throw invalid();
-            validateTransfer(participant, keys);
+        List<String> participantPages = listChildren("Participants", structure.participantsPageId());
+        for (int index = 0; index < participantPages.size(); index++) {
+            String id = participantPages.get(index);
+            try {
+                if (id == null || !participantIds.add(id)) throw invalid();
+                TransferRecord participant = read(id);
+                if (participant == null || participant.participant() == null) throw invalid();
+                validateTransfer(participant, keys);
+            } catch (RuntimeException failure) {
+                log.error("Meeting history read failed: section=Participants, itemIndex={}, pageId={}, cause={}",
+                        index, safePageId(id), safeCause(failure), failure);
+                throw failure;
+            }
         }
         List<TransferRecord> meetings = new ArrayList<>();
-        for (String id : children(structure.meetingsPageId())) {
-            if (id == null || participantIds.contains(id)) throw invalid();
-            if (!meetingIds.add(id)) continue;
-            TransferRecord meeting = read(id);
-            if (meeting == null || meeting.participant() != null || meeting.marker() == null
-                    || !sessions.add(meeting.marker().externalSessionId())) throw invalid();
-            TransferPageCodec.validateReferences(meeting, participantIds);
-            validateTransfer(meeting, keys);
-            meetings.add(meeting);
+        List<String> meetingPages = listChildren("Meetings", structure.meetingsPageId());
+        String dataPage = meetingDataPageId();
+        if (dataPage != null) meetingPages = concat(meetingPages, listChildren("Meeting Data", dataPage));
+        for (int index = 0; index < meetingPages.size(); index++) {
+            String id = meetingPages.get(index);
+            try {
+                if (id == null || participantIds.contains(id)) throw invalid();
+                if (!meetingIds.add(id)) continue;
+                TransferRecord meeting = read(id);
+                if (meeting == null) continue;
+                if (meeting == null || meeting.participant() != null || meeting.marker() == null
+                        || !sessions.add(meeting.marker().externalSessionId())) throw invalid();
+                TransferPageCodec.validateReferences(meeting, participantIds);
+                validateTransfer(meeting, keys);
+                meetings.add(meeting);
+            } catch (RuntimeException failure) {
+                log.error("Meeting history read failed: section=Meetings, itemIndex={}, pageId={}, cause={}",
+                        index, safePageId(id), safeCause(failure), failure);
+                throw failure;
+            }
         }
         return List.copyOf(meetings);
+    }
+
+    private List<String> listChildren(String section, String pageId) {
+        try {
+            return children(pageId);
+        } catch (RuntimeException failure) {
+            log.error("Meeting history read failed while listing section={}, pageId={}, cause={}",
+                    section, safePageId(pageId), safeCause(failure), failure);
+            throw failure;
+        }
+    }
+
+    private List<String> meetingRecordPages(DocumentStructure structure) {
+        List<String> pages = listChildren("Meetings", structure.meetingsPageId());
+        String dataPage = meetingDataPageId();
+        return dataPage == null ? pages : concat(pages, listChildren("Meeting Data", dataPage));
+    }
+
+    private static List<String> concat(List<String> left, List<String> right) {
+        List<String> result = new ArrayList<>(left);
+        result.addAll(right);
+        return List.copyOf(result);
+    }
+
+    private static String safePageId(String pageId) {
+        return pageId == null ? "missing" : pageId.replaceAll("[^A-Za-z0-9_-]", "?");
+    }
+
+    private static String safeCause(RuntimeException failure) {
+        return failure instanceof TransferCodec.ValidationException validation
+                ? validation.code().name()
+                : failure instanceof com.meetingautomation.document.DocumentProviderException providerFailure
+                        ? providerFailure.code() : failure.getClass().getSimpleName();
     }
     @Override public TransferRecord exportMeeting(String sourceDocumentId) { TransferRecord r = readMeeting(sourceDocumentId); if (r.participant() != null) throw invalid(); return r; }
     @Override public Participant importParticipant(TransferRecord record, String sourceConnectionFingerprint) {
@@ -56,7 +119,10 @@ public abstract class ProviderTransferSupport implements DocumentTransferPort {
     }
     @Override public MeetingDocumentRef importMeeting(TransferRecord record, Map<String,String> participantIdMap, String sourceConnectionFingerprint) {
         if (record.participant() != null) throw invalid(); TransferRecord target = target(record, participantIdMap, sourceConnectionFingerprint);
-        TransferRecord existing = find(target); TransferRecord result = existing == null ? verifiedCreate(structure().meetingsPageId(), target) : existing;
+        TransferRecord existing = find(target);
+        String dataPage = ensureMeetingDataPageId();
+        TransferRecord result = existing == null ? verifiedCreate(
+                dataPage == null ? structure().meetingsPageId() : dataPage, target) : existing;
         return new MeetingDocumentRef(result.sourceDocumentId(), result.documentUrl());
     }
     @Override public MeetingDocumentRef publishMeeting(TransferRecord meeting) {
@@ -66,7 +132,8 @@ public abstract class ProviderTransferSupport implements DocumentTransferPort {
 
         String id;
         try {
-            id = create(structure().meetingsPageId(), meeting);
+            String dataPage = ensureMeetingDataPageId();
+            id = create(dataPage == null ? structure().meetingsPageId() : dataPage, meeting);
         } catch (RuntimeException ambiguousCreate) {
             TransferRecord reconciled = reconcilePublish(meeting);
             if (reconciled != null) return verifiedPublishReference(meeting, reconciled);
@@ -188,7 +255,8 @@ public abstract class ProviderTransferSupport implements DocumentTransferPort {
         if (minutes != null) minutes = new StructuredMinutes(minutes.templateId(), minutes.templateVersion(), minutes.summary(), minutes.discussionPoints(), minutes.decisions(),
                 minutes.actionItems().stream().map(a -> new StructuredMinutes.ActionItem(mapped.apply(a.ownerParticipantId()), a.task(), a.dueDate())).toList(), minutes.followUps());
         return new TransferRecord(r.sourceDocumentId(), r.sourceRevision(), r.documentUrl(), marker, r.participant() == null ? r.title() : r.participant().name(), minutes, r.transcript(),
-                r.participants().stream().map(p -> new ParticipantSummary(mapped.apply(p.id()), p.name())).toList(), r.participant());
+                r.participants().stream().map(p -> new ParticipantSummary(mapped.apply(p.id()), p.name())).toList(), r.participant(),
+                r.renderedMarkdown(), null);
     }
     private static TransferCodec.ValidationException invalid() { return new TransferCodec.ValidationException(TransferCodec.Code.INVALID_RECORD); }
     private static TransferAdapterException conflict() { return new TransferAdapterException(TransferAdapterException.Code.CONFLICT); }

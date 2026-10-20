@@ -10,10 +10,10 @@ class DocumentStructureInitializerTests {
     @Test void bootNotionCreatesTemplatePageAlongsideMeetingStructure() {
         var pages = new Pages(); var journal = new Journal();
         var structure = new DocumentStructureInitializer(pages).initializeStructure("parent", null, "operation", journal);
-        assertThat(pages.created).containsExactly("Meeting Automation", "Meetings", "Participants", "Templates");
+        assertThat(pages.created).containsExactly("Meeting Automation", "Meetings", "Participants", "Meeting Data", "Templates");
         assertThat(structure.rootId()).isEqualTo("page1");
         assertThat(pages.nodes.get("page2").parentId()).isEqualTo("page1");
-        assertThat(journal.entries).hasSize(4).containsKey("TEMPLATES")
+        assertThat(journal.entries).hasSize(5).containsKey("MEETING_DATA").containsKey("TEMPLATES")
             .allSatisfy((step, entry) -> assertThat(entry.pageId()).isNotBlank());
         assertThat(pages.contents.get("Templates")).contains("# 기본 회의록 템플릿", "## AI 작성 지침",
                 "## 회의 개요", "## 논의 및 확인 사항", "## 결정 사항", "## 실행 항목", "## 비고");
@@ -23,7 +23,7 @@ class DocumentStructureInitializerTests {
         pages.add("meetings", "root", "Meetings", "page", "");
         var initializer = new DocumentStructureInitializer(pages);
         initializer.initializeStructure("parent", "root", "operation", new Journal());
-        assertThat(pages.created).containsExactly("Participants", "Templates");
+        assertThat(pages.created).containsExactly("Participants", "Meeting Data", "Templates");
         pages.created.clear();
         initializer.initializeStructure("parent", "root", "other", new Journal());
         assertThat(pages.created).isEmpty();
@@ -47,7 +47,7 @@ class DocumentStructureInitializerTests {
         assertThat(journal.entries.get("ROOT").pageId()).isNull();
         var structure = initializer.initializeStructure("parent", null, "operation", journal);
         assertThat(structure.rootId()).isEqualTo("page1");
-        assertThat(pages.created).containsExactly("Meeting Automation", "Meetings", "Participants", "Templates");
+        assertThat(pages.created).containsExactly("Meeting Automation", "Meetings", "Participants", "Meeting Data", "Templates");
     }
     @Test void bootRecoveryNeverRecreatesAnUnresolvedIntent() {
         var pages = new Pages(); var journal = new Journal();

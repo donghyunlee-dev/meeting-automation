@@ -288,7 +288,7 @@ public final class DocumentSwitchUseCase {
         if (current.operation() != null && !current.operation().operationId().equals(operation.operationId()))
             history.put(current.operation().operationId(), current.operation());
         history.values().removeIf(old -> !old.updatedAt().plus(Duration.ofDays(30)).isAfter(clock.instant()));
-        return new GlobalDocumentSettings(1, current.version() + 1, active, draft, operation, records, Map.copyOf(history));
+        return new GlobalDocumentSettings(1, current.version() + 1, active, draft, operation, records, Map.copyOf(history), current.slackNotification(), current.emailNotification());
     }
 
     private static OperationSummary summary(GlobalDocumentSettings.Operation operation, long version) {

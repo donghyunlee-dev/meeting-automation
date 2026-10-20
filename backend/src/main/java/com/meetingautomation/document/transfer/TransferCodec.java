@@ -121,6 +121,7 @@ public final class TransferCodec {
                 if (record.transcript() != null) content.put("transcript", record.transcript().stream().map(s ->
                         Map.of("segmentId", s.segmentId(), "speakerId", s.speakerId(), "startMs", s.startMs(),
                                 "endMs", s.endMs(), "text", s.text())).toList());
+                if (record.renderedMarkdown() != null) content.put("renderedMarkdown", record.renderedMarkdown());
             }
             return sha256(canonicalJson(content));
         } catch (ValidationException e) {

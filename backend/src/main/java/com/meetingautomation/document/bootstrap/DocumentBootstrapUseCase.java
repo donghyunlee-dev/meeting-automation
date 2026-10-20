@@ -215,7 +215,7 @@ public final class DocumentBootstrapUseCase {
         if (current.operation()!=null && !current.operation().operationId().equals(op.operationId()))
             history.put(current.operation().operationId(),current.operation());
         history.values().removeIf(old -> !old.updatedAt().plus(Duration.ofDays(30)).isAfter(clock.instant()));
-        return new GlobalDocumentSettings(1,current.version()+1,active,draft,op,records,Map.copyOf(history));
+        return new GlobalDocumentSettings(1,current.version()+1,active,draft,op,records,Map.copyOf(history),current.slackNotification(),current.emailNotification());
     }
     private static GlobalDocumentSettings.Draft draftState(GlobalDocumentSettings.Draft draft,String state,DocumentStructure structure) {
         return new GlobalDocumentSettings.Draft(draft.draftId(),draft.revision(),draft.provider(),draft.location(),draft.credentials(),
@@ -233,7 +233,7 @@ public final class DocumentBootstrapUseCase {
             case "PENDING","RUNNING" -> List.of();
             default -> List.of();
         };
-        List<String> steps=List.of("ROOT","MEETINGS","PARTICIPANTS","TEMPLATES");
+        List<String> steps=List.of("ROOT","MEETINGS","PARTICIPANTS","MEETING_DATA","TEMPLATES");
         List<String> completed=steps.stream().filter(step -> op.journal().get(step)!=null && op.journal().get(step).pageId()!=null).toList();
         String current="STRUCTURE".equals(op.stage()) ? steps.stream().filter(step -> op.journal().get(step)==null || op.journal().get(step).pageId()==null).findFirst().orElse(null) : null;
         return new OperationSummary(op.operationId(),op.type(),op.status(),op.stage(),new Counts(0,0,0,0),false,op.errorCode(),op.retryable(),actions,version,completed,current);

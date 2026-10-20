@@ -164,7 +164,7 @@ class DocumentBootstrapUseCaseTests {
         assertThat(fixture.queue.tasks).hasSize(1);
         fixture.queue.run();
         assertThat(fixture.store.read().operation().status()).isEqualTo("SUCCEEDED");
-        assertThat(fixture.pages.created).containsExactly("Meeting Automation","Meetings","Participants","Templates");
+        assertThat(fixture.pages.created).containsExactly("Meeting Automation","Meetings","Participants","Meeting Data","Templates");
     }
     @Test void bootOperationFailureActionsFollowRetryabilityAndReconciliation() {
         var fixture=new Fixture(); fixture.test(); fixture.initialize();
@@ -251,7 +251,7 @@ class DocumentBootstrapUseCaseTests {
         assertThatThrownBy(() -> resumed.initialize(fixture.store.read().version(),"new-initialize",fixture.draftId,1,true))
             .isInstanceOf(SettingsException.class).extracting("code").isEqualTo("DOCUMENT_CHANGE_BUSY");
         resumed.resumeInterrupted(failed.operationId()); fixture.queue.run();
-        assertThat(fixture.pages.created).containsExactly("Meeting Automation","Meetings","Participants","Templates");
+        assertThat(fixture.pages.created).containsExactly("Meeting Automation","Meetings","Participants","Meeting Data","Templates");
         assertThat(fixture.store.read().active()).isNotNull();
     }
     @Test void bootOperationPublicSummaryNeverSerializesJournalOrCredentials() {
@@ -307,10 +307,10 @@ class DocumentBootstrapUseCaseTests {
         var guarded=new GuardedStore(DocumentSettingsFixtures.empty()); var fixture=new Fixture(guarded); fixture.test();
         guarded.rejectActivation=true; fixture.initialize(); fixture.queue.run();
         assertThat(fixture.store.read().active()).isNull();
-        assertThat(fixture.store.read().operation().journal()).hasSize(4);
+        assertThat(fixture.store.read().operation().journal()).hasSize(5);
         guarded.rejectActivation=false;
         fixture.bootstrap.resumeInterrupted(fixture.store.read().operation().operationId()); fixture.queue.run();
-        assertThat(fixture.pages.created).containsExactly("Meeting Automation","Meetings","Participants","Templates");
+        assertThat(fixture.pages.created).containsExactly("Meeting Automation","Meetings","Participants","Meeting Data","Templates");
         assertThat(fixture.store.read().active()).isNotNull();
     }
     static final class Fixture {

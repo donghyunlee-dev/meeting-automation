@@ -181,6 +181,23 @@ class NotionPageHierarchyAdapterTests extends com.meetingautomation.document.Doc
     }
 
     @Test
+    void meetingHistoryIgnoresOrdinaryParagraphsInTheMeetingsContainer() {
+        TestClient client = client(TOKEN, ROOT_ID);
+        client.server().expect(notionRequest(URL)).andRespond(jsonSuccess(children(
+                block("meetings-child", "child_page", "Meetings"),
+                block("participants-child", "child_page", "Participants"))));
+        client.server().expect(notionRequest(urlFor("participants-child"))).andRespond(jsonSuccess(emptyChildren()));
+        client.server().expect(notionRequest(urlFor("meetings-child"))).andRespond(jsonSuccess(children(
+                "{\"id\":\"intro-paragraph\",\"type\":\"paragraph\",\"paragraph\":{\"rich_text\":[{\"type\":\"text\",\"text\":{\"content\":\"Notes\"}}]}}")));
+        client.server().expect(notionRequest(URL)).andRespond(jsonSuccess(children(
+                block("meetings-child", "child_page", "Meetings"),
+                block("participants-child", "child_page", "Participants"))));
+
+        assertEquals(List.of(), client.adapter().listMeetingRecords());
+        client.server().verify();
+    }
+
+    @Test
     void forwardsOpaqueCursorUntilAllRootChildrenAreRead() {
         TestClient client = client(TOKEN, ROOT_ID);
         String cursor = "opaque cursor / page-one";

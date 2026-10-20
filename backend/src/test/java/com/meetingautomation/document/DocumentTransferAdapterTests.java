@@ -9,13 +9,17 @@ import java.util.*;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.http.MediaType;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.test.web.client.*;
 import org.springframework.web.client.RestClient;
 import tools.jackson.databind.json.JsonMapper;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
+@ExtendWith(OutputCaptureExtension.class)
 class DocumentTransferAdapterTests {
     private static final JsonMapper JSON = JsonMapper.builder().build();
     private static final TransferCodec CODEC = new TransferCodec();
@@ -63,6 +67,16 @@ class DocumentTransferAdapterTests {
             assertThrows(TransferCodec.ValidationException.class, f.port::listMeetingRecords, defect);
             f.server.verify();
         }
+    }
+
+    @Test
+    void historyListLogsTheFailingSectionAndValidationCode(CapturedOutput output) {
+        Fixture f = new Fixture(true, 1, "cross-root-collision");
+
+        assertThrows(TransferCodec.ValidationException.class, f.port::listMeetingRecords);
+
+        assertTrue(output.getAll().contains("Meeting history read failed: section=Meetings"));
+        assertTrue(output.getAll().contains("cause=INVALID_RECORD"));
     }
 
     @ParameterizedTest @ValueSource(booleans = {true, false})

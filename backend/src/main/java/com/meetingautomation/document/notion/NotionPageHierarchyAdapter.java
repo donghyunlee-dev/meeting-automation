@@ -8,6 +8,7 @@ import com.meetingautomation.document.Participant;
 import com.meetingautomation.document.ParticipantCreationProvider;
 import com.meetingautomation.document.ParticipantUpdateCommand;
 import com.meetingautomation.document.ParticipantUpdatingProvider;
+import com.meetingautomation.document.ParticipantDeletingProvider;
 import com.meetingautomation.document.ParticipantPageMapper;
 import com.meetingautomation.document.MeetingDocumentRef;
 import com.meetingautomation.document.transfer.*;
@@ -24,14 +25,17 @@ import org.springframework.http.HttpStatusCode;
 import org.springframework.util.StreamUtils;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /** Notion implementation for the root hierarchy and connection health slice. */
-public final class NotionPageHierarchyAdapter implements ParticipantCreationProvider, ParticipantUpdatingProvider, DocumentTransferPort {
+public final class NotionPageHierarchyAdapter implements ParticipantCreationProvider, ParticipantUpdatingProvider, ParticipantDeletingProvider, DocumentTransferPort {
+    private static final Logger log = LoggerFactory.getLogger(NotionPageHierarchyAdapter.class);
     public static final String API_VERSION = "2026-03-11";
     private static final String API_BASE_URL = "https://api.notion.com";
     private static final String CHILDREN_PATH = "/v1/blocks/{block_id}/children";
     private static final java.util.regex.Pattern BOOTSTRAP_SENTINEL = java.util.regex.Pattern.compile(
-            "meeting-automation/bootstrap/[A-Za-z0-9_.-]+/(MEETINGS|PARTICIPANTS)");
+            "meeting-automation/bootstrap/[A-Za-z0-9_.-]+/(MEETINGS|PARTICIPANTS|MEETING_DATA)");
     private static final JsonMapper JSON_MAPPER = JsonMapper.builder().build();
 
     private final RestClient restClient;
@@ -41,6 +45,8 @@ public final class NotionPageHierarchyAdapter implements ParticipantCreationProv
     private final ProviderTransferSupport transfer = new ProviderTransferSupport() {
         @Override protected String fingerprint() { return codec.connectionFingerprint("notion", configuredRootId); }
         @Override protected DocumentStructure structure() { return discoverStructure(configuredRootId); }
+        @Override protected String meetingDataPageId() { return findMeetingDataPageId(configuredRootId); }
+        @Override protected String ensureMeetingDataPageId() { return ensureMeetingDataPage(configuredRootId); }
         @Override protected List<String> children(String root) { return transferChildren(root); }
         @Override protected TransferRecord read(String id) { return readTransferPage(id, pages); }
         @Override protected TransferRecord readMeeting(String id) { return readTransferPage(id, pages, true); }
@@ -48,7 +54,18 @@ public final class NotionPageHierarchyAdapter implements ParticipantCreationProv
     };
 
     @Override public TransferManifest readManifest() { return transfer.readManifest(); }
-    @Override public List<TransferRecord> listMeetingRecords() { return transfer.listMeetingRecords(); }
+    @Override public List<TransferRecord> listMeetingRecords() {
+        try {
+            return transfer.listMeetingRecords();
+        } catch (RuntimeException failure) {
+            String cause = failure instanceof TransferCodec.ValidationException validation
+                    ? validation.code().name()
+                    : failure instanceof DocumentProviderException providerFailure
+                            ? providerFailure.code() : failure.getClass().getSimpleName();
+            log.error("Notion meeting history traversal failed: cause={}", cause);
+            throw failure;
+        }
+    }
     @Override public TransferRecord exportMeeting(String id) {
         try { return transfer.exportMeeting(id); }
         catch (DocumentProviderException failure) { throw failure; }
@@ -71,6 +88,14 @@ public final class NotionPageHierarchyAdapter implements ParticipantCreationProv
                 headers.setContentType(org.springframework.http.MediaType.APPLICATION_JSON);
             }).exchange((req, res) -> {
                 if (res.getStatusCode().isError()) {
+                    String errorBody = StreamUtils.copyToString(res.getBody(), StandardCharsets.UTF_8);
+                    String notionCode = "unknown";
+                    try {
+                        JsonNode error = JSON_MAPPER.readTree(errorBody);
+                        if (error != null && error.path("code").isTextual()) notionCode = error.path("code").asString();
+                    } catch (Exception ignored) { /* Keep provider response details out of logs. */ }
+                    log.error("Notion transfer API request failed: endpoint={}, status={}, notionCode={}",
+                            safeEndpoint(path), res.getStatusCode().value(), notionCode);
                     if (meetingRead && res.getStatusCode().value() == 404) {
                         throw DocumentProviderException.meetingNotFound();
                     }
@@ -82,7 +107,21 @@ public final class NotionPageHierarchyAdapter implements ParticipantCreationProv
             if (parsed == null || !parsed.isObject()) throw transferInvalid();
             return parsed;
         } catch (TransferCodec.ValidationException | DocumentProviderException e) { throw e; }
-        catch (Exception e) { throw transferInvalid(); }
+        catch (Exception e) {
+            log.error("Notion transfer API response could not be decoded: endpoint={}, cause={}",
+                    safeEndpoint(path), e.getClass().getSimpleName());
+            throw transferInvalid();
+        }
+    }
+
+    private static String safeEndpoint(String path) {
+        if (path.startsWith("/v1/blocks/")) return "block-children";
+        if (path.startsWith("/v1/pages/")) return "page";
+        return "other";
+    }
+
+    private static String safeIdentifier(String value) {
+        return value == null ? "missing" : value.replaceAll("[^A-Za-z0-9_-]", "?");
     }
 
     private List<JsonNode> transferBlocks(String root) {
@@ -104,10 +143,16 @@ public final class NotionPageHierarchyAdapter implements ParticipantCreationProv
             String type = transferText(b.get("type"));
             if ("child_page".equals(type) && b.path("child_page").isObject()) {
                 transferText(b.path("child_page").get("title")); children.add(transferText(b.get("id")));
-            } else if ("paragraph".equals(type) && isBootstrapSentinel(b)) {
-                if (bootstrapSentinelSeen) throw transferInvalid();
-                bootstrapSentinelSeen = true;
-            } else throw transferInvalid();
+            } else if ("paragraph".equals(type)) {
+                if (isBootstrapSentinel(b)) {
+                    if (bootstrapSentinelSeen) throw transferInvalid();
+                    bootstrapSentinelSeen = true;
+                }
+            } else {
+                log.error("Notion container contains an unsupported child block: parentPageId={}, blockType={}",
+                        safeIdentifier(root), type);
+                throw transferInvalid();
+            }
         }
         return children;
     }
@@ -125,8 +170,10 @@ public final class NotionPageHierarchyAdapter implements ParticipantCreationProv
         JsonNode page = transferRequest("/v1/pages/" + encodeId(id), null, meetingRead);
         if (!id.equals(transferText(page.get("id")))) throw transferInvalid();
         String revision = transferText(page.get("last_edited_time"));
+        List<JsonNode> rawBlocks = transferBlocks(id);
+        if (rawBlocks.stream().noneMatch(block -> "code".equals(text(block.get("type"))))) return null;
         List<TransferPageCodec.Block> blocks = new ArrayList<>();
-        for (JsonNode b : transferBlocks(id)) {
+        for (JsonNode b : rawBlocks) {
             String type = transferText(b.get("type"));
             if (!Set.of("heading_2", "paragraph", "bulleted_list_item", "code").contains(type) || b.path("has_children").asBoolean(false)) throw transferInvalid();
             blocks.add(new TransferPageCodec.Block(type, transferRichText(b.path(type).get("rich_text"))));
@@ -139,6 +186,10 @@ public final class NotionPageHierarchyAdapter implements ParticipantCreationProv
         return mapper.decode(id, revision, transferText(page.get("url")), title, blocks);
     }
     private String createTransferPage(String parent, TransferRecord record, TransferPageCodec mapper) {
+        if (record.participant() == null && record.renderedMarkdown() != null && record.storageKey() == null) {
+            JsonNode human = createMarkdownMeetingPage(record);
+            record = record.withStorage(transferText(human.get("url")), record.marker().externalSessionId());
+        }
         List<Object> children = new ArrayList<>();
         for (var block : mapper.encode(record)) {
             Map<String,Object> fields = new java.util.LinkedHashMap<>(); fields.put("rich_text", transferRuns(block.text()));
@@ -146,7 +197,8 @@ public final class NotionPageHierarchyAdapter implements ParticipantCreationProv
             children.add(Map.of("object", "block", "type", block.type(), block.type(), fields));
         }
         // Notion allows 100 initial children; larger pages append batches after creation.
-        JsonNode created = transferRequest("/v1/pages", Map.of("parent", Map.of("page_id", parent), "properties", Map.of("title", Map.of("title", transferRuns(record.title()))),
+        String pageTitle = record.storageKey() == null ? record.title() : record.storageKey();
+        JsonNode created = transferRequest("/v1/pages", Map.of("parent", Map.of("page_id", parent), "properties", Map.of("title", Map.of("title", transferRuns(pageTitle))),
                 "children", children.subList(0, Math.min(100, children.size()))));
         String id = transferText(created.get("id"));
         for (int start = 100; start < children.size(); start += 100) {
@@ -156,6 +208,42 @@ public final class NotionPageHierarchyAdapter implements ParticipantCreationProv
                     .exchange((request, response) -> { if (response.getStatusCode().isError()) throw transferInvalid(); return null; });
         }
         return id;
+    }
+
+    private JsonNode createMarkdownMeetingPage(TransferRecord record) {
+        MeetingMarkdownRenderer renderer = new MeetingMarkdownRenderer();
+        List<Object> children = renderer.blocks(record.renderedMarkdown()).stream().map(block -> {
+            Map<String, Object> richText = Map.of("rich_text", transferRuns(block.text()));
+            return (Object) Map.of("object", "block", "type", block.type(), block.type(), richText);
+        }).toList();
+        JsonNode created = transferRequest("/v1/pages", Map.of("parent", Map.of("page_id", discoverStructure(configuredRootId).meetingsPageId()),
+                "properties", Map.of("title", Map.of("title", transferRuns(record.title()))),
+                "children", children.subList(0, Math.min(100, children.size()))));
+        String id = transferText(created.get("id"));
+        for (int start = 100; start < children.size(); start += 100) {
+            restClient.patch().uri("/v1/blocks/" + encodeId(id) + "/children")
+                    .headers(headers -> { headers.setBearerAuth(token); headers.set("Notion-Version", API_VERSION); headers.setContentType(org.springframework.http.MediaType.APPLICATION_JSON); })
+                    .body(JSON_MAPPER.writeValueAsString(Map.of("children", children.subList(start, Math.min(start + 100, children.size())))))
+                    .exchange((request, response) -> { if (response.getStatusCode().isError()) throw transferInvalid(); return null; });
+        }
+        return created;
+    }
+
+    private String findMeetingDataPageId(String rootId) {
+        List<String> matches = childIdsNamed(readAllChildren(rootId), "Meeting Data");
+        if (matches.size() > 1) throw DocumentProviderException.structureNotFound();
+        return matches.isEmpty() ? null : matches.getFirst();
+    }
+
+    private String ensureMeetingDataPage(String rootId) {
+        String existing = findMeetingDataPageId(rootId);
+        if (existing != null) return existing;
+        String marker = "meeting-automation/bootstrap/meeting-data/MEETING_DATA";
+        JsonNode created = transferRequest("/v1/pages", Map.of("parent", Map.of("page_id", rootId),
+                "properties", Map.of("title", Map.of("title", transferRuns("Meeting Data"))),
+                "children", List.of(Map.of("object", "block", "type", "paragraph",
+                        "paragraph", Map.of("rich_text", transferRuns(marker))))));
+        return transferText(created.get("id"));
     }
     private static List<Object> transferRuns(String value) {
         List<Object> runs = new ArrayList<>();
@@ -346,6 +434,23 @@ public final class NotionPageHierarchyAdapter implements ParticipantCreationProv
         return new Participant(participantId, command.updatedName(), command.updatedEmail());
     }
 
+    @Override
+    public void deleteParticipant(String participantsPageId, Participant participant) {
+        if (isBlank(token) || isBlank(participant.id())) throw DocumentProviderException.documentFailed(false);
+        JsonNode page = transferRequest("/v1/pages/" + encodeId(participant.id()), null);
+        String parentId = text(page.path("parent").get("page_id"));
+        if (!participantsPageId.equals(parentId)) throw DocumentProviderException.participantNotFound();
+        List<PageBlock> blocks = readPageBlocks(participant.id());
+        TransferCodec codec = new TransferCodec();
+        TransferMarker marker = codec.parseMarker(blocks.stream().filter(b -> "code".equals(b.type())).map(PageBlock::text).toList());
+        try {
+            ParticipantTransferMarkers.validateCurrent(participant, marker);
+        } catch (TransferCodec.ValidationException stalePageId) {
+            ParticipantTransferMarkers.validateCreatedPendingId(participant, marker);
+        }
+        patchBlock(participant.id(), Map.of("in_trash", true), true);
+    }
+
     private List<PageBlock> readPageBlocks(String pageId) {
         List<PageBlock> blocks = new ArrayList<>();
         Set<String> seenCursors = new HashSet<>();
@@ -443,10 +548,18 @@ public final class NotionPageHierarchyAdapter implements ParticipantCreationProv
                     .body(json)
                     .exchange((request, response) -> {
                         if (HttpStatusCode.valueOf(response.getStatusCode().value()).isError()) {
+                            int status = response.getStatusCode().value();
+                            String errorCode = "unknown";
+                            try {
+                                JsonNode error = JSON_MAPPER.readTree(StreamUtils.copyToString(response.getBody(), StandardCharsets.UTF_8));
+                                if (error != null && error.path("code").isTextual()) errorCode = error.path("code").asString();
+                            } catch (Exception ignored) { /* Provider response details are not exposed. */ }
+                            log.error("Notion page mutation failed: operation={}, status={}, notionCode={}",
+                                    page ? "page" : "block", status, errorCode);
                             if (page && response.getStatusCode().value() == 404) {
                                 throw DocumentProviderException.participantNotFound();
                             }
-                            throw new NotionApiFailure(true, response.getStatusCode().value());
+                            throw new NotionApiFailure(true, status);
                         }
                         return null;
                     });

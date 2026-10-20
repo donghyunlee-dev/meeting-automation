@@ -15,6 +15,10 @@ public final class TransferPageCodec {
         if (r.participant() != null) b.add(new Block("paragraph", "Email: " + r.participant().email()));
         else {
             heading(b, "Meeting information"); paragraph(b, "Date: " + r.marker().meetingAt()); paragraph(b, "Template: " + r.marker().templateId());
+            if (r.storageKey() != null) {
+                paragraph(b, "Meeting title: " + r.title());
+                paragraph(b, "Meeting URL: " + Objects.toString(r.documentUrl(), ""));
+            }
             for (ParticipantSummary p : r.participants()) { paragraph(b, "Participant: " + p.id()); paragraph(b, p.name()); }
             for (TransferMarker.Speaker s : r.marker().speakers()) { paragraph(b, "Speaker: " + s.speakerId()); paragraph(b, s.label()); paragraph(b, "Participant: " + Objects.toString(s.participantId(), "")); }
             if (r.marker().failure() != null) paragraph(b, "녹음 변환 결과: 실패");
@@ -28,6 +32,10 @@ public final class TransferPageCodec {
             if (r.transcript() != null) {
                 heading(b, "Transcript");
                 for (var s : r.transcript()) { paragraph(b, "Segment: " + s.segmentId()); paragraph(b, "Speaker: " + s.speakerId()); paragraph(b, "Start ms: " + s.startMs()); paragraph(b, "End ms: " + s.endMs()); paragraph(b, s.text()); }
+            }
+            if (r.renderedMarkdown() != null) {
+                heading(b, "Rendered document");
+                paragraph(b, r.renderedMarkdown());
             }
         }
         b.add(new Block("code", codec.encodeMarker(r.marker()))); return List.copyOf(b);
@@ -45,6 +53,14 @@ public final class TransferPageCodec {
             }
             Reader read = new Reader(body); read.heading("Meeting information");
             if (!java.time.OffsetDateTime.parse(read.field("Date: ")).equals(marker.meetingAt()) || !read.field("Template: ").equals(marker.templateId())) throw invalid(INVALID_RECORD);
+            String meetingTitle = title;
+            String meetingUrl = url;
+            boolean storageRecord = false;
+            if (read.hasParagraph() && read.peek().startsWith("Meeting title: ")) {
+                storageRecord = true;
+                meetingTitle = read.field("Meeting title: ");
+                meetingUrl = read.field("Meeting URL: ");
+            }
             List<ParticipantSummary> roster = new ArrayList<>();
             for (String participantId : marker.participantIds()) { if (!read.field("Participant: ").equals(participantId)) throw invalid(BROKEN_REFERENCE); roster.add(new ParticipantSummary(participantId, read.paragraph())); }
             for (var s : marker.speakers()) { if (!read.field("Speaker: ").equals(s.speakerId()) || !read.paragraph().equals(s.label()) || !read.field("Participant: ").equals(Objects.toString(s.participantId(), ""))) throw invalid(BROKEN_REFERENCE); }
@@ -61,8 +77,13 @@ public final class TransferPageCodec {
                 read.heading("Transcript"); transcript = new ArrayList<>();
                 while (read.hasParagraph()) { String segment = read.field("Segment: "); String speaker = read.field("Speaker: "); long start = Long.parseLong(read.field("Start ms: ")); long end = Long.parseLong(read.field("End ms: ")); transcript.add(new TranscriptSegment(segment, speaker, start, end, read.paragraph())); }
             }
+            String renderedMarkdown = null;
+            if (read.hasHeading("Rendered document")) {
+                read.heading("Rendered document"); renderedMarkdown = read.paragraph();
+            }
             if (!read.done()) throw invalid(INVALID_RECORD);
-            TransferRecord r = new TransferRecord(id, revision, url, marker, title, minutes, transcript, roster, null); validateReferences(r, new HashSet<>(marker.participantIds()));
+            TransferRecord r = new TransferRecord(id, revision, meetingUrl, marker, meetingTitle, minutes, transcript,
+                    roster, null, renderedMarkdown, storageRecord ? marker.externalSessionId() : null); validateReferences(r, new HashSet<>(marker.participantIds()));
             codec.canonicalDigest(r); return r;
         } catch (TransferCodec.ValidationException e) { throw e; }
         catch (RuntimeException e) { throw invalid(INVALID_RECORD); }
@@ -91,6 +112,7 @@ public final class TransferPageCodec {
         String take(String type) { if (done() || !blocks.get(index).type().equals(type)) throw invalid(INVALID_RECORD); return blocks.get(index++).text(); }
         void heading(String text) { if (!take("heading_2").equals(text)) throw invalid(INVALID_RECORD); }
         String paragraph() { return take("paragraph"); }
+        String peek() { if (done() || !blocks.get(index).type().equals("paragraph")) return ""; return blocks.get(index).text(); }
         String field(String prefix) { String value = paragraph(); if (!value.startsWith(prefix)) throw invalid(INVALID_RECORD); return value.substring(prefix.length()); }
         List<String> items() { List<String> values = new ArrayList<>(); while (!done() && blocks.get(index).type().equals("bulleted_list_item")) values.add(take("bulleted_list_item")); return values; }
     }

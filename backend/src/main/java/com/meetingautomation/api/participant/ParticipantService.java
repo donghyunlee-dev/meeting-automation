@@ -8,6 +8,7 @@ import com.meetingautomation.document.DocumentConnectionGate;
 import com.meetingautomation.document.Participant;
 import com.meetingautomation.document.ParticipantCreationProvider;
 import com.meetingautomation.document.ParticipantListingProvider;
+import com.meetingautomation.document.ParticipantDeletingProvider;
 import com.meetingautomation.document.ParticipantUpdateCommand;
 import com.meetingautomation.document.ParticipantUpdatingProvider;
 import java.util.List;
@@ -81,6 +82,25 @@ public final class ParticipantService {
                 new com.meetingautomation.document.settings.SettingsException("DOCUMENT_SETUP_REQUIRED", 409));
         try (var ignored = connectionGate.beginWrite(connection.connectionVersion())) {
             return updateParticipantWithinLease(participantId, request);
+        }
+    }
+
+    public void deleteParticipant(String participantId) {
+        providerResolver.requireActive();
+        var connection = providerResolver.active().orElseThrow(() ->
+                new com.meetingautomation.document.settings.SettingsException("DOCUMENT_SETUP_REQUIRED", 409));
+        try (var ignored = connectionGate.beginWrite(connection.connectionVersion())) {
+            ParticipantDeletingProvider provider = providerResolver.selectedProvider()
+                    .filter(ParticipantDeletingProvider.class::isInstance)
+                    .map(ParticipantDeletingProvider.class::cast)
+                    .orElseThrow(() -> new IllegalStateException("Selected provider cannot delete participants."));
+            if (!providerResolver.configured()) throw DocumentProviderException.structureNotFound();
+            var structure = provider.discoverStructure(providerResolver.rootId());
+            Participant participant = provider.listParticipants(structure.participantsPageId()).stream()
+                    .filter(item -> item.id().equals(participantId))
+                    .findFirst()
+                    .orElseThrow(ParticipantNotFoundException::new);
+            provider.deleteParticipant(structure.participantsPageId(), participant);
         }
     }
 

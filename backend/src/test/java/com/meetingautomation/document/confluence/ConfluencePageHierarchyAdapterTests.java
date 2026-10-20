@@ -17,10 +17,18 @@ import com.meetingautomation.document.ParticipantUpdateCommand;
 import com.meetingautomation.document.DocumentStructureProvider;
 import com.meetingautomation.document.ProviderHealth;
 import com.meetingautomation.document.Participant;
+import com.meetingautomation.document.ParticipantSummary;
+import com.meetingautomation.document.StructuredMinutes;
+import com.meetingautomation.document.transfer.MeetingMarkdownRenderer;
+import com.meetingautomation.document.transfer.TransferMarker;
+import com.meetingautomation.document.transfer.TransferPageCodec;
+import com.meetingautomation.document.transfer.TransferRecord;
+import java.time.OffsetDateTime;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
+import java.util.List;
 import java.util.function.Supplier;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -44,6 +52,69 @@ class ConfluencePageHierarchyAdapterTests extends com.meetingautomation.document
             + "/direct-children?limit=100";
     private static final String AUTHORIZATION = "Basic " + Base64.getEncoder().encodeToString(
             (EMAIL + ":" + TOKEN).getBytes(StandardCharsets.UTF_8));
+
+    @Test
+    void meetingHistoryIgnoresHumanReadablePagesAndIncludesMeetingDataChildren() {
+        TestClient client = client(BASE_URL, EMAIL, TOKEN, ROOT_ID);
+        client.server().expect(confluenceRequest(childrenUrl(ROOT_ID)))
+                .andRespond(jsonSuccess(children(page("10", "Meetings"), page("11", "Participants"), page("12", "Meeting Data"))));
+        client.server().expect(confluenceRequest(childrenUrl("11"))).andRespond(jsonSuccess(emptyChildren()));
+        client.server().expect(confluenceRequest(childrenUrl("10"))).andRespond(jsonSuccess(children(page("20", "Weekly review"))));
+        client.server().expect(confluenceRequest(childrenUrl(ROOT_ID)))
+                .andRespond(jsonSuccess(children(page("10", "Meetings"), page("11", "Participants"), page("12", "Meeting Data"))));
+        client.server().expect(confluenceRequest(childrenUrl("12"))).andRespond(jsonSuccess(emptyChildren()));
+        client.server().expect(confluenceRequest(BASE_URL + "/wiki/api/v2/pages/20?body-format=storage"))
+                .andRespond(jsonSuccess("{\"id\":\"20\",\"version\":{\"number\":1},\"title\":\"Weekly review\","
+                        + "\"body\":{\"storage\":{\"value\":\"<h1>회의록</h1><p>검토 내용</p>\"}}}"));
+
+        assertEquals(java.util.List.of(), client.adapter().listMeetingRecords());
+        client.server().verify();
+    }
+
+    @Test
+    void publishesTemplateRenderedPageAndStoresTransferRecordUnderMeetingData() {
+        TestClient client = client(BASE_URL, EMAIL, TOKEN, ROOT_ID);
+        String sessionId = "ms_confluence_rendered";
+        String markdown = "# Launch review";
+        TransferRecord meeting = meetingRecord(sessionId, markdown);
+        String rootChildren = children(page("10", "Meetings"), page("11", "Participants"), page("12", "Meeting Data"));
+        client.server().expect(confluenceRequest(childrenUrl(ROOT_ID))).andRespond(jsonSuccess(rootChildren));
+        client.server().expect(confluenceRequest(childrenUrl("11"))).andRespond(jsonSuccess(emptyChildren()));
+        client.server().expect(confluenceRequest(childrenUrl("10"))).andRespond(jsonSuccess(emptyChildren()));
+        client.server().expect(confluenceRequest(childrenUrl(ROOT_ID))).andRespond(jsonSuccess(rootChildren));
+        client.server().expect(confluenceRequest(childrenUrl("12"))).andRespond(jsonSuccess(emptyChildren()));
+        client.server().expect(confluenceRequest(childrenUrl(ROOT_ID))).andRespond(jsonSuccess(rootChildren));
+        client.server().expect(confluenceRequest(childrenUrl(ROOT_ID))).andRespond(jsonSuccess(rootChildren));
+        client.server().expect(confluenceRequest(BASE_URL + "/wiki/api/v2/pages/10?body-format=storage"))
+                .andRespond(jsonSuccess("{\"id\":\"10\",\"spaceId\":\"SPACE-KEY\"}"));
+        client.server().expect(request -> {
+            requestTo(BASE_URL + "/wiki/api/v2/pages").match(request);
+            method(HttpMethod.POST).match(request);
+            org.springframework.test.web.client.match.MockRestRequestMatchers.content().json("""
+                    {"spaceId":"SPACE-KEY","status":"current","title":"Planning","parentId":"10",
+                     "body":{"representation":"storage","value":"<h1>Launch review</h1>"}}
+                    """).match(request);
+        }).andRespond(jsonSuccess("{\"id\":20}"));
+        client.server().expect(confluenceRequest(BASE_URL + "/wiki/api/v2/pages/12?body-format=storage"))
+                .andRespond(jsonSuccess("{\"id\":\"12\",\"spaceId\":\"SPACE-KEY\"}"));
+        String sidecarStorage = storage(new TransferPageCodec().encode(meeting.withStorage(
+                BASE_URL + "/wiki/pages/20", sessionId)));
+        client.server().expect(request -> {
+            requestTo(BASE_URL + "/wiki/api/v2/pages").match(request);
+            method(HttpMethod.POST).match(request);
+            org.springframework.test.web.client.match.MockRestRequestMatchers.content().json("""
+                    {"spaceId":"SPACE-KEY","status":"current","title":"ms_confluence_rendered","parentId":"12",
+                     "body":{"representation":"storage","value":"%s"}}
+                    """.formatted(sidecarStorage)).match(request);
+        }).andRespond(jsonSuccess("{\"id\":21}"));
+        client.server().expect(confluenceRequest(BASE_URL + "/wiki/api/v2/pages/21?body-format=storage"))
+                .andRespond(jsonSuccess("{\"id\":\"21\",\"version\":{\"number\":1},\"title\":\"ms_confluence_rendered\","
+                        + "\"body\":{\"storage\":{\"value\":\"" + sidecarStorage.replace("\\", "\\\\").replace("\"", "\\\"") + "\"}}}"));
+
+        assertEquals(new com.meetingautomation.document.MeetingDocumentRef("21", BASE_URL + "/wiki/pages/20"),
+                client.adapter().publishMeeting(meeting));
+        client.server().verify();
+    }
 
     @Test
     void listsParticipantsByReadingPageTitleAndStorageBody() {
@@ -518,6 +589,26 @@ class ConfluencePageHierarchyAdapterTests extends com.meetingautomation.document
 
     private static String childrenUrl(String rootId) {
         return BASE_URL + "/wiki/api/v2/pages/" + rootId + "/direct-children?limit=100";
+    }
+
+    private static TransferRecord meetingRecord(String sessionId, String markdown) {
+        TransferMarker marker = new TransferMarker("meeting-automation", "meeting", "1.0", sessionId,
+                OffsetDateTime.parse("2026-10-20T09:00:00+09:00"), "default.md", List.of(), List.of(), null, null, null);
+        return new TransferRecord(null, null, null, marker, "Planning",
+                new StructuredMinutes("default.md", "1.0.0", "Summary", List.of(), List.of(), List.of(), List.of()),
+                List.of(), List.of(), null, markdown, null);
+    }
+
+    private static String storage(List<TransferPageCodec.Block> blocks) {
+        StringBuilder result = new StringBuilder();
+        for (TransferPageCodec.Block block : blocks) {
+            String tag = switch (block.type()) { case "heading_2" -> "h2"; case "bulleted_list_item" -> "li"; case "code" -> "pre"; default -> "p"; };
+            if (tag.equals("li")) result.append("<ul>");
+            result.append('<').append(tag).append('>').append(block.text().replace("&", "&amp;").replace("<", "&lt;")
+                    .replace(">", "&gt;").replace("\"", "&quot;").replace("'", "&#39;")).append("</").append(tag).append('>');
+            if (tag.equals("li")) result.append("</ul>");
+        }
+        return result.toString();
     }
 
     private static org.springframework.test.web.client.ResponseCreator jsonSuccess(String body) {

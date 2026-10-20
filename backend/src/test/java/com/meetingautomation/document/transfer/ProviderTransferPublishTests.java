@@ -18,6 +18,23 @@ import org.junit.jupiter.api.Test;
 
 class ProviderTransferPublishTests {
     @Test
+    void meetingDataSidecarRoundTripKeepsInternalIdentityAndUserFacingDocumentLocation() {
+        TransferRecord expected = meeting("ms_sidecar_roundtrip")
+                .withRenderedMarkdown("# Planning\n\n## Decisions\n- Launch on Friday")
+                .withStorage("https://documents.test/final-minutes", "ms_sidecar_roundtrip");
+        TransferPageCodec pageCodec = new TransferPageCodec();
+
+        TransferRecord actual = pageCodec.decode("metadata-page", "revision-1", "https://documents.test/metadata-page",
+                "ms_sidecar_roundtrip", pageCodec.encode(expected));
+
+        assertThat(actual.title()).isEqualTo("Planning");
+        assertThat(actual.documentUrl()).isEqualTo("https://documents.test/final-minutes");
+        assertThat(actual.storageKey()).isEqualTo("ms_sidecar_roundtrip");
+        assertThat(actual.renderedMarkdown()).isEqualTo(expected.renderedMarkdown());
+        assertThat(new TransferCodec().canonicalDigest(actual)).isEqualTo(new TransferCodec().canonicalDigest(expected));
+    }
+
+    @Test
     void publishMeetingUsesStandardPageCodecAndReusesUniqueExternalSessionId() {
         FakeTransferProvider provider = new FakeTransferProvider();
         provider.addParticipant();

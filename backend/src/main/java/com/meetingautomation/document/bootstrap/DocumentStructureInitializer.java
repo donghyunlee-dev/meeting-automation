@@ -21,7 +21,7 @@ public final class DocumentStructureInitializer {
 
     public DocumentStructure initializeStructure(String parent, String reuseRoot, String operationId, BootstrapJournal journal) {
         // Resolve every possibly-sent write before considering any new page creation.
-        for (String step : List.of("ROOT","MEETINGS","PARTICIPANTS","TEMPLATES")) {
+        for (String step : List.of("ROOT","MEETINGS","PARTICIPANTS","MEETING_DATA","TEMPLATES")) {
             if (journal.find(step)!=null) reconcile(step,journal);
         }
         String root;
@@ -41,16 +41,20 @@ public final class DocumentStructureInitializer {
         // Validate both titles before partially completing an explicitly reused hierarchy.
         var meetings = journal.find("MEETINGS")==null ? unique(children, "Meetings", null) : null;
         var participants = journal.find("PARTICIPANTS")==null ? unique(children, "Participants", null) : null;
+        var meetingData = journal.find("MEETING_DATA")==null ? unique(children, "Meeting Data", null) : null;
         var templates = journal.find("TEMPLATES")==null ? unique(children, "Templates", null) : null;
         String meetingsId = ensure("MEETINGS", root, "Meetings", operationId, journal, meetings);
         String participantsId = ensure("PARTICIPANTS", root, "Participants", operationId, journal, participants);
+        String meetingDataId = ensure("MEETING_DATA", root, "Meeting Data", operationId, journal, meetingData);
         String templatesId = ensure("TEMPLATES", root, "Templates", operationId, journal, templates, defaultTemplate);
         verify(pages.read(root), parent, "Meeting Automation", null, false);
         unique(pages.children(root), "Meetings", meetingsId);
         unique(pages.children(root), "Participants", participantsId);
+        unique(pages.children(root), "Meeting Data", meetingDataId);
         unique(pages.children(root), "Templates", templatesId);
         verify(pages.read(meetingsId), root, "Meetings", null, false);
         verify(pages.read(participantsId), root, "Participants", null, false);
+        verify(pages.read(meetingDataId), root, "Meeting Data", null, false);
         return new DocumentStructure(root, meetingsId, participantsId);
     }
     private String ensure(String step, String parent, String title, String operationId, BootstrapJournal journal, BootstrapPages.Page existing) {

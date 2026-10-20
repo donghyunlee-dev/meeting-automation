@@ -20,4 +20,12 @@ public final class ParticipantTransferMarkers {
     public static void validateCurrent(Participant current, TransferMarker marker) {
         if (!refreshed(current, marker).canonicalDigest().equals(marker.canonicalDigest())) throw new TransferCodec.ValidationException(TransferCodec.Code.INVALID_RECORD);
     }
+
+    /** Creation cannot know the provider page ID until after the page has been created. */
+    public static void validateCreatedPendingId(Participant current, TransferMarker marker) {
+        Participant pendingId = new Participant("pending", current.name(), current.email());
+        if (!refreshed(pendingId, marker).canonicalDigest().equals(marker.canonicalDigest())) {
+            throw new TransferCodec.ValidationException(TransferCodec.Code.INVALID_RECORD);
+        }
+    }
 }
