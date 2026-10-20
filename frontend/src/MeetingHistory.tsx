@@ -180,7 +180,7 @@ export function HomePage() {
             <h2 id="recent-meetings-title">최근 회의</h2>
             <button className="home-all-meetings" type="button" onClick={() => navigate('/meetings')}>전체 보기 <span aria-hidden="true">→</span></button>
           </div>
-          <MeetingList limit={5} emptyMessage="최근 회의가 없습니다. 새 회의를 시작해 보세요." quietEmpty linkRows />
+          <MeetingList limit={3} emptyMessage="최근 회의가 없습니다. 새 회의를 시작해 보세요." quietEmpty linkRows />
         </section>
       </div>
       {connectionDialogOpen && <div className="home-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setConnectionDialogOpen(false); }}>
