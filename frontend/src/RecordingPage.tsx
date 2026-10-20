@@ -118,11 +118,11 @@ export function RecordingPage({ title, state, elapsedMs, microphoneStatus = 'che
   return (
     <main className={`recording-page page-scroll-layout recording-page--${state.toLowerCase()}${completed ? ' recording-page--completed' : ''}${isRecovering ? ' recording-page--recovering' : ''}`}>
       <header className="recording-heading">
-        {state === 'Ready' && !completed && onReturnToSetup && <button className="recording-back" type="button" disabled={returningToSetup} onClick={() => {
+        {state === 'Ready' && !completed && onReturnToSetup && <button className="recording-back" type="button" disabled={returningToSetup} aria-busy={returningToSetup} onClick={() => {
           setReturningToSetup(true);
           setReturnError('');
           void onReturnToSetup().catch(() => setReturnError('회의 준비 화면으로 돌아가지 못했습니다. 다시 시도해 주세요.')).finally(() => setReturningToSetup(false));
-        }} aria-label="회의 준비로 돌아가기"><span aria-hidden="true">←</span><span>{returningToSetup ? '돌아가는 중…' : '회의 준비'}</span></button>}
+        }} aria-label="회의 준비로 돌아가기"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m10 3-5 5 5 5" /></svg></button>}
         <h1>
           <svg className="recording-title-icon" viewBox="0 0 24 24" aria-hidden="true">
             <rect x="9" y="3" width="6" height="12" rx="3" />
@@ -157,9 +157,10 @@ export function RecordingPage({ title, state, elapsedMs, microphoneStatus = 'che
               return <i key={index} style={{ height: `${Math.max(4, Math.round(wave * 38))}px` }} />;
             })}
           </div>
-          {onRetryMicrophone && (microphoneStatus === 'error' || (microphoneStatus === 'ready' && !microphoneSignalDetected)) && <button type="button" className="recording-microphone-retry" onClick={onRetryMicrophone}>{microphoneStatus === 'error' ? '마이크 다시 확인' : '마이크 입력 확인'}</button>}
+          {onRetryMicrophone && (microphoneStatus === 'error' || (microphoneStatus === 'ready' && !microphoneSignalDetected)) && <button type="button" className="recording-microphone-retry" aria-label={microphoneStatus === 'error' ? '마이크 다시 확인' : '마이크 입력 다시 확인'} onClick={onRetryMicrophone}>
+            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M16.5 7A7 7 0 0 0 4.4 4.7L3 6m0 0V2.8M3 6h3.2M3.5 13A7 7 0 0 0 15.6 15.3L17 14m0 0v3.2M17 14h-3.2" /></svg>
+          </button>}
         </div>}
-        {state === 'Ready' && !completed && <p className="recording-microphone-label" aria-live="polite">{microphoneStatusLabel}</p>}
         {returnError && <p className="recording-error" role="alert">{returnError}</p>}
         {errorMessage && <p className="recording-error" role="alert">{errorMessage}</p>}
         {endSnapshot?.message && endSnapshot.status !== 'idle'

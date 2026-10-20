@@ -594,14 +594,14 @@ function ActiveMeetingRecordingRoute({ session, setState, setNavigationLocked, c
     }}
     onRetryProcessing={() => { setNavigationLocked(true); void endCoordinator.current?.start(); }}
     onRetryMicrophone={() => { void controllerRef.current?.prepareMicrophone(); }}
-    onReturnToSetup={session.draft ? async () => {
+    onReturnToSetup={async () => {
       await cancelMeetingSession(session.sessionId);
       setNavigationLocked(false);
       setState('Ready');
       clearSession();
       try { sessionStorage.removeItem(RECORDING_SESSION_STORAGE_KEY); } catch { /* session restoration is unavailable */ }
-      navigate('/meetings/new', { state: { draft: session.draft } });
-    } : undefined}
+      navigate('/meetings/new', { state: session.draft ? { draft: session.draft } : null });
+    }}
     onStart={async () => {
       setNavigationLocked(true);
       const controller = controllerRef.current;

@@ -632,14 +632,14 @@ button:disabled { cursor: not-allowed; opacity: .6; }
 .recording-page--recording, .recording-page--paused { min-height: 100dvh; justify-content: center; gap: clamp(40px, 12vh, 110px); padding-bottom: max(48px, env(safe-area-inset-bottom)); }
 .recording-page--ready { gap: 18px; padding-top: 16px; }
 .app-shell:has(.recording-page--recording), .app-shell:has(.recording-page--paused) { padding-bottom: 0; }
-.recording-heading { position: relative; display: grid; min-width: 0; min-height: 44px; align-items: center; justify-items: center; }
-.recording-heading h1 { display: flex; align-items: center; gap: 11px; margin: 0; color: #182230; font-size: 17px; font-weight: 700; letter-spacing: -.02em; overflow-wrap: anywhere; }
-.recording-back { position: absolute; left: 0; display: inline-flex; min-height: 44px; align-items: center; gap: 7px; border: 0; padding: 0 8px 0 0; color: #344054; background: transparent; font: inherit; font-size: 14px; font-weight: 650; cursor: pointer; }
-.recording-back span:first-child { font-size: 24px; font-weight: 400; line-height: 1; }
+.recording-heading { display: flex; min-width: 0; min-height: 44px; align-items: center; justify-content: flex-start; gap: 10px; }
+.recording-heading h1 { display: flex; min-width: 0; align-items: center; gap: 11px; margin: 0; color: #182230; font-size: clamp(28px, 5vw, 34px); font-weight: 700; letter-spacing: -.04em; overflow-wrap: anywhere; }
+.recording-back { display: grid; flex: 0 0 24px; width: 24px; min-height: 44px; place-items: center start; border: 0; padding: 0; color: #344054; background: transparent; cursor: pointer; }
+.recording-back svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .recording-back:disabled { opacity: .55; cursor: wait; }
 .recording-title-icon { width: 30px; height: 30px; flex: 0 0 30px; fill: none; stroke: #3b82f6; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .recording-content { display: grid; flex: 1; align-content: center; justify-items: center; gap: 18px; min-width: 0; text-align: center; }
-.recording-page--ready .recording-content { align-content: center; gap: clamp(12px, 2.8vh, 24px); padding-bottom: 36px; }
+.recording-page--ready .recording-content { align-content: center; gap: clamp(22px, 4vh, 34px); padding-top: clamp(34px, 6vh, 50px); }
 .recording-page--ready .recording-meeting-title { margin: 0; font-size: clamp(24px, 6vw, 34px); }
 .recording-page--recovering .recording-content { align-content: start; padding-top: clamp(12px, 4vh, 32px); }
 .recording-meeting-title { max-width: 100%; margin: 0 0 18px; color: #182230; font-size: clamp(22px, 5vw, 30px); font-weight: 650; letter-spacing: -.035em; line-height: 1.25; overflow-wrap: anywhere; }
@@ -678,7 +678,6 @@ button:disabled { cursor: not-allowed; opacity: .6; }
 .recording-page--ready .recording-microphone--input-detected .recording-microphone-visual { background: linear-gradient(145deg, #24b980, #128458); box-shadow: 0 0 0 12px #17a76b12, 0 16px 34px #12845835; }
 .recording-page--ready .recording-microphone--input-detected .recording-microphone-lamp { border-color: #128458; }
 .recording-page--ready .recording-microphone--error .recording-microphone-visual { background: linear-gradient(145deg, #ef7770, #c63932); box-shadow: 0 0 0 12px #d92d2012, 0 16px 34px #c6393235; }
-.recording-microphone-label { min-height: 22px; margin: -8px 0 0; color: #596578; font-size: 14px; font-weight: 650; text-align: center; }
 .recording-microphone--ready .recording-waveform i { background: #5268df; }
 .recording-microphone--input-detected { color: #3448b8; }
 .recording-microphone--input-detected .recording-microphone-lamp { background: #17a76b; box-shadow: 0 0 0 2px #17a76b29, 0 0 10px #17a76b9c; animation: microphone-lamp-pulse 1.8s ease-in-out infinite; }
@@ -688,7 +687,8 @@ button:disabled { cursor: not-allowed; opacity: .6; }
 .recording-microphone--error { color: #b42318; }
 .recording-microphone--error .recording-microphone-lamp { background: #d92d20; box-shadow: 0 0 0 2px #d92d2029, 0 0 10px #d92d206e; }
 .recording-microphone--error .recording-waveform i { background: #f2b8b5; }
-.recording-microphone-retry { min-height: 36px; border: 0; padding: 4px 10px; color: #4056ce; background: transparent; font: inherit; font-weight: 650; cursor: pointer; }
+.recording-microphone-retry { display: grid; width: 36px; min-height: 36px; place-items: center; border: 0; border-radius: 50%; padding: 0; color: #4056ce; background: transparent; cursor: pointer; }
+.recording-microphone-retry svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
 @keyframes microphone-lamp-pulse { 50% { opacity: .55; transform: scale(.88); } }
 @media (prefers-reduced-motion: reduce) { .recording-microphone-lamp { animation: none !important; } }
 .recording-actions .button:disabled { cursor: wait; opacity: .55; }
