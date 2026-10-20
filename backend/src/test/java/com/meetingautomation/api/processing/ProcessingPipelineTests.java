@@ -117,7 +117,7 @@ class ProcessingPipelineTests {
                         && command.audioStream() != null
                         && command.audioBytes() == 42
                         && command.mimeType().equals("audio/webm")
-                        && command.languageHint() == null
+                        && command.languageHint().equals("ko")
                         && command.meetingDurationMs() == JOB.durationMs()));
         verify(minutesProvider).generateMinutes(org.mockito.ArgumentMatchers.argThat(command ->
                 command.templateId().equals("default.md")

@@ -3,7 +3,7 @@ package com.meetingautomation.transcription;
 public final class TranscriptionSettings {
     public static final long DEFAULT_MAX_AUDIO_BYTES = 25L * 1024 * 1024;
     public static final int DEFAULT_CONNECT_TIMEOUT_SECONDS = 10;
-    public static final int DEFAULT_TIMEOUT_SECONDS = 600;
+    public static final int DEFAULT_TIMEOUT_SECONDS = 1800;
 
     private final String model;
     private final String apiKey;

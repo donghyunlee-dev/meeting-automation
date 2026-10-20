@@ -130,7 +130,7 @@ public class ProcessingPipeline {
                 try {
                     try (var audio = audioAssembly.openAssembly(assembly)) {
                         TranscriptionCommand command = new TranscriptionCommand(
-                                audio, assembly.bytes(), assembly.mimeType(), null, job.durationMs());
+                                audio, assembly.bytes(), assembly.mimeType(), "ko", job.durationMs());
                         providerResponse = transcriptionProvider.transcribeWithDiarization(command);
                     } catch (java.io.IOException invalidStoredAudio) {
                         fail(sessionId, effectiveTraceId, TRANSCRIPTION, 33,

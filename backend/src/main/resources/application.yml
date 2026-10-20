@@ -11,7 +11,7 @@ transcription:
   model: ${TRANSCRIPTION_MODEL:gpt-4o-transcribe-diarize}
   max-audio-bytes: ${TRANSCRIPTION_MAX_AUDIO_BYTES:26214400}
   connect-timeout-seconds: ${TRANSCRIPTION_CONNECT_TIMEOUT_SECONDS:10}
-  timeout-seconds: ${TRANSCRIPTION_TIMEOUT_SECONDS:600}
+  timeout-seconds: ${TRANSCRIPTION_TIMEOUT_SECONDS:1800}
 
 minutes:
   model: ${MINUTES_MODEL:gpt-6-luna}

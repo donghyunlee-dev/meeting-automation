@@ -17,7 +17,7 @@ public class TranscriptionProviderConfiguration {
             @Value("${openai.api-key:}") String apiKey,
             @Value("${transcription.max-audio-bytes:26214400}") long maxAudioBytes,
             @Value("${transcription.connect-timeout-seconds:10}") int connectTimeoutSeconds,
-            @Value("${transcription.timeout-seconds:600}") int timeoutSeconds) {
+            @Value("${transcription.timeout-seconds:1800}") int timeoutSeconds) {
         if (maxAudioBytes < 1 || connectTimeoutSeconds < 1 || timeoutSeconds < 1) {
             throw new IllegalArgumentException("Transcription provider configuration is invalid.");
         }
