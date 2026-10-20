@@ -1,4 +1,5 @@
 import { getApiBaseUrl } from './apiBase';
+import { apiFetch, ApiRequestTimeoutError } from './apiFetch';
 import type { StoredChunk } from './chunkRepository';
 
 type ErrorEnvelope = { error?: { code?: string } };
@@ -21,10 +22,6 @@ export type AudioUploadRequestOptions = { timeoutMs?: number };
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 15_000;
 
-class RequestTimeoutError extends Error {
-  constructor(readonly status?: number) { super('Audio upload request timed out'); }
-}
-
 export async function getReceivedAudioStatus(sessionId: string, fetchImpl: typeof fetch = fetch, options: AudioUploadRequestOptions = {}): Promise<ReceivedAudioStatus> {
   let response: Response;
   let body: unknown;
@@ -33,7 +30,7 @@ export async function getReceivedAudioStatus(sessionId: string, fetchImpl: typeo
       headers: { Accept: 'application/json' },
     }, options.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS));
   } catch (error) {
-    if (error instanceof RequestTimeoutError) throw timeoutApiError(error);
+    if (error instanceof ApiRequestTimeoutError) throw timeoutApiError(error);
     throw new AudioUploadApiError('NETWORK_ERROR', undefined, true);
   }
 
@@ -72,7 +69,7 @@ export async function putAudioChunk(chunk: StoredChunk, fetchImpl: typeof fetch 
       body: chunk.blob,
     }, options.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS));
   } catch (error) {
-    if (error instanceof RequestTimeoutError) throw timeoutApiError(error);
+    if (error instanceof ApiRequestTimeoutError) throw timeoutApiError(error);
     throw new AudioUploadApiError('NETWORK_ERROR', undefined, true);
   }
 
@@ -97,36 +94,12 @@ async function readBody(response: Response, signal?: AbortSignal): Promise<unkno
 }
 
 async function requestAndRead(fetchImpl: typeof fetch, input: RequestInfo | URL, init: RequestInit, timeoutMs: number): Promise<{ response: Response; body: unknown }> {
-  const controller = new AbortController();
-  let response: Response | undefined;
-  let timeoutTriggered = false;
-  let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<never>((_resolve, reject) => {
-    timeoutHandle = setTimeout(() => {
-      timeoutTriggered = true;
-      reject(new RequestTimeoutError(response?.status));
-      controller.abort();
-    }, timeoutMs);
-  });
-  const request = (async () => {
-    try {
-      response = await fetchImpl(input, { ...init, signal: controller.signal });
-      const body = await readBody(response, controller.signal);
-      return { response, body };
-    } catch (error) {
-      if (timeoutTriggered) throw new RequestTimeoutError(response?.status);
-      throw error;
-    }
-  })();
-
-  try {
-    return await Promise.race([request, timeout]);
-  } finally {
-    if (timeoutHandle !== undefined) clearTimeout(timeoutHandle);
-  }
+  const response = await apiFetch(input, init, { timeoutMs }, fetchImpl);
+  const body = await readBody(response, init.signal ?? undefined);
+  return { response, body };
 }
 
-function timeoutApiError(error: RequestTimeoutError): AudioUploadApiError {
+function timeoutApiError(error: ApiRequestTimeoutError): AudioUploadApiError {
   const status = error.status !== undefined && error.status >= 400 ? error.status : undefined;
   return new AudioUploadApiError('REQUEST_TIMEOUT', status, true);
 }
