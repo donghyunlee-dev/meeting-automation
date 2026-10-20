@@ -15,6 +15,7 @@ type Props = {
   saveState: MinutesSaveState;
   saveBlockedMessage?: string;
   footerContent?: ReactNode;
+  actionContent?: ReactNode;
   disabled?: boolean;
   onSave?: (sessionId: string, minutes: StructuredMinutes) => void;
   onChange: (minutes: StructuredMinutes) => void;
@@ -43,7 +44,7 @@ function sameMinutes(left: StructuredMinutes | null, right: StructuredMinutes | 
   return JSON.stringify(left) === JSON.stringify(right);
 }
 
-export function ReviewMinutesEditor({ sessionId, minutes, baseline, participants, ownerState, saveState, saveBlockedMessage, footerContent, disabled = false, onSave, onChange }: Props) {
+export function ReviewMinutesEditor({ sessionId, minutes, baseline, participants, ownerState, saveState, saveBlockedMessage, footerContent, actionContent, disabled = false, onSave, onChange }: Props) {
   const saving = saveState.sessionId === sessionId && saveState.status === 'saving';
   const failed = saveState.sessionId === sessionId && saveState.status === 'error';
 
@@ -52,15 +53,15 @@ export function ReviewMinutesEditor({ sessionId, minutes, baseline, participants
       <div className="review-speaker-card-heading"><div><h2 id="minutes-heading">회의록</h2></div></div>
       <p role="status">표시할 회의록이 없습니다.</p>
       {footerContent}
+      {actionContent && <div className="review-flow-dock" role="group" aria-label="회의록 저장 및 전달">{actionContent}</div>}
     </section>;
   }
 
   const valid = isValid(minutes);
-  const dirty = !sameMinutes(minutes, baseline);
-  const canSave = Boolean(onSave && dirty && valid && !saving && !saveBlockedMessage);
+  const canSave = Boolean(onSave && valid && !saving && !saveBlockedMessage);
   const canChooseOwner = ownerState === 'ready';
   const handleSave = () => {
-    if (!onSave || !canSave) return;
+    if (!onSave || !canSave || sameMinutes(minutes, baseline)) return;
     onSave(sessionId, minutes);
   };
   const updateList = (field: typeof LIST_FIELDS[number]['key'], index: number, value: string) => {
@@ -165,11 +166,15 @@ export function ReviewMinutesEditor({ sessionId, minutes, baseline, participants
     </div>
 
     {footerContent}
-    <div className="review-minutes-save-controls">
-      <button className="button button-primary" type="button" disabled={!canSave || disabled} onClick={handleSave}>
-        {saving ? '저장 중…' : dirty ? '회의록 저장' : '저장 완료'}
-      </button>
-      {failed && <p role="alert">{saveState.message || '회의록을 저장하지 못했습니다. 수정 내용은 유지됩니다.'}</p>}
+    <div className="review-flow-dock" role="group" aria-label="회의록 저장 및 전달">
+      <div className="review-minutes-save-controls">
+        <button className="button button-secondary" type="button" disabled={!canSave || disabled} aria-busy={saving} onClick={handleSave}>
+          회의록 변경사항 저장
+        </button>
+        {saving && <p role="status">회의록 변경사항 저장 중…</p>}
+        {failed && <p role="alert">{saveState.message || '회의록을 저장하지 못했습니다. 수정 내용은 유지됩니다.'}</p>}
+      </div>
+      {actionContent}
     </div>
   </section>;
 }

@@ -89,3 +89,7 @@ export async function updateParticipant(id: string, patch: ParticipantPatch): Pr
   });
   return result.data;
 }
+
+export async function deleteParticipant(id: string): Promise<void> {
+  await request<void>(`/participants/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}

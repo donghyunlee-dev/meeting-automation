@@ -108,7 +108,7 @@ export function SharePage() {
     && config.data?.document?.configured === true;
   const notificationConfigKnown = config.status === 'ready' && config.data?.notification !== undefined;
   const notificationConfig = config.data?.notification;
-  const notificationReady = Boolean(notificationConfig?.provider) && notificationConfig?.configured === true;
+  const notificationReady = Boolean(notificationConfig?.provider) && notificationConfig?.enabled === true;
   const notificationNeedsSetup = notificationConfigKnown && !notificationReady;
   const documentSaved = Boolean(snapshot?.document?.documentId);
   const retryAllowed = snapshot?.status === 'DOCUMENT_FAILED' && snapshot.allowedActions.includes('PUBLISH');

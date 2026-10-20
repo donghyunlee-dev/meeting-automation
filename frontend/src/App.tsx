@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import {
   createParticipant,
+  deleteParticipant,
   listParticipants,
   ParticipantApiError,
   type Participant,
@@ -15,6 +16,8 @@ import { RecordingPage, type RecordingViewState } from './RecordingPage';
 import { DocumentSetupWizard } from './DocumentSetupWizard';
 import { CompletePage } from './CompletePage';
 import { getSetupSnapshot } from './documentSetupApi';
+import { restoreSlackWebhookSettings } from './slackSettingsApi';
+import { restoreEmailSettings } from './emailSettingsApi';
 import { browserMediaAdapter } from './browserMediaAdapter';
 import { RecordingController, type MediaRecorderAdapter, type RecordingSnapshot } from './recordingController';
 import { AsyncState } from './components/async-state/AsyncState';
@@ -70,6 +73,9 @@ function ParticipantsPage() {
   const [formError, setFormError] = useState('');
   const [notice, setNotice] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [participantToDelete, setParticipantToDelete] = useState<Participant | null>(null);
+  const [deleteError, setDeleteError] = useState('');
+  const [deleting, setDeleting] = useState(false);
   const createAttempt = useRef<{ payload: string; key: string } | null>(null);
   const dialogRef = useRef<HTMLElement | null>(null);
   const nameInputRef = useRef<HTMLInputElement | null>(null);
@@ -223,6 +229,26 @@ function ParticipantsPage() {
     }
   }
 
+  async function confirmDeleteParticipant() {
+    if (!participantToDelete || deleting) return;
+    setDeleting(true);
+    setDeleteError('');
+    try {
+      await deleteParticipant(participantToDelete.id);
+      setParticipants((current) => current.filter((participant) => participant.id !== participantToDelete.id));
+      setNotice('참석자를 삭제했습니다.');
+      setParticipantToDelete(null);
+    } catch (error) {
+      setDeleteError(error instanceof ParticipantApiError
+        ? error.code === 'PARTICIPANT_NOT_FOUND'
+          ? '이미 삭제된 참석자입니다. 목록을 새로고침해 주세요.'
+          : error.message
+        : '참석자를 삭제하지 못했습니다. 잠시 후 다시 시도해 주세요.');
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   return (
     <main className="participants-main">
       <section className="participants-page" id="participants" aria-labelledby="page-title">
@@ -265,7 +291,10 @@ function ParticipantsPage() {
               {filteredParticipants.map((participant) => <article className="participant-card" key={participant.id} aria-label={`${participant.name} ${participant.email}`}>
                 <div className="avatar" aria-hidden="true">{participant.name.trim().charAt(0).toLocaleUpperCase()}</div>
                 <div className="participant-info"><h4>{participant.name}</h4><p>{participant.email}</p></div>
-                <button className="button button-secondary edit-button" type="button" aria-label="수정" onClick={(event) => openEdit(participant, event.currentTarget)}>수정</button>
+                <div className="participant-card-actions">
+                  <button className="button button-secondary edit-button" type="button" aria-label="수정" onClick={(event) => openEdit(participant, event.currentTarget)}>수정</button>
+                  <button className="button button-danger-outline delete-button" type="button" aria-label={`${participant.name} 삭제`} onClick={() => { setParticipantToDelete(participant); setDeleteError(''); }}>삭제</button>
+                </div>
               </article>)}
             </div>
           </>}
@@ -282,6 +311,17 @@ function ParticipantsPage() {
               {formError.includes('새로고침') && <button className="button button-secondary refresh-button" type="button" onClick={() => void refreshParticipants()}>목록 새로고침</button>}
               <div className="form-actions participant-form-actions"><button className="button button-primary" type="submit" disabled={submitting}>{submitting ? '저장 중…' : '저장'}</button></div>
             </form>
+          </section>
+        </div>}
+        {participantToDelete && <div className="participant-confirm-backdrop" role="presentation">
+          <section className="participant-confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="participant-delete-title" aria-describedby="participant-delete-description">
+            <h2 id="participant-delete-title">삭제하시겠습니까?</h2>
+            <p id="participant-delete-description"><strong>{participantToDelete.name}</strong> 참석자 정보를 연결된 문서 서비스에서 삭제합니다.</p>
+            {deleteError && <p className="form-error" role="alert">{deleteError}</p>}
+            <div className="participant-confirm-actions">
+              <button className="button button-secondary" type="button" disabled={deleting} onClick={() => setParticipantToDelete(null)}>아니요</button>
+              <button className="button button-danger" type="button" disabled={deleting} onClick={() => void confirmDeleteParticipant()}>{deleting ? '삭제 중…' : '예'}</button>
+            </div>
           </section>
         </div>}
       </section>
@@ -572,6 +612,10 @@ export function App({ onNewMeetingSubmit = () => undefined, onMinutesSave, minut
   minutesSaveState?: MinutesSaveState;
   mediaAdapter?: MediaRecorderAdapter;
 } = {}) {
+  useEffect(() => {
+    void restoreSlackWebhookSettings().catch(() => undefined);
+    void restoreEmailSettings().catch(() => undefined);
+  }, []);
   const [createdSession, setCreatedSession] = useState<RecordingSession | null>(restoreRecordingSession);
   const [recordingState, setRecordingState] = useState<RecordingViewState>('Ready');
   const [recordingNavigationLocked, setRecordingNavigationLocked] = useState(false);
@@ -626,6 +670,14 @@ export function App({ onNewMeetingSubmit = () => undefined, onMinutesSave, minut
 
   return (
     <div className="app-shell">
+      {!isDocumentConnectionRoute && <header className="product-header">
+        <Link className="product-header-brand" to="/" aria-label="Windsoft Minutes 홈">
+          <img src="/assets/windsoft-favicon-mark.png" alt="" />
+          <span className="product-header-company"><span>Wind</span><span>soft</span></span>
+          <span className="product-header-divider" aria-hidden="true" />
+          <span className="product-header-product">Minutes</span>
+        </Link>
+      </header>}
       <Routes>
         <Route path="/" element={<SetupGate><HomePage /></SetupGate>} />
         <Route path="/setup/document" element={<DocumentSetupWizard />} />

@@ -38,8 +38,9 @@ describe('Settings page', () => {
     expect(screen.getByRole('heading', { level: 1, name: '설정' })).toBeTruthy();
     expect([...document.querySelectorAll('.settings-sections > section h2')].map((heading) => heading.textContent)).toEqual(['문서 연결', '이메일', '알림', '참석자']);
     expect(screen.getByText((_content, element) => element?.classList.contains('settings-method') === true && element.textContent?.includes('Notion') === true)).toBeTruthy();
-    expect(screen.getByText((_content, element) => element?.classList.contains('settings-method') === true && element.textContent?.includes('Gmail OAuth') === true)).toBeTruthy();
-    expect(screen.getByText((_content, element) => element?.classList.contains('settings-method') === true && element.textContent?.includes('Slack Webhook URL') === true)).toBeTruthy();
+    expect(screen.getByText((_content, element) => element?.classList.contains('settings-method') === true && element.textContent?.includes('회의록과 기본 템플릿') === true)).toBeTruthy();
+    expect(screen.queryByText(/DOCUMENT SERVICE|DOCUMENT CONNECTION/)).toBeNull();
+    expect(screen.queryByText(/OAuth|Refresh Token|Webhook/)).toBeNull();
     expect(screen.getByRole('link', { name: '문서 연결 설정' })).toBeTruthy();
     expect(screen.getByRole('link', { name: '참석자 관리' })).toBeTruthy();
     expect(screen.queryByText('Acme')).toBeNull();
@@ -66,6 +67,27 @@ describe('Settings page', () => {
     expect(await screen.findByText('최근 알림 전달 상태가 확인되지 않았습니다.')).toBeTruthy();
     expect(fetchMock.mock.calls.filter(([input]) => new URL(String(input)).pathname.endsWith('/app-config'))).toHaveLength(1);
     expect(fetchMock.mock.calls.some(([, init]) => init?.method && init.method !== 'GET')).toBe(false);
+  });
+
+  it('keeps email credentials editable when the backend has no saved email settings', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const path = new URL(String(input), window.location.origin).pathname;
+      if (path.endsWith('/app-config')) return response(config);
+      if (path.endsWith('/integrations/health')) return response(health);
+      if (path.endsWith('/integrations/email')) return response('email settings unavailable', 503);
+      throw new Error(`Unexpected request: ${path}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<MemoryRouter><SettingsPage /></MemoryRouter>);
+
+    const emailSection = await screen.findByRole('region', { name: '이메일' });
+    const sender = await within(emailSection).findByLabelText('발신 이메일 주소');
+    expect(sender.hasAttribute('readonly')).toBe(false);
+    fireEvent.change(sender, { target: { value: 'user@gmail.com' } });
+    fireEvent.change(within(emailSection).getByLabelText('Google 클라이언트 ID'), { target: { value: 'client-id' } });
+    fireEvent.change(within(emailSection).getByLabelText('Google 클라이언트 보안 키'), { target: { value: 'client-secret' } });
+    fireEvent.change(within(emailSection).getByLabelText('메일 전송용 연결 토큰'), { target: { value: 'refresh-token' } });
+    expect(within(emailSection).getByRole('button', { name: '저장' }).hasAttribute('disabled')).toBe(false);
   });
 
   it('shows one shared health retry after refresh failure', async () => {

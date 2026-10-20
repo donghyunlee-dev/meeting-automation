@@ -1056,7 +1056,8 @@ describe('Processing route', () => {
 
     expect(await screen.findByRole('heading', { name: '회의 처리' })).toBeTruthy();
     expect(screen.getByText('오디오 준비')).toBeTruthy();
-    expect(await screen.findByRole('progressbar', { name: '처리 진행률' })).toHaveProperty('value', 25);
+    expect(await screen.findByRole('progressbar', { name: '전체 처리 단계' })).toHaveProperty('value', 1);
+    expect(screen.getByText('전체 4단계 중 1단계 · 오디오 준비 진행 중')).toBeTruthy();
     expect(screen.queryByRole('navigation', { name: '주요 메뉴' })).toBeNull();
     expect(screen.queryByText('partial transcript must stay hidden')).toBeNull();
     expect(screen.queryByText('partial minutes must stay hidden')).toBeNull();
@@ -1122,7 +1123,7 @@ describe('Processing route', () => {
     render(<MemoryRouter initialEntries={['/meetings/minutes-session/processing']}><App /></MemoryRouter>);
     const minutesStep = await screen.findByText('회의록 생성');
     expect(minutesStep.closest('li')?.getAttribute('aria-current')).toBe('step');
-    expect(screen.getByText('회의록 생성 단계 처리 중입니다.')).toBeTruthy();
+    expect(screen.getByText('전체 4단계 중 4단계 · 회의록 생성 진행 중')).toBeTruthy();
   });
 
   it('does not invent progress for an out-of-range percentage', async () => {
@@ -1131,8 +1132,8 @@ describe('Processing route', () => {
       processing: { stage: 'TRANSCRIPTION', progressPercent: 140 }, allowedActions: [],
     } })));
     render(<MemoryRouter initialEntries={['/meetings/invalid-progress/processing']}><App /></MemoryRouter>);
-    expect(await screen.findByText('음성 인식 단계 처리 중입니다.')).toBeTruthy();
-    expect(screen.queryByRole('progressbar', { name: '처리 진행률' })).toBeNull();
+    expect(await screen.findByText('전체 4단계 중 2단계 · 음성 인식 진행 중')).toBeTruthy();
+    expect(screen.getByRole('progressbar', { name: '전체 처리 단계' })).toHaveProperty('value', 2);
   });
 
   it('does not invent progress when the API-010 percentage is absent', async () => {
@@ -1141,8 +1142,8 @@ describe('Processing route', () => {
       processing: { stage: 'TRANSCRIPTION' }, allowedActions: [],
     } })));
     render(<MemoryRouter initialEntries={['/meetings/missing-progress/processing']}><App /></MemoryRouter>);
-    expect(await screen.findByText('음성 인식 단계 처리 중입니다.')).toBeTruthy();
-    expect(screen.queryByRole('progressbar', { name: '처리 진행률' })).toBeNull();
+    expect(await screen.findByText('전체 4단계 중 2단계 · 음성 인식 진행 중')).toBeTruthy();
+    expect(screen.getByRole('progressbar', { name: '전체 처리 단계' })).toHaveProperty('value', 2);
   });
 
   it('treats REVIEW with a DRAFT_READY stage as completed and navigates to review', async () => {

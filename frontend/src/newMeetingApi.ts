@@ -6,7 +6,8 @@ export type CompanyConfig = { id: string; name: string; timezone: string };
 export type DocumentAppConfig = {
   company: CompanyConfig;
   document?: { provider: string; configured: boolean; connectionVersion: number; rootUrl: string };
-  notification?: { provider: string | null; configured: boolean };
+  email?: { enabled: boolean; configured: boolean };
+  notification?: { provider: string | null; enabled: boolean };
   setup?: { status: string; required: boolean; canCreateMeeting: boolean; operationId: string | null };
 };
 export type MeetingSessionAttempt = {

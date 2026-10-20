@@ -127,12 +127,17 @@ export function RecordingPage({ title, state, elapsedMs, errorMessage, completed
           {['stopping', 'persisting', 'uploading', 'starting'].includes(endSnapshot.status) && <progress aria-label={endSnapshot.status === 'uploading' ? '오디오 업로드 진행' : '처리 시작 진행'} />}
           {['retryable', 'incomplete', 'failed'].includes(endSnapshot.status) && onRetryProcessing && <button className="button button-secondary" type="button" onClick={onRetryProcessing}>처리 시작 재시도</button>}
         </div>}
-        {uploadSnapshot && (uploadSnapshot.totalCount > 0 || uploadSnapshot.status === 'retryable') && <div className="recording-upload" aria-label="오디오 업로드">
-          <div className="recording-upload-heading"><strong>오디오 업로드</strong><span>{uploadSnapshot.confirmedCount}/{uploadSnapshot.totalCount}</span></div>
-          {uploadSnapshot.totalCount > 0
-            ? <progress aria-label="오디오 업로드 진행" value={uploadSnapshot.confirmedCount} max={uploadSnapshot.totalCount} />
-            : <progress aria-label="오디오 업로드 진행" />}
-          <span className="visually-hidden" role={uploadSnapshot.status === 'retryable' ? 'alert' : 'status'} aria-live="polite">
+        {uploadSnapshot && ((state !== 'Recording' && state !== 'Paused' && uploadSnapshot.status === 'uploading') || ['retryable', 'failed', 'session-not-found'].includes(uploadSnapshot.status)) && <div className="recording-upload" aria-label="오디오 업로드">
+          <div className="recording-upload-heading">
+            <strong>오디오 업로드</strong>
+            {uploadSnapshot.status === 'uploading' ? <span>업로드 중</span> : uploadSnapshot.totalCount > 0 && <span>{uploadSnapshot.confirmedCount}/{uploadSnapshot.totalCount}</span>}
+          </div>
+          {uploadSnapshot.status === 'uploading'
+            ? <progress aria-label="오디오 업로드 진행" />
+            : uploadSnapshot.totalCount > 0
+              ? <progress aria-label="오디오 업로드 진행" value={uploadSnapshot.confirmedCount} max={uploadSnapshot.totalCount} />
+              : <progress aria-label="오디오 업로드 진행" />}
+          <span className="visually-hidden" role={['retryable', 'failed', 'session-not-found'].includes(uploadSnapshot.status) ? 'alert' : 'status'} aria-live="polite">
             {uploadSnapshot.message ?? (uploadSnapshot.status === 'complete' ? '오디오 업로드가 완료되었습니다.' : `${uploadSnapshot.pendingCount}개 조각 업로드 대기 중`)}
           </span>
           {uploadSnapshot.status === 'retryable' && onRetryUpload && <button className="button button-secondary" type="button" onClick={onRetryUpload}>업로드 재시도</button>}

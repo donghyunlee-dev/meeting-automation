@@ -316,7 +316,7 @@ describe('document setup wizard', () => {
     expect(await screen.findByRole('heading', { name: '최근 회의' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /문서 서비스 연결 상태/ }));
     expect(await screen.findByRole('dialog', { name: '문서 연결 상태' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: /연결된 문서 열기/ })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /연결된 문서 열기/ })).toBeNull();
     expect(screen.getByText('Meeting Automation')).toBeTruthy();
     expect(screen.getByText('Templates')).toBeTruthy();
     expect(screen.getByText('기본 회의록 템플릿')).toBeTruthy();

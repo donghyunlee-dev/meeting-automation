@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useParams } from 'react-router';
+import { Link, useParams } from 'react-router';
 import { listParticipants, type Participant } from './participantsApi';
-import { getDocumentAppConfig } from './newMeetingApi';
+import { getDocumentAppConfig, NewMeetingApiError } from './newMeetingApi';
 import { createIdempotencyKey, getPublishSnapshot, PublishApiError, publishSession, retryDelivery, type PublishDelivery, type PublishSnapshot } from './publishApi';
 import { AsyncState } from './components/async-state/AsyncState';
 import { normalizeApiError } from './lib/api/normalizeApiError';
@@ -33,6 +33,48 @@ function deliveryStepState(rows: PublishDelivery[]): StepState {
   return 'waiting';
 }
 
+function failureMessage(code: string): string {
+  switch (code) {
+    case 'DOCUMENT_STRUCTURE_NOT_FOUND': return '필수 문서 구조를 찾을 수 없습니다.';
+    case 'PARTICIPANT_LIST_FAILED': return '문서 서비스에서 참석자 목록을 가져오지 못했습니다.';
+    case 'DOCUMENT_CONNECTION_CHANGED': return '문서 연결 정보가 변경되어 저장 요청을 처리하지 못했습니다.';
+    case 'DOCUMENT_FAILED':
+    case 'DOCUMENT_FAILURE': return '문서 서비스가 회의록 저장 요청을 처리하지 못했습니다.';
+    case 'NETWORK_ERROR': return '서버에 연결하지 못했습니다. 네트워크와 서버 상태를 확인해 주세요.';
+    case 'SESSION_VERSION_CONFLICT': return '회의 상태가 변경되어 요청이 거절되었습니다. 최신 상태를 다시 불러와 주세요.';
+    case 'SESSION_STATE_CONFLICT': return '현재 회의 상태에서는 저장을 시작할 수 없습니다. 최신 상태를 확인해 주세요.';
+    case 'INVALID_APP_CONFIG': return '문서 연결 설정을 읽지 못했습니다. 연결 설정을 확인해 주세요.';
+    case 'EMAIL_FAILED': return '이메일 서비스가 참석자에게 전달하지 못했습니다.';
+    case 'NOTIFICATION_FAILED': return 'Slack 알림을 전달하지 못했습니다.';
+    case 'DELIVERY_NOT_FOUND': return '전달 작업을 찾을 수 없습니다. 상태를 새로고침해 주세요.';
+    case 'DELIVERY_STATE_CONFLICT': return '전달 상태가 변경되어 재시도를 접수하지 못했습니다.';
+    case 'DELIVERY_NOT_RETRYABLE': return '이 전달 작업은 다시 시도할 수 없는 상태입니다.';
+    case 'SLACK_REJECTED': return 'Slack이 알림 요청을 거부했습니다. Slack 연결과 채널 설정을 확인해 주세요.';
+    default: return '작업을 완료하지 못했습니다. 오류 코드와 함께 관리자에게 문의해 주세요.';
+  }
+}
+
+function requestFailureMessage(error: unknown): string {
+  if (error instanceof PublishApiError || error instanceof NewMeetingApiError)
+    return `${failureMessage(error.code)} (오류 코드: ${error.code})`;
+  return '저장 요청을 완료하지 못했습니다. 상태를 새로고침해 현재 진행 결과를 확인해 주세요.';
+}
+
+function resultHeading(snapshot: PublishSnapshot): string {
+  if (snapshot.status === 'DOCUMENT_FAILED') return '문서 저장 실패';
+  if (!documentIsSaved(snapshot)) return snapshot.status === 'PUBLISHING' ? '회의록 저장 중' : '회의록 저장 준비 중';
+  const deliveries = snapshot.deliveries ?? [];
+  if (deliveries.some(({ status }) => status === 'FAILED')) return '일부 전달 실패';
+  if (deliveries.some(({ status }) => status === 'PENDING' || status === 'SENDING')) return '전달 진행 중';
+  return deliveries.length > 0 ? '완료' : '문서 저장 완료';
+}
+
+function failureRecovery(code: string, retryable: boolean): string {
+  if (code === 'DOCUMENT_STRUCTURE_NOT_FOUND') return '문서 서비스에서 기본 구조를 복구한 뒤 저장을 다시 요청하세요.';
+  if (retryable) return '이 오류는 다시 시도할 수 있습니다.';
+  return '원인을 해결한 뒤 저장을 다시 요청할 수 있습니다.';
+}
+
 function CompletePageHeader() {
   return <header className="complete-page-heading"><h1>
     <svg className="workflow-heading-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3.5h9l5 5v12H5zM14 3.5v5h5M8 13h8M8 17h5" /></svg>
@@ -44,6 +86,7 @@ export function CompletePage() {
   const { sessionId = '' } = useParams();
   const [snapshot, setSnapshot] = useState<PublishSnapshot | null>(null);
   const [participants, setParticipants] = useState<Participant[]>([]);
+  const [emailConfigured, setEmailConfigured] = useState(false);
   const [loadedSessionId, setLoadedSessionId] = useState('');
   const [reloadLoading, setReloadLoading] = useState(false);
   const [error, setError] = useState('');
@@ -71,6 +114,7 @@ export function CompletePage() {
       setConnectionCheck(null);
     }
     snapshotRef.current = next;
+    setMessage('');
     for (const delivery of next.deliveries ?? []) {
       const retryAttempt = delivery.deliveryId ? retryKeysRef.current.get(delivery.deliveryId) : undefined;
       if (delivery.deliveryId && retryAttempt?.accepted && !busyRef.current.has(delivery.deliveryId)
@@ -84,6 +128,7 @@ export function CompletePage() {
     const sequence = ++requestSequence.current;
     const next = await getPublishSnapshot(sessionId);
     if (sequence !== requestSequence.current || sessionId !== activeSessionIdRef.current || next.sessionId !== sessionId) return snapshotRef.current;
+    setError('');
     return applySnapshot(next);
   }, [applySnapshot, sessionId]);
 
@@ -94,13 +139,15 @@ export function CompletePage() {
     snapshotRef.current = null;
     busyRef.current.clear();
     retryKeysRef.current.clear();
-    Promise.allSettled([getPublishSnapshot(sessionId), listParticipants()]).then(([snapshotResult, participantResult]) => {
+    setEmailConfigured(false);
+    Promise.allSettled([getPublishSnapshot(sessionId), listParticipants(), getDocumentAppConfig()]).then(([snapshotResult, participantResult, configResult]) => {
       if (!active) return;
       if (snapshotResult.status === 'fulfilled') applySnapshot(snapshotResult.value);
       else setError(snapshotResult.reason instanceof PublishApiError && snapshotResult.reason.status === 404
-        ? '회의를 찾을 수 없습니다.' : '회의 결과를 불러오지 못했습니다. 다시 시도해 주세요.');
+        ? '회의를 찾을 수 없습니다.' : requestFailureMessage(snapshotResult.reason));
       if (participantResult.status === 'fulfilled') setParticipants(participantResult.value);
       else setParticipants([]);
+      if (configResult.status === 'fulfilled') setEmailConfigured(configResult.value.email?.enabled === true && configResult.value.email.configured === true);
       setLoadedSessionId(sessionId);
     });
     return () => { active = false; };
@@ -108,14 +155,18 @@ export function CompletePage() {
 
   const viewSnapshot = snapshot?.sessionId === sessionId ? snapshot : null;
   const hasPending = Boolean(viewSnapshot?.deliveries?.some(({ status }) => status === 'PENDING' || status === 'SENDING'));
+  const isPublishing = viewSnapshot?.status === 'PUBLISHING';
   const loading = loadedSessionId !== sessionId || reloadLoading;
   useEffect(() => {
-    if (!hasPending && busyRows.size === 0) return;
+    if (!hasPending && !isPublishing && busyRows.size === 0) return;
     const timer = window.setInterval(() => {
-      void refresh().catch(() => setMessage('상태를 새로 확인하지 못했습니다. 다시 시도해 주세요.'));
+      void refresh().catch((requestError) => {
+        setError(requestFailureMessage(requestError));
+        setMessage('진행 상태를 확인하지 못했습니다. 연결을 확인하고 다시 조회합니다.');
+      });
     }, 1500);
     return () => window.clearInterval(timer);
-  }, [busyRows.size, hasPending, refresh]);
+  }, [busyRows.size, hasPending, isPublishing, refresh]);
 
   useEffect(() => {
     if (!viewSnapshot || viewSnapshot.status !== 'CONFIRMED' || !viewSnapshot.allowedActions.includes('PUBLISH')) return;
@@ -126,7 +177,8 @@ export function CompletePage() {
     setConnectionCheck({ sessionId, state: 'checking' });
     setMessage('연결된 문서와 회의 참석자에게 결과를 전달하고 있습니다.');
     void getDocumentAppConfig().then((config) => publishSession(sessionId, viewSnapshot.version, createIdempotencyKey(),
-      viewSnapshot.meeting?.participantIds ?? [], config.notification?.configured === true))
+      config.email?.enabled === true && config.email.configured === true ? viewSnapshot.meeting?.participantIds ?? [] : [],
+      config.notification?.enabled === true))
       .then(() => { if (active) { setConnectionCheck({ sessionId, state: 'complete' }); void refresh(); } })
       .catch(async (requestError) => {
         if (!active) return;
@@ -139,7 +191,8 @@ export function CompletePage() {
           } catch { /* keep the connection step in an unknown state */ }
         } else {
           setConnectionCheck({ sessionId, state: 'failed' });
-          setMessage('자동 전달을 시작하지 못했습니다. 회의 상태를 새로고침해 주세요.');
+          setError(requestFailureMessage(requestError));
+          setMessage('저장 요청이 접수되지 않았습니다. 아래 오류와 현재 상태를 확인해 주세요.');
         }
       });
     return () => { active = false; };
@@ -147,7 +200,8 @@ export function CompletePage() {
 
   async function retry(delivery: PublishDelivery) {
     const id = delivery.deliveryId;
-    if (!id || delivery.status !== 'FAILED' || delivery.retryable !== true || busyRef.current.has(id)) return;
+    if (!id || delivery.status !== 'FAILED' || delivery.retryable !== true
+      || (delivery.channel === 'EMAIL' && !emailConfigured) || busyRef.current.has(id)) return;
     const attempt = retryKeysRef.current.get(id) ?? { key: createIdempotencyKey(), accepted: false };
     retryKeysRef.current.set(id, attempt);
     const key = attempt.key;
@@ -186,8 +240,9 @@ export function CompletePage() {
         if (!attempt.accepted && conflict && current && (current.status === 'SENT' || current.status === 'FAILED')) retryKeysRef.current.delete(id);
       } catch { /* retain the last authoritative snapshot and this click's idempotency key */ }
       setMessage(conflict
-        ? '최신 상태를 확인했습니다. 재시도 가능 여부를 확인해 주세요.'
+        ? '최신 상태를 확인했습니다. 중복 전달을 막기 위해 자동 재전송하지 않습니다. 현재 전달 상태를 확인해 주세요.'
         : '재시도 결과를 확인할 수 없습니다. 최신 상태를 새로고침해 주세요.');
+      setError(requestFailureMessage(requestError));
     } finally {
       busyRef.current.delete(id);
       const latestStatus = snapshotRef.current?.deliveries?.find((row) => row.deliveryId === id)?.status;
@@ -206,8 +261,9 @@ export function CompletePage() {
     setMessage('문서와 참석자 전달을 다시 시작하고 있습니다.');
     try {
       const config = await getDocumentAppConfig();
-      await publishSession(sessionId, current.version, createIdempotencyKey(), current.meeting?.participantIds ?? [],
-        config.notification?.configured === true);
+      await publishSession(sessionId, current.version, createIdempotencyKey(),
+        config.email?.enabled === true && config.email.configured === true ? current.meeting?.participantIds ?? [] : [],
+        config.notification?.enabled === true);
       setConnectionCheck({ sessionId, state: 'complete' });
       setMessage('다시 전달을 시작했습니다. 최신 상태를 확인하고 있습니다.');
       await refresh();
@@ -221,7 +277,7 @@ export function CompletePage() {
         } catch { /* keep the connection step in an unknown state */ }
       } else {
         setConnectionCheck({ sessionId, state: 'failed' });
-        setError('다시 전달을 시작하지 못했습니다. 연결 상태와 회의 상태를 확인해 주세요.');
+          setError(requestFailureMessage(requestError));
       }
     } finally {
       manualPublishInFlight.current = false;
@@ -244,27 +300,29 @@ export function CompletePage() {
   const notificationRows = (viewSnapshot.deliveries ?? []).filter((delivery) => delivery.channel === 'NOTIFICATION');
   const documentSaved = documentIsSaved(viewSnapshot);
   const canRetryPublish = viewSnapshot.allowedActions.includes('PUBLISH')
-    && (viewSnapshot.status === 'DOCUMENT_FAILED'
-      || (viewSnapshot.status === 'CONFIRMED' && message === '자동 전달을 시작하지 못했습니다. 회의 상태를 새로고침해 주세요.'));
+    && (viewSnapshot.status === 'DOCUMENT_FAILED' || viewSnapshot.status === 'CONFIRMED');
   const currentConnectionState = connectionCheck?.sessionId === sessionId ? connectionCheck.state : null;
-  const connectionState: StepState = viewSnapshot.status !== 'CONFIRMED'
-    ? 'complete'
-    : currentConnectionState === 'checking' ? 'current'
-      : currentConnectionState === 'failed' ? 'failed'
-        : currentConnectionState === 'unknown' ? 'current' : 'waiting';
-  const documentState: StepState = viewSnapshot.status === 'DOCUMENT_FAILED' ? 'failed'
+  const documentState: StepState = viewSnapshot.status === 'DOCUMENT_FAILED' || currentConnectionState === 'failed' ? 'failed'
     : documentSaved ? 'complete'
-      : viewSnapshot.status === 'PUBLISHING' ? 'current' : 'waiting';
+      : viewSnapshot.status === 'PUBLISHING' || currentConnectionState === 'checking' || currentConnectionState === 'unknown' ? 'current' : 'waiting';
   const terminalState: StepState = !documentSaved ? 'waiting'
     : (emailRows.some(({ status }) => status === 'FAILED') || notificationRows.some(({ status }) => status === 'FAILED')) ? 'failed'
       : (emailRows.some(({ status }) => status === 'PENDING' || status === 'SENDING')
         || notificationRows.some(({ status }) => status === 'PENDING' || status === 'SENDING')) ? 'current' : 'complete';
-  const steps: Array<{ title: string; state: StepState }> = [
-    { title: '저장 요청', state: connectionState },
-    { title: '회의록 저장', state: documentState },
-    ...(documentSaved && emailRows.length > 0 ? [{ title: '이메일 전달', state: deliveryStepState(emailRows) }] : []),
-    ...(documentSaved && notificationRows.length > 0 ? [{ title: 'Slack 전달', state: deliveryStepState(notificationRows) }] : []),
-    ...(documentSaved ? [{ title: '완료', state: terminalState }] : []),
+  const failure = viewSnapshot.documentFailure;
+  const savedDocumentId = viewSnapshot.document?.documentId;
+  const canOpenSavedMinutes = documentSaved && terminalState === 'complete' && Boolean(savedDocumentId);
+  const documentDetail = documentState === 'failed'
+    ? failure ? failureMessage(failure.errorCode) : error || message || '저장 요청을 처리하지 못했습니다.'
+    : documentState === 'current' ? '문서 서비스에 회의록을 저장하고 있습니다.'
+      : documentState === 'complete' ? '회의록 문서가 저장되었습니다.'
+        : '저장 요청을 기다리고 있습니다.';
+  const steps: Array<{ title: string; state: StepState; detail: string; errorCode?: string; recovery?: string }> = [
+    { title: '회의록 저장', state: documentState, detail: documentDetail,
+      ...(failure ? { errorCode: failure.errorCode, recovery: failureRecovery(failure.errorCode, failure.retryable) } : {}) },
+    ...(documentSaved && emailRows.length > 0 ? [{ title: '이메일 전달', state: deliveryStepState(emailRows), detail: deliveryStepDetail(emailRows) }] : []),
+    ...(documentSaved && notificationRows.length > 0 ? [{ title: 'Slack 전달', state: deliveryStepState(notificationRows), detail: deliveryStepDetail(notificationRows) }] : []),
+    ...(documentSaved ? [{ title: '완료', state: terminalState, detail: terminalState === 'failed' ? '일부 전달에 실패했습니다.' : terminalState === 'current' ? '전달 작업이 진행 중입니다.' : '저장 및 전달 작업이 완료되었습니다.' }] : []),
   ];
   const stepIcon = (state: StepState) => state === 'complete'
     ? <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m4 10 4 4 8-8" /></svg>
@@ -274,34 +332,49 @@ export function CompletePage() {
     const key = delivery.deliveryId ?? `${kind}-${index}`;
     const recipient = delivery.recipientParticipantId ? people.get(delivery.recipientParticipantId) : undefined;
     const label = kind === 'notification' ? 'Slack' : recipient?.name || delivery.recipientParticipantId || '참석자';
-    const retryName = `Retry ${kind === 'notification' ? 'Slack 알림' : label}`;
-    const retryable = Boolean(delivery.deliveryId && delivery.status === 'FAILED' && delivery.retryable === true);
+    const retryName = kind === 'email' ? `재전송 ${label}` : `Retry Slack 알림`;
+    const retryable = Boolean(delivery.deliveryId && delivery.status === 'FAILED' && delivery.retryable === true
+      && (kind !== 'email' || emailConfigured));
     return <li key={key} className="complete-delivery-row">
-      <div><strong>{label}: {statusLabel(delivery.status)}</strong></div>
+      <div><strong>{label}: {statusLabel(delivery.status)}</strong>
+        {kind === 'email' && recipient?.email && <small className="complete-delivery-email">{recipient.email}</small>}
+        {kind === 'notification' && delivery.errorCode && <small className="complete-step-detail">{failureMessage(delivery.errorCode)}</small>}
+        {kind === 'notification' && delivery.errorCode && <small className="complete-step-code">오류 코드: {delivery.errorCode}</small>}
+      </div>
       {retryable && <button type="button" className="button button-secondary" aria-label={retryName} disabled={busyRows.has(delivery.deliveryId!)} onClick={() => void retry(delivery)}>
-        {busyRows.has(delivery.deliveryId!) ? '재시도 중…' : 'Retry'}
+        {busyRows.has(delivery.deliveryId!) ? (kind === 'email' ? '재전송 중…' : 'Retry 중…') : (kind === 'email' ? '재전송' : 'Retry')}
       </button>}
     </li>;
   });
 
   return <main className="share-page complete-page">
     <CompletePageHeader/>
+    <h2 className="complete-result-heading">{resultHeading(viewSnapshot)}</h2>
     <section className="processing-card complete-publish-card" aria-label="회의 결과 처리 단계" aria-live="polite">
-      <ol className="processing-steps complete-publish-steps">{steps.map(({ title, state }, index) => <li key={`${title}-${index}`} className={`is-${state}`} aria-current={state === 'current' ? 'step' : undefined}>
+      <ol className="processing-steps complete-publish-steps">{steps.map(({ title, state, detail, errorCode, recovery }, index) => <li key={`${title}-${index}`} className={`is-${state}`} aria-current={state === 'current' ? 'step' : undefined}>
         <span className="processing-step-icon" aria-hidden="true">{stepIcon(state)}</span>
-        <span className="processing-step-label"><span>{title}</span><small className="complete-step-state">{stepStateLabel(state)}</small></span>
+        <span className="processing-step-label"><span>{title}</span><small className="complete-step-state">{title === '회의록 저장' && state === 'failed' ? '저장 실패' : stepStateLabel(state)}</small><small className="complete-step-detail">{detail}</small>{recovery && <small className="complete-step-recovery">다음 조치: {recovery}</small>}{errorCode && <small className="complete-step-code">오류 코드: {errorCode}</small>}</span>
       </li>)}</ol>
     </section>
     {documentSaved && emailRows.length > 0 && <section className="share-result-card" aria-label="Email 전달 결과" aria-live="polite"><h2>Email</h2><ul>{rows(emailRows, 'email')}</ul></section>}
     {documentSaved && notificationRows.length > 0 && <section className="share-result-card" aria-label="Slack 알림 결과" aria-live="polite"><h2>Slack 알림</h2><ul>{rows(notificationRows, 'notification')}</ul></section>}
-    {error && <p role="alert">{error}</p>}
+    {error && <p className="complete-action-error" role="alert">{error}</p>}
+    {message && <p className="complete-action-status" role="status">{message}</p>}
     <div className="share-actions">
+      {canOpenSavedMinutes && <Link className="button button-primary" to={`/meetings/${encodeURIComponent(savedDocumentId!)}`}>저장된 회의록 보기</Link>}
       {canRetryPublish && <button type="button" className="button button-primary" disabled={publishing} onClick={() => void retryPublish()}>
-        {publishing ? '저장 및 전달 중…' : viewSnapshot.status === 'DOCUMENT_FAILED' ? '문서 저장 다시 시도' : '저장 및 전달 다시 시도'}
+        {publishing ? '저장 요청 중…' : viewSnapshot.status === 'DOCUMENT_FAILED' ? '문서 저장 재시도' : '저장 및 전달 재시도'}
       </button>}
-      <button type="button" className="button button-secondary" onClick={() => { setError(''); void refresh().then(() => setMessage('상태를 새로 확인했습니다.')).catch(() => setError('최신 상태를 불러오지 못했습니다. 다시 시도해 주세요.')); }}>회의 상태 새로고침</button>
+      <button type="button" className="button button-secondary" onClick={() => { setError(''); void refresh().catch((requestError) => setError(requestFailureMessage(requestError))); }}>상태 새로고침</button>
     </div>
   </main>;
+}
+
+function deliveryStepDetail(rows: PublishDelivery[]): string {
+  const failures = rows.filter(({ status }) => status === 'FAILED').length;
+  if (failures > 0) return `${failures}건의 전달에 실패했습니다. 항목별 원인과 코드를 확인해 주세요.`;
+  if (rows.some(({ status }) => status === 'PENDING' || status === 'SENDING')) return '전달 요청을 처리하고 있습니다.';
+  return '전달이 완료되었습니다.';
 }
 
 function rowLabel(delivery: PublishDelivery, participants: Participant[]): string {

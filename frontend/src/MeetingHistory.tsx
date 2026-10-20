@@ -185,7 +185,7 @@ export function HomePage() {
       </div>
       {connectionDialogOpen && <div className="home-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setConnectionDialogOpen(false); }}>
         <section className="home-connection-dialog" role="dialog" aria-modal="true" aria-labelledby="home-connection-dialog-title">
-          <header><div><p className="eyebrow">DOCUMENT SERVICE</p><h2 id="home-connection-dialog-title">문서 연결 상태</h2></div>
+          <header><div><h2 id="home-connection-dialog-title">문서 연결 상태</h2></div>
             <button ref={dialogCloseRef} className="home-dialog-close" type="button" aria-label="닫기" onClick={() => setConnectionDialogOpen(false)}>×</button></header>
           {connection.status === 'loading' ? <p role="status">문서 연결 상태를 불러오는 중…</p>
             : connection.status === 'error' ? <div className="home-dialog-status" role="alert"><strong>연결 상태를 확인할 수 없습니다</strong><p>백엔드 연결을 확인한 뒤 다시 시도해 주세요.</p>
@@ -195,8 +195,7 @@ export function HomePage() {
                   <span><strong>{providerLabel(active.provider)}</strong><small>{connection.snapshot?.status === 'SWITCHING' ? '새 문서 서비스로 전환 중' : connectionReady ? `연결됨 · 버전 ${active.connectionVersion}` : '연결 상태를 확인해 주세요'}</small></span>
                   {connectionReady && <span className="home-connected-check" aria-label="연결됨">✓</span>}</div>
                 <div className="home-document-structure"><h3>문서 구조</h3><ul><li><strong>Meeting Automation</strong><ul><li>Meetings <span>회의록</span></li><li>Participants <span>참석자</span></li><li>Templates <span>기본 회의록 템플릿</span></li></ul></li></ul></div>
-                <div className="home-dialog-actions"><button className="button button-secondary" type="button" onClick={() => window.open(active.rootUrl, '_blank', 'noopener,noreferrer')}>연결된 문서 열기 <span aria-hidden="true">↗</span></button>
-                  <button className="button button-primary" type="button" onClick={() => navigate('/setup/document')}>문서 연결 변경</button></div>
+                <div className="home-dialog-actions"><button className="button button-primary" type="button" onClick={() => navigate('/setup/document')}>문서 연결 변경</button></div>
               </> : <div className="home-dialog-status"><strong>연결된 문서 서비스가 없습니다</strong><p>회의록을 저장하려면 문서 서비스를 연결해 주세요.</p>
                 <button className="button button-primary" type="button" onClick={() => navigate('/setup/document')}>문서 서비스 연결</button></div>}
         </section>

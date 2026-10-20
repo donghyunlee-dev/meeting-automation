@@ -1,10 +1,19 @@
 ﻿import { useEffect, useRef, useState } from 'react';
-import { Link, useParams } from 'react-router';
+import { useParams } from 'react-router';
 import { AsyncState } from './components/async-state/AsyncState';
+import { MeetingListBackLink } from './components/MeetingListBackLink';
 import { normalizeApiError } from './lib/api/normalizeApiError';
 import { getMeetingDetail, MeetingDetailApiError, type MeetingDetail } from './meetingDetailApi';
 
 function formatDate(value: string): string {
+  const datePart = value.slice(0, 10);
+  const hasDateOnlyValue = !value.includes('T') || /T00:00(?::00(?:\.0+)?)?(?:Z|[+-]\d{2}:\d{2})?$/.test(value);
+  if (hasDateOnlyValue) {
+    const date = new Date(`${datePart}T12:00:00Z`);
+    return Number.isNaN(date.getTime())
+      ? '날짜 정보 없음'
+      : new Intl.DateTimeFormat('ko-KR', { dateStyle: 'long', timeZone: 'UTC' }).format(date);
+  }
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? '날짜 정보 없음' : new Intl.DateTimeFormat('ko-KR', { dateStyle: 'long', timeStyle: 'short' }).format(date);
 }
@@ -99,16 +108,16 @@ export function MeetingDetailPage() {
   const currentStatus = result.documentId === documentId ? result.status : 'loading';
   const detail = result.documentId === documentId ? result.detail ?? null : null;
   const error = result.documentId === documentId ? result.error ?? null : null;
-  if (currentStatus === 'loading') return <main className="meeting-detail-page"><AsyncState state={{ status: 'loading', label: '회의 상세를 불러오는 중…', fullPage: true }} renderReady={() => null} /></main>;
-  if (error?.safe.kind === 'not-found') return <main className="meeting-detail-page"><AsyncState state={{ status: 'error', title: '회의 기록을 찾을 수 없습니다.', error: error.safe, description: '삭제되었거나 더 이상 접근할 수 없는 회의입니다.', action: <Link className="button button-secondary" to="/meetings">회의록 목록으로</Link> }} renderReady={() => null} /></main>;
-  if (error || !detail) return <main className="meeting-detail-page"><AsyncState state={{ status: 'error', title: '회의 상세를 불러오지 못했습니다.', error: error?.safe ?? normalizeApiError(null), onRetry: () => { setResult({ documentId, status: 'loading' }); setAttempt((value) => value + 1); }, action: <Link to="/meetings">회의록 목록으로</Link> }} renderReady={() => null} /></main>;
+  if (currentStatus === 'loading') return <main className="meeting-detail-page"><MeetingListBackLink /><AsyncState state={{ status: 'loading', label: '회의 상세를 불러오는 중…', fullPage: true }} renderReady={() => null} /></main>;
+  if (error?.safe.kind === 'not-found') return <main className="meeting-detail-page"><MeetingListBackLink /><AsyncState state={{ status: 'error', title: '회의 기록을 찾을 수 없습니다.', error: error.safe, description: '삭제되었거나 더 이상 접근할 수 없는 회의입니다.' }} renderReady={() => null} /></main>;
+  if (error || !detail) return <main className="meeting-detail-page"><MeetingListBackLink /><AsyncState state={{ status: 'error', title: '회의 상세를 불러오지 못했습니다.', error: error?.safe ?? normalizeApiError(null), onRetry: () => { setResult({ documentId, status: 'loading' }); setAttempt((value) => value + 1); } }} renderReady={() => null} /></main>;
 
   return <AsyncState state={{ status: 'ready', data: detail }} renderReady={(detail) => {
     const participantNames = new Map(detail.participants.map(({ id, name }) => [id, name]));
     const minutes = detail.minutes;
     return (
     <main className="meeting-detail-page">
-      <Link className="meeting-detail-back" to="/meetings">← 회의록 목록</Link>
+      <MeetingListBackLink />
       <header className="meeting-detail-heading"><h1>{detail.title}</h1><p>{formatDate(detail.meetingAt)}</p><p>{detail.participants.length ? detail.participants.map(({ name }) => name).join(', ') : '참석자 정보 없음'}</p></header>
       <section className="meeting-detail-card" aria-labelledby="minutes-title"><h2 id="minutes-title">회의록</h2><section><h3>요약</h3><p>{minutes.summary || '요약이 없습니다.'}</p></section>
         {minutes.discussionPoints.length > 0 && <section><h3>논의 사항</h3><ul>{minutes.discussionPoints.map((item, index) => <li key={`${index}-${item}`}>{item}</li>)}</ul></section>}

@@ -33,7 +33,7 @@ describe('ProcessingPage failure recovery', () => {
     expect(document.body.textContent).not.toContain('private proxy diagnostic');
     available = true;
     fireEvent.click(screen.getByRole('button', { name: '다시 시도' }));
-    expect(await screen.findByText('음성 인식 단계 처리 중입니다.')).toBeTruthy();
+    expect(await screen.findByText('전체 4단계 중 2단계 · 음성 인식 진행 중')).toBeTruthy();
     expect(fetchMock.mock.calls.filter(([, init]) => !init?.method || init.method === 'GET').length).toBe(fetchMock.mock.calls.length);
   });
 
@@ -86,7 +86,7 @@ describe('ProcessingPage failure recovery', () => {
     renderPage();
     const retry = await screen.findByRole('button', { name: '다시 변환' });
     fireEvent.click(retry);
-    await screen.findByText('음성 인식 단계 처리 중입니다.');
+    await screen.findByText('전체 4단계 중 2단계 · 음성 인식 진행 중');
     const post = fetchMock.mock.calls.find(([, init]) => init?.method === 'POST');
     expect(post?.[0]).toContain('/processing/retry');
     expect(new Headers(post?.[1]?.headers).get('If-Match')).toBe('"7"');
@@ -104,7 +104,7 @@ describe('ProcessingPage failure recovery', () => {
     vi.stubGlobal('fetch', fetchMock);
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: '다시 변환' }));
-    expect(await screen.findByText('음성 인식 단계 처리 중입니다.')).toBeTruthy();
+    expect(await screen.findByText('전체 4단계 중 2단계 · 음성 인식 진행 중')).toBeTruthy();
     expect(screen.queryByRole('button', { name: '다시 변환' })).toBeNull();
     expect(fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1);
   });

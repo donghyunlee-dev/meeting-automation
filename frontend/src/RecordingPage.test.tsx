@@ -66,6 +66,31 @@ describe('RecordingPage', () => {
     expect(onRetryUpload).toHaveBeenCalledTimes(1);
   });
 
+  it('hides chunk upload progress while recording and hides a completed per-batch count', () => {
+    const callbacks = { onStart: vi.fn(), onPause: vi.fn(), onResume: vi.fn(), onRequestEnd: vi.fn(), onConfirmEnd: vi.fn(), onCancelEnd: vi.fn() };
+    const base = { sessionId: 'session-123', title: 'Planning', state: 'Recording' as const, elapsedMs: 2_000, ...callbacks };
+    const { rerender } = render(<RecordingPage {...base} uploadSnapshot={{ status: 'uploading', totalCount: 1, confirmedCount: 0, pendingCount: 1 }} />);
+
+    expect(screen.queryByLabelText('오디오 업로드')).toBeNull();
+    expect(screen.queryByRole('progressbar', { name: '오디오 업로드 진행' })).toBeNull();
+
+    rerender(<RecordingPage {...base} state="Ready" completed uploadSnapshot={{ status: 'complete', totalCount: 1, confirmedCount: 1, pendingCount: 0 }} />);
+    expect(screen.queryByLabelText('오디오 업로드')).toBeNull();
+    expect(screen.queryByText('1/1')).toBeNull();
+  });
+
+  it('keeps an upload failure visible while recording', () => {
+    render(<RecordingPage
+      sessionId="session-123" title="Planning" state="Recording" elapsedMs={2_000}
+      uploadSnapshot={{ status: 'retryable', totalCount: 2, confirmedCount: 1, pendingCount: 1, message: '업로드에 실패했습니다.' }}
+      onRetryUpload={vi.fn()} onStart={vi.fn()} onPause={vi.fn()} onResume={vi.fn()}
+      onRequestEnd={vi.fn()} onConfirmEnd={vi.fn()} onCancelEnd={vi.fn()}
+    />);
+
+    expect(screen.getByLabelText('오디오 업로드')).toBeTruthy();
+    expect(screen.getByRole('button', { name: '업로드 재시도' })).toBeTruthy();
+  });
+
   it('preserves the final elapsed time in the completed Ready view without offering another start', () => {
     render(<RecordingPage
       sessionId="session-123"

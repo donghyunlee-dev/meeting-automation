@@ -59,6 +59,7 @@ function structureStepLabel(step: string | null | undefined) {
     case 'ROOT': return 'Meeting Automation';
     case 'MEETINGS': return 'Meetings';
     case 'PARTICIPANTS': return 'Participants';
+    case 'MEETING_DATA': return 'Meeting Data';
     case 'TEMPLATES': return 'Templates';
     default: return '문서 구조';
   }
@@ -75,7 +76,7 @@ function initializationProgressMessage(operation: SetupOperation | null, provide
   return `${service} 연결 작업을 진행하고 있습니다.`;
 }
 
-const STRUCTURE_STEPS = ['ROOT', 'MEETINGS', 'PARTICIPANTS', 'TEMPLATES'];
+const STRUCTURE_STEPS = ['ROOT', 'MEETINGS', 'PARTICIPANTS', 'MEETING_DATA', 'TEMPLATES'];
 
 function operationGuidance(operation: SetupOperation) {
   if (operation.type === 'SWITCH') {
@@ -472,11 +473,10 @@ export function DocumentSetupWizard({ settings = false }: { settings?: boolean }
   const initializationSucceeded = snapshot.operation?.type === 'INITIALIZE' && operationStatus === 'SUCCEEDED' && snapshot.status === 'READY' && snapshot.active != null && !preparedTarget;
   const initializationFailed = snapshot.operation?.type === 'INITIALIZE' && ['FAILED', 'INTERRUPTED', 'CANCELLED', 'RECONCILIATION_REQUIRED'].includes(operationStatus);
   const initializationInProgress = !preparedTarget && !initializationFailed && (setupProgressStarted || snapshot.operation?.type === 'INITIALIZE' && ['PENDING', 'RUNNING', 'SUCCEEDED'].includes(operationStatus));
-  const activeSummary = snapshot.active && <section className="setup-card" aria-label="현재 활성 문서 연결"><h2>문서 서비스</h2><p>현재 연결: {snapshot.active.provider === 'NOTION' ? 'Notion' : 'Confluence Cloud'}</p><p>연결 버전: {snapshot.active.connectionVersion}</p><a className="button button-secondary setup-link-action" href={snapshot.active.rootUrl} target="_blank" rel="noreferrer">활성 문서 루트 열기 <span aria-hidden="true">↗</span></a></section>;
+  const activeSummary = snapshot.active && <section className="setup-card" aria-label="현재 활성 문서 연결"><h2>문서 서비스</h2><p>현재 연결: {snapshot.active.provider === 'NOTION' ? 'Notion' : 'Confluence Cloud'}</p><p>연결 버전: {snapshot.active.connectionVersion}</p></section>;
   if (snapshot.status === 'READY' && settings && !changing) return <main className="setup-page setup-settings-page">
     <Link className="button button-secondary setup-settings-back" to="/settings"><span aria-hidden="true">←</span> 설정으로 돌아가기</Link>
     <header className="setup-settings-heading">
-      <p className="eyebrow">DOCUMENT CONNECTION</p>
       <h1><svg className="setup-settings-heading-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8.5 15.5 6 18a4 4 0 0 1-5.7-5.7l4-4A4 4 0 0 1 10 8m5.5.5L18 6a4 4 0 0 1 5.7 5.7l-4 4A4 4 0 0 1 14 16m-6 0 8-8" /></svg>문서 연결</h1>
       <p>현재 연결된 문서 서비스와 저장 위치를 확인합니다.</p>
     </header>
@@ -503,7 +503,7 @@ export function DocumentSetupWizard({ settings = false }: { settings?: boolean }
   const currentStructureStep = operation?.currentStep ?? (operation?.stage === 'STRUCTURE'
     ? STRUCTURE_STEPS.find((step) => !completedStructureSteps.includes(step)) ?? null : null);
   return <main className={`setup-page${firstRun ? ' setup-first-run' : ''}`}>
-    <header className="setup-heading"><p className="eyebrow">DOCUMENT CONNECTION</p><h1>{changing ? '문서 서비스 선택' : '문서 서비스 연결'}</h1><p>{provider ? '서비스 연결 정보를 입력해 주세요.' : '연결된 문서 서비스가 없습니다. 회의록을 저장하려면 먼저 서비스를 연결해 주세요.'}</p></header>
+    <header className="setup-heading"><h1>{changing ? '문서 서비스 선택' : '문서 서비스 연결'}</h1><p>{provider ? '서비스 연결 정보를 입력해 주세요.' : '연결된 문서 서비스가 없습니다. 회의록을 저장하려면 먼저 서비스를 연결해 주세요.'}</p></header>
     {provider && !hasBlockingOperation && !preparedTarget && !initializationUncertain && !setupProgressStarted && <button className="button button-secondary setup-provider-back" type="button" aria-label="서비스 선택으로 돌아가기" onClick={() => chooseProvider(null)}><span aria-hidden="true">←</span> 서비스 선택</button>}
     {!initializationSucceeded && activeSummary}
     {error && !operationReadFailed && <p className="setup-error" role="alert">{error}</p>}{notice && <p className="setup-notice" role="status">{notice}</p>}
@@ -521,7 +521,7 @@ export function DocumentSetupWizard({ settings = false }: { settings?: boolean }
         const current = currentStructureStep === step && !complete;
         return <li key={step} className={complete ? 'is-complete' : current ? 'is-current' : ''}><span aria-hidden="true">{complete ? '✓' : current ? <span className="setup-progress-spinner" /> : '○'}</span><strong>{structureStepLabel(step)}</strong><small>{complete ? '생성 완료' : current ? '생성 중' : '대기 중'}</small></li>;
       })}</ol>}
-      {initializationSucceeded ? <><p>Meeting Automation 아래 Meetings, Participants, Templates 페이지를 만들고 Templates에 기본 회의록을 넣었습니다.</p><a className="button button-secondary setup-link-action" href={snapshot.active!.rootUrl} target="_blank" rel="noreferrer">연결된 문서 열기 <span aria-hidden="true">↗</span></a><button className="button button-primary" type="button" onClick={() => navigate('/', { state: { documentSetupCompleted: { provider: snapshot.active!.provider, rootUrl: snapshot.active!.rootUrl } } })}>확인</button></> : <>
+      {initializationSucceeded ? <><p>Meeting Automation 아래 Meetings, Participants, Meeting Data, Templates 페이지를 만들고 Templates에 기본 회의록을 넣었습니다.</p><button className="button button-primary" type="button" onClick={() => navigate('/', { state: { documentSetupCompleted: { provider: snapshot.active!.provider, rootUrl: snapshot.active!.rootUrl } } })}>확인</button></> : <>
         <p className="setup-progress-status" role="status"><span className="setup-progress-spinner" aria-hidden="true" />{initializationProgressMessage(operation, setupProvider)}</p>
         {operationReadFailed && <div className="setup-progress-recovery" role="group" aria-label="진행 상태 복구">
           <p className="setup-error" role="alert">{error || `진행 상세 정보를 불러오지 못했습니다. ${providerLabel(setupProvider)}의 현재 작업 요약은 ‘${operationStatusLabel(snapshot.operation?.status)}’입니다. 서버에서 페이지 생성이 계속될 수 있으므로 새 작업을 보내지 않고 상태를 다시 확인해 주세요.`}</p>
@@ -553,7 +553,7 @@ export function DocumentSetupWizard({ settings = false }: { settings?: boolean }
           {operation.allowedActions.includes('CANCEL') && <button className="button button-secondary" type="button" disabled={busy} onClick={() => void runOperationAction('CANCEL')}>중단된 연결 작업 종료</button>}
         </div>}
       </>}
-      {operation?.type === 'SWITCH' && operation.status === 'SUCCEEDED' && snapshot.status === 'READY' && snapshot.active && <><p>Meetings, Participants, Templates 기본 구조가 준비되었습니다.</p><button className="button button-primary" type="button" onClick={() => navigate('/', { state: { documentSetupCompleted: { provider: snapshot.active!.provider, rootUrl: snapshot.active!.rootUrl } } })}>확인</button></>}
+      {operation?.type === 'SWITCH' && operation.status === 'SUCCEEDED' && snapshot.status === 'READY' && snapshot.active && <><p>Meetings, Participants, Meeting Data, Templates 기본 구조가 준비되었습니다.</p><button className="button button-primary" type="button" onClick={() => navigate('/', { state: { documentSetupCompleted: { provider: snapshot.active!.provider, rootUrl: snapshot.active!.rootUrl } } })}>확인</button></>}
       <button ref={progressRefreshRef} type="button" className="button button-secondary" disabled={busy} onClick={() => void safeRefresh()}>진행 상태 새로고침</button>
     </section>}
     {snapshot.status === 'ATTENTION_REQUIRED' && <section className="setup-card" role="status"><h2>이전 작업을 확인해 주세요</h2><p>이전에 시작한 설정 작업이 완료되지 않았습니다. 공개 진행 상태를 새로고침해 확인할 수 있습니다.</p></section>}

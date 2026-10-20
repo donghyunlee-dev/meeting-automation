@@ -23,6 +23,7 @@ export type PublishSnapshot = {
   deliveries?: PublishDelivery[];
   review?: ReviewSession;
   document?: { documentId?: string; documentUrl?: string | null };
+  documentFailure?: { errorCode: string; retryable: boolean };
 };
 
 export class PublishApiError extends Error {
@@ -168,6 +169,11 @@ export async function getPublishSnapshot(sessionId: string, signal?: AbortSignal
       ...(typeof documentRaw.documentUrl === 'string' || documentRaw.documentUrl === null
         ? { documentUrl: documentRaw.documentUrl as string | null } : {}),
     } : undefined;
+    const failureRaw = typeof raw.documentFailure === 'object' && raw.documentFailure !== null && !Array.isArray(raw.documentFailure)
+      ? raw.documentFailure as Record<string, unknown> : undefined;
+    const documentFailure = failureRaw && typeof failureRaw.errorCode === 'string'
+      && /^[A-Z][A-Z0-9_]*$/.test(failureRaw.errorCode)
+      ? { errorCode: failureRaw.errorCode, retryable: failureRaw.retryable === true } : undefined;
     const meeting = parseMeeting(raw.meeting);
     const deliveries = parseDeliveries(raw.deliveries);
     const review = raw.status === 'REVIEW' ? parseReviewSessionData(raw, sessionId, response.status) : undefined;
@@ -180,6 +186,7 @@ export async function getPublishSnapshot(sessionId: string, signal?: AbortSignal
       ...(deliveries ? { deliveries } : {}),
       ...(review ? { review } : {}),
       ...(document ? { document } : {}),
+      ...(documentFailure ? { documentFailure } : {}),
     };
   } catch {
     throw new PublishApiError('INVALID_RESPONSE', response.status);

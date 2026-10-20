@@ -62,11 +62,11 @@ export function ReviewTranscriptDrawer({ open, segments, speakers, participants,
     onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
     <section ref={dialogRef} className="transcript-drawer" role="dialog" aria-modal="true" aria-labelledby="transcript-drawer-title" onKeyDown={handleKeyDown}>
       <header className="transcript-drawer-header">
-        <div><p className="eyebrow">TRANSCRIPT</p><h2 id="transcript-drawer-title">Transcript 원문</h2></div>
+        <div><p className="eyebrow">TRANSCRIPT</p><h2 id="transcript-drawer-title">전사 원문</h2></div>
         <button ref={closeButtonRef} type="button" className="icon-button" aria-label="닫기" onClick={onClose}>×</button>
       </header>
-      {orderedSegments.length === 0 ? <p className="transcript-drawer-empty" role="status">표시할 Transcript가 없습니다.</p>
-        : <div className="transcript-drawer-list" aria-label="Transcript 원문">
+      {orderedSegments.length === 0 ? <p className="transcript-drawer-empty" role="status">표시할 전사 원문이 없습니다.</p>
+        : <div className="transcript-drawer-list" aria-label="전사 원문">
           {orderedSegments.map((segment) => {
             const speaker = speakers.find(({ speakerId }) => speakerId === segment.speakerId);
             const participantId = speaker ? selectedParticipantId(speaker) : null;

@@ -167,7 +167,9 @@ export function ProcessingPage() {
   const progress = snapshot?.processing?.progressPercent;
   const validProgress = typeof progress === 'number' && Number.isFinite(progress) && progress >= 0 && progress <= 100;
   const isProcessing = snapshot?.status === 'PROCESSING';
+  // The API percentage marks workflow milestones; it is not audio throughput.
   const activeStage = isProcessing && reportedStage === 2 && validProgress && progress === 100 ? 3 : reportedStage;
+  const activeStep = activeStage >= 0 ? activeStage + 1 : null;
   const stageForFailure = snapshot?.processing?.stage;
 
   return (
@@ -216,7 +218,10 @@ export function ProcessingPage() {
             <span className="processing-step-icon" aria-hidden="true">{complete ? <svg viewBox="0 0 20 20"><path d="m4 10 4 4 8-8" /></svg> : current ? <span /> : null}</span>
             <span className="processing-step-label">{name}</span>
           </li>;
-        })}</ol>{validProgress && <progress aria-label="처리 진행률" value={progress} max={100}>{progress}%</progress>}<p className="processing-current" role="status">{activeStage >= 0 ? `${stageNames[activeStage]} 단계 처리 중입니다.` : '처리 상태를 확인하고 있습니다.'}</p></section>
+        })}</ol>{activeStep !== null ? <div className="processing-progress" aria-label="단계 기반 진행률">
+          <p className="processing-current" role="status">전체 {stageNames.length}단계 중 {activeStep}단계 · {stageNames[activeStage]} 진행 중</p>
+          <progress aria-label="전체 처리 단계" value={activeStep} max={stageNames.length}>{activeStep}/{stageNames.length}</progress>
+        </div> : <p className="processing-current" role="status">처리 상태를 확인하고 있습니다.</p>}</section>
       )}
     </main>
   );

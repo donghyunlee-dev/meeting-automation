@@ -1,8 +1,11 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { Link } from 'react-router';
 import { AsyncState } from './components/async-state/AsyncState';
 import { normalizeApiError } from './lib/api/normalizeApiError';
 import { getAppConfig, getIntegrationHealth, selectSettingsSummary, type AppConfig, type IntegrationHealth, type IntegrationState } from './settingsApi';
+import { deleteEmailSettings, getEmailSettings, restoreEmailSettings, saveEmailSettings, EmailSettingsApiError, verifyEmailConnection, type EmailSettings } from './emailSettingsApi';
+import type { StoredEmailSettings } from './emailSettingsStorage';
+import { deleteSlackWebhook, getSlackWebhookSettings, restoreSlackWebhookSettings, saveSlackWebhook, SlackSettingsApiError, testSlackWebhook, type SlackWebhookSettings } from './slackSettingsApi';
 
 type QueryState<T> = { status: 'loading' | 'ready' | 'error'; data: T | null };
 const SAFE_SETTINGS_QUERY_ERROR = normalizeApiError({ error: { code: 'REQUEST_FAILED' } });
@@ -32,6 +35,213 @@ function SettingsQueryLoading({ label }: { label: string }) {
 
 function SettingsQueryError({ title, description, retryLabel, onRetry }: { title: string; description: string; retryLabel: string; onRetry: () => void }) {
   return <AsyncState state={{ status: 'error', title, error: SAFE_SETTINGS_QUERY_ERROR, description, retryLabel, onRetry }} renderReady={() => null} />;
+}
+
+function EmailSettingsForm({ onChanged }: { onChanged: () => void }) {
+  const [settings, setSettings] = useState<EmailSettings | null>(null);
+  const [form, setForm] = useState<StoredEmailSettings>({ clientId: '', clientSecret: '', refreshToken: '', senderAddress: '' });
+  const [editing, setEditing] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const current = await restoreEmailSettings();
+      setSettings(current);
+      setEditing(!current.configured);
+    } catch (failure) {
+      setEditing(true);
+      setError(failure instanceof EmailSettingsApiError ? failure.message : '이메일 설정을 불러오지 못했습니다.');
+    } finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => { void refresh().finally(onChanged); }, [refresh]);
+
+  function clearForm() {
+    setForm({ clientId: '', clientSecret: '', refreshToken: '', senderAddress: '' });
+  }
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (saving || !editing) return;
+    setSaving(true);
+    setError('');
+    let saved: EmailSettings;
+    try {
+      saved = await saveEmailSettings(form);
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : '이메일 설정을 저장하지 못했습니다.');
+      setSaving(false);
+      return;
+    }
+    setSettings(saved);
+    clearForm();
+    setEditing(false);
+    try {
+      const result = await verifyEmailConnection();
+      if (!result.connected) throw new Error(result.message);
+      setSettings(await getEmailSettings());
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : 'Google 메일 연결을 확인하지 못했습니다.');
+      try { setSettings(await getEmailSettings()); } catch { /* Keep the saved settings summary. */ }
+    }
+    setSaving(false);
+    onChanged();
+  }
+
+  async function remove() {
+    if (saving) return;
+    setSaving(true);
+    setError('');
+    try {
+      setSettings(await deleteEmailSettings());
+      clearForm();
+      setEditing(true);
+      onChanged();
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : '이메일 설정을 삭제하지 못했습니다.');
+    } finally { setSaving(false); }
+  }
+
+  return <div className="email-settings-form">
+    {loading ? <p className="settings-note" role="status">이메일 설정을 불러오는 중…</p> : <>
+      <form onSubmit={(event) => void submit(event)}>
+        <div className="email-settings-fields">
+          <label>발신 이메일 주소
+            <input type="email" autoComplete="email" readOnly={!editing}
+              value={editing ? form.senderAddress : settings?.senderAddress ?? ''}
+              onChange={(event) => setForm((current) => ({ ...current, senderAddress: event.target.value }))}
+              placeholder={editing ? 'name@gmail.com' : ''} required />
+          </label>
+          <label>Google 클라이언트 ID
+            <input type="password" autoComplete="new-password" spellCheck={false} readOnly={!editing}
+              value={editing ? form.clientId : settings?.maskedClientId ?? ''}
+              onChange={(event) => setForm((current) => ({ ...current, clientId: event.target.value }))}
+              placeholder={editing ? 'Google Cloud의 클라이언트 ID' : ''} required />
+          </label>
+          <label>Google 클라이언트 보안 키
+            <input type="password" autoComplete="new-password" spellCheck={false} readOnly={!editing}
+              value={editing ? form.clientSecret : settings?.maskedClientSecret ?? ''}
+              onChange={(event) => setForm((current) => ({ ...current, clientSecret: event.target.value }))}
+              placeholder={editing ? 'Google Cloud의 클라이언트 보안 키' : ''} required />
+          </label>
+          <label>메일 전송용 연결 토큰
+            <input type="password" autoComplete="new-password" spellCheck={false} readOnly={!editing}
+              value={editing ? form.refreshToken : settings?.maskedRefreshToken ?? ''}
+              onChange={(event) => setForm((current) => ({ ...current, refreshToken: event.target.value }))}
+              placeholder={editing ? 'Google 인증에서 발급된 연결 토큰' : ''} required />
+          </label>
+        </div>
+        <div className="email-settings-actions">
+          {editing ? <>
+            <button className="button button-secondary" type="submit" disabled={saving || Object.values(form).some((value) => !value.trim())}>{saving ? '연결 확인 중…' : '저장'}</button>
+            {settings?.configured && <button className="button button-secondary" type="button" disabled={saving} onClick={() => { clearForm(); setEditing(false); setError(''); }}>취소</button>}
+          </> : <>
+            <button className="button button-secondary" type="button" disabled={saving} onClick={() => { clearForm(); setEditing(true); setError(''); }}>수정</button>
+            <button className="button button-secondary" type="button" disabled={saving} onClick={() => void remove()}>삭제</button>
+          </>}
+        </div>
+      </form>
+      {error && <p className="slack-settings-feedback is-error" role="alert">{error}</p>}
+    </>}
+  </div>;
+}
+
+function SlackWebhookSettingsForm({ onChanged }: { onChanged: () => void }) {
+  const [settings, setSettings] = useState<SlackWebhookSettings | null>(null);
+  const [webhookUrl, setWebhookUrl] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [error, setError] = useState('');
+
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const restored = await restoreSlackWebhookSettings();
+      setSettings(restored);
+      setEditing(!restored.configured);
+    }
+    catch (failure) { setError(failure instanceof SlackSettingsApiError ? failure.message : 'Slack 설정을 불러오지 못했습니다.'); }
+    finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => { void refresh().finally(onChanged); }, [refresh]);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (saving || !editing || !webhookUrl.trim()) return;
+    setSaving(true);
+    setError('');
+    let saved: SlackWebhookSettings;
+    try {
+      saved = await saveSlackWebhook(webhookUrl.trim());
+    } catch (failure) {
+      setError(failure instanceof SlackSettingsApiError || failure instanceof Error
+        ? failure.message
+        : 'Slack 알림 주소를 저장하지 못했습니다.');
+      setSaving(false);
+      return;
+    }
+    setSettings(saved);
+    setWebhookUrl('');
+    setEditing(false);
+    try {
+      const result = await testSlackWebhook();
+      if (!result.sent) throw new Error(result.message);
+      setSettings(await getSlackWebhookSettings());
+    } catch (failure) {
+      setError(failure instanceof SlackSettingsApiError || failure instanceof Error
+        ? failure.message
+        : 'Webhook 저장 또는 연결 확인에 실패했습니다.');
+      try { setSettings(await getSlackWebhookSettings()); } catch { /* Keep the last known settings. */ }
+    }
+    setSaving(false);
+    onChanged();
+  }
+
+  async function removeWebhook() {
+    if (saving) return;
+    setSaving(true);
+    setError('');
+    try {
+      const cleared = await deleteSlackWebhook();
+      setSettings(cleared);
+      setWebhookUrl('');
+      setEditing(true);
+      onChanged();
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : 'Slack 알림 주소를 삭제하지 못했습니다.');
+    } finally { setSaving(false); }
+  }
+
+  return <div className="slack-settings-form">
+    {loading ? <p className="settings-note" role="status">Slack 설정을 불러오는 중…</p> : <>
+      <form onSubmit={(event) => void submit(event)}>
+        <label htmlFor="slack-webhook-url">Slack 알림 주소</label>
+        <div className="slack-webhook-row">
+          <input id="slack-webhook-url" type="password" autoComplete="new-password" spellCheck={false}
+            readOnly={!editing} value={editing ? webhookUrl : settings?.configured ? '••••••••' : ''}
+            onChange={(event) => setWebhookUrl(event.target.value)}
+            placeholder={editing ? 'Slack에서 복사한 알림 주소를 입력해 주세요' : ''} />
+          {editing ? <>
+            <div className="slack-webhook-actions">
+              <button className="button button-secondary" type="submit" disabled={saving || !webhookUrl.trim()}>{saving ? '확인 중…' : '저장'}</button>
+              {settings?.configured && <button className="button button-secondary" type="button" disabled={saving} onClick={() => { setWebhookUrl(''); setEditing(false); setError(''); }}>취소</button>}
+            </div>
+          </> : <div className="slack-webhook-actions">
+            <button className="button button-secondary" type="button" disabled={saving} onClick={() => { setWebhookUrl(''); setEditing(true); setError(''); }}>수정</button>
+            <button className="button button-secondary" type="button" disabled={saving} onClick={() => void removeWebhook()}>삭제</button>
+          </div>}
+        </div>
+      </form>
+      {error && <p className="slack-settings-feedback is-error" role="alert">{error}</p>}
+    </>}
+  </div>;
 }
 
 export function SettingsPage() {
@@ -71,7 +281,6 @@ export function SettingsPage() {
   const bothQueriesFailed = config.status === 'error' && health.status === 'error';
   const documentName = summary?.document.provider ?? (config.data?.document?.provider ? '선택된 문서 서비스' : '문서 서비스');
   const emailStatus = summary?.email.state;
-  const notificationName = summary?.notification.provider ?? '알림';
   const notificationStatus = summary?.notification.state;
 
   return <main className="settings-page">
@@ -86,17 +295,16 @@ export function SettingsPage() {
       {summary && <>
         <section className="settings-card" aria-labelledby="settings-document-heading">
           <div className="settings-card-heading"><h2 id="settings-document-heading">문서 연결</h2><ProviderStatus state={summary.document.state} configuredLabel="연결 상태 확인됨" /></div>
-          <p className="settings-method"><strong>연결 방법</strong> · {documentName} 연결 정보로 회의록 구조를 만듭니다.</p>
+          <p className="settings-method">{documentName}에 회의록과 기본 템플릿을 저장합니다.</p>
           <Link className="button button-secondary" to="/settings/document">문서 연결 설정</Link>
         </section>
         <section className="settings-card" aria-labelledby="settings-email-heading">
           <div className="settings-card-heading"><h2 id="settings-email-heading">이메일</h2><ProviderStatus state={emailStatus ?? 'health-unknown'} configuredLabel="연결 확인됨" /></div>
-          <p className="settings-method"><strong>연결 방법</strong> · Gmail OAuth 정보를 백엔드 환경에 설정합니다.</p>
+          <EmailSettingsForm onChanged={() => { void refreshConfig(); void refreshHealth(); }} />
         </section>
         <section className="settings-card" aria-labelledby="settings-notification-heading">
           <div className="settings-card-heading"><h2 id="settings-notification-heading">알림</h2><ProviderStatus state={notificationStatus ?? 'health-unknown'} configuredLabel="연결 확인됨" /></div>
-          <p className="settings-method"><strong>연결 방법</strong> · {notificationName} Webhook URL을 백엔드 환경에 설정합니다.</p>
-          <p className="settings-note">최근 전달 결과를 표시하며 실제 전달 성공을 보장하지 않습니다.</p>
+          <SlackWebhookSettingsForm onChanged={() => { void refreshConfig(); void refreshHealth(); }} />
         </section>
       </>}
       <section className="settings-card" aria-labelledby="settings-participants-heading">
