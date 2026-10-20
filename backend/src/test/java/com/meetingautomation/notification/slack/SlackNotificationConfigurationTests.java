@@ -9,10 +9,34 @@ import com.meetingautomation.notification.NotificationProvider;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 
-class SlackNotificationConfigurationTests {
+public class SlackNotificationConfigurationTests {
+    private org.springframework.boot.test.context.runner.ApplicationContextRunner context() {
+        return new ApplicationContextRunner().withUserConfiguration(SettingsServiceFixture.class).withBean(
+                com.meetingautomation.document.settings.GlobalSettingsStore.class,
+                com.meetingautomation.document.settings.InMemoryGlobalSettingsStore::new);
+    }
+
+    @org.springframework.boot.test.context.TestConfiguration(proxyBeanMethods = false)
+    public static class SettingsServiceFixture {
+        @org.springframework.context.annotation.Bean
+        SlackNotificationSettings slackNotificationSettings(
+                @org.springframework.beans.factory.annotation.Value("${NOTIFICATION_PROVIDER:}") String provider,
+                @org.springframework.beans.factory.annotation.Value("${SLACK_MEETING_WEBHOOK_URL:}") String webhookUrl) {
+            return new SlackNotificationSettings(provider, webhookUrl);
+        }
+
+        @org.springframework.context.annotation.Bean
+        SlackWebhookSettingsService slackWebhookSettingsService(
+                com.meetingautomation.document.settings.GlobalSettingsStore store,
+                @org.springframework.beans.factory.annotation.Value("${NOTIFICATION_PROVIDER:}") String provider,
+                @org.springframework.beans.factory.annotation.Value("${SLACK_MEETING_WEBHOOK_URL:}") String webhookUrl) {
+            return new SlackWebhookSettingsService(store, provider, webhookUrl);
+        }
+    }
+
     @Test
     void selectedSlackRegistersNotificationPortAndConfiguredHealthWithoutProbingWebhook() {
-        new ApplicationContextRunner().withUserConfiguration(SlackNotificationConfiguration.class)
+        context().withUserConfiguration(SlackNotificationConfiguration.class)
                 .withPropertyValues("NOTIFICATION_PROVIDER=SLACK",
                         "SLACK_MEETING_WEBHOOK_URL=https://hooks.slack.com/services/T/B/secret-token")
                 .run(context -> {
@@ -25,7 +49,7 @@ class SlackNotificationConfigurationTests {
 
     @Test
     void unselectedProviderKeepsSlackHealthUnconfiguredEvenWhenWebhookIsPresent() {
-        new ApplicationContextRunner().withUserConfiguration(SlackNotificationConfiguration.class)
+        context().withUserConfiguration(SlackNotificationConfiguration.class)
                 .withPropertyValues("NOTIFICATION_PROVIDER=NONE",
                         "SLACK_MEETING_WEBHOOK_URL=https://hooks.slack.com/services/T/B/secret-token")
                 .run(context -> {

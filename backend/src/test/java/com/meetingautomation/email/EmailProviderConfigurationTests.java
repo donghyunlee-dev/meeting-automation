@@ -15,9 +15,25 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 
 class EmailProviderConfigurationTests {
+    private org.springframework.boot.test.context.runner.ApplicationContextRunner context() {
+        return new ApplicationContextRunner().withUserConfiguration(SettingsServiceFixture.class,
+                com.meetingautomation.notification.slack.SlackNotificationConfigurationTests.SettingsServiceFixture.class).withBean(
+                com.meetingautomation.document.settings.GlobalSettingsStore.class,
+                com.meetingautomation.document.settings.InMemoryGlobalSettingsStore::new);
+    }
+
+    @org.springframework.boot.test.context.TestConfiguration(proxyBeanMethods = false)
+    static class SettingsServiceFixture {
+        @org.springframework.context.annotation.Bean
+        EmailSettingsService emailSettingsService(
+                com.meetingautomation.document.settings.GlobalSettingsStore store, EmailSettings settings) {
+            return new EmailSettingsService(store, settings);
+        }
+    }
+
     @Test
     void selectedGmailWithoutCredentialsRegistersSafeUnconfiguredEmailHealth() {
-        new ApplicationContextRunner().withUserConfiguration(EmailProviderConfiguration.class)
+        context().withUserConfiguration(EmailProviderConfiguration.class)
                 .withPropertyValues("EMAIL_PROVIDER=GMAIL_API")
                 .run(context -> {
                     var contributors = context.getBeansOfType(IntegrationHealthContributor.class).values();
@@ -39,7 +55,7 @@ class EmailProviderConfigurationTests {
         properties.put("EMAIL_OAUTH_REFRESH_TOKEN", "test-refresh");
         properties.put("EMAIL_SENDER_ADDRESS", "sender@example.test");
         properties.put(missing, " ");
-        new ApplicationContextRunner().withUserConfiguration(EmailProviderConfiguration.class)
+        context().withUserConfiguration(EmailProviderConfiguration.class)
                 .withPropertyValues(properties.entrySet().stream().map(e -> e.getKey() + "=" + e.getValue()).toArray(String[]::new))
                 .run(context -> {
                     assertThat(context.getBean(EmailSettings.class).configured()).isFalse();
@@ -51,7 +67,7 @@ class EmailProviderConfigurationTests {
     @ParameterizedTest
     @ValueSource(strings = {"", "SMTP", "UNSUPPORTED"})
     void unselectedOrUnsupportedProviderCannotSendEvenWithOAuthSettings(String provider) {
-        new ApplicationContextRunner().withUserConfiguration(EmailProviderConfiguration.class)
+        context().withUserConfiguration(EmailProviderConfiguration.class)
                 .withPropertyValues("EMAIL_PROVIDER=" + provider, "EMAIL_OAUTH_CLIENT_ID=test-client",
                         "EMAIL_OAUTH_CLIENT_SECRET=test-secret", "EMAIL_OAUTH_REFRESH_TOKEN=test-refresh",
                         "EMAIL_SENDER_ADDRESS=sender@example.test")
@@ -68,7 +84,7 @@ class EmailProviderConfigurationTests {
     void appConfigRejectsSenderListsWithSameConfigurationRulesAsProviderHealth() {
         var settings = mock(GlobalSettingsUseCase.class);
         when(settings.status()).thenReturn(new GlobalSettingsUseCase.Status(1L, "UNCONFIGURED", null, null, null, false));
-        new ApplicationContextRunner().withUserConfiguration(EmailProviderConfiguration.class, AppConfigController.class)
+        context().withUserConfiguration(EmailProviderConfiguration.class, AppConfigController.class)
                 .withBean(GlobalSettingsUseCase.class, () -> settings)
                 .withPropertyValues("EMAIL_PROVIDER=GMAIL_API", "EMAIL_OAUTH_CLIENT_ID=test-client",
                         "EMAIL_OAUTH_CLIENT_SECRET=test-secret", "EMAIL_OAUTH_REFRESH_TOKEN=test-refresh",

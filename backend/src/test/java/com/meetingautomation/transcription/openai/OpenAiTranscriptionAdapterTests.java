@@ -229,11 +229,11 @@ class OpenAiTranscriptionAdapterTests {
         new ApplicationContextRunner()
                 .withUserConfiguration(TranscriptionProviderConfiguration.class)
                 .withPropertyValues(
-                        "TRANSCRIPTION_MODEL=deployment-selected-model",
-                        "OPENAI_API_KEY=" + SECRET_SENTINEL,
-                        "TRANSCRIPTION_MAX_AUDIO_BYTES=24",
-                        "TRANSCRIPTION_CONNECT_TIMEOUT_SECONDS=3",
-                        "TRANSCRIPTION_TIMEOUT_SECONDS=1")
+                        "transcription.model=deployment-selected-model",
+                        "openai.api-key=" + SECRET_SENTINEL,
+                        "transcription.max-audio-bytes=24",
+                        "transcription.connect-timeout-seconds=3",
+                        "transcription.timeout-seconds=1")
                 .run(context -> {
                     TranscriptionSettings settings = context.getBean(TranscriptionSettings.class);
 

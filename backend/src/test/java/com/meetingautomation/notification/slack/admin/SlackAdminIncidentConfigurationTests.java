@@ -12,7 +12,28 @@ class SlackAdminIncidentConfigurationTests {
     private static final String ADMIN_URL = "https://hooks.slack.com/services/T-ADMIN/B-ADMIN/admin-secret";
 
     private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
+            .withUserConfiguration(SettingsServiceFixture.class)
+            .withBean(com.meetingautomation.document.settings.GlobalSettingsStore.class,
+                    com.meetingautomation.document.settings.InMemoryGlobalSettingsStore::new)
             .withUserConfiguration(SlackNotificationConfiguration.class, SlackAdminIncidentConfiguration.class);
+
+    @org.springframework.boot.test.context.TestConfiguration(proxyBeanMethods = false)
+    static class SettingsServiceFixture {
+        @org.springframework.context.annotation.Bean
+        com.meetingautomation.notification.slack.SlackNotificationSettings slackNotificationSettings(
+                @org.springframework.beans.factory.annotation.Value("${NOTIFICATION_PROVIDER:}") String provider,
+                @org.springframework.beans.factory.annotation.Value("${SLACK_MEETING_WEBHOOK_URL:}") String webhookUrl) {
+            return new com.meetingautomation.notification.slack.SlackNotificationSettings(provider, webhookUrl);
+        }
+
+        @org.springframework.context.annotation.Bean
+        com.meetingautomation.notification.slack.SlackWebhookSettingsService slackWebhookSettingsService(
+                com.meetingautomation.document.settings.GlobalSettingsStore store,
+                @org.springframework.beans.factory.annotation.Value("${NOTIFICATION_PROVIDER:}") String provider,
+                @org.springframework.beans.factory.annotation.Value("${SLACK_MEETING_WEBHOOK_URL:}") String webhookUrl) {
+            return new com.meetingautomation.notification.slack.SlackWebhookSettingsService(store, provider, webhookUrl);
+        }
+    }
 
     @Test
     void meetingAndAdminWebhooksAreBoundToIndependentSettings() {

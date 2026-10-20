@@ -43,7 +43,7 @@ class MeetingAutomationApplicationTests {
                 .andExpect(jsonPath("$.data.email.enabled").value(false))
                 .andExpect(jsonPath("$.data.email.configured").value(false))
                 .andExpect(jsonPath("$.data.notification.provider").value("SLACK"))
-                .andExpect(jsonPath("$.data.notification.enabled").value(true))
+                .andExpect(jsonPath("$.data.notification.enabled").value(false))
                 .andExpect(jsonPath("$.data.recording.chunkDurationSeconds").value(15))
                 .andExpect(jsonPath("$.data.recording.maxMeetingDurationMinutes").value(60))
                 .andExpect(result -> {

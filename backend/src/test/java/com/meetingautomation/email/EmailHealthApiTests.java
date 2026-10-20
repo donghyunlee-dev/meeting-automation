@@ -35,7 +35,11 @@ class EmailHealthApiTests {
 
     private ApplicationContextRunner context() {
         return new ApplicationContextRunner()
-                .withUserConfiguration(EmailProviderConfiguration.class, GoogleHttpBoundary.class, AppConfigController.class)
+                .withUserConfiguration(EmailProviderConfiguration.class, GoogleHttpBoundary.class, AppConfigController.class,
+                        EmailProviderConfigurationTests.SettingsServiceFixture.class,
+                        com.meetingautomation.notification.slack.SlackNotificationConfigurationTests.SettingsServiceFixture.class)
+                .withBean(com.meetingautomation.document.settings.GlobalSettingsStore.class,
+                        com.meetingautomation.document.settings.InMemoryGlobalSettingsStore::new)
                 .withBean(GlobalSettingsUseCase.class, () -> {
                     var settings = mock(GlobalSettingsUseCase.class);
                     when(settings.status()).thenReturn(new GlobalSettingsUseCase.Status(1L, "UNCONFIGURED", null, null, null, false));

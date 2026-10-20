@@ -45,7 +45,7 @@ public final class AppConfigController {
         AppConfigResponse.Email email = new AppConfigResponse.Email(emailConfigured, emailConfigured);
         boolean slackConfigured = slackSettings.snapshot().configured();
         AppConfigResponse.Notification notification = new AppConfigResponse.Notification(
-                slackConfigured ? "SLACK" : null, slackConfigured);
+                slackSettings.selectedProvider(), slackConfigured);
         AppConfigResponse.Recording recording = new AppConfigResponse.Recording(
                 chunkDurationSeconds, maxMeetingDurationMinutes);
         return new AppConfigResponse(new AppConfigResponse.Data(company, document, setup, email, notification, recording));

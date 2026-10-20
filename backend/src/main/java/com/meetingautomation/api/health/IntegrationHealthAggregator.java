@@ -19,7 +19,7 @@ public final class IntegrationHealthAggregator {
             com.meetingautomation.notification.slack.SlackWebhookSettingsService slackSettings) {
         this.documentContributor = documentContributor;
         this.contributors = List.copyOf(contributors);
-        this.notificationProvider = () -> slackSettings.snapshot().configured() ? "SLACK" : null;
+        this.notificationProvider = slackSettings::selectedProvider;
     }
 
     public IntegrationHealthAggregator(DocumentHealthContributor documentContributor,

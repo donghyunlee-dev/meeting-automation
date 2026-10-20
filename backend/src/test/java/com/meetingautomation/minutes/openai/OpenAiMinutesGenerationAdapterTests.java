@@ -148,8 +148,8 @@ class OpenAiMinutesGenerationAdapterTests {
     void bindsRuntimeModelAndTimeoutSettingsWhileRedactingApiKey() {
         new ApplicationContextRunner()
                 .withUserConfiguration(MinutesGenerationProviderConfiguration.class)
-                .withPropertyValues("MINUTES_MODEL=model-from-environment", "OPENAI_API_KEY=" + API_KEY,
-                        "MINUTES_CONNECT_TIMEOUT_SECONDS=7", "MINUTES_TIMEOUT_SECONDS=45")
+                .withPropertyValues("minutes.model=model-from-environment", "openai.api-key=" + API_KEY,
+                        "minutes.connect-timeout-seconds=7", "minutes.timeout-seconds=45")
                 .run(context -> {
                     assertThat(context).hasSingleBean(MinutesGenerationProvider.class);
                     MinutesGenerationSettings settings = context.getBean(MinutesGenerationSettings.class);

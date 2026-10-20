@@ -32,7 +32,17 @@ public final class EmailSettingsService {
     }
 
     public Snapshot snapshot() {
-        GlobalDocumentSettings.EmailNotification saved = settingsStore.read().emailNotification();
+        GlobalDocumentSettings.EmailNotification saved;
+        try {
+            saved = settingsStore.read().emailNotification();
+        } catch (com.meetingautomation.document.settings.SettingsException unavailable) {
+            EmailSettings effective = environmentSettings;
+            return new Snapshot(effective.configured(), false,
+                    effective.configured() ? "••••••••" : null,
+                    effective.configured() ? "••••••••" : null,
+                    effective.configured() ? "••••••••" : null,
+                    effective.configured() ? effective.senderAddress() : null, null);
+        }
         EmailSettings effective = complete(saved) ? asSettings(saved) : environmentSettings;
         boolean verified = complete(saved) && saved.connectionVerified();
         return new Snapshot(effective.configured(), verified,

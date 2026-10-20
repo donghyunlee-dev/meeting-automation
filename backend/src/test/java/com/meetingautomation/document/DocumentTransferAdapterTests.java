@@ -158,8 +158,8 @@ class DocumentTransferAdapterTests {
         MeetingDocumentRef meeting = f.port.importMeeting(source, Map.of(), fingerprint);
 
         List<String> titles = f.saved.values().stream().map(JSON::readTree).map(data -> data.path("title").asString()).toList();
-        assertEquals(2, titles.size());
-        assertEquals(2, titles.stream().distinct().count());
+        assertEquals(3, titles.size());
+        assertEquals(3, titles.stream().distinct().count());
         assertEquals(imported.name(), f.port.readManifest().participants().getFirst().participant().name());
         assertEquals(imported.name(), f.port.exportMeeting(meeting.documentId()).title());
         f.server.verify();
@@ -231,7 +231,7 @@ class DocumentTransferAdapterTests {
         TransferRecord record = meeting("source", List.of("old"), null);
         MeetingDocumentRef meeting = f.port.importMeeting(record, Map.of("old", first.id()), fingerprint);
         assertEquals(meeting, f.port.importMeeting(record, Map.of("old", first.id()), fingerprint));
-        assertEquals(2, f.saved.size()); f.server.verify();
+        assertEquals(3, f.saved.size()); f.server.verify();
     }
 
     @ParameterizedTest @ValueSource(booleans = {true, false})
@@ -257,14 +257,14 @@ class DocumentTransferAdapterTests {
         TransferRecord first = meeting("source", List.of(), null); f.port.importMeeting(first, Map.of(), fingerprint);
         TransferRecord changed = new TransferRecord(first.sourceDocumentId(), first.sourceRevision(), null, first.marker(), "Changed title", null, null, List.of(), null);
         var failure = assertThrows(TransferAdapterException.class, () -> f.port.importMeeting(changed, Map.of(), fingerprint));
-        assertEquals(TransferAdapterException.Code.CONFLICT, failure.code()); assertEquals(1, f.creates);
+        assertEquals(TransferAdapterException.Code.CONFLICT, failure.code()); assertEquals(2, f.creates);
     }
 
     @ParameterizedTest @ValueSource(booleans = {true, false})
     void readBackMismatchHasTypedConflict(boolean notion) {
         Fixture f = new Fixture(notion, 0, "readback");
         var failure = assertThrows(TransferAdapterException.class, () -> f.port.importMeeting(meeting("source", List.of(), null), Map.of(), CODEC.connectionFingerprint("notion", "source-root")));
-        assertEquals(TransferAdapterException.Code.CONFLICT, failure.code()); assertEquals(1, f.creates);
+        assertEquals(TransferAdapterException.Code.CONFLICT, failure.code()); assertEquals(2, f.creates);
     }
 
     @ParameterizedTest @ValueSource(booleans = {true, false})
@@ -423,7 +423,17 @@ class DocumentTransferAdapterTests {
                     if (path.endsWith("children")) {
                         id = parts[parts.length - 2];
                         int start = query.contains("cursor=") ? Integer.parseInt(query.substring(query.indexOf("cursor=") + 7).replace("opaque cursor/", "")) : 0;
-                        if (id.equals("1")) response = children(List.of(child("2", "Meetings"), child("3", "Participants")), null);
+                        if (id.equals("1")) {
+                            List<Object> rootPages = new ArrayList<>(List.of(child("2", "Meetings"), child("3", "Participants")));
+                            for (var entry : saved.entrySet()) {
+                                var data = JSON.readTree(entry.getValue());
+                                String parent = notion ? data.path("parent").path("page_id").asString() : data.path("parentId").asString();
+                                if (parent.equals(id)) rootPages.add(child(entry.getKey(), notion
+                                        ? data.path("properties").path("title").path("title").get(0).path("text").path("content").asString()
+                                        : data.path("title").asString()));
+                            }
+                            response = children(rootPages, null);
+                        }
                         else if (id.equals("2") || id.equals("3")) {
                             String kind = id.equals("2") ? "meetings" : "participants"; requested.add(kind + ":" + start);
                             List<Object> children = new ArrayList<>();
@@ -444,7 +454,30 @@ class DocumentTransferAdapterTests {
                             if (id.equals("3") && "repeat".equals(defect)) next = "100";
                             if (id.equals("3") && "cursor".equals(defect)) next = "";
                             response = children(children, next);
-                        } else response = blocks(id, start);
+                        } else if (notion) {
+                            List<Object> children = new ArrayList<>();
+                            var blockPage = JSON.readTree(blocks(id, start));
+                            var existingBlocks = blockPage.path("results");
+                            existingBlocks.forEach(children::add);
+                            if (start == 0) for (var entry : saved.entrySet()) {
+                                var data = JSON.readTree(entry.getValue());
+                                if (data.path("parent").path("page_id").asString().equals(id)) {
+                                    children.add(child(entry.getKey(), data.path("properties").path("title")
+                                            .path("title").get(0).path("text").path("content").asString()));
+                                }
+                            }
+                            response = children(children, blockPage.path("next_cursor").asString(null));
+                        } else {
+                            List<Object> children = new ArrayList<>();
+                            if (start == 0) for (var entry : saved.entrySet()) {
+                                var data = JSON.readTree(entry.getValue());
+                                String parent = notion ? data.path("parent").path("page_id").asString() : data.path("parentId").asString();
+                                if (parent.equals(id)) children.add(child(entry.getKey(), notion
+                                        ? data.path("properties").path("title").path("title").get(0).path("text").path("content").asString()
+                                        : data.path("title").asString()));
+                            }
+                            response = children(children, null);
+                        }
                     } else response = page(id);
                 }
                 return withSuccess(response, MediaType.APPLICATION_JSON).createResponse(request);

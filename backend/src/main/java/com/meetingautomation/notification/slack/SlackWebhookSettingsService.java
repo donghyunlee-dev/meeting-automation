@@ -34,12 +34,33 @@ public final class SlackWebhookSettingsService {
     }
 
     public Snapshot snapshot() {
-        GlobalDocumentSettings.SlackNotification saved = settingsStore.read().slackNotification();
+        GlobalDocumentSettings.SlackNotification saved;
+        try {
+            saved = settingsStore.read().slackNotification();
+        } catch (com.meetingautomation.document.settings.SettingsException unavailable) {
+            return new Snapshot(environmentSettings.configured(), false,
+                    environmentSettings.configured() ? "••••••••" : null, null);
+        }
         SlackNotificationSettings current = saved.webhookUrl() == null || saved.webhookUrl().isBlank()
                 ? environmentSettings : new SlackNotificationSettings("SLACK", saved.webhookUrl());
         boolean verified = saved.webhookUrl() != null && !saved.webhookUrl().isBlank() && saved.connectionVerified();
         return new Snapshot(current.configured(), verified, current.configured() ? "••••••••" : null,
                 saved.verifiedAt() == null ? null : saved.verifiedAt().toString());
+    }
+
+    public String selectedProvider() {
+        GlobalDocumentSettings.SlackNotification saved;
+        try {
+            saved = settingsStore.read().slackNotification();
+        } catch (com.meetingautomation.document.settings.SettingsException unavailable) {
+            return selected(environmentSettings.provider());
+        }
+        return saved.webhookUrl() != null && !saved.webhookUrl().isBlank()
+                ? "SLACK" : selected(environmentSettings.provider());
+    }
+
+    private static String selected(String provider) {
+        return "SLACK".equals(provider) ? "SLACK" : null;
     }
 
     public Snapshot save(String webhookUrl) {
