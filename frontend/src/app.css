@@ -938,11 +938,11 @@ button:disabled { cursor: not-allowed; opacity: .6; }
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
 }
+.new-meeting-page:has(.participant-combo.is-open) .page-scroll-content { padding-bottom: 84px; }
 .settings-page .page-scroll-content,
 .setup-settings-page .page-scroll-content,
 .processing-page .page-scroll-content,
 .review-speaker-page .page-scroll-content,
-.new-meeting-page:has(.participant-combo.is-open) .page-scroll-content { padding-bottom: 84px; }
 .meeting-detail-page .page-scroll-content {
   display: grid;
   align-content: start;
