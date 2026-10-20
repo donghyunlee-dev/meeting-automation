@@ -35,6 +35,7 @@ import type { MinutesSaveState } from './ReviewMinutesEditor';
 import { HomePage, MeetingsPage } from './MeetingHistory';
 import { MeetingDetailPage } from './MeetingDetailPage';
 import { SettingsPage } from './SettingsPage';
+import { BackendRecoveryOverlay } from './components/BackendRecoveryOverlay';
 
 type ViewState = 'loading' | 'ready' | 'error';
 type FormState = { mode: 'create' } | { mode: 'edit'; participant: Participant };
@@ -699,6 +700,7 @@ export function App({ onNewMeetingSubmit = () => undefined, onMinutesSave, minut
         <Route path="*" element={<FutureRouteNotice />} />
       </Routes>
       {!isActiveRecording && !isDocumentConnectionRoute && <BottomNavigation />}
+      <BackendRecoveryOverlay />
     </div>
   );
 }
