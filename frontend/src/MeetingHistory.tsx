@@ -26,7 +26,7 @@ function participantSummary(meeting: MeetingSummary, showNames: boolean): string
   return names.length ? names.join(', ') : '참석자 정보 없음';
 }
 
-function MeetingRows({ meetings, showParticipantNames, linkRows = false }: { meetings: MeetingSummary[]; showParticipantNames: boolean; linkRows?: boolean }) {
+function MeetingRows({ meetings, showParticipantNames, linkRows = false, separateParticipantLine = false }: { meetings: MeetingSummary[]; showParticipantNames: boolean; linkRows?: boolean; separateParticipantLine?: boolean }) {
   const navigate = useNavigate();
   return (
     <ul className="meeting-summary-list">
@@ -34,7 +34,7 @@ function MeetingRows({ meetings, showParticipantNames, linkRows = false }: { mee
         <li className="meeting-summary-row" key={meeting.documentId}>
           {linkRows ? <button className="meeting-summary-button" type="button" aria-label={`${meeting.title} 상세 보기`}
             onClick={() => navigate(`/meetings/${encodeURIComponent(meeting.documentId)}`)}>
-            <span className="meeting-summary-copy"><h3>{meeting.title}</h3><span className="meeting-summary-meta"><time>{formatMeetingDate(meeting.meetingAt)}</time><span aria-hidden="true">·</span><span>{participantSummary(meeting, showParticipantNames)}</span></span></span>
+            <span className="meeting-summary-copy"><h3>{meeting.title}</h3><span className="meeting-summary-meta"><time>{formatMeetingDate(meeting.meetingAt)}</time>{!separateParticipantLine && <><span aria-hidden="true">·</span><span>{participantSummary(meeting, showParticipantNames)}</span></>}</span>{separateParticipantLine && <span className="meeting-summary-participants">{participantSummary(meeting, showParticipantNames)}</span>}</span>
             <span className="meeting-summary-arrow" aria-hidden="true">›</span>
           </button> : <><h3>{meeting.title}</h3><p>{formatMeetingDate(meeting.meetingAt)}</p><p>{participantSummary(meeting, showParticipantNames)}</p></>}
         </li>
@@ -43,7 +43,7 @@ function MeetingRows({ meetings, showParticipantNames, linkRows = false }: { mee
   );
 }
 
-function MeetingList({ limit, emptyMessage, enableFilters = false, quietEmpty = false, linkRows = false }: { limit?: number; emptyMessage: string; enableFilters?: boolean; quietEmpty?: boolean; linkRows?: boolean }) {
+function MeetingList({ limit, emptyMessage, enableFilters = false, quietEmpty = false, linkRows = false, showRecentParticipantNames = false }: { limit?: number; emptyMessage: string; enableFilters?: boolean; quietEmpty?: boolean; linkRows?: boolean; showRecentParticipantNames?: boolean }) {
   const [result, setResult] = useState<ListResult>({ status: 'loading' });
   const [attempt, setAttempt] = useState(0);
   const [filters, setFilters] = useState<MeetingFilters>({ query: '', from: '', to: '' });
@@ -79,7 +79,7 @@ function MeetingList({ limit, emptyMessage, enableFilters = false, quietEmpty = 
     visual: quietEmpty ? <img className="empty-meetings-icon" src="/assets/empty-meetings.svg" alt="회의 기록 없음" /> : undefined,
     visuallyHideTitle: quietEmpty,
   }} renderReady={() => null} />;
-  if (!enableFilters) return <AsyncState state={{ status: 'ready', data: visibleMeetings, refreshing, warning: result.warning, onRetry: retry }} renderReady={(items) => <MeetingRows meetings={items} showParticipantNames={limit === undefined} linkRows={linkRows} />} />;
+  if (!enableFilters) return <AsyncState state={{ status: 'ready', data: visibleMeetings, refreshing, warning: result.warning, onRetry: retry }} renderReady={(items) => <MeetingRows meetings={items} showParticipantNames={limit === undefined || showRecentParticipantNames} linkRows={linkRows} separateParticipantLine={showRecentParticipantNames} />} />;
   const invalidRange = hasInvalidDateRange(filters.from, filters.to);
   return (
     <AsyncState state={{ status: 'ready', data: visibleMeetings, refreshing, warning: result.warning, onRetry: retry }} renderReady={(items) => <>
@@ -178,9 +178,9 @@ export function HomePage() {
         <section className="home-recent" aria-labelledby="recent-meetings-title">
           <div className="home-recent-heading">
             <h2 id="recent-meetings-title">최근 회의</h2>
-            <button className="home-all-meetings" type="button" onClick={() => navigate('/meetings')}>전체 보기 <span aria-hidden="true">→</span></button>
+            <button className="home-all-meetings" type="button" onClick={() => navigate('/meetings')}>전체 보기 <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m5.5 3 5 5-5 5" /></svg></button>
           </div>
-          <MeetingList limit={3} emptyMessage="최근 회의가 없습니다. 새 회의를 시작해 보세요." quietEmpty linkRows />
+          <MeetingList limit={3} emptyMessage="최근 회의가 없습니다. 새 회의를 시작해 보세요." quietEmpty linkRows showRecentParticipantNames />
         </section>
       </div>
       {connectionDialogOpen && <div className="home-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setConnectionDialogOpen(false); }}>
