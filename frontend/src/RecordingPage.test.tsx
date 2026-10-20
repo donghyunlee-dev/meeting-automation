@@ -21,7 +21,7 @@ function renderRecording(state: RecordingViewState, elapsedMs = 0) {
 
 describe('RecordingPage', () => {
   it.each([
-    ['Ready', 0, '준비됨', '녹음 시작'],
+    ['Ready', 0, '마이크 입력이 감지되었습니다', '녹음 시작'],
     ['Recording', 62018, '녹음 중', '일시정지'],
     ['Paused', 62018, '일시정지됨', '녹음 재개'],
   ] as const)('renders %s title, status, elapsed time, and primary action', (state, elapsedMs, status, primaryAction) => {
@@ -29,7 +29,13 @@ describe('RecordingPage', () => {
     expect(screen.getByRole('heading', { name: '회의 녹음', level: 1 })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Planning', level: 2 })).toBeTruthy();
     expect(screen.queryByText(/세션 ID/)).toBeNull();
-    expect(screen.getByText(status).textContent).toContain(status);
+    if (state === 'Ready') {
+      expect(screen.queryByText(status)).toBeNull();
+      expect(screen.getByRole('status', { name: status })).toBeTruthy();
+      expect(screen.getByRole('status', { name: status }).querySelector('.recording-microphone-lamp')).toBeTruthy();
+    } else {
+      expect(screen.getByText(status).textContent).toContain(status);
+    }
     expect(screen.getByLabelText('경과 시간').textContent).toBe(state === 'Ready' ? '00:00:00' : '00:01:02');
     expect(screen.getByRole('button', { name: primaryAction })).toBeTruthy();
   });
@@ -54,6 +60,22 @@ describe('RecordingPage', () => {
 
     expect(onRetryMicrophone).toHaveBeenCalledTimes(1);
     expect((screen.getByRole('button', { name: '녹음 시작' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('uses the microphone indicator to show waiting, checking, and error states without visible status copy', () => {
+    const base = {
+      sessionId: 'session-123', title: 'Planning', state: 'Ready' as const, elapsedMs: 0,
+      onStart: vi.fn(), onPause: vi.fn(), onResume: vi.fn(), onRequestEnd: vi.fn(), onConfirmEnd: vi.fn(), onCancelEnd: vi.fn(),
+    };
+    const { rerender } = render(<RecordingPage {...base} microphoneStatus="ready" microphoneInputDetected={false} />);
+    expect(screen.getByRole('status', { name: '마이크 입력 대기 중' }).querySelector('.recording-microphone-lamp')?.className).toContain('recording-microphone-lamp--waiting');
+    expect(screen.queryByText('마이크 입력 대기 중')).toBeNull();
+
+    rerender(<RecordingPage {...base} microphoneStatus="checking" microphoneInputDetected={false} />);
+    expect(screen.getByRole('status', { name: '마이크를 확인하고 있습니다' }).querySelector('.recording-microphone-lamp')?.className).toContain('recording-microphone-lamp--checking');
+
+    rerender(<RecordingPage {...base} microphoneStatus="error" microphoneInputDetected={false} />);
+    expect(screen.getByRole('status', { name: '마이크를 사용할 수 없습니다' }).querySelector('.recording-microphone-lamp')?.className).toContain('recording-microphone-lamp--error');
   });
 
   it('formats durations as padded HH:mm:ss, including hours and fractional seconds', () => {

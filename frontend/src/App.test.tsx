@@ -803,7 +803,7 @@ describe('Recording route', () => {
 
     expect(await screen.findByRole('heading', { name: 'Planning' })).toBeTruthy();
     expect(screen.queryByText('session-ready')).toBeNull();
-    expect(await screen.findByText('준비됨')).toBeTruthy();
+    expect(await screen.findByRole('status', { name: '마이크 입력이 감지되었습니다' })).toBeTruthy();
     expect(screen.getByText('00:00:00')).toBeTruthy();
     expect(screen.getByRole('button', { name: '녹음 시작' })).toBeTruthy();
     expect(screen.getByRole('navigation', { name: '주요 메뉴' })).toBeTruthy();
@@ -892,6 +892,7 @@ describe('Recording route', () => {
       <CurrentPath />
     </MemoryRouter>);
 
+    await screen.findByRole('status', { name: '마이크 입력이 감지되었습니다' });
     fireEvent.click(await screen.findByRole('button', { name: '녹음 시작' }));
     await screen.findByText('녹음 중');
     elapsedMs = 4_250;
@@ -954,7 +955,7 @@ describe('Recording route', () => {
       <CurrentPath />
     </MemoryRouter>);
 
-    await screen.findByText('준비됨');
+    await screen.findByRole('status', { name: '마이크 입력이 감지되었습니다' });
     fireEvent.click(await screen.findByRole('button', { name: '녹음 시작' }));
     await screen.findByText('녹음 중');
     elapsedMs = 8_500;
@@ -1009,7 +1010,7 @@ describe('Recording route', () => {
     installFetchMock(fetchMock);
 
     render(<MemoryRouter initialEntries={[`/meetings/${session.sessionId}/recording`]}><App mediaAdapter={mediaAdapter} /></MemoryRouter>);
-    await screen.findByText('준비됨');
+    await screen.findByRole('status', { name: '마이크 입력이 감지되었습니다' });
     fireEvent.click(await screen.findByRole('button', { name: '녹음 시작' }));
     await screen.findByText('녹음 중');
     recorder.ondataavailable?.({ data: new NodeBlob(['already saved audio'], { type: 'audio/webm' }) as Blob });

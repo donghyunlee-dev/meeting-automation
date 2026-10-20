@@ -45,6 +45,16 @@ const statusByState: Record<RecordingViewState, string> = {
 export function RecordingPage({ title, state, elapsedMs, microphoneStatus = 'checking', microphoneLevel = 0, microphoneInputDetected = false, errorMessage, completed = false, endFlowFailed = false, uploadSnapshot, endSnapshot, onRetryUpload, onRetryProcessing, onRetryMicrophone, onStart, onPause, onResume, onRequestEnd, onConfirmEnd, onCancelEnd }: RecordingPageProps) {
   const [isConfirmOpen, setConfirmOpen] = useState(false);
   const microphoneSignalDetected = microphoneInputDetected;
+  const microphoneStatusLabel = microphoneStatus === 'checking'
+    ? '마이크를 확인하고 있습니다'
+    : microphoneStatus === 'error'
+      ? '마이크를 사용할 수 없습니다'
+      : microphoneSignalDetected ? '마이크 입력이 감지되었습니다' : '마이크 입력 대기 중';
+  const microphoneSignalState = microphoneStatus === 'error'
+    ? 'error'
+    : microphoneStatus === 'checking'
+      ? 'checking'
+      : microphoneSignalDetected ? 'input-detected' : 'waiting';
   const showRecoveryActions = (completed && Boolean(errorMessage)) || endFlowFailed || ['retryable', 'incomplete', 'upload-failed', 'failed'].includes(endSnapshot?.status ?? '');
   const hasRecordingActions = (state === 'Ready' && !completed && !endFlowFailed)
     || (state === 'Ready' && showRecoveryActions)
@@ -116,14 +126,21 @@ export function RecordingPage({ title, state, elapsedMs, microphoneStatus = 'che
 
       <section className="recording-content" aria-label="녹음 상태">
         <h2 className="recording-meeting-title">{title}</h2>
-        <p className="recording-status" role="status" aria-live="polite">
-          {state === 'Recording' && <span className="recording-indicator" aria-hidden="true" />}
-          {completed ? '녹음이 종료되었습니다.' : state === 'Ready'
-            ? microphoneStatus === 'error' ? '마이크 확인 필요' : microphoneStatus === 'ready' && microphoneInputDetected ? '준비됨' : microphoneStatus === 'ready' ? '마이크 입력 대기 중' : statusByState.Ready
-            : statusByState[state]}
-        </p>
+        {(state !== 'Ready' || completed) && <p className="recording-status" role="status" aria-live="polite">
+          {completed ? '녹음이 종료되었습니다.' : <>
+            {state === 'Recording' && <span className="recording-indicator" aria-hidden="true" />}
+            {statusByState[state]}
+          </>}
+        </p>}
         <p className="recording-timer" aria-label="경과 시간">{formatElapsedTime(state === 'Ready' && !completed ? 0 : elapsedMs)}</p>
-        {!completed && <div className={`recording-microphone recording-microphone--${microphoneStatus}`} role="status" aria-live="polite">
+        {!completed && <div className={`recording-microphone recording-microphone--${microphoneStatus} recording-microphone--${microphoneSignalState}`} role="status" aria-label={microphoneStatusLabel} aria-live="polite">
+          <div className="recording-microphone-visual" aria-hidden="true">
+            <svg className="recording-microphone-icon" viewBox="0 0 24 24">
+              <rect x="9" y="3" width="6" height="12" rx="3" />
+              <path d="M5.5 11v1a6.5 6.5 0 0 0 13 0v-1M12 18.5V22m-4 0h8" />
+            </svg>
+            <i className={`recording-microphone-lamp recording-microphone-lamp--${microphoneSignalState}`} />
+          </div>
           <div className="recording-waveform" aria-label={`마이크 입력 레벨 ${Math.round(microphoneLevel * 100)}%`}>
             {Array.from({ length: 21 }, (_, index) => {
               const position = Math.abs(index - 10) / 10;
@@ -131,7 +148,6 @@ export function RecordingPage({ title, state, elapsedMs, microphoneStatus = 'che
               return <i key={index} style={{ height: `${Math.max(4, Math.round(wave * 38))}px` }} />;
             })}
           </div>
-          <span>{microphoneStatus === 'checking' ? '마이크 확인 중' : microphoneStatus === 'error' ? '마이크를 사용할 수 없습니다' : microphoneSignalDetected ? '마이크 입력 확인됨' : '마이크 입력 대기 중 · 짧게 말해 주세요'}</span>
           {onRetryMicrophone && (microphoneStatus === 'error' || (microphoneStatus === 'ready' && !microphoneSignalDetected)) && <button type="button" className="recording-microphone-retry" onClick={onRetryMicrophone}>{microphoneStatus === 'error' ? '마이크 다시 확인' : '마이크 입력 확인'}</button>}
         </div>}
         {errorMessage && <p className="recording-error" role="alert">{errorMessage}</p>}

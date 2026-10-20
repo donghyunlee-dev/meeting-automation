@@ -649,13 +649,24 @@ button:disabled { cursor: not-allowed; opacity: .6; }
 .recording-indicator { width: 10px; height: 10px; border-radius: 50%; background: #cf3f3f; animation: recording-pulse 1.5s ease-in-out infinite; }
 @keyframes recording-pulse { 50% { opacity: .35; transform: scale(.84); } }
 .recording-timer { margin: 0; color: #182230; font-size: clamp(48px, 14vw, 84px); font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: -.05em; line-height: 1; white-space: nowrap; }
-.recording-microphone { display: flex; min-height: 48px; flex-direction: column; align-items: center; justify-content: center; gap: 6px; color: #667085; font-size: 13px; }
+.recording-microphone { display: flex; min-height: 112px; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #667085; }
+.recording-microphone-visual { position: relative; display: grid; width: 48px; height: 48px; place-items: center; }
+.recording-microphone-icon { width: 30px; height: 30px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; }
+.recording-microphone-lamp { position: absolute; top: 1px; right: 0; width: 11px; height: 11px; border: 2px solid #f6f8fb; border-radius: 50%; background: #98a2b3; box-shadow: 0 0 0 1px #98a2b366; }
 .recording-waveform { display: flex; width: min(220px, 70vw); height: 40px; align-items: center; justify-content: center; gap: 3px; }
 .recording-waveform i { display: block; width: 4px; min-height: 4px; border-radius: 999px; background: #98a2b3; transition: height 80ms linear, background-color 150ms ease; }
 .recording-microphone--ready .recording-waveform i { background: #5268df; }
+.recording-microphone--input-detected { color: #3448b8; }
+.recording-microphone--input-detected .recording-microphone-lamp { background: #17a76b; box-shadow: 0 0 0 2px #17a76b29, 0 0 10px #17a76b9c; animation: microphone-lamp-pulse 1.8s ease-in-out infinite; }
+.recording-microphone--input-detected .recording-waveform i { background: #17a76b; }
+.recording-microphone--waiting .recording-microphone-lamp { background: #f4b740; box-shadow: 0 0 0 2px #f4b74029; }
+.recording-microphone--checking .recording-microphone-lamp { background: #5268df; box-shadow: 0 0 0 2px #5268df29; animation: microphone-lamp-pulse 1s ease-in-out infinite; }
 .recording-microphone--error { color: #b42318; }
+.recording-microphone--error .recording-microphone-lamp { background: #d92d20; box-shadow: 0 0 0 2px #d92d2029, 0 0 10px #d92d206e; }
 .recording-microphone--error .recording-waveform i { background: #f2b8b5; }
 .recording-microphone-retry { min-height: 36px; border: 0; padding: 4px 10px; color: #4056ce; background: transparent; font: inherit; font-weight: 650; cursor: pointer; }
+@keyframes microphone-lamp-pulse { 50% { opacity: .55; transform: scale(.88); } }
+@media (prefers-reduced-motion: reduce) { .recording-microphone-lamp { animation: none !important; } }
 .recording-actions .button:disabled { cursor: wait; opacity: .55; }
 .recording-actions { position: fixed; z-index: 6; bottom: calc(68px + env(safe-area-inset-bottom)); left: 50%; display: grid; grid-template-columns: minmax(0, 1fr); justify-content: center; gap: 12px; width: min(100%, 868px); transform: translateX(-50%); margin: 0; padding: 12px 24px; background: transparent; }
 .recording-page:has(.recording-actions) { padding-bottom: 80px; }
