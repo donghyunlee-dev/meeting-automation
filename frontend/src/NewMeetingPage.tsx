@@ -11,6 +11,7 @@ import {
   NewMeetingApiError,
   type DocumentAppConfig,
   type MeetingSessionAttempt,
+  type MeetingDraft,
   type MeetingTemplate,
 } from './newMeetingApi';
 
@@ -40,14 +41,14 @@ function localDateString(): string {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 }
 
-export function NewMeetingPage({ onSubmit }: { onSubmit: (attempt: MeetingSessionAttempt) => void | Promise<void> }) {
+export function NewMeetingPage({ onSubmit, initialDraft }: { onSubmit: (attempt: MeetingSessionAttempt) => void | Promise<void>; initialDraft?: MeetingDraft }) {
   const [config, setConfig] = useState<Resource<DocumentAppConfig>>({ status: 'loading' });
   const [templates, setTemplates] = useState<Resource<MeetingTemplate[]>>({ status: 'loading' });
   const [participants, setParticipants] = useState<Resource<Participant[]>>({ status: 'loading' });
-  const [title, setTitle] = useState('');
-  const [meetingDate, setMeetingDate] = useState(localDateString());
-  const [templateId, setTemplateId] = useState('default.md');
-  const [participantIds, setParticipantIds] = useState<string[]>([]);
+  const [title, setTitle] = useState(initialDraft?.title ?? '');
+  const [meetingDate, setMeetingDate] = useState(initialDraft?.meetingDate ?? localDateString());
+  const [templateId, setTemplateId] = useState(initialDraft?.templateId ?? 'default.md');
+  const [participantIds, setParticipantIds] = useState<string[]>([...(initialDraft?.participantIds ?? [])]);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);

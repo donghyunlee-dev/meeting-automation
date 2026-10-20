@@ -21,6 +21,7 @@ export type MeetingSessionAttempt = {
   recoveryKey: string;
   idempotencyKey: string;
 };
+export type MeetingDraft = Pick<MeetingSessionAttempt, 'title' | 'meetingDate' | 'templateId' | 'participantIds'>;
 export type MeetingSession = {
   sessionId: string;
   version: number;
@@ -62,6 +63,22 @@ export async function createMeetingSession(attempt: MeetingSessionAttempt): Prom
   if (!response.ok) throw new NewMeetingApiError(body?.error?.code ?? 'REQUEST_FAILED', response.status >= 500);
   if (!body?.data?.sessionId || !body.data.uploadPolicy) throw new NewMeetingApiError('INVALID_SESSION_RESPONSE', true);
   return body.data;
+}
+
+export async function cancelMeetingSession(sessionId: string): Promise<void> {
+  let response: Response;
+  try {
+    response = await apiFetch(`${baseUrl()}/api/v1/meeting-sessions/${encodeURIComponent(sessionId)}`, {
+      method: 'DELETE', headers: { Accept: 'application/json' },
+    });
+  } catch {
+    throw new NewMeetingApiError('NETWORK_ERROR');
+  }
+  if (!response.ok) {
+    let body: { error?: { code?: string } } | undefined;
+    try { body = await response.json() as typeof body; } catch { /* use the generic code */ }
+    throw new NewMeetingApiError(body?.error?.code ?? 'REQUEST_FAILED');
+  }
 }
 
 function baseUrl(): string {

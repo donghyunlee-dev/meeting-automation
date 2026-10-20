@@ -11,7 +11,7 @@ import {
 import './app.css';
 import { Link, NavLink, Route, Routes, useLocation, useNavigate, useParams } from 'react-router';
 import { NewMeetingPage, type NewMeetingPayload } from './NewMeetingPage';
-import { createMeetingSession, type MeetingSession, type MeetingSessionAttempt } from './newMeetingApi';
+import { cancelMeetingSession, createMeetingSession, type MeetingDraft, type MeetingSession, type MeetingSessionAttempt } from './newMeetingApi';
 import { RecordingPage, type RecordingViewState } from './RecordingPage';
 import { DocumentSetupWizard } from './DocumentSetupWizard';
 import { CompletePage } from './CompletePage';
@@ -378,7 +378,7 @@ function SetupGate({ children }: { children: React.ReactNode }) {
   return allowed ? <>{children}</> : <main className="setup-page"><p role="status">문서 연결 상태를 확인하는 중…</p></main>;
 }
 
-type RecordingSession = MeetingSession & { title: string };
+type RecordingSession = MeetingSession & { title: string; draft?: MeetingDraft };
 const RECORDING_SESSION_STORAGE_KEY = 'meeting-automation.recording-session';
 
 function restoreRecordingSession(): RecordingSession | null {
@@ -402,9 +402,12 @@ function NewMeetingRoute({ onCreated, onSubmitted }: {
   onSubmitted?: (payload: NewMeetingPayload) => void;
 }) {
   const navigate = useNavigate();
+  const location = useLocation();
+  const initialDraft = (location.state as { draft?: MeetingDraft } | null)?.draft;
   async function submit(attempt: MeetingSessionAttempt) {
     const session = await createMeetingSession(attempt);
-    onCreated({ ...session, title: attempt.title });
+    const draft = { title: attempt.title, meetingDate: attempt.meetingDate, templateId: attempt.templateId, participantIds: [...attempt.participantIds] };
+    onCreated({ ...session, title: attempt.title, draft });
     onSubmitted?.({
       title: attempt.title,
       meetingDate: attempt.meetingDate,
@@ -415,13 +418,14 @@ function NewMeetingRoute({ onCreated, onSubmitted }: {
     });
     navigate(`/meetings/${encodeURIComponent(session.sessionId)}/recording`);
   }
-  return <NewMeetingPage onSubmit={submit} />;
+  return <NewMeetingPage onSubmit={submit} initialDraft={initialDraft} />;
 }
 
-function MeetingRecordingRoute({ session, setState, setNavigationLocked, mediaAdapter }: {
+function MeetingRecordingRoute({ session, setState, setNavigationLocked, clearSession, mediaAdapter }: {
   session: RecordingSession | null;
   setState: (state: RecordingViewState) => void;
   setNavigationLocked: (locked: boolean) => void;
+  clearSession: () => void;
   mediaAdapter: MediaRecorderAdapter;
 }) {
   const { sessionId } = useParams();
@@ -432,13 +436,14 @@ function MeetingRecordingRoute({ session, setState, setNavigationLocked, mediaAd
       <Link className="button button-primary" to="/meetings/new">새 회의 시작</Link>
     </main>
   );
-  return <ActiveMeetingRecordingRoute session={session} setState={setState} setNavigationLocked={setNavigationLocked} mediaAdapter={mediaAdapter} />;
+  return <ActiveMeetingRecordingRoute session={session} setState={setState} setNavigationLocked={setNavigationLocked} clearSession={clearSession} mediaAdapter={mediaAdapter} />;
 }
 
-function ActiveMeetingRecordingRoute({ session, setState, setNavigationLocked, mediaAdapter }: {
+function ActiveMeetingRecordingRoute({ session, setState, setNavigationLocked, clearSession, mediaAdapter }: {
   session: RecordingSession;
   setState: (state: RecordingViewState) => void;
   setNavigationLocked: (locked: boolean) => void;
+  clearSession: () => void;
   mediaAdapter: MediaRecorderAdapter;
 }) {
   const navigate = useNavigate();
@@ -589,6 +594,14 @@ function ActiveMeetingRecordingRoute({ session, setState, setNavigationLocked, m
     }}
     onRetryProcessing={() => { setNavigationLocked(true); void endCoordinator.current?.start(); }}
     onRetryMicrophone={() => { void controllerRef.current?.prepareMicrophone(); }}
+    onReturnToSetup={session.draft ? async () => {
+      await cancelMeetingSession(session.sessionId);
+      setNavigationLocked(false);
+      setState('Ready');
+      clearSession();
+      try { sessionStorage.removeItem(RECORDING_SESSION_STORAGE_KEY); } catch { /* session restoration is unavailable */ }
+      navigate('/meetings/new', { state: { draft: session.draft } });
+    } : undefined}
     onStart={async () => {
       setNavigationLocked(true);
       const controller = controllerRef.current;
@@ -697,7 +710,7 @@ export function App({ onNewMeetingSubmit = () => undefined, onMinutesSave, minut
           <Route path="/meetings" element={<MeetingsPage />} />
           <Route path="/meetings/new" element={<SetupGate><NewMeetingRoute onCreated={(session) => { setCreatedSession(session); saveRecordingSession(session); setRecordingState('Ready'); setRecordingNavigationLocked(false); }} onSubmitted={onNewMeetingSubmit} /></SetupGate>} />
           <Route path="/meetings/:documentId" element={<MeetingDetailPage />} />
-          <Route path="/meetings/:sessionId/recording" element={<MeetingRecordingRoute session={createdSession} setState={setRecordingState} setNavigationLocked={setRecordingNavigationLocked} mediaAdapter={mediaAdapter} />} />
+          <Route path="/meetings/:sessionId/recording" element={<MeetingRecordingRoute session={createdSession} setState={setRecordingState} setNavigationLocked={setRecordingNavigationLocked} clearSession={() => setCreatedSession(null)} mediaAdapter={mediaAdapter} />} />
           <Route path="/meetings/:sessionId/processing" element={<ProcessingPage />} />
           <Route path="/meetings/:sessionId/review" element={<ReviewSpeakerPage drafts={speakerDrafts} onInitialize={initializeSpeakerDraft} onChange={updateSpeakerDraft} onCommit={commitSpeakerMappings} onMinutesSave={onMinutesSave} minutesSaveState={minutesSaveState} />} />
           <Route path="/meetings/:sessionId/complete" element={<CompletePage />} />

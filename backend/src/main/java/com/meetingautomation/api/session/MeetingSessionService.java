@@ -58,6 +58,16 @@ public final class MeetingSessionService {
         return uploadPolicy;
     }
 
+    public void cancelBeforeRecording(String sessionId) {
+        sessionStore.withSessionLock(sessionId, () -> {
+            MeetingSession session = sessionStore.find(sessionId)
+                    .orElseThrow(com.meetingautomation.api.audio.AudioSessionNotFoundException::new);
+            if (!"CREATED".equals(session.status())) throw new SessionStateConflictException();
+            sessionStore.remove(sessionId);
+            return null;
+        });
+    }
+
     private MeetingSession createOnce(MeetingSessionCreationCoordinator.Command command) {
         MeetingSession candidate = MeetingSessionCreationCoordinator.newSession(command);
         DocumentConnectionGate.SessionLease registration = connectionGate.beginSession(

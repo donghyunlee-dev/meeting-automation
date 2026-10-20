@@ -34,6 +34,7 @@ type RecordingPageProps = RecordingSessionContext & RecordingCallbacks & {
   onRetryUpload?: () => void;
   onRetryProcessing?: () => void;
   onRetryMicrophone?: () => void;
+  onReturnToSetup?: () => Promise<void>;
 };
 
 const statusByState: Record<RecordingViewState, string> = {
@@ -42,8 +43,10 @@ const statusByState: Record<RecordingViewState, string> = {
   Paused: '일시정지됨',
 };
 
-export function RecordingPage({ title, state, elapsedMs, microphoneStatus = 'checking', microphoneLevel = 0, microphoneInputDetected = false, errorMessage, completed = false, endFlowFailed = false, uploadSnapshot, endSnapshot, onRetryUpload, onRetryProcessing, onRetryMicrophone, onStart, onPause, onResume, onRequestEnd, onConfirmEnd, onCancelEnd }: RecordingPageProps) {
+export function RecordingPage({ title, state, elapsedMs, microphoneStatus = 'checking', microphoneLevel = 0, microphoneInputDetected = false, errorMessage, completed = false, endFlowFailed = false, uploadSnapshot, endSnapshot, onRetryUpload, onRetryProcessing, onRetryMicrophone, onReturnToSetup, onStart, onPause, onResume, onRequestEnd, onConfirmEnd, onCancelEnd }: RecordingPageProps) {
   const [isConfirmOpen, setConfirmOpen] = useState(false);
+  const [returningToSetup, setReturningToSetup] = useState(false);
+  const [returnError, setReturnError] = useState('');
   const microphoneSignalDetected = microphoneInputDetected;
   const microphoneStatusLabel = microphoneStatus === 'checking'
     ? '마이크를 확인하고 있습니다'
@@ -115,6 +118,11 @@ export function RecordingPage({ title, state, elapsedMs, microphoneStatus = 'che
   return (
     <main className={`recording-page page-scroll-layout recording-page--${state.toLowerCase()}${completed ? ' recording-page--completed' : ''}${isRecovering ? ' recording-page--recovering' : ''}`}>
       <header className="recording-heading">
+        {state === 'Ready' && !completed && onReturnToSetup && <button className="recording-back" type="button" disabled={returningToSetup} onClick={() => {
+          setReturningToSetup(true);
+          setReturnError('');
+          void onReturnToSetup().catch(() => setReturnError('회의 준비 화면으로 돌아가지 못했습니다. 다시 시도해 주세요.')).finally(() => setReturningToSetup(false));
+        }} aria-label="회의 준비로 돌아가기"><span aria-hidden="true">←</span><span>{returningToSetup ? '돌아가는 중…' : '회의 준비'}</span></button>}
         <h1>
           <svg className="recording-title-icon" viewBox="0 0 24 24" aria-hidden="true">
             <rect x="9" y="3" width="6" height="12" rx="3" />
@@ -151,6 +159,8 @@ export function RecordingPage({ title, state, elapsedMs, microphoneStatus = 'che
           </div>
           {onRetryMicrophone && (microphoneStatus === 'error' || (microphoneStatus === 'ready' && !microphoneSignalDetected)) && <button type="button" className="recording-microphone-retry" onClick={onRetryMicrophone}>{microphoneStatus === 'error' ? '마이크 다시 확인' : '마이크 입력 확인'}</button>}
         </div>}
+        {state === 'Ready' && !completed && <p className="recording-microphone-label" aria-live="polite">{microphoneStatusLabel}</p>}
+        {returnError && <p className="recording-error" role="alert">{returnError}</p>}
         {errorMessage && <p className="recording-error" role="alert">{errorMessage}</p>}
         {endSnapshot?.message && endSnapshot.status !== 'idle'
           && !(endSnapshot.status === 'uploading' && uploadSnapshot && (uploadSnapshot.totalCount > 0 || uploadSnapshot.status === 'retryable'))
