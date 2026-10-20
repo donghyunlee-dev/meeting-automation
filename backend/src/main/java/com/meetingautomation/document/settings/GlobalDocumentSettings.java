@@ -5,12 +5,23 @@ import java.util.Map;
 
 /** Private storage model. Never serialize this model in an HTTP response or a log. */
 public record GlobalDocumentSettings(int schemaVersion, long version, Connection active, Draft draft,
-        Operation operation, Map<String, Replay> idempotencyRecords, Map<String, Operation> operationHistory) {
+        Operation operation, Map<String, Replay> idempotencyRecords, Map<String, Operation> operationHistory,
+        SlackNotification slackNotification, EmailNotification emailNotification) {
     public GlobalDocumentSettings {
         operationHistory=operationHistory==null ? Map.of() : Map.copyOf(operationHistory);
+        slackNotification=slackNotification==null ? SlackNotification.empty() : slackNotification;
+        emailNotification=emailNotification==null ? EmailNotification.empty() : emailNotification;
+    }
+    public GlobalDocumentSettings(int schemaVersion,long version,Connection active,Draft draft,Operation operation,
+            Map<String,Replay> records, Map<String,Operation> history, SlackNotification slackNotification) {
+        this(schemaVersion,version,active,draft,operation,records,history,slackNotification,EmailNotification.empty());
+    }
+    public GlobalDocumentSettings(int schemaVersion,long version,Connection active,Draft draft,Operation operation,
+            Map<String,Replay> records, Map<String,Operation> history) {
+        this(schemaVersion,version,active,draft,operation,records,history,SlackNotification.empty(),EmailNotification.empty());
     }
     public GlobalDocumentSettings(int schemaVersion,long version,Connection active,Draft draft,Operation operation,Map<String,Replay> records) {
-        this(schemaVersion,version,active,draft,operation,records,Map.of());
+        this(schemaVersion,version,active,draft,operation,records,Map.of(),SlackNotification.empty(),EmailNotification.empty());
     }
     public static GlobalDocumentSettings empty() {
         return new GlobalDocumentSettings(1, 0, null, null, null, Map.of());
@@ -76,4 +87,13 @@ public record GlobalDocumentSettings(int schemaVersion, long version, Connection
     }
     public record Creation(String parentId, String title, String marker, String pageId) { }
     public record Replay(String requestHmac, int status, String responseJson, long version) { }
+    public record SlackNotification(String webhookUrl, boolean connectionVerified, Instant verifiedAt) {
+        public static SlackNotification empty() { return new SlackNotification(null, false, null); }
+        @Override public String toString() { return "SlackNotification[redacted]"; }
+    }
+    public record EmailNotification(String clientId, String clientSecret, String refreshToken, String senderAddress,
+            boolean connectionVerified, Instant verifiedAt) {
+        public static EmailNotification empty() { return new EmailNotification(null, null, null, null, false, null); }
+        @Override public String toString() { return "EmailNotification[redacted]"; }
+    }
 }

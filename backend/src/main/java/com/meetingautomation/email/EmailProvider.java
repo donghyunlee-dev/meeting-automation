@@ -6,5 +6,7 @@ import java.util.List;
 public interface EmailProvider {
     boolean validateConnection();
 
+    default boolean sendTestMessage() { return false; }
+
     List<RecipientDeliveryResult> sendMeetingEmail(MeetingEmailCommand command);
 }

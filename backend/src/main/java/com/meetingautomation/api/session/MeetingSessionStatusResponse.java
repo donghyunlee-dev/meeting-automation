@@ -24,6 +24,7 @@ public record MeetingSessionStatusResponse(Data data) {
             List<String> allowedActions,
             @JsonInclude(JsonInclude.Include.NON_NULL) LastOperation lastOperation,
             @JsonInclude(JsonInclude.Include.NON_NULL) Document document,
+            @JsonInclude(JsonInclude.Include.NON_NULL) DocumentFailure documentFailure,
             @JsonInclude(JsonInclude.Include.NON_NULL) List<Delivery> deliveries) {
         public Data {
             speakers = List.copyOf(speakers);
@@ -37,6 +38,8 @@ public record MeetingSessionStatusResponse(Data data) {
             @JsonInclude(JsonInclude.Include.NON_NULL) String errorCode) { }
 
     public record Document(String documentId, String documentUrl) { }
+
+    public record DocumentFailure(String errorCode, boolean retryable) { }
 
     public record Delivery(String deliveryId, String channel, String recipientParticipantId, String status,
             int attemptCount, boolean retryable,
@@ -122,6 +125,10 @@ public record MeetingSessionStatusResponse(Data data) {
             document = new Document(failureFinalization.document().documentId(),
                     failureFinalization.document().documentUrl());
         List<Delivery> deliveries = null;
+        DocumentFailure documentFailure = "DOCUMENT_FAILED".equals(session.status()) && publishSnapshot != null
+                ? new DocumentFailure(publishSnapshot.errorCode() == null ? "DOCUMENT_FAILED" : publishSnapshot.errorCode(),
+                        publishSnapshot.retryable())
+                : null;
         if (publishSnapshot != null && !"DOCUMENT_FAILED".equals(session.status())) {
             var projected = new java.util.ArrayList<>(publishSnapshot.deliveries().stream()
                     .map(delivery -> new Delivery(delivery.deliveryId(), delivery.channel(),
@@ -138,7 +145,7 @@ public record MeetingSessionStatusResponse(Data data) {
                 new Meeting(session.meeting().participantIds()), processing, speakers, transcript, minutes,
                 allowedActions, reviewReady ? lastOperation : failureFinalization == null ? null
                         : new LastOperation("FINALIZE_PROCESSING_FAILURE", "COMPLETED", null, null),
-                document, deliveries));
+                document, documentFailure, deliveries));
     }
 
     private static List<String> failureActions(ProcessingFailure failure, boolean audioAvailable) {

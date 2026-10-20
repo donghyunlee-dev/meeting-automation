@@ -14,7 +14,7 @@ public class DocumentSetupWebConfiguration implements WebMvcConfigurer {
         this.origins = Arrays.stream(configuredOrigins.split(",")).map(String::trim).filter(s -> !s.isEmpty()).toArray(String[]::new);
     }
     @Override public void addCorsMappings(CorsRegistry registry) {
-        registry.addMapping("/api/v1/**").allowedOrigins(origins).allowedMethods("GET", "POST", "PUT", "PATCH", "OPTIONS")
+        registry.addMapping("/api/v1/**").allowedOrigins(origins).allowedMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
             .allowedHeaders("Accept", "Content-Type", "If-Match", "Idempotency-Key", "X-Audio-SHA256",
                 "X-Audio-Byte-Length", "X-Document-Setup-Request", "X-Request-Id")
             .exposedHeaders("ETag").allowCredentials(false);

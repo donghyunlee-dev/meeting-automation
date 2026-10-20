@@ -2,6 +2,7 @@ package com.meetingautomation.minutes.openai;
 
 import com.meetingautomation.minutes.MinutesGenerationProvider;
 import com.meetingautomation.minutes.MinutesGenerationSettings;
+import com.meetingautomation.minutes.MinutesDocumentWriter;
 import java.net.http.HttpClient;
 import java.time.Duration;
 import org.springframework.beans.factory.annotation.Value;
@@ -33,5 +34,16 @@ public class MinutesGenerationProviderConfiguration {
         JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(httpClient);
         requestFactory.setReadTimeout(Duration.ofSeconds(settings.timeoutSeconds()));
         return new OpenAiMinutesGenerationAdapter(RestClient.builder().requestFactory(requestFactory), settings);
+    }
+
+    @Bean
+    MinutesDocumentWriter minutesDocumentWriter(MinutesGenerationSettings settings) {
+        HttpClient httpClient = HttpClient.newBuilder()
+                .followRedirects(HttpClient.Redirect.NEVER)
+                .connectTimeout(Duration.ofSeconds(settings.connectTimeoutSeconds()))
+                .build();
+        JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(httpClient);
+        requestFactory.setReadTimeout(Duration.ofSeconds(settings.timeoutSeconds()));
+        return new OpenAiMinutesDocumentWriter(RestClient.builder().requestFactory(requestFactory), settings);
     }
 }

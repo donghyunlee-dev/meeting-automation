@@ -3,22 +3,30 @@ package com.meetingautomation.api.health;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 @Component
 public final class IntegrationHealthAggregator {
     private final DocumentHealthContributor documentContributor;
     private final List<IntegrationHealthContributor> contributors;
-    private final String notificationProvider;
+    private final java.util.function.Supplier<String> notificationProvider;
 
+    @Autowired
     public IntegrationHealthAggregator(
             DocumentHealthContributor documentContributor,
             List<IntegrationHealthContributor> contributors,
-            @Value("${NOTIFICATION_PROVIDER:}") String notificationProvider) {
+            com.meetingautomation.notification.slack.SlackWebhookSettingsService slackSettings) {
         this.documentContributor = documentContributor;
         this.contributors = List.copyOf(contributors);
-        this.notificationProvider = normalizedOrNull(notificationProvider);
+        this.notificationProvider = () -> slackSettings.snapshot().configured() ? "SLACK" : null;
+    }
+
+    public IntegrationHealthAggregator(DocumentHealthContributor documentContributor,
+            List<IntegrationHealthContributor> contributors, String notificationProvider) {
+        this.documentContributor = documentContributor;
+        this.contributors = List.copyOf(contributors);
+        this.notificationProvider = () -> normalizedOrNull(notificationProvider);
     }
 
     public IntegrationHealthResponse health() {
@@ -47,7 +55,7 @@ public final class IntegrationHealthAggregator {
                 documentStatus,
                 statuses.get(IntegrationArea.EMAIL),
                 new IntegrationHealthResponse.NotificationHealthStatus(
-                        notificationProvider, notificationStatus.configured(), notificationStatus.reachable()),
+                        notificationProvider.get(), notificationStatus.configured(), notificationStatus.reachable()),
                 statuses.get(IntegrationArea.AI)));
     }
 

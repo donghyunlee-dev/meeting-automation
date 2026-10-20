@@ -28,6 +28,8 @@ import com.meetingautomation.document.transfer.DocumentTransferPort;
 import com.meetingautomation.document.transfer.TransferRecord;
 import com.meetingautomation.document.transfer.TransferManifest;
 import com.meetingautomation.document.transfer.TransferCodec;
+import com.meetingautomation.minutes.MinutesDocumentCommand;
+import com.meetingautomation.minutes.MinutesDocumentWriter;
 import com.meetingautomation.document.settings.DocumentProviderFactory;
 import com.meetingautomation.document.settings.GlobalSettingsStore;
 import com.meetingautomation.email.EmailProvider;
@@ -85,6 +87,7 @@ class MeetingSessionPublishApiTests {
     @MockitoBean private DocumentProviderFactory providerFactory;
     @MockitoBean private EmailProvider emailProvider;
     @MockitoBean private SlackNotificationAdapter notificationProvider;
+    @MockitoBean private MinutesDocumentWriter minutesDocumentWriter;
 
     @BeforeEach
     void resetPublishFixture() {
@@ -102,6 +105,7 @@ class MeetingSessionPublishApiTests {
                     RecipientDeliveryResult.sent(recipient.participantId())).toList();
         });
         when(notificationProvider.sendMeetingPublished(any())).thenReturn(DeliveryResult.sent());
+        when(minutesDocumentWriter.render(any())).thenReturn("# Planning\n\n## 회의 요약\nSummary");
         sessionStore.save(new MeetingSession(SESSION_ID, 7, "CONFIRMED", 1,
                 new MeetingSession.Meeting("Planning", "default.md", "1.0.0", List.of("pt_ada", "pt_grace"),
                         "Asia/Seoul", List.of(new MeetingSession.ParticipantReference("pt_ada", "Ada"),
@@ -147,6 +151,11 @@ class MeetingSessionPublishApiTests {
                 .isInstanceOf(com.meetingautomation.document.settings.SettingsException.class);
         workerExecutor.drain();
         assertThat(FakePublishProvider.PUBLISH_CALLS.get()).isEqualTo(1);
+        org.mockito.ArgumentCaptor<MinutesDocumentCommand> documentCommand =
+                org.mockito.ArgumentCaptor.forClass(MinutesDocumentCommand.class);
+        verify(minutesDocumentWriter).render(documentCommand.capture());
+        assertThat(documentCommand.getValue().templateContent()).contains("# 기본 회의록 템플릿");
+        assertThat(documentCommand.getValue().reviewedMinutes()).contains("Summary", "Discussion", "Decision", "Follow up");
         assertThat(sessionStore.find(SESSION_ID).orElseThrow().status()).isEqualTo("DOCUMENT_SAVED");
         assertThat(sessionStore.find(SESSION_ID).orElseThrow().version()).isEqualTo(13);
         assertThat(sessionStore.findPublishSnapshot(SESSION_ID).document().documentId()).isEqualTo("doc_publish");
@@ -155,8 +164,8 @@ class MeetingSessionPublishApiTests {
         org.mockito.ArgumentCaptor<MeetingEmailCommand> emailCommand =
                 org.mockito.ArgumentCaptor.forClass(MeetingEmailCommand.class);
         verify(emailProvider).sendMeetingEmail(emailCommand.capture());
-        assertThat(emailCommand.getValue().subject()).isEqualTo("Meeting minutes: Planning");
-        assertThat(emailCommand.getValue().textBody()).isEqualTo("Summary\n\nhttps://docs.example/doc_publish");
+        assertThat(emailCommand.getValue().subject()).isEqualTo("회의록 공유: Planning");
+        assertThat(emailCommand.getValue().textBody()).isEqualTo("# Planning\n\n## 회의 요약\nSummary");
         assertThat(emailCommand.getValue().documentUrl()).isEqualTo("https://docs.example/doc_publish");
         assertThat(emailCommand.getValue().recipients()).containsExactly(
                 new MeetingEmailCommand.Recipient("pt_ada", "ada@example.com"));
@@ -655,9 +664,11 @@ class MeetingSessionPublishApiTests {
         MeetingSession failed = sessionStore.find(SESSION_ID).orElseThrow();
         assertThat(failed.status()).isEqualTo("DOCUMENT_FAILED");
         assertThat(failed.version()).isEqualTo(9);
-        assertThat(sessionStore.findPublishSnapshot(SESSION_ID).errorCode()).isEqualTo("DOCUMENT_FAILURE");
+        assertThat(sessionStore.findPublishSnapshot(SESSION_ID).errorCode()).isEqualTo("DOCUMENT_FAILED");
         mockMvc.perform(get(SESSION_URL, SESSION_ID)).andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.allowedActions[0]").value("PUBLISH"))
+                .andExpect(jsonPath("$.data.documentFailure.errorCode").value("DOCUMENT_FAILED"))
+                .andExpect(jsonPath("$.data.documentFailure.retryable").value(true))
                 .andExpect(jsonPath("$.data.document").doesNotExist())
                 .andExpect(jsonPath("$.data.deliveries").doesNotExist())
                 .andExpect(jsonPath("$.data.publish").doesNotExist());
@@ -675,13 +686,28 @@ class MeetingSessionPublishApiTests {
         assertThat(sessionStore.find(SESSION_ID).orElseThrow().status()).isEqualTo("DOCUMENT_FAILED");
         assertThat(sessionStore.find(SESSION_ID).orElseThrow().version()).isEqualTo(9);
         assertThat(sessionStore.findPublishSnapshot(SESSION_ID)).isEqualTo(failureBeforeRetry);
-        assertThat(sessionStore.findPublishSnapshot(SESSION_ID).errorCode()).isEqualTo("DOCUMENT_FAILURE");
+        assertThat(sessionStore.findPublishSnapshot(SESSION_ID).errorCode()).isEqualTo("DOCUMENT_FAILED");
         try (var switchLease = gate.beginSwitch(globalSettingsStore.read().version())) { assertThat(switchLease).isNotNull(); }
 
         when(providerFactory.create(any())).thenReturn(new FakePublishProvider(false));
         mockMvc.perform(publish(SESSION_ID, "9", "publish-retry", REQUEST)).andExpect(status().isAccepted());
         workerExecutor.drain();
         assertThat(sessionStore.find(SESSION_ID).orElseThrow().status()).isEqualTo("DOCUMENT_SAVED");
+    }
+
+    @Test
+    void nonRetryableDocumentFailureExposesCauseAndDoesNotAdvertisePublishRetry() throws Exception {
+        when(providerFactory.create(any())).thenReturn(new FakePublishProvider(
+                com.meetingautomation.document.DocumentProviderException.structureNotFound()));
+        mockMvc.perform(publish(SESSION_ID, "7", "publish-structure-failure", REQUEST))
+                .andExpect(status().isAccepted());
+        workerExecutor.drain();
+
+        mockMvc.perform(get(SESSION_URL, SESSION_ID)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("DOCUMENT_FAILED"))
+                .andExpect(jsonPath("$.data.documentFailure.errorCode").value("DOCUMENT_STRUCTURE_NOT_FOUND"))
+                .andExpect(jsonPath("$.data.documentFailure.retryable").value(false))
+                .andExpect(jsonPath("$.data.allowedActions[0]").value("PUBLISH"));
     }
 
     @Test
@@ -726,11 +752,13 @@ class MeetingSessionPublishApiTests {
     static final class FakePublishProvider implements ParticipantListingProvider, DocumentTransferPort {
         private static final java.util.concurrent.atomic.AtomicInteger PUBLISH_CALLS = new java.util.concurrent.atomic.AtomicInteger();
         private final boolean fail;
+        private RuntimeException publishFailure;
         private final boolean failParticipantList;
         private final String missingEmailParticipantId;
         private final String adaEmailAddress;
         FakePublishProvider() { this(false, false, null); }
         FakePublishProvider(boolean fail) { this(fail, false, null); }
+        FakePublishProvider(RuntimeException publishFailure) { this(false, false, null); this.publishFailure = publishFailure; }
         FakePublishProvider(boolean fail, boolean failParticipantList) {
             this(fail, failParticipantList, null);
         }
@@ -740,6 +768,7 @@ class MeetingSessionPublishApiTests {
         FakePublishProvider(boolean fail, boolean failParticipantList, String missingEmailParticipantId,
                 String adaEmailAddress) {
             this.fail = fail;
+            this.publishFailure = null;
             this.failParticipantList = failParticipantList;
             this.missingEmailParticipantId = missingEmailParticipantId;
             this.adaEmailAddress = adaEmailAddress;
@@ -762,6 +791,7 @@ class MeetingSessionPublishApiTests {
                 String sourceConnectionFingerprint) { return null; }
         @Override public MeetingDocumentRef publishMeeting(TransferRecord record) {
             PUBLISH_CALLS.incrementAndGet();
+            if (publishFailure != null) throw publishFailure;
             if (fail) throw new IllegalStateException("provider failure");
             assertThat(record.marker().meetingAt().toString()).isEqualTo("2026-10-01T12:00+09:00");
             assertThat(new TransferCodec().canonicalDigest(record)).isNotBlank();

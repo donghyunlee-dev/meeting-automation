@@ -11,6 +11,8 @@ import com.meetingautomation.email.RecipientDeliveryResult;
 import jakarta.mail.Message;
 import jakarta.mail.Session;
 import jakarta.mail.internet.MimeMessage;
+import jakarta.mail.Multipart;
+import jakarta.mail.BodyPart;
 import java.io.ByteArrayInputStream;
 import java.net.SocketTimeoutException;
 import java.time.Clock;
@@ -143,6 +145,36 @@ class GmailEmailAdapterTests {
         var client = client(SETTINGS);
         expectToken(client);
         assertThat(client.adapter.validateConnection()).isTrue();
+        client.server.verify();
+    }
+
+    @Test
+    void testMessageSendsExactlyOneMessageToTheConfiguredSender() {
+        var client = client(SETTINGS);
+        expectToken(client);
+        client.server.expect(requestTo(SEND_URL)).andExpect(method(HttpMethod.POST))
+                .andExpect(header("Authorization", "Bearer " + ACCESS_TOKEN))
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                .andExpect(request -> {
+                    try {
+                        var json = JsonMapper.builder().build().readTree(((MockClientHttpRequest) request).getBodyAsString());
+                        String raw = json.path("raw").asText();
+                        var mime = new MimeMessage(Session.getInstance(new Properties()),
+                                new ByteArrayInputStream(Base64.getUrlDecoder().decode(raw)));
+                        assertThat(mime.getFrom()).extracting(Object::toString).containsExactly("sender@example.test");
+                        assertThat(mime.getRecipients(Message.RecipientType.TO)).extracting(Object::toString)
+                                .containsExactly("sender@example.test");
+                        assertThat(mime.getRecipients(Message.RecipientType.CC)).isNull();
+                        assertThat(mime.getRecipients(Message.RecipientType.BCC)).isNull();
+                        assertThat(mime.getSubject()).isEqualTo("Meeting Automation 테스트 메일");
+                        assertThat(mime.getContent().toString().replace("\r\n", "\n"))
+                                .isEqualTo("Gmail 연결을 확인하기 위해 보낸 테스트 메일입니다.");
+                    } catch (Exception malformedMime) {
+                        throw new AssertionError("Outgoing test message must be valid MIME", malformedMime);
+                    }
+                }).andRespond(withSuccess("{\"id\":\"gmail-test-message-id\"}", MediaType.APPLICATION_JSON));
+
+        assertThat(client.adapter.sendTestMessage()).isTrue();
         client.server.verify();
     }
 
@@ -392,10 +424,19 @@ class GmailEmailAdapterTests {
                         assertThat(mime.getRecipients(Message.RecipientType.CC)).isNull();
                         assertThat(mime.getRecipients(Message.RecipientType.BCC)).isNull();
                         assertThat(mime.getSubject()).isEqualTo("검토 회의 ✓");
-                        assertThat(mime.isMimeType("text/plain")).isTrue();
-                        assertThat(mime.getContentType().toLowerCase()).contains("charset=utf-8");
-                        assertThat(mime.getContent().toString().replace("\r\n", "\n"))
+                        assertThat(mime.isMimeType("multipart/alternative")).isTrue();
+                        Multipart alternatives = (Multipart) mime.getContent();
+                        assertThat(alternatives.getCount()).isEqualTo(2);
+                        BodyPart plain = alternatives.getBodyPart(0);
+                        assertThat(plain.isMimeType("text/plain")).isTrue();
+                        assertThat(plain.getContentType().toLowerCase()).contains("charset=utf-8");
+                        assertThat(plain.getContent().toString().replace("\r\n", "\n"))
                             .isEqualTo(PRIVATE_BODY + "\n\n" + DOCUMENT_URL);
+                        BodyPart html = alternatives.getBodyPart(1);
+                        assertThat(html.isMimeType("text/html")).isTrue();
+                        String htmlBody = html.getContent().toString();
+                        assertThat(htmlBody).contains("&lt;html&gt;plain text&lt;/html&gt;", "회의록 문서 열기", DOCUMENT_URL);
+                        assertThat(htmlBody).doesNotContain("<html>plain text</html>");
                     } catch (jakarta.mail.MessagingException malformedMime) {
                         throw new AssertionError("Outgoing message must be valid MIME", malformedMime);
                     }

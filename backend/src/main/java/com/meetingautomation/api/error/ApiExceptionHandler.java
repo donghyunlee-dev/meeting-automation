@@ -47,6 +47,22 @@ public class ApiExceptionHandler {
                 failure.category(), false, request, Map.of());
     }
 
+    @ExceptionHandler(com.meetingautomation.notification.slack.SlackWebhookSettingsService.InvalidSlackWebhookException.class)
+    public ResponseEntity<ApiErrorResponse> handleInvalidSlackWebhook(
+            com.meetingautomation.notification.slack.SlackWebhookSettingsService.InvalidSlackWebhookException failure,
+            HttpServletRequest request) {
+        return errorResponse(HttpStatus.BAD_REQUEST, "SLACK_WEBHOOK_INVALID",
+                "Slack Incoming Webhook URL을 확인해 주세요.", "VALIDATION", false, request, Map.of());
+    }
+
+    @ExceptionHandler(com.meetingautomation.email.EmailSettingsService.InvalidEmailSettingsException.class)
+    public ResponseEntity<ApiErrorResponse> handleInvalidEmailSettings(
+            com.meetingautomation.email.EmailSettingsService.InvalidEmailSettingsException failure,
+            HttpServletRequest request) {
+        return errorResponse(HttpStatus.BAD_REQUEST, "EMAIL_SETTINGS_INVALID",
+                "Gmail OAuth2 설정값과 발신 이메일 주소를 확인해 주세요.", "VALIDATION", false, request, Map.of());
+    }
+
     private static final String REQUEST_ID_HEADER = "X-Request-Id";
 
     @ExceptionHandler(BindException.class)

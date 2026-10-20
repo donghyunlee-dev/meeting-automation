@@ -19,12 +19,19 @@ import com.meetingautomation.email.RecipientDeliveryResult;
 import com.meetingautomation.notification.DeliveryResult;
 import com.meetingautomation.notification.MeetingPublishedCommand;
 import com.meetingautomation.notification.NotificationProvider;
+import com.meetingautomation.api.template.TemplateCatalog;
+import com.meetingautomation.minutes.MinutesDocumentCommand;
+import com.meetingautomation.minutes.MinutesDocumentWriter;
 import java.util.ArrayList;
 import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.time.OffsetDateTime;
 import java.time.ZoneId;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Locale;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -37,11 +44,16 @@ final class PublishJobRunner {
     private final EmailProvider emailProvider;
     private final NotificationProvider notificationProvider;
     private final FailureContextReporter failureContextReporter;
+    private final TemplateCatalog templates;
+    private final MinutesDocumentWriter minutesDocumentWriter;
     PublishJobRunner(MeetingSessionStore sessions, DocumentProviderFactory providers, EmailProvider emailProvider,
-            NotificationProvider notificationProvider, FailureContextReporter failureContextReporter) {
+            NotificationProvider notificationProvider, FailureContextReporter failureContextReporter,
+            TemplateCatalog templates, MinutesDocumentWriter minutesDocumentWriter) {
         this.sessions = sessions; this.providers = providers; this.emailProvider = emailProvider;
         this.notificationProvider = notificationProvider;
         this.failureContextReporter = failureContextReporter;
+        this.templates = templates;
+        this.minutesDocumentWriter = minutesDocumentWriter;
     }
 
     void run(PublishJob job) {
@@ -50,13 +62,17 @@ final class PublishJobRunner {
         try {
             DocumentStructureProvider provider = providers.create(job.connection());
             if (!(provider instanceof DocumentTransferPort transfer)) throw new IllegalStateException("Publish port unavailable.");
-            MeetingDocumentRef ref = transfer.publishMeeting(toRecord(job.session()));
+            var template = templates.loadTemplate(job.session().meeting().templateId());
+            OffsetDateTime meetingAt = meetingAtAtSave(job.session());
+            String renderedMarkdown = minutesDocumentWriter.render(new MinutesDocumentCommand(
+                    template.content(), reviewedMinutes(job.session(), meetingAt)));
+            MeetingDocumentRef ref = transfer.publishMeeting(toRecord(job.session(), meetingAt, renderedMarkdown));
             sessions.withSessionLock(job.session().sessionId(), () -> {
                 if (sessions.find(job.session().sessionId()).filter(s -> "PUBLISHING".equals(s.status())).isPresent())
                     sessions.completePublish(job.session().sessionId(), ref);
                 return null;
             });
-            sendSelectedEmail(job, provider, ref, traceId);
+            sendSelectedEmail(job, provider, ref, renderedMarkdown, traceId);
             sendSelectedNotification(job, ref, traceId);
             LOG.atInfo().addKeyValue("sessionId", sessionId).addKeyValue("traceId", traceId)
                     .addKeyValue("stage", "DOCUMENT_SAVE").log("Meeting publish completed.");
@@ -64,7 +80,11 @@ final class PublishJobRunner {
             try {
                 sessions.withSessionLock(sessionId, () -> {
                     if (sessions.find(sessionId).filter(s -> "PUBLISHING".equals(s.status())).isPresent())
-                        sessions.failPublish(sessionId);
+                        sessions.failPublish(sessionId,
+                                failure instanceof DocumentProviderException providerFailure
+                                        ? providerFailure.code() : "DOCUMENT_FAILED",
+                                !(failure instanceof DocumentProviderException providerFailure)
+                                        || providerFailure.retryable());
                     return null;
                 });
             } catch (RuntimeException ignored) { }
@@ -108,7 +128,7 @@ final class PublishJobRunner {
     }
 
     private void sendSelectedEmail(PublishJob job, DocumentStructureProvider provider, MeetingDocumentRef ref,
-            String traceId) {
+            String renderedMinutes, String traceId) {
         String sessionId = job.session().sessionId();
         MeetingSessionStore.PublishSnapshot snapshot = sessions.findPublishSnapshot(sessionId);
         java.util.List<EmailDelivery> deliveries = snapshot == null ? java.util.List.of() : snapshot.deliveries();
@@ -153,12 +173,9 @@ final class PublishJobRunner {
                 deliveryById.putAll(sendingById);
                 java.util.List<RecipientDeliveryResult> results;
                 try {
-                    String summary = job.session().minutes() == null ? "" : job.session().minutes().summary();
-                    String textBody = summary.isBlank() ? ref.documentUrl()
-                            : summary + "\n\n" + ref.documentUrl();
                     results = emailProvider.sendMeetingEmail(new MeetingEmailCommand(
-                            "Meeting minutes: " + job.session().meeting().title(),
-                            textBody, ref.documentUrl(), validRecipients));
+                            "회의록 공유: " + job.session().meeting().title(),
+                            renderedMinutes, ref.documentUrl(), validRecipients));
                 } catch (RuntimeException providerFailure) {
                     for (MeetingEmailCommand.Recipient recipient : validRecipients) {
                         outcomes.put(recipient.participantId(), deliveryById.get(recipient.participantId())
@@ -219,9 +236,8 @@ final class PublishJobRunner {
                         java.time.Instant.now()).ifPresent(context -> failureContextReporter.report(context, LOG)));
     }
 
-    private static TransferRecord toRecord(MeetingSession session) {
+    private static TransferRecord toRecord(MeetingSession session, OffsetDateTime meetingAt, String renderedMarkdown) {
         var meeting = session.meeting();
-        var meetingAt = session.meetingAt();
         List<ParticipantSummary> participants = meeting.participantReferences().stream()
                 .map(p -> new ParticipantSummary(p.id(), p.name())).toList();
         List<TransferMarker.Speaker> speakers = session.speakers().stream()
@@ -229,6 +245,59 @@ final class PublishJobRunner {
         TransferMarker marker = new TransferMarker("meeting-automation", "meeting", "1.0", session.sessionId(),
                 meetingAt, meeting.templateId(), meeting.participantIds(), speakers, null, null, null);
         return new TransferRecord(null, null, null, marker, meeting.title(), session.minutes(), session.transcript(),
-                participants, null);
+                participants, null, renderedMarkdown, null);
+    }
+
+    private static OffsetDateTime meetingAtAtSave(MeetingSession session) {
+        var meeting = session.meeting();
+        if (meeting.meetingDate() == null) return session.meetingAt();
+        ZoneId zone = ZoneId.of(meeting.timezone());
+        ZonedDateTime savedAt = ZonedDateTime.now(zone);
+        return meeting.meetingDate().atTime(savedAt.toLocalTime().withNano(0)).atZone(zone).toOffsetDateTime();
+    }
+
+    private static String reviewedMinutes(MeetingSession session, OffsetDateTime meetingAt) {
+        var minutes = session.minutes();
+        var meeting = session.meeting();
+        Map<String, String> participantNames = meeting.participantReferences().stream()
+                .collect(Collectors.toMap(MeetingSession.ParticipantReference::id,
+                        MeetingSession.ParticipantReference::name));
+        StringBuilder content = new StringBuilder();
+        content.append("## 확인된 회의 정보\n")
+                .append("- 주제: ").append(meeting.title()).append('\n')
+                .append("- 날짜 및 시간: ").append(meetingAt.format(DateTimeFormatter.ofPattern(
+                        "yyyy-MM-dd HH:mm:ss XXX", Locale.ROOT))).append(" (").append(meeting.timezone()).append(")\n")
+                .append("- 참석자: ").append(participantNames.isEmpty() ? "미기록"
+                        : String.join(", ", meeting.participantReferences().stream()
+                                .map(MeetingSession.ParticipantReference::name).toList())).append('\n');
+        List<String> speakerMappings = session.speakers().stream()
+                .filter(speaker -> speaker.participantId() != null && participantNames.containsKey(speaker.participantId()))
+                .map(speaker -> speaker.label() + ": " + participantNames.get(speaker.participantId()))
+                .toList();
+        if (!speakerMappings.isEmpty()) {
+            content.append("- 화자 매핑: ").append(String.join(", ", speakerMappings)).append('\n');
+        }
+        content.append('\n');
+        appendSection(content, "회의 요약", minutes.summary());
+        appendList(content, "논의 사항", minutes.discussionPoints());
+        appendList(content, "결정 사항", minutes.decisions());
+        content.append("\n## 실행 항목\n");
+        for (var item : minutes.actionItems()) {
+            String owner = item.ownerParticipantId() == null ? "미정"
+                    : participantNames.getOrDefault(item.ownerParticipantId(), "미정");
+            content.append("- 할 일: ").append(item.task()).append(" | 담당자: ").append(owner)
+                    .append(" | 기한: ").append(item.dueDate() == null ? "미정" : item.dueDate()).append('\n');
+        }
+        appendList(content, "후속 확인", minutes.followUps());
+        return content.toString().strip();
+    }
+
+    private static void appendSection(StringBuilder target, String title, String value) {
+        target.append("## ").append(title).append("\n").append(value == null ? "" : value.strip()).append('\n');
+    }
+
+    private static void appendList(StringBuilder target, String title, List<String> values) {
+        target.append("\n## ").append(title).append('\n');
+        values.forEach(value -> target.append("- ").append(value).append('\n'));
     }
 }

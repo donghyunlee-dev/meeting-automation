@@ -24,16 +24,16 @@ public class EmailProviderConfiguration {
     }
 
     @Bean
-    EmailProvider emailProvider(EmailSettings settings) {
+    EmailProvider emailProvider(EmailSettingsService settings) {
         var httpClient = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NEVER)
                 .connectTimeout(Duration.ofSeconds(10)).build();
         var factory = new JdkClientHttpRequestFactory(httpClient);
         factory.setReadTimeout(Duration.ofSeconds(30));
-        return new GmailEmailAdapter(RestClient.builder().requestFactory(factory), settings);
+        return new GmailEmailAdapter(RestClient.builder().requestFactory(factory), settings::current);
     }
 
     @Bean
-    IntegrationHealthContributor emailHealthContributor(EmailSettings settings, EmailProvider provider) {
+    IntegrationHealthContributor emailHealthContributor(EmailSettingsService settings, EmailProvider provider) {
         return new IntegrationHealthContributor() {
             @Override
             public IntegrationArea area() {
@@ -42,7 +42,7 @@ public class EmailProviderConfiguration {
 
             @Override
             public IntegrationHealthStatus health() {
-                return new IntegrationHealthStatus(settings.configured(), provider.validateConnection());
+                return new IntegrationHealthStatus(settings.current().configured(), provider.validateConnection());
             }
         };
     }

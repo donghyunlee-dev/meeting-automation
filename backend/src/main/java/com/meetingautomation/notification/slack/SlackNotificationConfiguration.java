@@ -12,13 +12,7 @@ import org.springframework.web.client.RestClient;
 
 @Configuration(proxyBeanMethods = false)
 public class SlackNotificationConfiguration {
-    @Bean SlackNotificationSettings slackNotificationSettings(
-            @Value("${NOTIFICATION_PROVIDER:}") String provider,
-            @Value("${SLACK_MEETING_WEBHOOK_URL:}") String webhookUrl) {
-        return new SlackNotificationSettings(provider, webhookUrl);
-    }
-
-    @Bean SlackNotificationAdapter slackNotificationAdapter(SlackNotificationSettings settings) {
+    @Bean SlackNotificationAdapter slackNotificationAdapter(SlackWebhookSettingsService settings) {
         HttpClient http = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NEVER)
                 .connectTimeout(Duration.ofSeconds(5)).build();
         JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory(http);

@@ -7,7 +7,11 @@ public record SlackNotificationSettings(String provider, String webhookUrl) {
     private static final Pattern PATH = Pattern.compile("/services/[A-Za-z0-9-]+/[A-Za-z0-9-]+/[A-Za-z0-9-]+/?");
 
     public boolean configured() {
-        if (!"SLACK".equals(provider) || webhookUrl == null || webhookUrl.isBlank()) return false;
+        return "SLACK".equals(provider) && validWebhookUrl(webhookUrl);
+    }
+
+    public static boolean validWebhookUrl(String webhookUrl) {
+        if (webhookUrl == null || webhookUrl.isBlank()) return false;
         try {
             URI uri = URI.create(webhookUrl.trim());
             return "https".equalsIgnoreCase(uri.getScheme()) && "hooks.slack.com".equalsIgnoreCase(uri.getHost())

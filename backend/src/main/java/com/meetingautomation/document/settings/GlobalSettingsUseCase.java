@@ -30,7 +30,7 @@ public final class GlobalSettingsUseCase {
                 if (draft != null && !locked(current) && !draft.expiresAt().isAfter(clock.instant())) draft=null;
                 if (draft!=current.draft() || operation!=current.operation() || history.size()!=current.operationHistory().size()) {
                     var cleaned = new GlobalDocumentSettings(1, current.version() + 1, current.active(), draft,
-                            operation, current.idempotencyRecords(),Map.copyOf(history));
+                            operation, current.idempotencyRecords(),Map.copyOf(history), current.slackNotification(), current.emailNotification());
                     return new GlobalSettingsStore.Change<>(cleaned, cleaned);
                 }
                 return new GlobalSettingsStore.Change<>(current, current);
@@ -125,7 +125,7 @@ public final class GlobalSettingsUseCase {
         String json = JSON.writeValueAsString(Map.of("data", response));
         var records = new HashMap<>(current.idempotencyRecords());
         records.put(key, new GlobalDocumentSettings.Replay(hmac, status, json, current.version() + 1));
-        var next = new GlobalDocumentSettings(1, current.version() + 1, current.active(), draft, current.operation(), Map.copyOf(records),current.operationHistory());
+        var next = new GlobalDocumentSettings(1, current.version() + 1, current.active(), draft, current.operation(), Map.copyOf(records),current.operationHistory(),current.slackNotification(),current.emailNotification());
         return new GlobalSettingsStore.Change<>(next, new MutationResult(status, json, next.version()));
     }
     public record MutationResult(int status, String responseJson, long version) { }
