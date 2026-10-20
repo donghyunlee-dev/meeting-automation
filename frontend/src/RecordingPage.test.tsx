@@ -44,6 +44,18 @@ describe('RecordingPage', () => {
     expect(screen.getByRole('button', { name: '녹음 시작' }).className).toContain('recording-start-action');
   });
 
+  it('offers an input monitor retry when the microphone stream is ready but no signal is detected', () => {
+    const onRetryMicrophone = vi.fn();
+    render(<RecordingPage sessionId="session-123" title="Planning" state="Ready" elapsedMs={0}
+      microphoneStatus="ready" microphoneInputDetected={false} onRetryMicrophone={onRetryMicrophone}
+      onStart={vi.fn()} onPause={vi.fn()} onResume={vi.fn()} onRequestEnd={vi.fn()} onConfirmEnd={vi.fn()} onCancelEnd={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole('button', { name: '마이크 입력 확인' }));
+
+    expect(onRetryMicrophone).toHaveBeenCalledTimes(1);
+    expect((screen.getByRole('button', { name: '녹음 시작' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
   it('formats durations as padded HH:mm:ss, including hours and fractional seconds', () => {
     expect(formatElapsedTime(62018)).toBe('00:01:02');
     expect(formatElapsedTime(3_661_999)).toBe('01:01:01');

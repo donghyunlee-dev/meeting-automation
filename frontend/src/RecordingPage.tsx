@@ -132,7 +132,7 @@ export function RecordingPage({ title, state, elapsedMs, microphoneStatus = 'che
             })}
           </div>
           <span>{microphoneStatus === 'checking' ? '마이크 확인 중' : microphoneStatus === 'error' ? '마이크를 사용할 수 없습니다' : microphoneSignalDetected ? '마이크 입력 확인됨' : '마이크 입력 대기 중 · 짧게 말해 주세요'}</span>
-          {microphoneStatus === 'error' && onRetryMicrophone && <button type="button" className="recording-microphone-retry" onClick={onRetryMicrophone}>마이크 다시 확인</button>}
+          {onRetryMicrophone && (microphoneStatus === 'error' || (microphoneStatus === 'ready' && !microphoneSignalDetected)) && <button type="button" className="recording-microphone-retry" onClick={onRetryMicrophone}>{microphoneStatus === 'error' ? '마이크 다시 확인' : '마이크 입력 확인'}</button>}
         </div>}
         {errorMessage && <p className="recording-error" role="alert">{errorMessage}</p>}
         {endSnapshot?.message && endSnapshot.status !== 'idle'

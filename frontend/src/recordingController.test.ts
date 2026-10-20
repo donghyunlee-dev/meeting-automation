@@ -8,6 +8,7 @@ function createFixture(options: {
   supported?: boolean;
   supportedTypes?: string[];
   getUserMedia?: () => Promise<{ getTracks: () => Array<{ stop: () => void }> }>;
+  monitorInput?: (stream: { getTracks: () => Array<{ stop: () => void }> }, onLevel: (level: number) => void) => () => void;
   constructionError?: Error;
   recorderStartError?: Error;
   recorderStopError?: Error;
@@ -36,6 +37,7 @@ function createFixture(options: {
     isMediaRecorderSupported: vi.fn(() => options.supported ?? true),
     isTypeSupported: vi.fn((mimeType) => options.supportedTypes?.includes(mimeType) ?? true),
     getUserMedia: vi.fn(options.getUserMedia ?? (() => Promise.resolve(stream))),
+    ...(options.monitorInput ? { monitorInput: vi.fn(options.monitorInput) } : {}),
     createRecorder: vi.fn((_mediaStream, { mimeType }) => {
       if (options.constructionError) throw options.constructionError;
       recorder.mimeType = mimeType;
@@ -78,6 +80,33 @@ describe('RecordingController', () => {
     expect(fixture.controller.getSnapshot().state).toBe('Recording');
     expect(fixture.adapter.setInterval).toHaveBeenCalledTimes(1);
     expect(vi.mocked(fixture.adapter.setInterval).mock.calls[0][1]).toBe(1_000);
+  });
+
+  it('restarts the input monitor on an explicit retry without reacquiring the microphone', async () => {
+    const firstCleanup = vi.fn();
+    const monitorInput = vi.fn()
+      .mockReturnValueOnce(firstCleanup)
+      .mockReturnValueOnce(vi.fn());
+    const fixture = createFixture({ monitorInput });
+
+    await fixture.controller.prepareMicrophone();
+    await fixture.controller.prepareMicrophone();
+
+    expect(fixture.adapter.getUserMedia).toHaveBeenCalledTimes(1);
+    expect(monitorInput).toHaveBeenCalledTimes(2);
+    expect(firstCleanup).toHaveBeenCalledTimes(1);
+  });
+
+  it('releases the microphone stream if input monitoring cannot be initialized', async () => {
+    const fixture = createFixture({ monitorInput: () => { throw new Error('monitor unavailable'); } });
+
+    await fixture.controller.prepareMicrophone();
+
+    expect(fixture.track.stop).toHaveBeenCalledTimes(1);
+    expect(fixture.controller.getSnapshot()).toMatchObject({
+      microphoneStatus: 'error',
+      errorMessage: '마이크 입력 상태를 확인할 수 없습니다. 브라우저에서 마이크를 다시 확인해 주세요.',
+    });
   });
 
   it('shows a safe unsupported-browser error without requesting microphone access', async () => {

@@ -6,6 +6,7 @@ export const browserMediaAdapter: MediaRecorderAdapter = {
   getUserMedia: async () => navigator.mediaDevices.getUserMedia({ audio: true }) as Promise<MediaStreamLike>,
   monitorInput: (stream, onLevel) => {
     const context = new AudioContext();
+    if (context.state !== 'running') void context.resume().catch(() => undefined);
     const source = context.createMediaStreamSource(stream as MediaStream);
     const analyser = context.createAnalyser();
     analyser.fftSize = 512;

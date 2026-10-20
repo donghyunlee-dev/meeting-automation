@@ -149,9 +149,22 @@ export class RecordingController {
   }
 
   async prepareMicrophone(): Promise<void> {
-    if (this.disposed || this.snapshot.state !== 'Ready' || this.stream || this.microphoneCheckInProgress) return;
+    if (this.disposed || this.snapshot.state !== 'Ready' || this.microphoneCheckInProgress) return;
     this.microphoneCheckInProgress = true;
     this.publish({ microphoneStatus: 'checking', microphoneLevel: 0, microphoneInputDetected: false, errorMessage: undefined });
+    if (this.stream) {
+      try {
+        this.monitorCleanup?.();
+        this.monitorCleanup = null;
+        this.startInputMonitor(this.stream);
+      } catch {
+        this.releaseTracks();
+        this.publish({ microphoneStatus: 'error', microphoneLevel: 0, errorMessage: '마이크 입력 상태를 확인할 수 없습니다. 브라우저에서 마이크를 다시 확인해 주세요.' });
+      } finally {
+        this.microphoneCheckInProgress = false;
+      }
+      return;
+    }
     let acquired: MediaStreamLike | null = null;
     try {
       if (!this.options.adapter.isMediaRecorderSupported()) {
@@ -170,11 +183,7 @@ export class RecordingController {
       this.stream = acquired;
       this.publish({ microphoneStatus: 'ready' });
       try {
-        this.monitorCleanup = this.options.adapter.monitorInput?.(acquired, (level) => {
-          const normalizedLevel = Math.max(0, Math.min(1, level));
-          this.publish({ microphoneLevel: normalizedLevel, microphoneInputDetected: this.snapshot.microphoneInputDetected || normalizedLevel > .025 });
-        }) ?? null;
-        if (!this.options.adapter.monitorInput) this.publish({ microphoneInputDetected: true });
+        this.startInputMonitor(acquired);
       } catch {
         this.releaseTracks();
         this.publish({ microphoneStatus: 'error', microphoneLevel: 0, errorMessage: '마이크 입력 상태를 확인할 수 없습니다. 브라우저에서 마이크를 다시 확인해 주세요.' });
@@ -185,6 +194,15 @@ export class RecordingController {
     } finally {
       this.microphoneCheckInProgress = false;
     }
+  }
+
+  private startInputMonitor(stream: MediaStreamLike) {
+    this.monitorCleanup = this.options.adapter.monitorInput?.(stream, (level) => {
+      const normalizedLevel = Math.max(0, Math.min(1, level));
+      this.publish({ microphoneStatus: 'ready', microphoneLevel: normalizedLevel, microphoneInputDetected: this.snapshot.microphoneInputDetected || normalizedLevel > .025 });
+    }) ?? null;
+    if (!this.options.adapter.monitorInput) this.publish({ microphoneStatus: 'ready', microphoneInputDetected: true });
+    else this.publish({ microphoneStatus: 'ready' });
   }
 
   async start(): Promise<void> {
