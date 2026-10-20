@@ -1,4 +1,5 @@
 import { getApiBaseUrl } from './apiBase';
+import { apiFetch } from './apiFetch';
 import { normalizeApiError, type SafeApiError } from './lib/api/normalizeApiError';
 
 export type MeetingParticipantSummary = { id: string; name: string };
@@ -52,7 +53,7 @@ export function listMeetings(limit?: number): Promise<MeetingSummary[]> {
 
 async function requestMeetingList(url: string): Promise<MeetingSummary[]> {
   try {
-    const response = await fetch(url, { headers: { Accept: 'application/json' } });
+    const response = await apiFetch(url, { headers: { Accept: 'application/json' } });
     const body: unknown = await response.json();
     if (!response.ok || typeof body !== 'object' || body === null || !('data' in body)) {
       throw new MeetingListApiError(normalizeApiError(body, response.status));

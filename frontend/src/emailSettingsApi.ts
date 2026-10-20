@@ -1,4 +1,5 @@
 import { getApiBaseUrl } from './apiBase';
+import { apiFetch } from './apiFetch';
 import { clearStoredEmailSettings, loadStoredEmailSettings, saveStoredEmailSettings, type StoredEmailSettings } from './emailSettingsStorage';
 
 export type EmailSettings = {
@@ -23,7 +24,7 @@ export class EmailSettingsApiError extends Error {
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let response: Response;
   try {
-    response = await fetch(`${getApiBaseUrl()}/api/v1/integrations/email${path}`, {
+    response = await apiFetch(`${getApiBaseUrl()}/api/v1/integrations/email${path}`, {
       ...init,
       headers: { Accept: 'application/json', ...init?.headers },
     });

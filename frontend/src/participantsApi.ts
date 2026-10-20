@@ -1,4 +1,5 @@
 import { getApiBaseUrl } from './apiBase';
+import { apiFetch } from './apiFetch';
 export type Participant = { id: string; name: string; email: string };
 export type ParticipantInput = { name: string; email: string };
 export type ParticipantPatch = Partial<ParticipantInput>;
@@ -39,7 +40,7 @@ function baseUrl(): string {
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let response: Response;
   try {
-    response = await fetch(`${baseUrl()}/api/v1${path}`, {
+    response = await apiFetch(`${baseUrl()}/api/v1${path}`, {
       ...init,
       headers: { Accept: 'application/json', ...init?.headers },
     });

@@ -22,17 +22,22 @@ export async function apiFetch(
   const timeoutMs = options.timeoutMs ?? DEFAULT_API_REQUEST_TIMEOUT_MS;
   let response: Response | undefined;
   let requestError: unknown;
+  let requestFailed = false;
 
   try {
     response = await fetchWithTimeout(input, init, timeoutMs, fetchImpl);
   } catch (error) {
     requestError = error;
+    requestFailed = true;
     if (!isBackendRequest(input) || isCallerAbort(error, getCallerSignal(input, init))) throw error;
   }
 
   if (response && (!isBackendRequest(input) || !GATEWAY_FAILURES.has(response.status))) return response;
 
-  const recovery = await recoverBackendAvailability(fetchImpl);
+  const recovery = await waitForRecovery(
+    recoverBackendAvailability(fetchImpl),
+    getCallerSignal(input, init),
+  );
   if (recovery === 'recovered' && canReplayRequest(input, init)) {
     if (init.signal?.aborted) throw abortError();
     try {
@@ -43,8 +48,32 @@ export async function apiFetch(
     }
   }
 
-  if (requestError !== undefined) throw requestError;
+  if (requestFailed) throw requestError;
   return response!;
+}
+
+function waitForRecovery(
+  recovery: Promise<'already-ready' | 'recovered' | 'dismissed'>,
+  signal?: AbortSignal | null,
+): Promise<'already-ready' | 'recovered' | 'dismissed'> {
+  if (!signal) return recovery;
+  if (signal.aborted) return Promise.reject(abortError());
+
+  return new Promise((resolve, reject) => {
+    const cleanup = () => signal.removeEventListener('abort', onAbort);
+    const onAbort = () => {
+      cleanup();
+      reject(abortError());
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+    recovery.then((result) => {
+      cleanup();
+      resolve(result);
+    }, (error: unknown) => {
+      cleanup();
+      reject(error);
+    });
+  });
 }
 
 function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit, timeoutMs: number, fetchImpl: typeof fetch): Promise<Response> {

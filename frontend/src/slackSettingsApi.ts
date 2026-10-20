@@ -1,4 +1,5 @@
 import { getApiBaseUrl } from './apiBase';
+import { apiFetch } from './apiFetch';
 import { clearStoredSlackWebhook, loadStoredSlackWebhook, saveStoredSlackWebhook } from './slackWebhookStorage';
 
 export type SlackWebhookSettings = {
@@ -22,7 +23,7 @@ let restorePromise: Promise<SlackWebhookSettings> | null = null;
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let response: Response;
   try {
-    response = await fetch(`${getApiBaseUrl()}/api/v1/integrations/slack${path}`, {
+    response = await apiFetch(`${getApiBaseUrl()}/api/v1/integrations/slack${path}`, {
       ...init,
       headers: { Accept: 'application/json', ...init?.headers },
     });

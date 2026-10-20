@@ -1,4 +1,5 @@
 import { getApiBaseUrl } from './apiBase';
+import { apiFetch } from './apiFetch';
 import type { Participant } from './participantsApi';
 
 export type MeetingTemplate = { id: string; name: string; version: string };
@@ -39,7 +40,7 @@ export class NewMeetingApiError extends Error {
 export async function createMeetingSession(attempt: MeetingSessionAttempt): Promise<MeetingSession> {
   let response: Response;
   try {
-    response = await fetch(`${baseUrl()}/api/v1/meeting-sessions`, {
+    response = await apiFetch(`${baseUrl()}/api/v1/meeting-sessions`, {
       method: 'POST',
       headers: { Accept: 'application/json', 'Content-Type': 'application/json', 'Idempotency-Key': attempt.idempotencyKey },
       body: JSON.stringify({
@@ -70,7 +71,7 @@ function baseUrl(): string {
 async function get<T>(path: string): Promise<T> {
   let response: Response;
   try {
-    response = await fetch(`${baseUrl()}/api/v1${path}`, { headers: { Accept: 'application/json' } });
+    response = await apiFetch(`${baseUrl()}/api/v1${path}`, { headers: { Accept: 'application/json' } });
   } catch {
     throw new NewMeetingApiError('NETWORK_ERROR');
   }
