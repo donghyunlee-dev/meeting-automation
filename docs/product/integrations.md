@@ -1,5 +1,7 @@
 # Meeting Automation Integration Specification
 
+> **문서 상태:** 아래 Port/Adapter 및 Provider 계약은 설계 기준입니다. 일부는 현재 코드와 다릅니다. 실제 동작·지원 범위·저장 위치는 [현재 구현 기준](./implementation-status.md)과 [Backend 설정 안내](../setup/backend-setup.md)를 우선합니다. 예를 들어 현재 초기화는 `Home`/`Speaker Memory` 페이지를 만들지 않으며, 문서·Slack·이메일 설정 복구본은 브라우저 `localStorage`에도 저장됩니다.
+
 > **문서 역할:** 외부 시스템 연동 Port, 표준 DTO, Adapter 책임, 오류/보안 규칙을 정의한다.
 > **기준 문서:** [PRD.md](./PRD.md)
 > **시스템 구성:** [architecture.md](./architecture.md)

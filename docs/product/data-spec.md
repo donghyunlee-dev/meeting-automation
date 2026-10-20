@@ -1,19 +1,18 @@
 # Meeting Automation Data Specification
 
-> **현재 기준:** [최초 연결·자동 발송 기준 흐름](../superpowers/specs/2026-10-16-first-run-and-autodelivery-design.md)이 최초 설정, Template seed, Speaker Memory, 회의 처리 순서를 정의한다. 아래 기존 Session/Review 데이터 필드 중 `REVIEW`/`CONFIRMED`/사용자 Publish 전제를 가진 항목은 과거 계약 기록이며 현재 자동 처리 흐름의 상태 기준으로 사용하지 않는다.
+> **현재 구현 기준:** [현재 구현 기준](./implementation-status.md)을 우선한다. 이 문서는 과거 설계 흐름과 저장 계약을 포함했으며 아래에서 실제 코드와 달랐던 부분을 바로잡는다.
 
 > **문서 역할:** V1의 표준 데이터 모델, 메모리 수명주기, Provider 저장 형태를 정의한다.
 > **기준 문서:** [PRD.md](./PRD.md)
 > **상호 참조:** [architecture.md](./architecture.md), [api-spec.md](./api-spec.md)
-> **기준일:** 2026-10-16 · PRD v2.1.0 draft
-> **최초 설정·자동 발송 흐름:** [기준 설계](../superpowers/specs/2026-10-16-first-run-and-autodelivery-design.md)
+> **기준일:** 2026-10-21 · 구현 대조
 
 ## 설계 원칙
 
 - 별도 application database를 두지 않는다.
 - 진행 중 Session과 조회 cache는 메모리에만 둔다.
-- Participant, Template, 확인된 Speaker Memory, 완료 Meeting 문서는 Document Provider가 영속 Source of Truth다.
-- Audio는 처리용 임시 데이터다. 실패한 Audio는 비공개 객체 저장소에서 최대 24시간 보존하고 처리 이후 삭제한다.
+- Participant, Template, 완료 Meeting 문서는 Document Provider가 영속 Source of Truth다.
+- Audio는 Backend 임시 파일로 처리한다. 실패한 Audio는 재시도 정책에 따라 제한 시간 보존하고 회의록 초안 생성 성공 후 삭제한다.
 - 모든 모델은 Provider SDK 타입과 분리된 표준 DTO/Domain model이다.
 - 시간은 ISO 8601 offset/Z 표기를 사용한다. Segment 위치는 정수 millisecond다.
 
@@ -21,24 +20,23 @@
 
 | 데이터 | 정본/저장 위치 | 수명 |
 |---|---|---|
-| Company, AI/Email/Slack 설정 | Backend 환경 설정 | 배포 기간 |
-| Document 연결 설정·credentials·journal | 암호화한 전역 영속 snapshot | 재시작·재배포 유지 |
-| AI/Email/Slack Secret·설정 암호화 키 | Render Secret | 배포 기간, 비응답 |
+| Company 정보, OpenAI 설정 | Backend 환경 설정 | 배포 기간 |
+| Document·Email·Slack 설정 | 로컬은 조건부 암호화 파일 또는 메모리, Render는 메모리. 브라우저 `localStorage`에서 복구 가능 | 저장 방식에 따라 다름 |
+| OpenAI Secret·설정 암호화 키 | Backend 환경 설정 | 배포 설정에 따름 |
 | Template seed | Backend static resource | Bootstrap 초기 seed; 매 회의 source of truth가 아님 |
 | 활성 Templates | Document Provider `Templates` child page | Provider page content/version |
-| Participants | Document Provider `Participants` child page | Provider 정책에 따름. V1 API는 삭제를 제공하지 않음 |
-| Speaker Memory | Document Provider `Speaker Memory` child page | 사용자가 확인한 회의별 mapping. 다음 회의에서 후보만 제공 |
+| Participants | Document Provider `Participants` child page | Provider 정책에 따름. API에서 조회·생성·수정·삭제 |
 | 완료 Meeting, Minutes, Transcript | Document Provider `Meetings` child page | Provider 정책에 따름 |
 | 진행 MeetingSession | Backend memory | 완료/실패 또는 프로세스 재시작까지 |
 | 브라우저 대기 Audio chunk | IndexedDB 등 Browser temporary storage | 업로드 ACK/세션 정리까지 |
-| Backend chunk 및 assembled Audio | 비공개 객체 저장소 | 성공 시 Review 진입 때 삭제. Processing 실패에서 retry input/chunks 및 검증된 assembled Audio를 마지막 실패부터 최대 24시간 보존하며, retry 성공·실패 마무리·만료 시 삭제. Backend filesystem에 영속 Audio를 두지 않음 |
+| Backend chunk 및 assembled Audio | `TEMP_AUDIO_DIR` 아래 Backend 임시 파일 | 초안 생성 성공 시 삭제. 처리 실패 시 재시도·다운로드 정책에 따른 제한 시간 보존. 영구 저장소가 아님 |
 | Meeting list cache | Backend memory | 짧은 휘발성 cache, 재조회 가능 |
 
-Session은 서버 재시작 뒤 복구되지 않는다. 상태 조회 시 휘발된 Session에 `SESSION_NOT_FOUND`를 반환한다. Browser의 미전송 chunk는 재전송할 수 있지만 Session이 유실된 경우 새 Session 재생성이 필요할 수 있다. 비공개 Audio 객체는 Backend 재시작/재배포로 삭제되지 않으며 설정된 만료까지 보존·정리된다. 다만 Session 복구가 별도로 지원되지 않으므로 API를 통한 해당 Session의 재시도/다운로드는 불가능할 수 있다.
+Session은 서버 재시작 뒤 복구되지 않는다. 상태 조회 시 휘발된 Session에 `SESSION_NOT_FOUND`를 반환한다. Browser의 미전송 chunk는 브라우저 저장소에 남아 있으면 재전송할 수 있지만 Session이 유실된 경우 새 Session 재생성이 필요할 수 있다. Backend 임시 파일의 재시작·재배포 후 보존은 보장하지 않는다.
 
-`PROCESSING_FAILED` Session은 `failedStage`, 안전한 `errorCode`, `retryable`, `audioAvailable`, `audioExpiresAt` metadata를 가진다. retryable 여부와 관계없이 만료 전 실패 종료는 가능하다. Audio chunk와 assembled object는 private storage port에 서버 생성 opaque key로 저장하며 public URL을 생성하지 않는다. 처리하지 않은 chunk와 처리 중 만들어진 assembled object에는 저장 시점부터 24시간의 durable 임시 만료를 붙여 abandoned upload와 재시작 잔여 객체를 정리한다. 메모리에 남아 있는 `PROCESSING` Session의 입력은 sweep이 삭제하지 않는다. `AUDIO_ASSEMBLY` 실패 시 필요한 source chunks를 보존하고 retryable이면 재시도한다. 검증된 assembled Audio가 있을 때만 사용자는 기존 V1 배포 접근 정책으로 보호되는 Backend API 경로를 통해 원본 Audio를 다운로드할 수 있다. 사용자 계정 인증은 현재 API 계약에 포함하지 않는다. 재시도가 명시적으로 시작되면 필요한 Audio/chunks의 expiry sweep을 중지하고, 재시도 실패 시 object 만료를 새 실패 시각에서 24시간으로 갱신한다. 성공하면 REVIEW 진입 전 Audio/chunk를 삭제한다. 사용자가 실패 종료를 선택하거나, 만료 시 Session이 메모리에 남아 있으면 Audio/chunk를 삭제하고 Session을 `COMPLETED_WITH_WARNINGS`로 마무리한다. Backend 재시작 뒤 Session이 없는 경우 만료 sweep은 객체만 삭제하며 실패 문서는 생성하지 않는다. 저장 실패는 안전한 `AUDIO_STORAGE_FAILED`로 처리하며 Audio를 잃은 상태로 processing 성공을 가장하지 않는다.
+`PROCESSING_FAILED` Session은 실패 단계, 안전한 오류 코드, 재시도 가능 여부, 오디오 사용 가능 여부와 선택적 만료 시각을 가진다. Audio는 Backend 임시 파일에 저장하며 영구 저장소에 보존하지 않는다. 회의록 초안 생성 성공 시 Audio와 chunk를 삭제한다. 처리 실패 시 재시도에 필요한 Audio/chunk를 제한 기간 유지하고, 명시적 재시도·실패 종료·만료 정책에 따라 삭제한다. Backend 재시작 뒤 Session 복구는 지원하지 않는다.
 
-실패 종료 Meeting 문서는 `{externalSessionId,meetingAt,templateId,participantIds}` 기존 최소 metadata에 실패 stage, safe error code, `audioDisposition`, 완료 시각을 추가한다. 본문에는 meeting 정보와 `녹음 변환 결과: 실패` 기록을 둔다. Transcript, Minutes placeholder, Audio bytes, 파일 경로, Provider 원문은 기록하지 않는다. 정상 처리 완료 문서 저장은 기존 Review/Confirm 흐름을 따른다.
+실패 종료 Meeting 문서는 `{externalSessionId,meetingAt,templateId,participantIds}` metadata에 실패 단계, 안전한 오류 코드, `audioDisposition`, 완료 시각을 추가한다. 본문에는 회의 정보와 변환 실패를 기록하고 Transcript, 오디오 bytes, 파일 경로, Provider 오류 원문은 넣지 않는다. 정상 처리 뒤 Session은 `REVIEW` 상태가 된다. 사용자가 회의록과 화자 매핑을 저장하고 검토를 완료하면 Publish 작업이 선택 템플릿과 검토 Minutes로 최종 Markdown을 작성해 Provider에 저장한다. 문서 저장 후 설정된 Email/Notification 채널을 각각 처리한다.
 
 ## 식별자와 공통 필드
 
@@ -118,9 +116,9 @@ TranscriptSegment = { segmentId, speakerId, startMs, endMs, text }
 - Provider `speakerId`는 Session 범위로만 유효하다. Speaker Memory의 과거 기록만으로 다른 회의의 Speaker를 자동 식별하지 않는다.
 - Voiceprint, 음성 embedding, 생체 식별 특징은 저장하지 않는다.
 
-### Speaker Memory
+### Speaker mapping
 
-Speaker Memory record는 최소한 확인된 `participantId`, 회의 ID, 회의별 `speakerId`, 확인 시각을 연결한다. 이름/email은 Participants 참조에서 가져오며 중복 복제하지 않는다. 회의별 mapping 화면에서 기존 기록은 후보/힌트로만 보여주고 사용자가 확인해야 한다.
+Speaker mapping은 현재 회의 Session 메모리에 보관한다. 각 화자는 회의 참가자 roster ID에 연결되고 이름은 참석자 Provider 자료를 조회해 표시한다. 현재 구현은 별도 `Speaker Memory` 페이지에 이전 매핑을 저장하거나 다음 회의의 후보로 자동 제공하지 않는다.
 
 ### Structured Minutes
 
@@ -138,7 +136,7 @@ Speaker Memory record는 최소한 확인된 `participantId`, 회의 ID, 회의�
 }
 ```
 
-각 필드는 생성 및 편집 가능한 구조화 필드다. `ownerParticipantId`는 실제 Participant를 참조하거나 null이다. 날짜는 `YYYY-MM-DD` 또는 null이다. AI는 Transcript 근거가 없는 결정, 담당자, 날짜를 만들어 내지 않는다. Template별 Markdown은 Backend renderer가 이 구조를 표시하는 데 사용한다.
+각 필드는 생성 및 편집 가능한 구조화 필드다. `ownerParticipantId`는 실제 Participant를 참조하거나 null이다. 날짜는 `YYYY-MM-DD` 또는 null이다. AI는 Transcript 근거가 없는 결정, 담당자, 날짜를 만들어 내지 않는다. 검토 UI는 구조화 Minutes를 표시·수정하고, 최종 저장 단계에서 OpenAI Chat Completions가 선택 템플릿과 검토 내용을 Markdown으로 변환한다.
 
 ## Chunk 업로드 데이터
 
@@ -188,12 +186,15 @@ API-010은 Publish가 시작된 뒤 이 generic Delivery projection을 제공한
 지정 부모/space
 └─ Meeting Automation (위저드 생성 또는 명시 재사용 root)
    ├─ Meetings
-   │  └─ <meeting date> <title> (one provider page per meeting)
-   └─ Participants
-      └─ <participant name> (one provider page per participant)
+   │  └─ <meeting date> <title> (회의 문서)
+   ├─ Participants
+   │  └─ <participant name> (참석자 문서)
+   ├─ Meeting Data
+   └─ Templates
+      └─ 기본 회의록 (초기 Markdown template)
 ```
 
-다른 자동 생성 문서 계층은 만들지 않는다. Meeting page 본문은 회의 정보, 요약, 논의사항, 결정사항, Action Items, 후속 확인사항, Transcript 순서다.
+`Home` 및 `Speaker Memory` 페이지는 현재 생성하지 않는다. Meeting history는 Meetings와 Meeting Data의 앱 관리 문서를 읽어 구성한다. 회의 본문은 선택된 템플릿의 섹션을 따른다.
 
 필수 최소 metadata:
 
@@ -202,7 +203,7 @@ API-010은 Publish가 시작된 뒤 이 generic Delivery projection을 제공한
   "schemaVersion": "1.0",
   "externalSessionId": "ms_xxx",
   "meetingAt": "2026-10-04T10:00:00+09:00",
-  "templateId": "default.md",
+    "templateId": "default.md",
   "participantIds": ["pt_001", "pt_002"]
 }
 ```

@@ -1,11 +1,12 @@
 # Meeting Automation Product Requirements Document
 
+> **현재 구현과의 차이:** 이 PRD에는 현재 구현과 다른 과거 결정, 화면 요구사항, TASK 일정이 함께 남아 있습니다. 실제 기능과 운영 설정의 기준은 [현재 구현 기준](./implementation-status.md)입니다. 아래 PRD 항목은 제품 의사결정·요구사항의 이력으로 읽고, 코드와 다르면 현재 구현 설명으로 사용하지 않습니다.
+
 > **문서 ID:** PRD-MA-001\
 > **버전:** 2.1.0\
 > **기준일:** 2026-10-16\
 > **상태:** 사용자 검토용 설계 초안\
-> **문서 역할:** Meeting Automation V1의
-> 제품·UX·디자인·아키텍처·데이터·API·개발 일정 Single Source of Truth\
+> **문서 역할:** Meeting Automation V1의 제품 요구사항과 과거 설계 결정\
 > **대상:** Product Owner, Frontend, Backend, QA, Codex\
 > **기술 기준:** Node.js 24 / React Mobile-first Web / Vercel, Java 25 / Spring Boot 4.1.x
 > / Render\
@@ -13,14 +14,13 @@
 
 ## 구현 상세 문서
 
-이 PRD는 제품 범위와 확정 의사결정의 기준 문서다. 구현 상세는 아래 문서를 함께 참조한다.
+이 PRD는 제품 범위와 설계 요구사항을 기록한다. 현재 소스 구현과의 대조 기준은 [현재 구현 기준](./implementation-status.md)이다. 구현과 아래 설계가 다를 경우 제품 설계 변경 여부를 검토하고, 실제 동작 안내는 구현 기준 문서를 따른다.
 
 - [Architecture](./architecture.md): 시스템 경계, 구성요소, 흐름, 운영 설계
 - [Data Specification](./data-spec.md): 표준 모델, 저장 위치, 수명주기
 - [API Specification](./api-spec.md): Frontend/Backend REST 계약
 - [Integrations](./integrations.md): 외부 Provider Port와 Adapter 계약
 - [문서 연결·이전 설계](./document-setup.md): 전역 설정, 최초 위저드, 구조 생성, 서비스 변경과 자료 이전
-- [최초 연결·자동 발송 기준 흐름](../superpowers/specs/2026-10-16-first-run-and-autodelivery-design.md): 최초 진입부터 자동 이메일까지의 합의된 순서와 구조
 - [UI Design](./ui-design.md): A안 기반 화면·컴포넌트·시각 토큰 명세
 
 개발 PC 설정 순서는 [Frontend Setup](../setup/frontend-setup.md)과 [Backend Setup](../setup/backend-setup.md)을 따른다.
@@ -44,7 +44,7 @@
 
 ## 문서 운영 원칙
 
-PRD v2.1.0은 최초 설정, 기본 Page 구조, Speaker mapping 이후 회의록 생성, 자동 Email 발송의 현재 제품 기준이다. 과거 TASK의 Review/Confirm/수동 Publish, 두 개 static Template, Root 하위 `Meetings`/`Participants`만 생성하는 설명은 새 동작 기준으로 사용하지 않는다. 과거 TASK와 Evidence는 이력으로 보존하며 변경은 새 task에서 추적한다. 상세 순서는 [기준 흐름 설계](../superpowers/specs/2026-10-16-first-run-and-autodelivery-design.md)를 따른다.
+이 문서는 일부 과거 설계를 포함한다. 현재 구현은 녹음 처리 직후 Minutes 초안을 만들고, 사용자가 화자와 Minutes를 검토한 뒤 Confirm/Publish로 문서를 저장한다. 저장 뒤 설정된 이메일과 Slack 전달을 처리한다. 저장 위치, 모델, 연결 복구와 페이지 구조 등 변경된 구현 사실은 [현재 구현 기준](./implementation-status.md)을 따른다. 과거 TASK/evidence 및 날짜가 붙은 설계는 당시 기록으로 유지한다.
 
 이 문서는 Meeting Automation V1 개발의 최상위 구현 기준이다. Codex를
 포함한 개발 주체는 작업 시작 전에 관련 `DEC-*`, `FR-*`, `NFR-*`,
@@ -80,24 +80,24 @@ PRD v2.1.0은 최초 설정, 기본 Page 구조, Speaker mapping 이후 회의�
 
 # 서비스 정의
 
-Meeting Automation은 **문서 서비스를 한 번 연결한 뒤, 참가자 이메일이 등록된 회의를 스마트폰 웹으로 녹음하고, 화자를 참가자에 매핑하여 AI 회의록을 생성·문서에 저장하고, 매칭된 참가자에게 자동 이메일 발송하는 내부 서비스**다.
+Meeting Automation은 **문서 서비스에 연결한 뒤 회의를 녹음하고, 한국어 전사와 화자 구분을 바탕으로 회의록 초안을 만들어 사용자가 검토·수정한 뒤, 선택한 템플릿의 문서로 저장하고 설정된 이메일·Slack으로 전달하는 내부 서비스**다.
 
 범용 Meeting Intelligence 플랫폼을 목표로 하지 않는다. 핵심 사용 경험은
 다음과 같다.
 
-> **문서 서비스를 연결하고 기본 페이지를 준비 → 참가자와 이메일 선택 → 녹음 → 화자를 참가자에 매칭 → 회의록 생성·저장 → 매칭된 참가자에게 자동 발송**
+> **문서 서비스와 참석자를 설정 → 회의 정보·템플릿 선택 → 녹음 → 전사·회의록 초안 생성 → 화자 매핑·회의록 검토 및 수정 → 검토 완료 → 템플릿 문서 저장 → 연결된 이메일·Slack 전달**
 
 ## 목표
 
 1.  오프라인 회의 기록을 최소 조작으로 시작한다.
 2.  녹음 종료 후 STT, Speaker Diarization, 회의록 생성을 자동화한다.
-3.  자동 실명 음성 인식 대신 사용자가 `Speaker A/B/C`를 참가자에 매핑한다. 확인된 매핑은 Speaker Memory에 기록하고 다음 회의에서 후보로 보여준다.
-4.  매칭 완료 후 기본 Template으로 회의록을 자동 생성한다.
-5.  정상 생성된 회의록을 Notion 또는 Confluence에 저장한 뒤, 매칭된 이메일로 자동 발송한다.
-6.  최초 연결 시 Home, Meetings, Participants, Templates, Speaker Memory 기본 Page를 준비한다.
-7.  앱 첫 방문은 설정 gate를 제공하고, 초기화 완료 직후 New Meeting으로 이동한다. 이후 방문은 Home에서 새 미팅과 이전 회의록을 제공한다.
-8.  별도 애플리케이션 DB 없이 문서 Provider를 참가자·Template·화자 기억·회의록 Source of Truth로 사용한다.
-9.  Slack은 V1 핵심 회의·이메일 흐름에 필요하지 않은 후속 선택 기능이다.
+3.  자동 실명 음성 인식 대신 사용자가 `Speaker A/B/C`를 회의 참석자에 매핑한다.
+4.  기본 Template과 전사 결과로 구조화 회의록 초안을 자동 생성하고 사용자가 내용을 수정할 수 있게 한다.
+5.  사용자가 검토를 완료하면 선택 Template 기준으로 최종 문서를 만들고 Notion 또는 Confluence에 저장한다.
+6.  문서 저장에 성공하면 연결된 Gmail과 Slack 알림을 개별적으로 처리한다.
+7.  최초 연결 시 Meetings, Participants, Meeting Data, Templates 기본 Page를 준비한다.
+8.  앱 첫 방문은 설정 gate를 제공하고, 초기화 완료 후 새 회의 화면으로 이동한다. 이후 방문은 Home에서 새 회의와 최근 회의를 제공한다.
+9.  별도 애플리케이션 DB 없이 문서 Provider를 참석자·Template·완료 회의 문서의 영속 저장소로 사용한다.
 10. Document와 Email Provider는 공통 계약을 통해 교체 가능하게 한다.
     가능하게 한다.
 
@@ -255,8 +255,7 @@ Spring Boot 4.1.x / Java 25
                                       사용하지 않는다.
 
   `DEC-006`                           Notion 또는 Confluence 중 하나가
-                                      참가자·Template·Speaker Memory·
-                                      회의록의 Source of Truth다. 연결과
+                                      참가자·Template·회의록의 Source of Truth다. 연결과
                                       초기화 전에는 회의 생성이 차단된다.
 
   `DEC-007`                           스마트폰을 회의 테이블 중앙에 두고
@@ -266,8 +265,8 @@ Spring Boot 4.1.x / Java 25
                                       `Speaker A/B/C...`를 얻는다.
 
   `DEC-009`                           자동 음성 지문 인식은 하지 않는다.
-                                      사용자가 Speaker를 참가자에 매핑하고
-                                      확인된 매핑을 기억 페이지에 남긴다.
+                                      사용자가 현재 회의의 Speaker를 참석자에
+                                      매핑한다. 이전 회의 매핑 저장은 현재 구현이 아니다.
 
   `DEC-010`                           Speaker mapping은 해당 Speaker의
                                       Transcript 전체에 일괄 적용한다.
@@ -284,23 +283,24 @@ Spring Boot 4.1.x / Java 25
                                       source of truth다.
 
   `DEC-013`                           Root `Meeting Automation` 아래
-                                      Home, Meetings, Participants,
-                                      Templates, Speaker Memory page를
-                                      준비한다.
+                                      Meetings, Participants, Meeting Data,
+                                      Templates page를 준비한다.
 
   `DEC-014`                           Notion/Confluence 공통화를 위해
                                       Page hierarchy/basic CRUD를
                                       기준으로 한다.
 
-  `DEC-015`                           정상 Minutes 생성 및 문서 저장 후
-                                      매칭된 참가자에게 Email을 자동
-                                      발송한다. Slack은 후속 선택 기능이다.
+  `DEC-015`                           사용자가 검토를 완료하고 문서 저장에
+                                      성공하면 선택한 Email 및 Slack 채널에
+                                      각각 전달한다.
 
   `DEC-016`                           과거 회의는 앱에서 읽기 전용이며
                                       수정은 원문 Document Provider에서
                                       한다.
 
-  `DEC-017`                           저장된 Secret은 Backend에서만 사용한다.
+  `DEC-017`                           Provider Secret은 Backend API에서만 사용한다.
+                                      브라우저 localStorage에는 Backend 설정 복구용
+                                      Secret 사본이 보관될 수 있다.
 
   `DEC-018`                           오류는 PROCESSING, DOCUMENT, EMAIL,
                                       NOTIFICATION 네 종류로 운영
@@ -309,11 +309,9 @@ Spring Boot 4.1.x / Java 25
   `DEC-019`                           Slack Admin 오류 알림은 V1 핵심
                                       회의 흐름의 필수 조건이 아니다.
 
-  `DEC-020`                           원본 Audio는 처리용 임시 데이터다.
-                                      성공 시 Review 진입 때 삭제하고,
-                                      실패 시 비공개 객체 저장소에 마지막
-                                      실패부터 24시간 내 재시도/다운로드
-                                      용도로 보존한 후 정리한다.
+  `DEC-020`                           원본 Audio는 Backend 임시 파일로 처리한다.
+                                      회의록 초안 생성 성공 후 삭제하고,
+                                      실패 시 재시도 정책에 따라 제한 시간 보존한다.
   -----------------------------------------------------------------------
 
 ------------------------------------------------------------------------
@@ -326,12 +324,12 @@ Spring Boot 4.1.x / Java 25
 | DEC-021 | 제품 계정·로그인·사용자별 설정은 없다. 문서 연결 설정 하나를 서비스 전체가 공유한다. |
 | DEC-022 | 활성 설정이 없으면 최초 위저드로 유도하며, 연결 테스트와 명시적 완료 요청으로 기본 Page 구조를 생성·재사용한다. |
 | DEC-023 | 운영 중 같은 위저드로 Provider를 변경한다. 전체 자료 복사 또는 새 시작을 선택하며 검증 전 active는 변경하지 않는다. |
-| DEC-024 | 전역 설정·credential·이전 journal은 단일 Backend 영속 디렉터리에 암호화해 저장한다. 업무 문서는 Provider 정본이고 제품 계정 DB는 없다. |
+| DEC-024 | 로컬 Backend는 설정 디렉터리와 키가 구성된 경우 암호화 파일을 사용한다. Render Backend 설정은 메모리 저장소를 사용하며 브라우저 localStorage에 복구용 연결 정보를 보관한다. 업무 문서는 Provider 정본이고 제품 계정 DB는 없다. |
 | DEC-025 | 활성 연결이나 기본 Page 준비가 없으면 설정 화면으로 보내고 회의 기능을 막는다. 저장소 장애나 기존 Provider의 일시 장애를 미설정으로 처리하지 않는다. |
 | DEC-026 | 초기화 성공 직후 첫 방문은 New Meeting으로 이동한다. 설정된 이후 재방문은 Home에서 New Meeting과 Meetings history를 제공한다. |
-| DEC-027 | STT/diarization 다음에 모든 Speaker를 참가자에 매핑한다. mapping을 Minutes 생성 입력으로 사용하며 완료 전에 자동 발송하지 않는다. |
-| DEC-028 | Minutes 성공 후 Provider Meetings page에 저장하고, 저장 성공 뒤 매칭된 참가자별 Email delivery를 자동 시작한다. 사용자의 Publish/Send action은 정상 경로의 선행 조건이 아니다. |
-| DEC-029 | Speaker Memory에는 사용자가 확인한 매핑을 저장해 다음 회의의 후보로 제공한다. V1은 voiceprint나 회의 간 자동 인물 식별을 하지 않으며 후보는 매번 사용자가 확인한다. |
+| DEC-027 | 오디오 처리에서 Minutes 초안을 생성한 뒤 사용자가 화자와 참석자를 매핑하고 회의록 내용을 검토·수정한다. |
+| DEC-028 | 사용자가 검토를 완료하면 Publish가 선택 Template 및 검토 Minutes로 문서 본문을 생성·저장한다. 저장이 성공한 뒤 설정된 Email/Slack을 전달한다. |
+| DEC-029 | 화자 매핑은 현재 Session에서 관리한다. 현재 구현에는 Speaker Memory page나 회의 간 매핑 후보가 없다. |
 
 ## 🧩 연결과 이전 요구사항
 
@@ -342,10 +340,10 @@ Spring Boot 4.1.x / Java 25
 | FR-033 | 이전 선택 시 회의록·Transcript·참석자를 참조 무결성과 함께 복사하고 원본을 보존한다. |
 | FR-034 | 설정·이전 상태를 재시작 후 복원하고 실패 재개·취소·멱등 생성·검증 후 원자 전환을 지원한다. |
 | FR-035 | 앱 진입 상태를 미설정·초기화·준비·저장소 오류·기존 연동 장애로 구분하고, READY 이전에는 회의 기능을 gate한다. |
-| FR-036 | 최초 연결 완료 때 기본 5개 Page를 idempotent하게 생성·재사용하고, 초기화 완료 직후 New Meeting으로 이동한다. |
+| FR-036 | 최초 연결 완료 때 Meetings, Participants, Meeting Data, Templates Page를 idempotent하게 생성·재사용하고, 초기화 완료 직후 새 회의 화면으로 이동한다. |
 | FR-037 | 초기 Template을 Provider Templates page에 seed하고, 활성 Template 내용/version을 회의록 생성에 사용한다. |
-| FR-038 | diarization 이후 모든 Speaker mapping을 먼저 확인·저장하고 그 mapping을 포함해 Minutes를 생성한다. 확인 매핑은 Speaker Memory에 기록한다. |
-| FR-039 | Minutes 생성과 Provider 문서 저장이 성공하면 매칭된 고유 이메일 주소별로 자동 발송하고 각 delivery 결과를 기록한다. |
+| FR-038 | diarization과 Minutes 초안 생성 뒤 Speaker mapping을 저장하고, 사용자가 Minutes를 검토·수정할 수 있다. |
+| FR-039 | 검토 완료 후 최종 문서 저장이 성공하면 요청에서 선택한 이메일 수신자와 Notification 채널을 처리하고 각 delivery 결과를 기록한다. |
 
 화면 SCR-013은 공용 연결 위저드, SCR-014는 서비스 전환·자료 이전 진행이다. 신규 API-023~030과 기존 API의 연결 gate는 [API 명세](./api-spec.md)를 따른다. 이 변경의 상세 경계는 [전역 문서 연결 설계](./document-setup.md)가 기준이다.
 
@@ -574,20 +572,16 @@ Domain/Application 계층은 특정 Notion/Confluence/Slack/OpenAI SDK 타입을
 
 ## 저장 위치
 
-  데이터                                   위치                          영속
-  ---------------------------------------- ----------------------------- ------
-  회사명                                  Backend deployment config     Y
-  Document Provider/Root/연결 credential     암호화한 전역 영속 설정        Y
-  AI/Email/Slack/설정 암호화 키             Render Secret                 Y
-  Template seed                            Backend static resource       Y
-  Active Template                          Document Provider Templates page Y
-  Participants                             Document Provider Participants page Y
-  Confirmed Speaker Memory                 Document Provider Speaker Memory page Y
-  Meeting Minutes                          Document Provider Meetings page Y
-  Transcript                               Meeting Document              Y
-  Active MeetingSession                    Spring memory                 N
-  Audio chunk/assembled audio              Browser temporary + private object storage   처리 중 유지, 성공 시 삭제, 실패 시 최대 24시간
-  Meeting list cache                       memory                        N
+| 데이터 | 현재 저장 위치 | 지속성 |
+|---|---|---|
+| 문서·이메일·Slack 연결 설정 | 로컬 Backend의 조건부 암호화 파일/메모리, Render Backend 메모리. 브라우저 `localStorage` 복구본 | 기기별 복구 가능, 중앙 동기화 없음 |
+| OpenAI 설정 | Backend 환경 설정 | 배포 설정에 따름 |
+| 참석자·활성 Template·완료 Meeting | Notion 또는 Confluence | Provider 정책에 따름 |
+| 화자 매핑·진행 중 MeetingSession | Backend 메모리 | 재시작 뒤 복구 보장 없음 |
+| Audio chunk·조립본 | 브라우저 대기 저장소와 Backend `TEMP_AUDIO_DIR` | 초안 생성 성공 후 삭제, 실패 시 임시 보존 |
+| Meeting list cache | Backend 메모리 | 재조회 가능 |
+
+브라우저 복구 정보에는 Provider 자격 증명이 포함될 수 있다. 브라우저 `localStorage`는 암호화된 비밀 저장소가 아니며 브라우저 프로필과 기기에 한정된다.
 
 ## MeetingSession
 
@@ -1027,12 +1021,12 @@ Recording/Processing 중 Bottom Navigation은 숨긴다.
 
 **목적:** 앱 진입 즉시 회의를 시작하거나 최근 회의를 확인한다.
 
-**구성** - App title - `새 회의` Primary Button - 최근 회의 최대 5건 -
+**구성** - App title - `새 회의` Primary Button - 최근 회의 최대 3건 -
 전체 보기 - Bottom Navigation
 
 ``` text
 ┌──────────────────────────┐
-│ Meeting Automation       │
+│ 회의 시작                 │
 │                          │
 │  회의를 시작할까요?      │
 │  회의 내용을 녹음하고    │
@@ -1142,12 +1136,12 @@ Bottom Sheet/Modal:
 
 실제 Backend 상태와 동기화한다.
 
-`PROCESSING_FAILED`이면 실패 stage와 안전한 안내를 표시한다. `retryable=true`이고 Audio 보존 기한 전이면 사용자가 `변환 재시도`를 명시적으로 실행할 수 있다. 자동 재시도는 없다. 실패가 반복되면 사용자는 비공개 객체 저장소의 원본 Audio를 내려받은 뒤 `변환 실패로 마무리`를 선택할 수 있다. 실패 종료 시 Meeting 문서에는 회의 정보, 변환 실패, Audio 다운로드 완료 여부를 기록하고 Email/Slack은 참석자에게 보내지 않는다. 24시간 안에 결정하지 않으면, Session이 메모리에 남아 있는 동안 Backend가 실패 문서를 `DISCARDED`로 마무리하고 Audio를 정리한다. Backend가 재시작되어 Session이 소실된 뒤에는 Audio만 정리하며, 실패 문서는 생성하지 않는다.
+`PROCESSING_FAILED`이면 실패 stage와 안전한 안내를 표시한다. `retryable=true`이고 Audio 보존 기한 전이면 사용자가 변환 재시도를 실행할 수 있다. 자동 재시도는 없다. Audio는 Backend 임시 파일에 보존되며 재시작 뒤 보존은 보장하지 않는다. 실패 종료 시 Meeting 문서에는 회의 정보와 변환 실패 정보를 기록하고 Email/Slack은 보내지 않는다.
 
 ``` text
 녹음 변환에 실패했어요
 실패 단계: 음성 변환
-원본 녹음은 비공개 저장소에 최대 24시간 동안 보관됩니다.
+원본 녹음은 재시도에 필요한 동안 임시 보관됩니다.
 
 [ 변환 재시도 ]  [ 원본 녹음 다운로드 ]
 [ 변환 실패로 마무리 ]
@@ -1157,9 +1151,9 @@ Bottom Sheet/Modal:
 
 ------------------------------------------------------------------------
 
-## SCR-006 Speaker Mapping and Automatic Minutes
+## SCR-006 Review: Speaker Mapping and Minutes
 
-**목적:** diarization이 끝난 뒤 사람이 Speaker를 참가자에 연결한다. 모든 매핑이 저장되면 Backend가 Minutes 생성·문서 저장·자동 이메일을 이어서 처리한다.
+**목적:** 사용자가 Speaker를 참석자에 매핑하고 자동 생성된 회의록 초안을 검토·수정한다.
 
 우선순위: 1. Speaker mapping 2. Transcript 원문
 
@@ -1186,11 +1180,11 @@ Speaker C
 [       매칭 완료       ]
 ```
 
-규칙: 감지된 모든 Speaker는 회의에서 선택된 Participant 중 하나로 연결한다. Speaker Memory의 기록은 후보로 표시하되 사용자가 현재 회의 mapping을 확인한다. 미매핑 화자가 있으면 `매칭 완료`를 막는다. 완료 시 Backend가 확인된 mapping과 활성 기본 Template으로 Minutes를 만든다. 이후 저장과 이메일 발송은 자동 처리한다. 이 핵심 흐름에는 Minutes confirm/publish/send 버튼이 없다.
+규칙: 화자 매핑과 회의록 수정은 각각 저장한다. Transcript를 참고해 요약, 논의 내용, 결정 사항과 실행 항목을 검토한다. 변경이 저장되지 않았으면 검토 완료를 막고 사용자에게 저장을 요청한다. 검토 완료 뒤 문서 저장·전달 단계로 이동한다. 별도 Speaker Memory 후보 기능은 현재 없다.
 
 ------------------------------------------------------------------------
 
-## SCR-007 Delivery Result
+## SCR-007 Meeting Result
 
 ``` text
 회의록 전달 결과
@@ -1200,18 +1194,21 @@ Notion
 Meeting Automation / Meetings
 ✓ 준비 완료
 
-Email 자동 발송 결과
+이메일 전달 결과
 ✓ 김동현
   user1@example.com
 ✓ 홍길동
   user2@example.com
 
+Slack 전달 결과
+✓ 전달 완료
+
 Notion 문서 열기
 ```
 
-이 화면은 자동 처리 결과를 읽기 전용으로 보여준다. 사용자가 저장·발송을 시작하는 버튼은 없다. 순서는 1. Minutes 생성 2. Document 저장 3. 매칭된 이메일 자동 발송이다. Slack은 V1 핵심 흐름에 포함하지 않는다.
+이 화면은 검토 완료 후 시작된 문서 작성·저장·전달의 각 단계를 보여준다. 문서 작성 모델은 선택된 Template과 검토 완료 Minutes를 입력으로 사용한다. 저장 성공 뒤 설정된 이메일과 Slack 전달이 개별 진행되고, 성공·실패 원인을 각 단계에 표시한다. 실패한 단계는 제공된 재시도 action으로 다시 시도한다.
 
-Document 저장 실패 시 Email 발송을 시작하지 않는다. Email 실패는 수신자별 결과로 표시하며 성공한 수신자에게 중복 발송하지 않는다.
+Document 저장 실패 시 Email/Slack 전달을 시작하지 않는다. 이메일은 수신자별 결과를 표시하며 성공한 수신자에게 중복 발송하지 않는다.
 
 ------------------------------------------------------------------------
 
@@ -1220,10 +1217,11 @@ Document 저장 실패 시 Email 발송을 시작하지 않는다. Email 실패�
 ``` text
         ✓
 
-회의록 작성 및 자동 이메일 발송이 완료되었습니다
+회의록 저장 및 전달이 완료되었습니다
 
 Notion        저장 완료
-Email         2명 전송 완료
+Email         전달 완료
+Slack         전달 완료
 
 [ 회의록 보기 ]
 [ 홈으로 ]
@@ -2316,7 +2314,7 @@ Meeting UI
 
 **Next development cursor: `TASK-018.03` (TASK-022.07 Issue #161 / PR #162 merged; TASK-018.03 remains gated on user-run TASK-018.01/#65 Android and TASK-018.02/#66 iOS evidence)**
 
-**실행 우선순위:** TASK-022.01~07, TASK-004.04 재검증 및 이전 소프트웨어 작업부터 TASK-017.04까지 DONE. 사용자 요청으로 TASK-022.07 최초 문서 연결 모바일 UI 개선을 TASK-018.03보다 먼저 수행했고 Issue #161 / PR #162 및 Evidence까지 완료했다. 다음 순서는 TASK-018.03 → TASK-018.04 → TASK-019.01~.03 → TASK-020.04 → TASK-021이며, TASK-018.03은 선행 TASK-018.01/#65 Android 및 TASK-018.02/#66 iOS 실기기 Evidence가 준비될 때까지 시작하지 않는다. 해당 실환경 검증은 사용자가 서비스 설정 후 직접 수행한다. 물리 기기 테스트나 결과를 완료로 간주하지 않는다.
+**이력 스냅샷:** 아래 TASK 일정과 완료 표는 이전 실행 계획을 포함하며 최신 구현 상태와 일치한다고 보장하지 않는다. 이를 현재 개발 커서로 사용하기 전에 코드, GitHub 상태, 배포 상태와 대조해야 한다. 현재 기능 설명은 [현재 구현 기준](./implementation-status.md)을 따른다.
 
 **재개 선택 규칙:** 새 세션과 기존 세션 모두 최신 master의 개발 커서·실행 우선순위와 GitHub 선행 관계를 로컬 checkpoint보다 먼저 적용한다. `Resume existing work`는 기존 작업이 여전히 실행 가능한 경우에만 적용한다. TASK-004.04(PR #95), TASK-004.05(PR #111), TASK-005.01(PR #112), TASK-005.02(PR #113), TASK-005.03(PR #114), TASK-005.04(PR #115), TASK-005.05(PR #116), TASK-005.06(PR #117), TASK-005.07(PR #118), TASK-005.08(PR #119), TASK-006.01(PR #120), TASK-006.02(PR #121), TASK-006.03(PR #122), TASK-006.04(PR #123), TASK-006.05(PR #124), TASK-006.06(PR #125), TASK-006.07(PR #126), TASK-007.01(PR #127), TASK-007.02(PR #128), TASK-007.03(PR #129), TASK-008.01(PR #130), TASK-008.02(PR #131), TASK-008.03(PR #132) 및 TASK-009.01(PR #134), TASK-009.02(Issue #41 / PR #135), TASK-009.03(Issue #42 / PR #137), TASK-010.01(Issue #43 / PR #138), TASK-010.02(Issue #44 / PR #139), TASK-010.03(Issue #45 / PR #140), TASK-011.01(Issue #46 / PR #141), TASK-012.01(Issue #48 / PR #143), TASK-012.02(Issue #49 / PR #144), TASK-013.01(Issue #50 / PR #145), TASK-013.02(Issue #51 / PR #146), TASK-014.01(Issue #52 / PR #147), TASK-014.03(PR #54), TASK-014.02(Issue #53 / PR #148)은 병합 및 검증 기록까지 완료했으며, 선행 작업이 완료된 다음 실행 가능 작업인 TASK-014.04(Issue #55 / PR #149)와 TASK-015.01(Issue #56 / PR #150)는 병합 및 검증 기록까지 완료했으며, 다음 실행 가능한 TASK-016.01(Issue #57 / PR #151), TASK-016.02(Issue #58 / PR #152), TASK-016.03(Issue #59 / PR #153), TASK-017.01(Issue #60 / PR #154)까지 병합 및 검증 기록 완료했으며, 다음 실행 가능한 TASK-017.02(Issue #61 / PR #155) and TASK-017.03(Issue #62 / PR #156) merged and recorded; higher-priority TASK-022.01-06 already DONE; TASK-020.03 (Issue #75 / PR #160) is merged and recorded; next is TASK-018.03 (Issue #67), which cannot start until user-run TASK-018.01 (Issue #65) Android and TASK-018.02 (Issue #66) iOS evidence is available. 사용자가 실제 Provider/계정/기기 QA를 제외해도 PRD 구현 범위까지 줄어드는 것은 아니며, 이번 실행은 전체 TODO를 순서대로 진행하고 완료하지 못한 작업은 DONE으로 표시하지 않는다. 과거의 `Provider 수동 설정 대기`는 재개 조건으로 사용하지 않는다. TASK-022.01의 첫 개발·mock 검증을 시작하기 위해 사용자가 먼저 문서 서비스나 키를 준비할 필요는 없으며, 실제 연동 QA에서 필요한 환경만 별도로 확인한다.
 

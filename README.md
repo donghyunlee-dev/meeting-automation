@@ -176,6 +176,7 @@ docs/product/                     제품 요구사항, API, 아키텍처, 연동
 
 ## 더 읽을 문서
 
+- [현재 구현 기준](docs/product/implementation-status.md)
 - [제품 요구사항](docs/product/PRD.md)
 - [시스템 아키텍처](docs/product/architecture.md)
 - [API 명세](docs/product/api-spec.md)

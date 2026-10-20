@@ -1,6 +1,6 @@
 # 🎨 Meeting Automation UI Design
 
-> **현재 제품 흐름:** 최초 연결/기본 Page 준비와 화자 매칭 후 자동 회의록·이메일 처리는 [기준 흐름 설계](../superpowers/specs/2026-10-16-first-run-and-autodelivery-design.md)를 따른다. 이 문서의 예전 Review 표현, SCR 명칭, Slack 표시 중 충돌하는 부분은 구현 지시가 아니다. OpenAI/Gmail 자격 증명은 운영자가 Backend Secret으로 설정하며 앱은 이 값을 입력받지 않는다.
+> **문서 상태:** 이 파일은 초기 UI 설계안의 이력과 시각 원칙을 담고 있습니다. 현재 화면 동작은 [현재 구현 기준](./implementation-status.md)을 따릅니다. 특히 Home 최근 회의는 3건, 녹음 전 마이크 확인, 검토 후 명시적 저장·완료, 하단 고정 action, 문서·이메일·Slack 결과 화면이 현재 구현입니다. 이 문서의 예전 SCR 구성과 미구현 Speaker Memory/자동 처리 흐름을 현재 기능으로 간주하지 않습니다.
 
 > **문서 역할:** 선택한 A안(Minimal & Clean)을 Meeting Automation V1의 구현 가능한 UI 기준으로 정의한다.
 > **기준 문서:** [PRD](./PRD.md)
@@ -188,7 +188,7 @@ font-family:
 ### Card / Meeting List Item
 
 - 회의 제목을 가장 먼저 읽고 날짜·참석자·완료 상태는 한 단계 낮게 보여준다.
-- Home은 최근 회의를 최대 5건까지만 표시한다.
+- Home은 최근 회의를 최대 3건까지만 표시한다.
 - Meetings는 Provider에서 가져온 100건 미만의 항목을 제목/참석자 기준으로 브라우저에서 필터한다.
 - 화면마다 card를 중첩하지 않는다.
 
@@ -200,9 +200,9 @@ font-family:
 
 ### Bottom Navigation
 
-- 항목은 `홈`, `회의록`, `설정` 세 개로 고정한다.
+- 항목은 `홈`, `회의록`, `참석자`, `설정` 네 개로 구성한다.
 - 활성 탭은 색과 icon/text 상태로 나타낸다.
-- Participants는 Settings 하위에서 접근한다.
+- 참석자 관리는 별도 하단 메뉴에서 바로 접근한다.
 - Recording/Processing 중에는 표시하지 않는다.
 
 ### Bottom Sheet / Confirmation Dialog
@@ -232,39 +232,39 @@ font-family:
 
 ## 화면 정의
 
-### SCR-001 Home
+### SCR-001 Home (초기 시안 기록)
 
 **목적:** READY 상태에서 새 회의를 시작하거나 이전 회의로 돌아간다. App Config가 READY가 아니면 Home을 열지 않고 설정/오류 상태로 분기한다.
 
 - App title과 서비스 목적을 간단하게 표시한다.
 - 파란색 Primary `새 회의 시작` 버튼을 화면 상단 주요 영역에 둔다.
-- 최근 회의는 최대 5건이며 제목, 회의 일시, 참석자 수, 완료 상태를 보여준다.
+- 최근 회의는 최대 3건이며 회의 제목, 회의 시각, 참석자 수를 보여준다.
 - `전체 보기`는 Meetings 화면으로 이동한다.
 - 회의가 없으면 최근 목록 자리에 짧은 Empty state를 보여주고 시작 버튼은 그대로 노출한다.
 - Loading/Error 상태와 재시도 action을 정의한다.
 - Bottom Navigation을 표시한다.
-- 구현 단계에서 Home shell과 새 회의 진입은 TASK-004.01, 최근 회의 목록·전체 보기는 TASK-014.03에서 연결한다.
+- Home의 구현 상세와 화면 동작은 위 현재 구현 기준 문서를 따른다. 과거 TASK 참조는 개발 진행 지시가 아니다.
 
-### SCR-002 New Meeting
+### SCR-002 New Meeting (초기 시안 기록)
 
 **목적:** 회의 Session을 만들기 위한 최소 정보 입력.
 
-- 회의명 text field, Template select, 참석자 multi-select, 참석자 추가 action을 세로로 배치한다.
-- 회의명과 Template은 필수, 참석자는 최소 1명 선택해야 한다.
-- `참석자 추가`는 API-003 roster에서 미선택 참석자를 multi-select에 추가한다. 새 roster record 관리는 Participants 설정 화면에서 한다.
+- 회의명, 회의 날짜, 참석자 선택을 세로로 배치한다. 기본 회의록 템플릿이 자동으로 지정된다.
+- 회의명·회의 날짜는 필수이며, 참석자는 등록된 목록에서 선택한다.
+- `참석자 추가`는 API-003 roster에서 미선택 참석자를 multi-select에 추가한다. 참석자 목록 관리는 별도 참석자 화면에서 한다.
 - 폼 오류를 해당 필드 근처에 표시하고 입력값을 보존한다.
-- 하단 Primary `회의 시작`을 제공한다. 비활성 사유는 label/help text로 알린다.
+- 하단에 고정된 full-width `회의 시작` action을 제공한다.
 - PRD 범위에 없는 날짜·시작시간·예상시간 입력은 추가하지 않는다.
 
-### SCR-003 Recording
+### SCR-003 Recording (초기 시안 기록)
 
 **목적:** 테이블 중앙에 놓인 모바일을 방해 없이 녹음기로 사용.
 
-- 회의명, Recording indicator, 경과 시간, 큰 종료 버튼만 주요 콘텐츠로 표시한다.
+- 녹음을 시작하기 전에 마이크 입력을 확인하고 입력 파형을 표시한다. 회의명, 녹음 상태, 경과 시간과 종료 버튼을 표시한다.
 - Session 생성 직후 Ready에는 `녹음 시작`, Recording에는 `일시정지`와 `회의 종료`, Paused에는 `녹음 재개`와 `회의 종료` action을 표시한다. 화면 표시 state는 녹음 제어기에서 전달받는다.
 - Recording/Paused 상태 문구는 `aria-live="polite"`로 알리되 timer 초 단위 변경은 반복 낭독시키지 않는다.
 - 마이크 권한 거부/미지원, MediaRecorder 오류, 업로드 연결 상태를 사용자에게 식별 가능하게 표시한다.
-- 녹음 중 Bottom Navigation과 설정 진입을 숨긴다.
+- 녹음 중에는 페이지 이동을 막아 녹음이 중단되지 않게 한다.
 - 미전송 chunk가 있으면 종료 후 처리 시작이 안전한 상태가 아님을 명확히 알려준다.
 - 화면 잠금/앱 전환 지원 여부는 실제 기기 검증 결과와 PRD Phase 8 범위를 따른다.
 
@@ -273,7 +273,7 @@ font-family:
 **목적:** 종료 전에 녹음을 계속할지 끝낼지 명시적으로 확인.
 
 - Bottom Sheet 또는 접근 가능한 modal로 보여준다.
-- 안내는 녹음 종료 후 업로드와 회의록 작성이 시작됨을 설명한다.
+- 확인하면 미전송 오디오 업로드와 회의 처리가 시작된다.
 - `계속 녹음`은 Secondary, `회의 종료`는 Danger action이다.
 - 확인 취소 시 현재 녹음 Session을 유지한다.
 - 녹음 확인 route는 `/meetings/{sessionId}/recording`을 사용한다.
@@ -285,22 +285,22 @@ font-family:
 - 단계는 녹음 업로드, 음성 변환(STT), 화자 분석, 회의록 작성 순서다.
 - 상태와 실패 단계는 Backend 응답과 동기화한다.
 - 대기 상태에서는 “잠시만 기다려 주세요”와 함께 단계별 완료/현재/대기를 구분한다.
-- 네트워크 끊김, 처리 실패에는 안전한 오류 요약과 가능한 재시도만 표시한다.
+- 진행률은 실제 오디오 처리량이나 남은 시간이 아니라 단계 진행을 나타낸다. 네트워크·처리 실패에는 확인된 단계와 사용자용 오류 안내, 가능한 재시도를 표시한다.
 - Bottom Navigation을 숨긴다.
 
-### SCR-006 Speaker Mapping and Minutes
+### SCR-006 Speaker Mapping and Minutes (초기 자동화 시안, 현재 흐름 아님)
 
 **목적:** diarization 결과의 각 Speaker를 참가자에 매핑한다. 모든 Speaker 매핑이 저장되면 Backend가 Minutes 생성과 자동 전달을 이어서 실행한다.
 
 - 감지된 모든 Speaker에 Participant dropdown을 하나씩 제공한다. 선택한 회의 참가자를 우선 보여준다.
-- Speaker Memory가 제공한 과거 확인 기록은 `제안`으로 표시한다. 사용자는 현재 회의에서 매핑을 확인해야 한다.
+- 현재 회의에서 감지된 Speaker를 참석자 콤보에 연결하고, 선택 즉시 매핑을 저장한다. 과거 회의의 Speaker 매핑 추천은 제공하지 않는다.
 - 미매핑 Speaker가 남아 있으면 `계속`을 비활성화하고 누락 화자를 알린다.
 - 사용자가 `매칭 완료`를 누르면 Backend가 mapping을 저장하고 확인된 mapping을 사용해 활성 Template으로 Minutes를 생성한다.
 - Minutes 생성/문서 저장/자동 이메일 전송 단계와 recipient별 결과를 같은 처리 화면에 표시한다. Publish/Send 버튼은 요구하지 않는다.
 - Transcript 원문은 별도 Sheet/Drawer에서 읽는다. Speaker mapping은 speaker 단위로 유지한다.
 - 별도 Minutes 편집·재생성 UI는 자동 발송 순서와 정책이 확정되기 전에는 이 핵심 흐름에 추가하지 않는다.
 
-### SCR-007 Delivery Result
+### SCR-007 Delivery Result (초기 자동화 시안, 현재 흐름 아님)
 
 **목적:** Backend가 자동 저장·이메일 발송한 결과를 표시한다.
 
@@ -310,7 +310,7 @@ font-family:
 - 정상 흐름에서 별도의 `저장하고 공유` action은 없다.
 - 문서 저장 실패 시 이메일 미발송 이유를 표시한다. 일부 발송 실패는 성공한 recipient를 재발송하지 않는다.
 
-### SCR-008 Complete
+### SCR-008 Complete (초기 자동화 시안, 현재 흐름 아님)
 
 **목적:** 문서 저장, 수신자별 Email, Notification 결과를 각각 확인한다.
 
@@ -401,7 +401,7 @@ font-family:
 
 이 문서는 PRD의 `SCR-001~012`, `FR-001~030`, `NFR-001~003`, `NFR-010`, `NFR-012`를 시각/상호작용 규칙으로 구체화한다. 화면 기능과 API 연결은 PRD Traceability Matrix 및 [API Specification](./api-spec.md)을 따른다.
 
-## 문서 연결 위저드
+## 문서 연결 위저드 (설계 기준)
 
 SCR-013은 `/setup/document`, `/settings/document`에서 재사용한다. App Config가 미설정/미초기화면 설정으로 이동한다. Provider 선택→credential/location 입력→읽기 테스트→기본 구조 확인→생성/검증 순서를 제공한다. Bootstrap 성공 직후 첫 설정은 New Meeting으로 이동한다. 이후 READY로 접속하면 Home에 새 미팅과 회의록 목록을 표시한다. 기존 연결의 Provider 장애나 storage failure를 최초 미설정으로 오인하지 않는다.
 

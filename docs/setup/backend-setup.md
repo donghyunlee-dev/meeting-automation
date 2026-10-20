@@ -1,6 +1,6 @@
 # ☕ Backend 개발 환경 설정
 
-이 가이드는 Meeting Automation 모노레포의 `backend/` Spring Boot API를 로컬에서 개발하고 실행하는 절차를 설명한다. Backend가 Frontend에서 오디오 chunk를 직접 받는 방향은 승인됐으며 구체적인 저장·복구 설계는 [Backend 소유 Audio 설계](../superpowers/specs/2026-10-16-backend-owned-audio-design.md)에서 검토 중이다. 제품 요구사항의 기준은 [PRD](../product/PRD.md), 시스템 경계는 [Architecture](../product/architecture.md), REST 계약은 [API Specification](../product/api-spec.md), 연동 설정은 [Integrations](../product/integrations.md)을 따른다.
+이 가이드는 Meeting Automation 모노레포의 `backend/` Spring Boot API를 로컬에서 개발하고 실행하는 절차를 설명한다. Backend는 Frontend에서 오디오 chunk를 직접 받으며 임시 파일로 처리한다. 현재 동작은 [현재 구현 기준](../product/implementation-status.md)을 참고한다.
 
 > **기준 환경:** Eclipse Temurin JDK 25, Spring Boot 4.1.x, Gradle Wrapper 9.x (JDK 25 실행 시 최소 9.1), IntelliJ IDEA
 > **주 개발 OS:** Windows 10/11 + PowerShell
@@ -89,7 +89,7 @@ Wrapper가 지원하는 작업:
 
 ## 환경변수
 
-Backend는 AI/Email/Slack과 저장 기반 설정을 환경변수로 읽는다. Document Provider·Root·인증 정보는 화면의 문서 연결 위저드에 입력한다. 로컬 개발에서는 `backend/.env.local` 파일을 사용할 수 있도록 애플리케이션 실행 설정을 구성하거나 IntelliJ Run Configuration에 값을 입력한다. Spring Boot가 `.env` 파일을 자동 로딩한다고 가정하지 않는다. 프로젝트가 로컬 dotenv loader를 포함하지 않으면 Run Configuration의 Environment variables에 직접 설정한다. Render 운영 설정은 [운영 테스트 설정 기준](./production-test.md)을 따른다.
+Backend는 AI 설정과 기본 Provider 값을 환경변수로 읽는다. Document Provider·Root·인증 정보는 화면의 문서 연결 위저드에 입력한다. 로컬 개발에서는 환경 변수를 프로세스나 IntelliJ Run Configuration에 넣거나 Git에서 제외되는 `backend/application-local.yml`을 사용한다. Spring Boot는 `.env` 파일을 자동 로딩하지 않는다. Render 설정은 [운영 테스트 설정 기준](./production-test.md)을 따른다.
 
 OpenAI 키는 `application.yml`에 직접 기록하지 않는다. 로컬에서는 `backend/application-local.yml`에 `openai.api-key`를 설정할 수 있으며, 기본 설정이 이 파일을 선택적으로 불러온다. 이 파일은 `.gitignore`에 포함된다. Render에서는 `OPENAI_API_KEY` 환경변수를 사용한다.
 
@@ -124,9 +124,9 @@ SLACK_ADMIN_WEBHOOK_URL
 
 로컬 Secret은 개인 개발 환경에만 보관한다. 실제 값을 Git에 commit하거나 문서, 로그, IDE 공유 설정, 화면 캡처에 넣지 않는다. 저장소의 `.gitignore`가 `.env.local` 및 secret 파일을 제외하는지 확인한다. 다른 개발자에게 전달할 설정 예시는 값이 없는 `.env.example`로 제공한다.
 
-### 비공개 Audio 객체 저장소
+### Audio 임시 파일
 
-Audio는 Frontend에서 Backend API로 직접 전송한다. Backend는 임시 작업 파일에 chunk를 저장하고 회의 처리가 끝나면 정리한다. `TEMP_AUDIO_DIR`는 로컬 실행에서 쓰기 가능한 경로를 지정한다. 이 경로는 영속 저장을 뜻하지 않으며 Render Free에서는 재시작·재배포·절전 후 파일을 복구할 수 없다. Vercel Blob 설정은 사용하지 않는다. 배포 제약은 [운영 테스트 설정 기준](./production-test.md), Audio 동작은 [Backend 소유 Audio 설계](../superpowers/specs/2026-10-16-backend-owned-audio-design.md)를 따른다.
+Audio는 Frontend에서 Backend API로 직접 전송한다. Backend는 `TEMP_AUDIO_DIR` 아래에 chunk와 조립 파일을 임시 저장하고 회의록 초안 생성 성공 후 정리한다. 처리 실패 시 재시도에 필요한 파일은 제한 시간 보존한다. 이 경로는 영속 저장을 뜻하지 않으며 Backend 재시작·재배포 후 파일 복구는 보장하지 않는다. Vercel Blob 설정은 사용하지 않는다.
 
 ## IntelliJ IDEA 설정
 

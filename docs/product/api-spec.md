@@ -4,10 +4,10 @@
 > **기준 문서:** [PRD.md](./PRD.md)
 > **데이터 정의:** [data-spec.md](./data-spec.md)
 > **외부 Provider 계약:** [integrations.md](./integrations.md)
-> **기준일:** 2026-10-16 · PRD v2.1.0 draft
-> **현재 제품 흐름:** [최초 연결·자동 발송 기준 흐름](../superpowers/specs/2026-10-16-first-run-and-autodelivery-design.md)
+> **기준일:** 2026-10-21 · 구현 대조
+> **현재 구현 흐름:** [현재 구현 기준](./implementation-status.md)
 
-> **계약 기준:** API-001~011, API-017~022, API-031은 현재 흐름의 설계 기준이다. API-012~016의 Review/Confirm/Publish/수동 재시도 계약은 이전 흐름의 기록이며 새 Frontend 정상 경로에서 호출하지 않는다. API 목록의 설명과 기존 상세를 새 흐름과 충돌할 때 구현 기준으로 사용하지 않는다. API-011의 완전한 화자 매핑 요청이 Minutes 생성·저장·자동 이메일 처리 시작점이다.
+> **계약 기준:** API-006~016은 현재 회의 처리·검토·확정·문서 저장 흐름에 사용한다. 초안 생성은 API-009 처리에서, 화자 매핑은 API-011에서, 회의록 편집은 API-012에서 진행한다. API-014로 검토를 완료한 뒤 API-015가 최종 문서 저장과 설정된 전달 채널 처리를 시작한다.
 
 ## 공통 HTTP 규칙
 
@@ -79,7 +79,7 @@ Session 상태와 전이 규칙은 [architecture.md](./architecture.md)의 상�
 | `DELIVERY_NOT_RETRYABLE` | 409 | N | Delivery가 FAILED가 아니거나 안전한 재시도가 허용되지 않음 |
 | `DELIVERY_RETRY_IN_PROGRESS` | 409 | N | 해당 Delivery의 재시도 처리가 이미 진행 중 |
 | `AUDIO_NOT_AVAILABLE` | 409 | N | 원본 Audio가 정리되었거나 보존 기한이 지남 |
-| `AUDIO_STORAGE_FAILED` | 502 | Y | private object storage 작업 실패. Audio를 온전한 저장 상태로 확인할 수 없음 |
+| `AUDIO_STORAGE_FAILED` | 502 | Y | Backend 임시 Audio 파일 기록 실패 |
 | `REVIEW_VALIDATION_FAILED` | 422 | N | Review 확정 조건 미충족. `details.issues`에 `{path,code}` 배열 포함 |
 | `AUDIO_CHUNK_INVALID` | 400 | N | MIME, checksum, 길이, 크기 검증 실패 |
 | `AUDIO_CHUNK_CONFLICT` | 409 | N | 같은 sequence가 다른 bytes로 이미 저장됨 |
@@ -108,6 +108,8 @@ Session 상태와 전이 규칙은 [architecture.md](./architecture.md)의 상�
 | API-003 | `GET /participants` | Participant 목록 |
 | API-004 | `POST /participants` | 생성 |
 | API-005 | `PATCH /participants/{participantId}` | 수정 |
+| — | `DELETE /participants/{participantId}` | 삭제 |
+| — | `DELETE /participants/{participantId}` | 삭제 |
 | API-006 | `POST /meeting-sessions` | Session 생성 |
 | API-007 | `PUT /meeting-sessions/{sessionId}/audio/chunks/{sequence}` | Chunk 업로드 |
 | API-008 | `GET /meeting-sessions/{sessionId}/audio` | 업로드 현황 |
@@ -133,7 +135,6 @@ Session 상태와 전이 규칙은 [architecture.md](./architecture.md)의 상�
 | API-028 | `POST /document-setup/switch` | 자료 복사 또는 새 시작 후 전환 |
 | API-029 | `POST /document-setup/operations/{operationId}/retry` | 중단·실패 작업 명시 재개 |
 | API-030 | `POST /document-setup/operations/{operationId}/cancel` | 작업 안전 취소 |
-| API-031 | `GET /speaker-memory` | 사용자가 확인한 화자 매칭 기록/후보 |
 
 ## Endpoint 계약
 
@@ -147,7 +148,7 @@ Session 상태와 전이 규칙은 [architecture.md](./architecture.md)의 상�
 
 공개 설정만 반환한다. 저장된 Secret과 Provider token은 응답하지 않는다. 문서 rootUrl/parent 위치의 공개 요약은 위저드 결과 확인에 사용하며 credential과 분리한다.
 
-Document는 전역 영속 active 설정에서 읽는다. 미설정은 provider:null/configured:false다. 추가 필드는 document.connectionVersion (초기 0), document.rootUrl (없으면 null), setup:{status,required,canCreateMeeting,bootstrapComplete,operationId?}다. status는 document-setup.md의 공개 enum을 따른다. config loading/storage 오류는 STORAGE_UNAVAILABLE로 구분하고 Provider 장애만으로 최초 설정을 강제하지 않는다. 기존 연결 장애는 ATTENTION_REQUIRED로 표현하며 신규 설정과 혼동하지 않는다. `canCreateMeeting`은 연결과 5개 필수 Page Bootstrap이 READY일 때만 true다. legacy DOCUMENT_PROVIDER env는 선택에 사용하지 않는다.
+Document는 전역 active 설정에서 읽는다. 미설정은 provider:null/configured:false다. 추가 필드는 document.connectionVersion (초기 0), document.rootUrl (없으면 null), setup:{status,required,canCreateMeeting,bootstrapComplete,operationId?}다. status는 document-setup.md의 공개 enum을 따른다. config loading/storage 오류는 STORAGE_UNAVAILABLE로 구분하고 Provider 장애만으로 최초 설정을 강제하지 않는다. 기존 연결 장애는 ATTENTION_REQUIRED로 표현하며 신규 설정과 혼동하지 않는다. `canCreateMeeting`은 연결과 현재 기본 문서 구조 Bootstrap이 READY일 때만 true다. legacy DOCUMENT_PROVIDER env는 선택에 사용하지 않는다.
 
 ### API-002 Templates
 
@@ -195,7 +196,7 @@ Backend는 trim한 title, `default.md`/`project.md` Template, 1개 이상인 중
 
 `PUT /api/v1/meeting-sessions/{sessionId}/audio/chunks/{sequence}` → `200`
 
-Raw bytes body. `sequence`는 0 이상의 정수. Header에 `Content-Type`, `X-Audio-SHA256`, `X-Audio-Byte-Length`, `Idempotency-Key`를 보낸다. `CREATED`/`UPLOADING` Session에서만 받는다. Backend는 제한된 크기로 요청을 읽고 검증한 뒤 Backend 관리 저장소에 완전히 게시하고 ACK `{sequence,received:true}`를 반환한다. 저장소의 재시작 후 영속성은 배포 설정에 따른다. 첫 Chunk 저장 성공 뒤 Session을 `CREATED → UPLOADING`으로 전이하고 version을 증가시킨다. 이후 업로드는 상태와 version을 유지한다. 잘못된 요청 또는 저장 오류는 Session 상태를 바꾸지 않는다. 동일 bytes 재전송은 멱등 ACK한다. 같은 sequence에 다른 bytes, 잘못된 MIME/길이, 허용 크기 초과는 명시 오류다. 처리 시작 후 업로드는 409 `SESSION_STATE_CONFLICT`다. 저장소 오류는 `AUDIO_STORAGE_FAILED`로 반환하고 성공 ACK를 하지 않는다.
+Raw bytes body. `sequence`는 0 이상의 정수. Header에 `Content-Type`, `X-Audio-SHA256`, `X-Audio-Byte-Length`, `Idempotency-Key`를 보낸다. `CREATED`/`UPLOADING` Session에서만 받는다. Backend는 제한된 크기로 요청을 읽고 검증한 뒤 `TEMP_AUDIO_DIR`의 임시 파일에 기록하고 ACK `{sequence,received:true}`를 반환한다. 이 파일은 영구 저장소가 아니며 재시작·재배포 뒤 보존되지 않는다. 첫 Chunk 저장 성공 뒤 Session을 `CREATED → UPLOADING`으로 전이하고 version을 증가시킨다. 이후 업로드는 상태와 version을 유지한다. 잘못된 요청 또는 저장 오류는 Session 상태를 바꾸지 않는다. 동일 bytes 재전송은 멱등 ACK한다. 같은 sequence에 다른 bytes, 잘못된 MIME/길이, 허용 크기 초과는 명시 오류다. 처리 시작 후 업로드는 409 `SESSION_STATE_CONFLICT`다. 저장소 오류는 `AUDIO_STORAGE_FAILED`로 반환하고 성공 ACK를 하지 않는다.
 
 ### API-008 Audio Upload Status
 
@@ -207,13 +208,13 @@ Raw bytes body. `sequence`는 0 이상의 정수. Header에 `Content-Type`, `X-A
 
 `POST /api/v1/meeting-sessions/{sessionId}/process` (`Idempotency-Key`) → `202`
 
-Request: `{expectedChunks:number,durationMs:number,mimeType:string}`. 새 작업은 `UPLOADING` Session에서만 시작한다. Backend는 Session별로 upload와 처리를 직렬화하고, chunk 연속성 및 duration 상한 검증 후 조립·STT·diarization을 실행한다. 완료하면 Session을 `AWAITING_SPEAKER_MAPPING`으로 바꾸고 diarization 결과와 매핑 후보를 제공한다. Minutes generation은 여기서 실행하지 않는다. 누락은 `AUDIO_CHUNKS_INCOMPLETE`; 같은 key/payload 재실행은 기존 작업을 반환한다. `CREATED` 상태의 새 요청 또는 처리 시작 뒤 새 upload는 409 `SESSION_STATE_CONFLICT`다. Idempotency-Key payload 비교는 lifecycle state 검사보다 먼저 수행한다.
+Request: `{expectedChunks:number,durationMs:number,mimeType:string}`. 새 작업은 `UPLOADING` Session에서만 시작한다. Backend는 Session별로 upload와 처리를 직렬화하고 chunk 검증·조립, 전사·화자 구간 분석, 구조화 회의록 초안 생성을 실행한다. 완료하면 Session을 `REVIEW`로 바꾸고 Transcript, speakers, Minutes를 제공한다. 누락은 `AUDIO_CHUNKS_INCOMPLETE`; 같은 key/payload 재실행은 기존 작업을 반환한다. `durationMs`는 양수이며 설정된 최대 회의 시간 이하여야 한다. `CREATED` 상태의 새 요청 또는 처리 시작 뒤 새 upload는 409 `SESSION_STATE_CONFLICT`다.
 
 ### API-010 Session Status / Processing Data
 
 `GET /api/v1/meeting-sessions/{sessionId}` → `200`
 
-응답에는 `{sessionId,version,status,meeting:{participantIds},processing,speakers,transcript,minutes,document,deliveries,allowedActions}`가 포함된다. Speaker mapping 대기 상태는 `AWAITING_SPEAKER_MAPPING`이며 `minutes`와 delivery가 아직 없다. `PROCESSING_FAILED`이면 `processing:{stage,progressPercent,errorCode,retryable,audioAvailable,audioExpiresAt?}`를 제공한다. `stage`는 `AUDIO_ASSEMBLY`, `TRANSCRIPTION`, `DIARIZATION`, `MINUTES_GENERATION`, `DOCUMENT_SAVE`, `EMAIL_DELIVERY` 중 하나다. 허용 시 `allowedActions`에 가능한 retry만 포함한다. 정상 경로는 Minutes 생성→문서 저장→자동 이메일 발송이다. `COMPLETED`/`COMPLETED_WITH_WARNINGS`는 document 및 recipient별 deliveries 결과를 반환한다. 응답은 주소/Secret/provider 원문을 노출하지 않는다. Browser는 action을 표시 힌트로 사용하되 서버가 항상 재검증한다.
+응답에는 `{sessionId,version,status,meeting,processing,speakers,transcript,minutes,document,deliveries,allowedActions}`가 포함된다. 처리 완료 후 `REVIEW`에서 Minutes, Transcript, speakers 및 검토 action을 제공한다. `PROCESSING_FAILED`이면 `processing:{stage,progressPercent,errorCode,retryable,audioAvailable,audioExpiresAt?}`를 제공한다. 진행률은 단계에 매핑된 값이며 실제 오디오 처리량이나 남은 시간의 측정값이 아니다. 검토 완료 뒤 문서 저장·전달 상태와 각 채널 결과를 반환한다. 응답은 주소/Secret/provider 오류 원문을 노출하지 않는다. Browser는 action을 표시 힌트로 사용하되 서버가 항상 재검증한다.
 
 ### API-020 Processing Retry
 
@@ -225,7 +226,7 @@ Session이 `PROCESSING_FAILED`, 오류가 retryable, Audio assembly 산출물 �
 
 `GET /api/v1/meeting-sessions/{sessionId}/audio/download` → `200` binary
 
-Session의 Audio가 private object storage에 존재하고 미만료일 때만 허용한다. Backend가 Session 존재·상태·action과 저장소 object 접근을 검증한 뒤 stream하며 raw object URL이나 storage credential을 반환하지 않는다. Object storage credential은 Backend service에만 설정한다. 검증된 MIME type, `Content-Disposition: attachment`, Session 생성 때 받은 recording MIME과 서버가 만든 안전한 파일명을 사용한다. 만료/삭제 후에는 409 `AUDIO_NOT_AVAILABLE`을 반환한다. Audio bytes, object key, storage credential은 로그에 남기지 않는다. Browser는 전송이 성공한 뒤 사용자에게 저장 확인을 받고 그 선택으로 API-022를 호출한다.
+Session의 Audio가 Backend 임시 파일에 남아 있고 미만료일 때만 허용한다. Backend가 Session 존재·상태·action과 파일 접근을 검증한 뒤 stream하며 파일 경로나 서버 저장 정보를 반환하지 않는다. 검증된 MIME type, `Content-Disposition: attachment`, Session 생성 때 받은 recording MIME과 서버가 만든 안전한 파일명을 사용한다. 초안 생성 후 정리되거나 만료된 Audio에는 409 `AUDIO_NOT_AVAILABLE`을 반환한다. Audio bytes와 파일 경로는 로그에 남기지 않는다. Browser는 전송이 성공한 뒤 사용자에게 저장 확인을 받고 그 선택으로 API-022를 호출한다.
 
 ### API-022 Finalize Processing Failure
 
@@ -239,21 +240,21 @@ Request: `{"audioDisposition":"DOWNLOADED"|"DISCARDED"}`. `PROCESSING_FAILED`에
 
 Request: `{ "mappings": [{"speakerId":"speaker_a","participantId":"pt_001"}] }`
 
-API-011은 API-009가 `AWAITING_SPEAKER_MAPPING`으로 반환된 Session에서 호출한다. Request에는 감지된 모든 Speaker가 정확히 한 번씩 포함되어야 하며 participantId는 Session에 선택한 roster 안에 있어야 한다. 미매핑/중복/외부 roster ID가 있으면 422 `SPEAKER_MAPPING_INCOMPLETE`이고 Minutes 생성은 시작하지 않는다. 모든 매핑이 유효하면 Backend는 Session mapping과 Speaker Memory 기록을 저장한 뒤 Transcript+mapping+활성 기본 Template으로 Minutes 생성을 시작하고 202 `{sessionId,status:"PROCESSING",stage:"MINUTES_GENERATION"}`를 반환한다. 매핑은 해당 화자의 모든 Transcript segment 표시 결과에 적용된다. 과거 Speaker Memory는 UI 후보일 뿐이며 사용자가 보낸 mapping이 최종 확인이다.
+API-011은 API-009 처리가 완료되어 `REVIEW`인 Session에서 사용한다. Request의 감지된 Speaker mapping은 중복될 수 없고 participantId는 회의에서 선택한 roster 안에 있어야 한다. 매핑은 Session에 저장되고 해당 화자의 Transcript segment 표시에 반영된다. 현재는 별도 Speaker Memory 문서에 매핑하지 않는다. Minutes 초안은 API-009 처리에서 이미 생성되어 있으며 mapping 저장은 초안을 다시 만들거나 자동 Publish하지 않는다.
 
-### API-012 Minutes Update — 이전 수동 검토 경로
+### API-012 Minutes Update
 
 `PUT /api/v1/meeting-sessions/{sessionId}/minutes` (`If-Match`) → `200`
 
 Request는 Structured Minutes를 전달한다. 모든 배열/문자열, action item의 Participant 참조와 날짜 형식을 검증한다. 응답은 새 version과 저장된 Minutes를 반환한다.
 
-### API-013 Minutes Regenerate — 이전 수동 검토 경로
+### API-013 Minutes Regenerate
 
 `POST /api/v1/meeting-sessions/{sessionId}/minutes/regenerate` (`Idempotency-Key`, `If-Match`) → `202`
 
 Request: `{ "templateId":"project.md" }`. Frontend는 편집 중 Minutes가 교체될 수 있음을 확인받은 뒤 호출한다. 처리 입력은 기존 Transcript + 현재 mapping + Template뿐이다. STT/diarization을 호출하지 않는다. 응답 `{sessionId,status:"PROCESSING",stage:"DRAFT_REGENERATION",templateId}`.
 
-### API-014 Review Confirm — 이전 수동 검토 경로
+### API-014 Review Confirm
 
 `POST /api/v1/meeting-sessions/{sessionId}/confirm` (`If-Match`, `Idempotency-Key`) → `200`
 
@@ -261,9 +262,9 @@ Request `{ "confirm":true }`. 필수 `Idempotency-Key`와 `If-Match` version, Se
 
 불완전 Review는 HTTP 422 `REVIEW_VALIDATION_FAILED` 공통 error envelope와 `details.issues:[{path,code}]` 전체 항목을 반환한다. 예: `speakers[0].participantId`/`SPEAKER_UNMAPPED`; `minutes.actionItems[0].task`/`REQUIRED`. 잘못된 body/header는 400 `VALIDATION_FAILED`; 없는 Session은 404 `SESSION_NOT_FOUND`; Review 이외 상태/action은 409 `SESSION_STATE_CONFLICT`; stale If-Match는 412 `SESSION_VERSION_CONFLICT`; 같은 key의 다른 요청은 409 `IDEMPOTENCY_KEY_CONFLICT`다. 모든 거절은 Session/version/Minutes를 변경하지 않는다.
 
-**V1 자동 발송 경로에서 API-014는 호출하지 않는다.** 기존 명시적 Confirm 계약은 이전 Review/Publish 설계의 기록이며 새 자동 처리 경로의 선행 단계가 아니다.
+현재 Frontend는 검토 완료 시 API-014를 호출한다. 확인된 Session은 `CONFIRMED`가 되며, 이후 API-015가 문서 저장 작업을 시작한다.
 
-### API-015 Publish / Share — 이전 수동 검토 경로
+### API-015 Publish
 
 `POST /api/v1/meeting-sessions/{sessionId}/publish` (`Idempotency-Key`, `If-Match`) → `202`
 
@@ -271,7 +272,7 @@ Request `{ "confirm":true }`. 필수 `Idempotency-Key`와 `If-Match` version, Se
 {"emailRecipientParticipantIds":["pt_001","pt_002"],"notificationEnabled":true}
 ```
 
-이 요청형 Publish는 PRD v1.x 수동 Review 흐름의 기록이며 V1 자동 발송 경로에서 Frontend가 호출하지 않는다. 새 흐름은 Minutes 생성 완료 후 Backend가 Provider Meeting 저장을 시작하고, 저장 성공 뒤 매칭된 Participant email로 자동 전송한다. 저장 실패 시 이메일을 보내지 않는다. 상태와 수신자별 결과는 API-010으로 조회한다.
+현재 Frontend는 검토 완료 후 API-015를 호출한다. Backend는 선택 템플릿과 검토된 Minutes로 문서 본문을 생성해 Provider에 저장한다. 저장 성공 뒤 요청에서 지정된 이메일 수신자와 활성화된 Notification 채널에 전달하고 결과를 API-010으로 제공한다. 저장 실패 시 전달하지 않는다.
 
 요청은 `CONFIRMED` 또는 문서 저장 실패 상태 `DOCUMENT_FAILED`에서만 접수한다. `DOCUMENT_FAILED` 재시도는 최신 `If-Match`와 새 `Idempotency-Key`를 요구하고 기존 Session 문서 조회를 다시 수행한다. 동일 키 재전송은 기존 접수 결과를 replay하며 새 작업을 시작하지 않는다.
 
@@ -294,12 +295,6 @@ FAILED이며 `retryable=true`인 Delivery만 허용한다. `retryable`은 사용
 `GET /api/v1/meetings/{documentId}` → `200`
 
 읽기 전용 `{documentId,title,meetingAt,participants:[{id,name}],minutes,transcript,documentUrl}`. `documentId`가 없으면 404 `MEETING_NOT_FOUND`; Provider 조회 실패는 502 `DOCUMENT_FAILED` (`DOCUMENT_FAILURE`)다. 이메일은 응답하지 않는다. 누락/유효하지 않은 원문 URL은 `documentUrl:null`이다. 앱을 통한 과거 문서 수정 API는 없다.
-
-### API-031 Speaker Memory
-
-`GET /api/v1/speaker-memory?participantIds=pt_001,pt_002` → `200`
-
-현재 회의 참가자 범위에서 과거 사용자가 확인한 mapping 기록을 반환한다. 기록은 매핑 UI의 후보/참고용이며 회의가 달라졌을 때 `speakerId`를 인물 식별자로 재사용하지 않는다. voiceprint/audio feature를 저장하거나 조회하지 않는다. Speaker Memory 조회 실패는 미매핑 상태의 회의를 자동 매핑하지 않으며, mapping UI에는 안전한 오류를 표시한다.
 
 ### API-019 Integration Health
 

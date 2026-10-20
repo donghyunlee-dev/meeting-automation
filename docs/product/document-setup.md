@@ -1,8 +1,8 @@
 # ⚙️ 문서 서비스 연결과 자료 이전 설계
 
-> 기준: PRD-MA-001 v2.1.0 draft · 2026-10-16
+> 기준: 코드 대조 · 2026-10-21
 > 사용자 결정: 제품 계정·로그인·사용자별 설정 없이, 서비스 전체가 하나의 문서 연결 설정을 공유한다.
-> 구현 완료 기록이 아니다. 최초 진입과 기본 Page 구조는 [최초 연결·자동 발송 기준 흐름](../superpowers/specs/2026-10-16-first-run-and-autodelivery-design.md)을 따른다.
+> 실제 현재 동작은 [현재 구현 기준](./implementation-status.md)을 따른다. 아래 상세 전환 규칙 중 코드에서 제공하지 않는 항목은 계획 설계다.
 
 ## 🎯 서비스 동작
 
@@ -29,12 +29,12 @@ Notion 키만으로 부모 페이지 접근 권한이 생기지는 않는다. �
 ## 🗂️ 전역 설정 저장
 
 - 업무 문서 정본은 계속 Document Provider다. 제품 계정 DB·사용자별 설정·JPA·Redis·Queue는 도입하지 않는다.
-- 로컬 Backend는 `DOCUMENT_SETTINGS_DIR`와 암호화 키가 설정된 경우 Git 밖의 암호화 파일을 사용하고, 값이 없으면 메모리 설정 저장소로 시작한다. Render Backend도 실행 중 메모리에 설정을 둔다. 브라우저는 연결 입력과 생성된 루트 ID를 origin별 localStorage에 보관해 같은 브라우저에서 Backend 재시작 후 설정을 다시 구성한다. 다른 브라우저·기기는 별도로 연결해야 한다.
+- 로컬 Backend는 `DOCUMENT_SETTINGS_DIR`와 암호화 키가 설정된 경우 Git 밖의 암호화 파일을 사용하고, 값이 없으면 메모리 설정 저장소로 시작한다. Render Backend는 메모리 설정 저장소를 사용한다. 브라우저는 연결 입력과 생성된 루트 ID를 origin별 `localStorage`에 보관해 같은 브라우저에서 Backend 재시작 후 설정을 다시 등록할 수 있다. 다른 브라우저·기기는 별도로 연결해야 한다.
 - 로컬 파일 설정은 `DOCUMENT_SETTINGS_ENCRYPTION_KEY`로 AES-256-GCM 암호화한다. 브라우저 복구 정보는 localStorage에 저장되며 문서 서비스 자격 증명을 포함한다. 브라우저 프로필과 기기에 종속되며 해당 브라우저 저장소를 지우면 다시 연결해야 한다.
 - 설정 갱신은 프로세스 전역 잠금, 임시 파일 쓰기·동기화·동일 파일시스템 원자 교체로 처리한다. 하나의 암호화된 상태 snapshot에 active, draft, operation, revision을 함께 기록한다. crash 뒤에는 이전 또는 새 snapshot 한 개만 유효해야 한다. 복호화·저장 오류를 미설정으로 간주하거나 이전 파일을 덮어쓰지 않는다.
 - `DOCUMENT_PROVIDER`, `DOCUMENT_ROOT_ID`, `NOTION_TOKEN`, `CONFLUENCE_*`는 새 런타임의 활성 연결 원본으로 사용하지 않는다. 기존 배포 운영자는 최초 위저드에서 기존 연결 정보를 다시 입력하고, 기존 루트 재사용을 명시 선택할 수 있다. env 자동 import·fallback은 없다.
-- 키가 누락되거나 디렉터리가 비영속·쓰기 불가능하면 `STORAGE_UNAVAILABLE` 상태로 안전하게 안내하고 설정 저장·문서 작업을 막는다. Render 기본 임시 파일시스템으로 성공 처리하지 않는다.
-- Render Persistent Disk는 유료 서비스에 필요하고 단일 인스턴스·배포 시 중단 제약이 있다. 이는 배포 설계 제약이며 이번 문서 변경에서 유료 자원 생성·요금 지출은 수행하지 않는다.
+- 로컬 파일 저장을 선택했는데 키가 누락되거나 디렉터리가 쓰기 불가능하면 `STORAGE_UNAVAILABLE` 상태로 안내하고 설정 저장·문서 작업을 막는다.
+- 현재 Render 설정 저장은 메모리 기반이며 Render Persistent Disk에 연결 설정을 쓰지 않는다. 따라서 같은 브라우저의 `localStorage` 복구 흐름에 의존하며, 그 브라우저가 다시 접속하기 전까지 Backend에는 설정이 없을 수 있다.
 
 ## 🔄 상태와 동시성
 
@@ -54,13 +54,13 @@ Operation은 `PENDING → RUNNING → SUCCEEDED` 또는 `FAILED`, `INTERRUPTED`,
 
 초기화 유스케이스만 페이지를 생성한다. 일반 Health, 목록 조회, Session 생성 요청은 누락 구조를 묵시적으로 생성하지 않는다.
 
-신규 루트는 고정 제목 `Meeting Automation`이다. 루트 바로 아래 필수 child page는 `Home`, `Meetings`, `Participants`, `Templates`, `Speaker Memory`다. `Home`은 기본 안내, `Meetings`는 회의록/이력, `Participants`는 이름과 이메일 주소, `Templates`는 회의록 생성 Template, `Speaker Memory`는 사용자가 확인한 화자·참가자 매칭 기록을 저장한다. Notion Database/Data Source나 Confluence Database/Folder는 만들지 않는다.
+신규 루트는 고정 제목 `Meeting Automation`이다. 루트 바로 아래 child page는 `Meetings`, `Participants`, `Meeting Data`, `Templates`다. `Meetings`와 `Meeting Data`는 회의 문서·이력, `Participants`는 참석자 이름·이메일, `Templates`는 회의록 템플릿에 사용한다. 초기화 시 Backend 기본 템플릿을 `Templates`에 기록한다. `Home`과 `Speaker Memory` 페이지는 만들지 않는다. Notion Database/Data Source나 Confluence Database/Folder는 만들지 않는다.
 
 초기화는 각 생성 결과와 journal을 기록하고 재시도에서 중복 page를 만들지 않는다. 정확한 대소문자 제목과 지정 부모를 검증한다. 기존 루트를 재사용할 때 이미 있는 필수 page를 검증하고 누락된 page는 생성한다. 같은 이름의 후보가 둘 이상이면 선택·정리 안내와 구조 충돌 오류를 반환하고 임의 선택하지 않는다.
 
 `Templates`에 Backend bundled default template을 초기 seed로 기록한다. 활성화 후 Provider의 Template page 본문과 version이 회의 처리의 source of truth다. Backend static seed를 매 요청에서 Provider 내용에 덮어쓰거나 Provider 오류를 조용한 fallback으로 숨기지 않는다.
 
-`Speaker Memory`는 사용자가 확인한 mapping을 보관하고 다음 회의의 후보로 보여준다. `speakerId`는 회의별 식별자이므로 회의가 달라지면 동일인으로 자동 간주하지 않는다. V1은 voiceprint나 자동 실명 화자 인식을 하지 않는다. 이전 mapping 후보도 회의별로 사용자가 확인한다.
+화자와 참석자의 연결은 현재 회의 Session에서 관리한다. 별도 `Speaker Memory` 페이지 저장이나 이전 회의 매핑 후보 추천은 현재 구현되어 있지 않다. `speakerId`는 회의별 식별자이며 음성 지문이나 자동 실명 화자 인식은 사용하지 않는다.
 
 외부 생성 응답을 받지 못했다면 이미 만들어졌을 수 있다. 재개는 journal과 정확한 부모·제목·생성 식별자 조회로 재조정한다. 결과가 불명확하면 RECONCILIATION_REQUIRED로 두며 새 페이지를 무조건 만들지 않는다. 생성 중 취소/실패로 남은 페이지는 보존하고 다시 연결할 때 명시적으로 재사용한다.
 
