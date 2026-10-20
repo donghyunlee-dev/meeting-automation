@@ -104,6 +104,18 @@ describe('document setup wizard', () => {
     expect(screen.queryByRole('link', { name: '참석자 관리' })).toBeNull();
   });
 
+  it('shows the active connection when opening document setup with an existing connection', async () => {
+    vi.stubGlobal('fetch', withHealthyBackend(vi.fn().mockResolvedValue(response({ version: 5, status: 'READY', active: { provider: 'NOTION', connectionVersion: 2, rootUrl: 'https://notion.example' }, draft: null, operation: null, canCreateMeeting: true }))));
+    render(<MemoryRouter initialEntries={['/setup/document']}><App /></MemoryRouter>);
+
+    await screen.findByRole('heading', { name: '문서 서비스 선택' });
+
+    expect(screen.getByText('현재 Notion에 연결되어 있습니다. 변경할 문서 서비스를 선택해 주세요.')).toBeTruthy();
+    expect(screen.queryByText(/연결된 문서 서비스가 없습니다/)).toBeNull();
+    expect(screen.getByRole('button', { name: 'Notion 선택' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Confluence Cloud 선택' })).toBeTruthy();
+  });
+
   it('CHANGE-ENTRY reopens provider selection from READY while preserving the active source', async () => {
     const fetchMock = vi.fn().mockResolvedValue(response({ version: 5, status: 'READY', active: { provider: 'NOTION', connectionVersion: 2, rootUrl: 'https://notion.example' }, draft: { draftId: 'pending-draft', revision: 1, provider: 'CONFLUENCE', state: 'DRAFT' }, operation: null, canCreateMeeting: true }));
     vi.stubGlobal('fetch', withHealthyBackend(fetchMock));
@@ -133,7 +145,7 @@ describe('document setup wizard', () => {
     });
     vi.stubGlobal('fetch', withHealthyBackend(fetchMock));
     render(<MemoryRouter initialEntries={['/setup/document']}><App /></MemoryRouter>);
-    await screen.findByRole('heading', { name: '문서 서비스 연결' });
+    await screen.findByRole('heading', { name: '문서 서비스 선택' });
     fireEvent.click(screen.getByRole('button', { name: 'Notion 선택' }));
     fireEvent.click(screen.getByRole('button', { name: '연결 확인' }));
     expect(screen.getByLabelText('Notion 내부 연결 토큰').getAttribute('aria-invalid')).toBe('true');
@@ -415,7 +427,7 @@ describe('document setup wizard', () => {
     });
     vi.stubGlobal('fetch', withHealthyBackend(fetchMock));
     render(<MemoryRouter initialEntries={['/setup/document']}><App /></MemoryRouter>);
-    await screen.findByRole('heading', { name: '문서 서비스 연결' });
+    await screen.findByRole('heading', { name: '문서 서비스 선택' });
     fireEvent.click(screen.getByRole('button', { name: 'Notion 선택' }));
     fireEvent.change(screen.getByLabelText('Notion 내부 연결 토큰'), { target: { value: 'synthetic-secret' } });
     fireEvent.change(screen.getByLabelText('부모 페이지 URL 또는 ID'), { target: { value: 'parent-1' } });

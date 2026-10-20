@@ -506,7 +506,7 @@ export function DocumentSetupWizard({ settings = false }: { settings?: boolean }
   const currentStructureStep = operation?.currentStep ?? (operation?.stage === 'STRUCTURE'
     ? STRUCTURE_STEPS.find((step) => !completedStructureSteps.includes(step)) ?? null : null);
   return <main className={`setup-page page-scroll-layout${firstRun ? ' setup-first-run' : ''}`}>
-    <header className="setup-heading"><h1>{changing ? '문서 서비스 선택' : '문서 서비스 연결'}</h1><p>{provider ? '서비스 연결 정보를 입력해 주세요.' : '연결된 문서 서비스가 없습니다. 회의록을 저장하려면 먼저 서비스를 연결해 주세요.'}</p></header>
+    <header className="setup-heading"><h1>{changing || snapshot.active && !provider ? '문서 서비스 선택' : '문서 서비스 연결'}</h1><p>{provider ? '서비스 연결 정보를 입력해 주세요.' : snapshot.active ? `현재 ${providerLabel(snapshot.active.provider)}에 연결되어 있습니다. 변경할 문서 서비스를 선택해 주세요.` : '연결된 문서 서비스가 없습니다. 회의록을 저장하려면 먼저 서비스를 연결해 주세요.'}</p></header>
     <div className="page-scroll-content">
     {provider && !hasBlockingOperation && !preparedTarget && !initializationUncertain && !setupProgressStarted && <button className="back-link setup-provider-back" type="button" aria-label="서비스 선택으로 돌아가기" onClick={() => chooseProvider(null)}><span aria-hidden="true">←</span> 서비스 선택</button>}
     {!initializationSucceeded && activeSummary}
