@@ -263,7 +263,7 @@ export function NewMeetingPage({ onSubmit }: { onSubmit: (attempt: MeetingSessio
           {participants.status === 'error' && (participants.data
             ? <AsyncState state={{ status: 'ready', data: participants.data, warning: SAFE_QUERY_ERROR, onRetry: () => void loadParticipants(), retryLabel: '참석자 목록 다시 시도' }} renderReady={() => null} />
             : <AsyncState state={{ status: 'error', title: '참석자 목록을 불러오지 못했습니다.', error: SAFE_QUERY_ERROR, description: QUERY_MESSAGES.participants, onRetry: () => void loadParticipants(), retryLabel: '참석자 목록 다시 시도' }} renderReady={() => null} />)}
-          {participants.status === 'ready' && availableParticipants.length === 0 && <AsyncState state={{ status: 'empty', title: '참석자가 없습니다.', action: <Link to="/settings/participants">참석자 관리에서 목록을 준비해 주세요.</Link> }} renderReady={() => null} />}
+          {participants.status === 'ready' && availableParticipants.length === 0 && <AsyncState state={{ status: 'empty', title: '참석자가 없습니다.', action: <Link to="/participants">참석자 관리에서 목록을 준비해 주세요.</Link> }} renderReady={() => null} />}
 
           <MeetingParticipantSelector
             participants={availableParticipants}

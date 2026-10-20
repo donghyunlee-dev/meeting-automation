@@ -697,7 +697,7 @@ export function ReviewSpeakerPage({ drafts, onInitialize, onChange, onCommit, on
               {config.status === 'error' && <div className="review-speaker-message" role="alert"><p>문서 연결 상태를 확인할 수 없습니다. 기존 선택은 유지됩니다.</p><button className="button button-secondary" type="button" onClick={() => void loadConfig()}>설정 상태 다시 확인</button></div>}
               {participants.status === 'ready' && participants.data?.length === 0 && <AsyncState state={{
                 status: 'empty', title: '선택할 참석자가 없습니다.', description: '참석자를 먼저 추가해 주세요.',
-                action: <Link className="button button-secondary" to="/settings/participants" state={{ from: location.pathname }}>참석자 관리</Link>,
+                action: <Link className="button button-secondary" to="/participants" state={{ from: location.pathname }}>참석자 관리</Link>,
               }} renderReady={() => null} />}
               {currentReview.speakers.length === 0 && <p role="status">감지된 화자가 없습니다.</p>}
               <div className="review-speaker-list">

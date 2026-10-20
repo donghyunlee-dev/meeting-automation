@@ -283,9 +283,9 @@ button:disabled { cursor: not-allowed; opacity: .6; }
 .participant-combo.is-open .meeting-dropdown-chevron { transform: translateY(-50%) rotate(180deg); }
 .meeting-form-footer { position: fixed; z-index: 6; bottom: calc(68px + env(safe-area-inset-bottom)); left: 50%; width: min(100%, 868px); transform: translateX(-50%); padding: 12px 24px; background: transparent; }
 .meeting-submit { display: flex; width: 100%; min-height: 56px; margin: 0 auto; font-size: 16px; }
-.bottom-navigation { position: fixed; z-index: 5; right: 0; bottom: 0; left: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); min-height: calc(68px + env(safe-area-inset-bottom)); padding: 4px 12px env(safe-area-inset-bottom); border-top: 1px solid #e8ebef; background: #fff; }
+.bottom-navigation { position: fixed; z-index: 5; right: 0; bottom: 0; left: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); min-height: calc(68px + env(safe-area-inset-bottom)); padding: 4px 12px env(safe-area-inset-bottom); border-top: 1px solid #e8ebef; background: #fff; }
 .bottom-navigation a { display: flex; min-width: 0; min-height: 60px; flex-direction: column; align-items: center; justify-content: center; gap: 2px; border-radius: 10px; color: #737f90; text-decoration: none; font-size: 11px; font-weight: 600; }
-.bottom-navigation a span { font-size: 21px; line-height: 1.1; }
+.bottom-navigation a svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 .bottom-navigation a[aria-current='page'] { color: #3b82f6; }
 .topbar { display: flex; align-items: center; gap: 13px; height: 76px; padding: 0 max(24px, calc((100vw - 1120px) / 2)); background: #fff; border-bottom: 1px solid #e8ebef; }
 .brand { display: grid; place-items: center; width: 44px; height: 44px; flex: 0 0 44px; border-radius: 12px; color: white; background: #3b82f6; text-decoration: none; font-weight: 700; }
@@ -782,6 +782,7 @@ button:disabled { cursor: not-allowed; opacity: .6; }
 
 .meeting-detail-page { display: grid; align-content: start; gap: 18px; width: min(100%, 868px); min-width: 0; margin: 0 auto; padding: 36px 24px 76px; overflow-wrap: anywhere; }
 .back-link { display: inline-flex; width: fit-content; min-height: 44px; align-items: center; gap: 7px; border: 0; padding: 0; color: #475467; background: transparent; font: inherit; font-size: 14px; font-weight: 650; text-decoration: none; cursor: pointer; }
+.back-link > span[aria-hidden="true"] { display: block; width: 8px; height: 8px; flex: 0 0 8px; border-bottom: 1.7px solid currentColor; border-left: 1.7px solid currentColor; font-size: 0; line-height: 0; transform: rotate(45deg); }
 .back-link:hover { color: #0b2d5b; }
 .back-link:focus-visible { outline: 3px solid #3b82f6; outline-offset: 2px; border-radius: 6px; }
 .share-actions .back-link { justify-self: start; }

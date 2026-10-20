@@ -430,7 +430,7 @@ describe('Participants settings', () => {
     expect(screen.queryByText('Meeting Automation')).toBeNull();
     expect(screen.getByRole('button', { name: /새 회의 시작/ })).toBeTruthy();
     const navigation = within(screen.getByRole('navigation', { name: '주요 메뉴' }));
-    expect(navigation.getAllByRole('link').map((link) => link.getAttribute('aria-label'))).toEqual(['홈', '회의록', '설정']);
+    expect(navigation.getAllByRole('link').map((link) => link.getAttribute('aria-label'))).toEqual(['홈', '회의록', '참석자', '설정']);
     expect(await screen.findByRole('img', { name: '회의 기록 없음' })).toBeTruthy();
     expect(fetchMock).toHaveBeenCalledOnce();
     expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/api/v1/meetings?limit=3'))).toBe(true);

@@ -71,7 +71,7 @@ export const screens: Screen[] = [
   { id: 'SCR-009', route: '/meetings', heading: /회의 기록/, contentSelector: '.meetings-page', paddingSelector: '.meetings-page' },
   { id: 'SCR-010', route: '/meetings/fixture-document', heading: new RegExp(longKoreanTitle), contentSelector: '.meeting-detail-page', paddingSelector: '.meeting-detail-page' },
   { id: 'SCR-011', route: '/settings', heading: /설정/, contentSelector: '.settings-page', paddingSelector: '.settings-page' },
-  { id: 'SCR-012', route: '/settings/participants', heading: /참석자/, headingLevel: 2, contentSelector: '.participants-page', paddingSelector: '.participants-page' },
+  { id: 'SCR-012', route: '/participants', heading: /참석자/, headingLevel: 2, contentSelector: '.participants-page', paddingSelector: '.participants-page' },
 ];
 
 export const widths = [360, 375, 390, 430, 768, 1280];

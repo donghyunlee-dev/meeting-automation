@@ -45,17 +45,17 @@ describe('Settings page', () => {
     expect(await screen.findByText('연결 상태 확인됨')).toBeTruthy();
     expect(screen.getByText('최근 알림 전달 상태가 확인되지 않았습니다.')).toBeTruthy();
     expect(screen.getByRole('heading', { level: 1, name: '설정' })).toBeTruthy();
-    expect([...document.querySelectorAll('.settings-sections > section h2')].map((heading) => heading.textContent)).toEqual(['문서 연결', '이메일', '알림', '참석자']);
+    expect([...document.querySelectorAll('.settings-sections > section h2')].map((heading) => heading.textContent)).toEqual(['문서 연결', '이메일', '알림']);
     expect(screen.getByText((_content, element) => element?.classList.contains('settings-method') === true && element.textContent?.includes('Notion') === true)).toBeTruthy();
     expect(screen.getByText((_content, element) => element?.classList.contains('settings-method') === true && element.textContent?.includes('회의록과 기본 템플릿') === true)).toBeTruthy();
     expect(screen.queryByText(/DOCUMENT SERVICE|DOCUMENT CONNECTION/)).toBeNull();
     expect(screen.queryByText(/OAuth|Refresh Token|Webhook/)).toBeNull();
     expect(screen.getByRole('link', { name: '문서 연결 설정' })).toBeTruthy();
-    expect(screen.getByRole('link', { name: '참석자 관리' })).toBeTruthy();
+    expect(screen.queryByRole('link', { name: '참석자 관리' })).toBeNull();
     expect(screen.queryByText('Acme')).toBeNull();
     expect(screen.queryByText(/시간대:/)).toBeNull();
     expect(screen.queryByRole('region', { name: '회사' })).toBeNull();
-    expect(screen.getByRole('region', { name: '참석자' })).toBeTruthy();
+    expect(screen.queryByRole('region', { name: '참석자' })).toBeNull();
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(4));
   });
 
@@ -210,7 +210,7 @@ describe('Settings page', () => {
     fireEvent.click(await screen.findByRole('link', { name: '문서 연결 설정' }));
     expect(await screen.findByRole('button', { name: '문서 서비스 변경' })).toBeTruthy();
     fireEvent.click(screen.getByRole('link', { name: '설정으로 돌아가기' }));
-    expect((await screen.findByRole('link', { name: '참석자 관리' })).getAttribute('href')).toBe('/settings/participants');
+    expect(screen.queryByRole('link', { name: '참석자 관리' })).toBeNull();
     expect(await screen.findByLabelText('발신 이메일 주소')).toBeTruthy();
     expect(await screen.findByLabelText('Slack 알림 주소')).toBeTruthy();
   });

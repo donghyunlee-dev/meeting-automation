@@ -330,11 +330,6 @@ export function SettingsPage() {
           <SlackWebhookSettingsForm onChanged={onIntegrationChanged} />
         </section>
       </>}
-      <section className="settings-card" aria-labelledby="settings-participants-heading">
-        <div className="settings-card-heading"><h2 id="settings-participants-heading">참석자</h2></div>
-        <p className="settings-method">회의에서 선택할 참석자 목록을 관리합니다.</p>
-        <Link className="button button-secondary" to="/settings/participants">참석자 관리</Link>
-      </section>
     </div>
     {config.status === 'ready' && health.status === 'ready' && <button className="button button-secondary settings-refresh" type="button" onClick={() => { void refreshConfig(); void refreshHealth(); }}>모든 연결 상태 새로고침</button>}
     </div>

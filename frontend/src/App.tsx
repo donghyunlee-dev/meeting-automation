@@ -608,9 +608,10 @@ function ActiveMeetingRecordingRoute({ session, setState, setNavigationLocked, m
 function BottomNavigation() {
   return (
     <nav className="bottom-navigation" aria-label="주요 메뉴">
-      <NavLink to="/" end aria-label="홈"><span aria-hidden="true">⌂</span>홈</NavLink>
-      <NavLink to="/meetings" aria-label="회의록"><span aria-hidden="true">▤</span>회의록</NavLink>
-      <NavLink to="/settings" aria-label="설정"><span aria-hidden="true">⚙</span>설정</NavLink>
+      <NavLink to="/" end aria-label="홈"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z" /></svg>홈</NavLink>
+      <NavLink to="/meetings" aria-label="회의록"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l4 4v14H6zM14 3v5h5M9 12h7M9 16h7" /></svg>회의록</NavLink>
+      <NavLink to="/participants" aria-label="참석자"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3" /><path d="M3.5 20v-1.5A4.5 4.5 0 0 1 8 14h2a4.5 4.5 0 0 1 4.5 4.5V20zM16 5.5a3 3 0 0 1 0 5.8M17 14h.5a3.5 3.5 0 0 1 3.5 3.5V20h-4" /></svg>참석자</NavLink>
+      <NavLink to="/settings" aria-label="설정"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8" /><circle cx="12" cy="12" r="3" /><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M19.1 4.9l-1.4 1.4M6.3 17.7l-1.4 1.4" /></svg>설정</NavLink>
     </nav>
   );
 }
@@ -700,6 +701,7 @@ export function App({ onNewMeetingSubmit = () => undefined, onMinutesSave, minut
           <Route path="/meetings/:sessionId/processing" element={<ProcessingPage />} />
           <Route path="/meetings/:sessionId/review" element={<ReviewSpeakerPage drafts={speakerDrafts} onInitialize={initializeSpeakerDraft} onChange={updateSpeakerDraft} onCommit={commitSpeakerMappings} onMinutesSave={onMinutesSave} minutesSaveState={minutesSaveState} />} />
           <Route path="/meetings/:sessionId/complete" element={<CompletePage />} />
+          <Route path="/participants" element={<SetupGate><ParticipantsPage /></SetupGate>} />
           <Route path="/settings/participants" element={<SetupGate><ParticipantsPage /></SetupGate>} />
           <Route path="*" element={<FutureRouteNotice />} />
         </Routes>
