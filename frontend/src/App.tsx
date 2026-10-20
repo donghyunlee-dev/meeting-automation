@@ -438,7 +438,7 @@ function ActiveMeetingRecordingRoute({ session, setState, setNavigationLocked, m
   mediaAdapter: MediaRecorderAdapter;
 }) {
   const navigate = useNavigate();
-  const [snapshot, setSnapshot] = useState<RecordingSnapshot>({ state: 'Ready', elapsedMs: 0 });
+  const [snapshot, setSnapshot] = useState<RecordingSnapshot>({ state: 'Ready', elapsedMs: 0, microphoneStatus: 'checking', microphoneLevel: 0, microphoneInputDetected: false });
   const [storageError, setStorageError] = useState('');
   const [uploadSnapshot, setUploadSnapshot] = useState<ChunkUploadSnapshot>({ status: 'idle', totalCount: 0, confirmedCount: 0, pendingCount: 0 });
   const [endSnapshot, setEndSnapshot] = useState<RecordingEndSnapshot>({ status: 'idle' });
@@ -557,6 +557,7 @@ function ActiveMeetingRecordingRoute({ session, setState, setNavigationLocked, m
       },
     });
     controllerRef.current = current;
+    void current.prepareMicrophone();
     return () => {
       active = false;
       current.dispose();
@@ -569,6 +570,9 @@ function ActiveMeetingRecordingRoute({ session, setState, setNavigationLocked, m
     title={session.title}
     state={snapshot.state}
     elapsedMs={snapshot.elapsedMs}
+    microphoneStatus={snapshot.microphoneStatus}
+    microphoneLevel={snapshot.microphoneLevel}
+    microphoneInputDetected={snapshot.microphoneInputDetected}
     errorMessage={storageError || snapshot.errorMessage}
     completed={snapshot.completed}
     endFlowFailed={endSnapshot.status === 'failed'}
@@ -580,6 +584,7 @@ function ActiveMeetingRecordingRoute({ session, setState, setNavigationLocked, m
       });
     }}
     onRetryProcessing={() => { setNavigationLocked(true); void endCoordinator.current?.start(); }}
+    onRetryMicrophone={() => { void controllerRef.current?.prepareMicrophone(); }}
     onStart={async () => {
       setNavigationLocked(true);
       const controller = controllerRef.current;

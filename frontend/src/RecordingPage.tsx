@@ -23,6 +23,9 @@ export type RecordingCallbacks = {
 type RecordingPageProps = RecordingSessionContext & RecordingCallbacks & {
   state: RecordingViewState;
   elapsedMs: number;
+  microphoneStatus?: 'checking' | 'ready' | 'error';
+  microphoneLevel?: number;
+  microphoneInputDetected?: boolean;
   errorMessage?: string;
   completed?: boolean;
   endFlowFailed?: boolean;
@@ -30,16 +33,18 @@ type RecordingPageProps = RecordingSessionContext & RecordingCallbacks & {
   endSnapshot?: RecordingEndSnapshot;
   onRetryUpload?: () => void;
   onRetryProcessing?: () => void;
+  onRetryMicrophone?: () => void;
 };
 
 const statusByState: Record<RecordingViewState, string> = {
-  Ready: '준비됨',
+  Ready: '마이크 확인 중',
   Recording: '녹음 중',
   Paused: '일시정지됨',
 };
 
-export function RecordingPage({ title, state, elapsedMs, errorMessage, completed = false, endFlowFailed = false, uploadSnapshot, endSnapshot, onRetryUpload, onRetryProcessing, onStart, onPause, onResume, onRequestEnd, onConfirmEnd, onCancelEnd }: RecordingPageProps) {
+export function RecordingPage({ title, state, elapsedMs, microphoneStatus = 'checking', microphoneLevel = 0, microphoneInputDetected = false, errorMessage, completed = false, endFlowFailed = false, uploadSnapshot, endSnapshot, onRetryUpload, onRetryProcessing, onRetryMicrophone, onStart, onPause, onResume, onRequestEnd, onConfirmEnd, onCancelEnd }: RecordingPageProps) {
   const [isConfirmOpen, setConfirmOpen] = useState(false);
+  const microphoneSignalDetected = microphoneInputDetected;
   const showRecoveryActions = (completed && Boolean(errorMessage)) || endFlowFailed || ['retryable', 'incomplete', 'upload-failed', 'failed'].includes(endSnapshot?.status ?? '');
   const hasRecordingActions = (state === 'Ready' && !completed && !endFlowFailed)
     || (state === 'Ready' && showRecoveryActions)
@@ -113,9 +118,22 @@ export function RecordingPage({ title, state, elapsedMs, errorMessage, completed
         <h2 className="recording-meeting-title">{title}</h2>
         <p className="recording-status" role="status" aria-live="polite">
           {state === 'Recording' && <span className="recording-indicator" aria-hidden="true" />}
-          {completed ? '녹음이 종료되었습니다.' : statusByState[state]}
+          {completed ? '녹음이 종료되었습니다.' : state === 'Ready'
+            ? microphoneStatus === 'error' ? '마이크 확인 필요' : microphoneStatus === 'ready' && microphoneInputDetected ? '준비됨' : microphoneStatus === 'ready' ? '마이크 입력 대기 중' : statusByState.Ready
+            : statusByState[state]}
         </p>
         <p className="recording-timer" aria-label="경과 시간">{formatElapsedTime(state === 'Ready' && !completed ? 0 : elapsedMs)}</p>
+        {!completed && <div className={`recording-microphone recording-microphone--${microphoneStatus}`} role="status" aria-live="polite">
+          <div className="recording-waveform" aria-label={`마이크 입력 레벨 ${Math.round(microphoneLevel * 100)}%`}>
+            {Array.from({ length: 21 }, (_, index) => {
+              const position = Math.abs(index - 10) / 10;
+              const wave = .18 + microphoneLevel * (1 - position * .72) * (0.45 + .55 * Math.abs(Math.sin(index * 1.7)));
+              return <i key={index} style={{ height: `${Math.max(4, Math.round(wave * 38))}px` }} />;
+            })}
+          </div>
+          <span>{microphoneStatus === 'checking' ? '마이크 확인 중' : microphoneStatus === 'error' ? '마이크를 사용할 수 없습니다' : microphoneSignalDetected ? '마이크 입력 확인됨' : '마이크 입력 대기 중 · 짧게 말해 주세요'}</span>
+          {microphoneStatus === 'error' && onRetryMicrophone && <button type="button" className="recording-microphone-retry" onClick={onRetryMicrophone}>마이크 다시 확인</button>}
+        </div>}
         {errorMessage && <p className="recording-error" role="alert">{errorMessage}</p>}
         {endSnapshot?.message && endSnapshot.status !== 'idle'
           && !(endSnapshot.status === 'uploading' && uploadSnapshot && (uploadSnapshot.totalCount > 0 || uploadSnapshot.status === 'retryable'))
@@ -143,7 +161,7 @@ export function RecordingPage({ title, state, elapsedMs, errorMessage, completed
           {uploadSnapshot.status === 'retryable' && onRetryUpload && <button className="button button-secondary" type="button" onClick={onRetryUpload}>업로드 재시도</button>}
         </div>}
         {hasRecordingActions && <div className="recording-actions">
-          {state === 'Ready' && !completed && !endFlowFailed && <button className="button button-primary recording-primary-action recording-start-action" type="button" onClick={onStart}>녹음 시작</button>}
+          {state === 'Ready' && !completed && !endFlowFailed && <button className="button button-primary recording-primary-action recording-start-action" type="button" disabled={microphoneStatus !== 'ready' || !microphoneSignalDetected} onClick={onStart}>녹음 시작</button>}
           {state === 'Ready' && showRecoveryActions && <>
             <Link className="button button-primary recording-primary-action" to="/meetings/new">새 회의 시작</Link>
             <Link className="button button-secondary" to="/meetings">회의록 목록</Link>

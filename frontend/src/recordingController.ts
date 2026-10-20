@@ -26,6 +26,7 @@ export type MediaRecorderAdapter = {
   isMediaRecorderSupported: () => boolean;
   isTypeSupported: (mimeType: string) => boolean;
   getUserMedia: () => Promise<MediaStreamLike>;
+  monitorInput?: (stream: MediaStreamLike, onLevel: (level: number) => void) => () => void;
   createRecorder: (stream: MediaStreamLike, options: { mimeType: string }) => RecorderLike;
   now: () => number;
   nowEpoch: () => number;
@@ -37,6 +38,9 @@ export type MediaRecorderAdapter = {
 export type RecordingSnapshot = {
   state: RecordingViewState;
   elapsedMs: number;
+  microphoneStatus: 'checking' | 'ready' | 'error';
+  microphoneLevel: number;
+  microphoneInputDetected: boolean;
   errorMessage?: string;
   completed?: boolean;
 };
@@ -78,7 +82,7 @@ function safeError(error: unknown): string {
 
 export class RecordingController {
   private readonly options: ControllerOptions;
-  private snapshot: RecordingSnapshot = { state: 'Ready', elapsedMs: 0 };
+  private snapshot: RecordingSnapshot = { state: 'Ready', elapsedMs: 0, microphoneStatus: 'checking', microphoneLevel: 0, microphoneInputDetected: false };
   private stream: MediaStreamLike | null = null;
   private recorder: RecorderLike | null = null;
   private selectedMime = '';
@@ -90,6 +94,8 @@ export class RecordingController {
   private disposed = false;
   private stopCompleted = false;
   private startGeneration = 0;
+  private monitorCleanup: (() => void) | null = null;
+  private microphoneCheckInProgress = false;
 
   constructor(options: ControllerOptions) { this.options = options; }
 
@@ -117,6 +123,8 @@ export class RecordingController {
   }
 
   private releaseTracks() {
+    this.monitorCleanup?.();
+    this.monitorCleanup = null;
     const current = this.stream;
     this.stream = null;
     current?.getTracks().forEach((track) => {
@@ -140,6 +148,45 @@ export class RecordingController {
     this.releaseTracks();
   }
 
+  async prepareMicrophone(): Promise<void> {
+    if (this.disposed || this.snapshot.state !== 'Ready' || this.stream || this.microphoneCheckInProgress) return;
+    this.microphoneCheckInProgress = true;
+    this.publish({ microphoneStatus: 'checking', microphoneLevel: 0, microphoneInputDetected: false, errorMessage: undefined });
+    let acquired: MediaStreamLike | null = null;
+    try {
+      if (!this.options.adapter.isMediaRecorderSupported()) {
+        this.publish({ microphoneStatus: 'error', errorMessage: ERRORS.unsupported });
+        return;
+      }
+      if (!this.options.uploadPolicy.acceptedMimeTypes.some((type) => this.options.adapter.isTypeSupported(type))) {
+        this.publish({ microphoneStatus: 'error', errorMessage: ERRORS.unsupportedMime });
+        return;
+      }
+      acquired = await this.options.adapter.getUserMedia();
+      if (this.disposed) {
+        acquired.getTracks().forEach((track) => track.stop());
+        return;
+      }
+      this.stream = acquired;
+      this.publish({ microphoneStatus: 'ready' });
+      try {
+        this.monitorCleanup = this.options.adapter.monitorInput?.(acquired, (level) => {
+          const normalizedLevel = Math.max(0, Math.min(1, level));
+          this.publish({ microphoneLevel: normalizedLevel, microphoneInputDetected: this.snapshot.microphoneInputDetected || normalizedLevel > .025 });
+        }) ?? null;
+        if (!this.options.adapter.monitorInput) this.publish({ microphoneInputDetected: true });
+      } catch {
+        this.releaseTracks();
+        this.publish({ microphoneStatus: 'error', microphoneLevel: 0, errorMessage: '마이크 입력 상태를 확인할 수 없습니다. 브라우저에서 마이크를 다시 확인해 주세요.' });
+      }
+    } catch (error) {
+      if (acquired && !this.stream) acquired.getTracks().forEach((track) => { try { track.stop(); } catch { /* best effort cleanup */ } });
+      this.publish({ microphoneStatus: 'error', microphoneLevel: 0, errorMessage: safeError(error) });
+    } finally {
+      this.microphoneCheckInProgress = false;
+    }
+  }
+
   async start(): Promise<void> {
     if (this.disposed || this.snapshot.state !== 'Ready' || this.startInProgress || this.recorder || this.stream) {
       if (this.snapshot.state !== 'Ready') this.publish({ errorMessage: ERRORS.invalid });
@@ -152,6 +199,7 @@ export class RecordingController {
     this.publish({ errorMessage: undefined, completed: false });
     let acquired: MediaStreamLike | null = null;
     try {
+      if (this.snapshot.microphoneStatus === 'error') return;
       if (!this.options.adapter.isMediaRecorderSupported()) {
         this.publish({ errorMessage: ERRORS.unsupported });
         return;
@@ -161,7 +209,7 @@ export class RecordingController {
         this.publish({ errorMessage: ERRORS.unsupportedMime });
         return;
       }
-      acquired = await this.options.adapter.getUserMedia();
+      acquired = this.stream ?? await this.options.adapter.getUserMedia();
       if (this.disposed || generation !== this.startGeneration) {
         acquired.getTracks().forEach((track) => track.stop());
         return;
