@@ -55,6 +55,21 @@ export function NewMeetingPage({ onSubmit, initialDraft }: { onSubmit: (attempt:
   const [submitError, setSubmitError] = useState('');
   const attemptRef = useRef<{ signature: string; attempt: MeetingSessionAttempt; uncertain: boolean } | null>(null);
   const submittingRef = useRef(false);
+  const pageScrollRef = useRef<HTMLDivElement>(null);
+  const participantSectionRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    if (!pickerOpen) return;
+    const frame = requestAnimationFrame(() => {
+      const viewport = pageScrollRef.current;
+      const section = participantSectionRef.current;
+      if (!viewport || !section) return;
+      const reservedBottom = 76;
+      const overflow = section.getBoundingClientRect().bottom - (viewport.getBoundingClientRect().bottom - reservedBottom);
+      if (overflow > 0) viewport.scrollBy({ top: overflow, behavior: 'smooth' });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [pickerOpen]);
 
   const loadConfig = useCallback(async () => {
     setConfig((current) => ({ status: 'loading', data: current.data }));
@@ -218,7 +233,7 @@ export function NewMeetingPage({ onSubmit, initialDraft }: { onSubmit: (attempt:
         </h1>
       </header>
 
-      <div className="page-scroll-content">
+      <div className="page-scroll-content" ref={pageScrollRef}>
       <form className="new-meeting-form" onSubmit={handleSubmit} noValidate>
         <div className="meeting-field">
           <label htmlFor="meeting-title">회의 제목</label>
@@ -256,7 +271,7 @@ export function NewMeetingPage({ onSubmit, initialDraft }: { onSubmit: (attempt:
           {templateError && <p className="meeting-field-error" id="meeting-template-error">회의록을 선택해 주세요.</p>}
         </div>
 
-        <section className="meeting-field participant-selection" aria-labelledby="participant-label">
+        <section className="meeting-field participant-selection" aria-labelledby="participant-label" ref={participantSectionRef}>
           <div className="participant-heading">
             <h2 id="participant-label">참석자</h2>
           </div>

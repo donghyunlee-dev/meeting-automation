@@ -257,7 +257,7 @@ button:disabled { cursor: not-allowed; opacity: .6; }
 .meeting-field input[type='text'], .meeting-field input[type='date'], .meeting-field select { width: 100%; min-height: 52px; border: 1px solid #dce2ea; border-radius: 10px; padding: 0 13px; color: #293548; background: #fff; }
 .meeting-select-control { position: relative; }
 .meeting-field .meeting-select-control select { appearance: none; padding-right: 48px; }
-.meeting-field select:focus, .meeting-field input:focus { outline: 3px solid #3b82f6; outline-offset: 2px; }
+.meeting-field select:focus, .meeting-field input:focus { border-color: #3b82f6; outline: none; box-shadow: inset 0 0 0 1px #3b82f6; }
 .meeting-resource { display: grid; gap: 8px; }
 .meeting-timezone { margin: 0; color: #596578; font-size: 14px; }
 .meeting-query-state, .meeting-empty-state { margin: 0; color: #697586; font-size: 13px; line-height: 1.55; }
@@ -272,7 +272,7 @@ button:disabled { cursor: not-allowed; opacity: .6; }
 .participant-identity strong { color: #293548; font-size: 15px; font-weight: 650; }
 .participant-identity small { overflow-wrap: anywhere; color: #697586; font-size: 14px; }
 .participant-combo { width: 100%; overflow: hidden; border: 1px solid #dce2ea; border-radius: 10px; background: #fff; }
-.participant-combo:focus-within { outline: 3px solid #3b82f6; outline-offset: 2px; }
+.participant-combo:focus-within { border-color: #3b82f6; box-shadow: inset 0 0 0 1px #3b82f6; }
 .participant-combo-toggle { position: relative; display: flex; width: 100%; min-height: 52px; align-items: center; border: 0; padding: 0 48px 0 14px; color: #596578; background: #fff; font-size: 14px; text-align: left; }
 .participant-combo-toggle:hover { background: #fbfcfe; }
 .participant-combo-toggle:focus-visible { outline: none; }
