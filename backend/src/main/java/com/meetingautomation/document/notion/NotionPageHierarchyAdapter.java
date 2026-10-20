@@ -33,6 +33,8 @@ public final class NotionPageHierarchyAdapter implements ParticipantCreationProv
     private static final Logger log = LoggerFactory.getLogger(NotionPageHierarchyAdapter.class);
     public static final String API_VERSION = "2026-03-11";
     private static final String API_BASE_URL = "https://api.notion.com";
+    private static final int MAX_RATE_LIMIT_RETRIES = 2;
+    private static final long MAX_RATE_LIMIT_WAIT_MILLIS = 10_000;
     private static final String CHILDREN_PATH = "/v1/blocks/{block_id}/children";
     private static final java.util.regex.Pattern BOOTSTRAP_SENTINEL = java.util.regex.Pattern.compile(
             "meeting-automation/bootstrap/[A-Za-z0-9_.-]+/(MEETINGS|PARTICIPANTS|MEETING_DATA)");
@@ -80,6 +82,10 @@ public final class NotionPageHierarchyAdapter implements ParticipantCreationProv
     }
 
     private JsonNode transferRequest(String path, Object body, boolean meetingRead) {
+        return transferRequest(path, body, meetingRead, 0);
+    }
+
+    private JsonNode transferRequest(String path, Object body, boolean meetingRead, int retryCount) {
         try {
             java.net.URI uri = java.net.URI.create(API_BASE_URL + path);
             var request = body == null ? restClient.get().uri(uri) : restClient.post().uri(uri).body(JSON_MAPPER.writeValueAsString(body));
@@ -90,10 +96,18 @@ public final class NotionPageHierarchyAdapter implements ParticipantCreationProv
                 if (res.getStatusCode().isError()) {
                     String errorBody = StreamUtils.copyToString(res.getBody(), StandardCharsets.UTF_8);
                     String notionCode = "unknown";
+                    String rateLimitReason = null;
+                    JsonNode error = null;
                     try {
-                        JsonNode error = JSON_MAPPER.readTree(errorBody);
+                        error = JSON_MAPPER.readTree(errorBody);
                         if (error != null && error.path("code").isTextual()) notionCode = error.path("code").asString();
+                        if (error != null && error.path("additional_data").path("rate_limit_reason").isTextual()) {
+                            rateLimitReason = error.path("additional_data").path("rate_limit_reason").asString();
+                        }
                     } catch (Exception ignored) { /* Keep provider response details out of logs. */ }
+                    if (res.getStatusCode().value() == 429 && !"public_api_request_blocked".equals(rateLimitReason)) {
+                        throw new NotionRateLimitFailure(retryAfterMillis(res.getHeaders().getFirst("Retry-After"), error), true);
+                    }
                     log.error("Notion transfer API request failed: endpoint={}, status={}, notionCode={}",
                             safeEndpoint(path), res.getStatusCode().value(), notionCode);
                     if (meetingRead && res.getStatusCode().value() == 404) {
@@ -106,12 +120,46 @@ public final class NotionPageHierarchyAdapter implements ParticipantCreationProv
             JsonNode parsed = JSON_MAPPER.readTree(response);
             if (parsed == null || !parsed.isObject()) throw transferInvalid();
             return parsed;
+        } catch (NotionRateLimitFailure rateLimited) {
+            if (rateLimited.retryable() && retryCount < MAX_RATE_LIMIT_RETRIES
+                    && rateLimited.retryAfterMillis() <= MAX_RATE_LIMIT_WAIT_MILLIS) {
+                long jitterMillis = java.util.concurrent.ThreadLocalRandom.current().nextLong(250);
+                log.warn("Notion transfer API rate limited; retrying: endpoint={}, retry={}, retryAfterMs={}",
+                        safeEndpoint(path), retryCount + 1, rateLimited.retryAfterMillis());
+                try {
+                    Thread.sleep(rateLimited.retryAfterMillis() + jitterMillis);
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    throw DocumentProviderException.rateLimited();
+                }
+                return transferRequest(path, body, meetingRead, retryCount + 1);
+            }
+            log.error("Notion transfer API rate limit exhausted: endpoint={}, retries={}", safeEndpoint(path), retryCount);
+            throw DocumentProviderException.rateLimited();
         } catch (TransferCodec.ValidationException | DocumentProviderException e) { throw e; }
         catch (Exception e) {
             log.error("Notion transfer API response could not be decoded: endpoint={}, cause={}",
                     safeEndpoint(path), e.getClass().getSimpleName());
             throw transferInvalid();
         }
+    }
+
+    private static long retryAfterMillis(String retryAfter, JsonNode error) {
+        if (retryAfter != null) {
+            try {
+                long seconds = Long.parseLong(retryAfter.trim());
+                if (seconds >= 0) return Math.multiplyExact(seconds, 1_000L);
+            } catch (NumberFormatException | ArithmeticException ignored) { /* Use the response body or backoff. */ }
+        }
+        JsonNode retryAfterValue = error == null ? null : error.path("additional_data").path("retry_after");
+        if (retryAfterValue != null && !retryAfterValue.isMissingNode() && !retryAfterValue.isNull()) {
+            try {
+                long seconds = retryAfterValue.isNumber()
+                        ? retryAfterValue.longValue() : Long.parseLong(retryAfterValue.asString());
+                if (seconds >= 0) return Math.multiplyExact(seconds, 1_000L);
+            } catch (NumberFormatException | ArithmeticException ignored) { /* Use exponential backoff. */ }
+        }
+        return 1_000L;
     }
 
     private static String safeEndpoint(String path) {
@@ -883,5 +931,18 @@ public final class NotionPageHierarchyAdapter implements ParticipantCreationProv
         private int statusCode() {
             return statusCode;
         }
+    }
+
+    private static final class NotionRateLimitFailure extends RuntimeException {
+        private final long retryAfterMillis;
+        private final boolean retryable;
+
+        private NotionRateLimitFailure(long retryAfterMillis, boolean retryable) {
+            this.retryAfterMillis = retryAfterMillis;
+            this.retryable = retryable;
+        }
+
+        private long retryAfterMillis() { return retryAfterMillis; }
+        private boolean retryable() { return retryable; }
     }
 }

@@ -198,6 +198,51 @@ class NotionPageHierarchyAdapterTests extends com.meetingautomation.document.Doc
     }
 
     @Test
+    void meetingHistoryRetriesNotionRateLimitAfterRetryAfter() {
+        TestClient client = client(TOKEN, ROOT_ID);
+        client.server().expect(notionRequest(URL)).andRespond(jsonSuccess(children(
+                block("meetings-child", "child_page", "Meetings"),
+                block("participants-child", "child_page", "Participants"))));
+        client.server().expect(notionRequest(urlFor("participants-child")))
+                .andRespond(withStatus(HttpStatusCode.valueOf(429))
+                        .header("Retry-After", "0")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .body("{\"code\":\"rate_limited\"}"));
+        client.server().expect(notionRequest(urlFor("participants-child"))).andRespond(jsonSuccess(emptyChildren()));
+        client.server().expect(notionRequest(urlFor("meetings-child"))).andRespond(jsonSuccess(children(
+                "{\"id\":\"intro-paragraph\",\"type\":\"paragraph\",\"paragraph\":{\"rich_text\":[{\"type\":\"text\",\"text\":{\"content\":\"Notes\"}}]}}")));
+        client.server().expect(notionRequest(URL)).andRespond(jsonSuccess(children(
+                block("meetings-child", "child_page", "Meetings"),
+                block("participants-child", "child_page", "Participants"))));
+
+        assertEquals(List.of(), client.adapter().listMeetingRecords());
+        client.server().verify();
+    }
+
+    @Test
+    void meetingHistoryReturnsRetryableRateLimitAfterRetryBudgetIsExhausted() {
+        TestClient client = client(TOKEN, ROOT_ID);
+        client.server().expect(notionRequest(URL)).andRespond(jsonSuccess(children(
+                block("meetings-child", "child_page", "Meetings"),
+                block("participants-child", "child_page", "Participants"))));
+        for (int attempt = 0; attempt < 3; attempt++) {
+            client.server().expect(notionRequest(urlFor("participants-child")))
+                    .andRespond(withStatus(HttpStatusCode.valueOf(429))
+                            .header("Retry-After", "0")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .body("{\"code\":\"rate_limited\"}"));
+        }
+
+        DocumentProviderException failure = assertThrows(DocumentProviderException.class,
+                client.adapter()::listMeetingRecords);
+
+        assertEquals("DOCUMENT_RATE_LIMITED", failure.code());
+        assertEquals(429, failure.statusCode());
+        assertEquals(true, failure.retryable());
+        client.server().verify();
+    }
+
+    @Test
     void forwardsOpaqueCursorUntilAllRootChildrenAreRead() {
         TestClient client = client(TOKEN, ROOT_ID);
         String cursor = "opaque cursor / page-one";

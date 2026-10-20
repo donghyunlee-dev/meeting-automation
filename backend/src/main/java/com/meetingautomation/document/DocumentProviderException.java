@@ -33,6 +33,12 @@ public final class DocumentProviderException extends RuntimeException {
                 404);
     }
 
+    public static DocumentProviderException rateLimited() {
+        return new DocumentProviderException(
+                "DOCUMENT_RATE_LIMITED", "문서 서비스 요청이 많아 잠시 후 다시 시도해 주세요.", "DOCUMENT_FAILURE", true,
+                429);
+    }
+
     public static DocumentProviderException participantListFailed(boolean retryable) {
         return participantListFailed(retryable, null);
     }
