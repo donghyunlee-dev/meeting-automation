@@ -54,7 +54,6 @@ public final class ProcessingRetryService {
             }
             if (current.version() != expectedVersion) throw new SessionVersionConflictException();
             ProcessingFailure failure = current.processingFailure();
-            if (!failure.retryable()) throw new SessionStateConflictException();
             if (failure.audioExpiresAt() == null || !failure.audioExpiresAt().isAfter(clock.instant())) {
                 throw new AudioNotAvailableException();
             }

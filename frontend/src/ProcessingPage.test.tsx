@@ -45,25 +45,28 @@ describe('ProcessingPage failure recovery', () => {
   });
 
   it('shows safe Korean stage copy and only actions allowed by API-010', async () => {
-    vi.stubGlobal('fetch', withHealthyBackend(vi.fn(async () => new Response(JSON.stringify(apiSnapshot('PROCESSING_FAILED', ['DOWNLOAD_AUDIO', 'FINALIZE_PROCESSING_FAILURE'])), { status: 200 }))));
+    const body = apiSnapshot('PROCESSING_FAILED', ['RETRY_PROCESSING', 'DOWNLOAD_AUDIO', 'FINALIZE_PROCESSING_FAILURE']);
+    body.data.processing.retryable = false;
+    body.data.processing.errorCode = 'TRANSCRIPTION_AUTHENTICATION_FAILED';
+    vi.stubGlobal('fetch', withHealthyBackend(vi.fn(async () => new Response(JSON.stringify(body), { status: 200 }))));
     renderPage();
     expect(await screen.findByRole('heading', { name: '처리를 완료하지 못했습니다' })).toBeTruthy();
-    expect(screen.getByRole('region').querySelector('p:not(.visually-hidden)')?.textContent).toContain('음성을 변환하는 중 문제가 발생했습니다');
+    expect(screen.getByText('음성 인식 서비스 연결 설정을 확인해 주세요.', { selector: '.processing-failure-detail' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '다시 시도' })).toBeTruthy();
     expect(screen.queryByRole('link', { name: '원본 오디오 다운로드' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: '오디오 다운로드 준비' }));
     expect((await screen.findByRole('link', { name: '원본 오디오 다운로드' })).getAttribute('href')).toContain('/audio/download');
-    expect(screen.queryByRole('button', { name: '다시 변환' })).toBeNull();
-    expect(screen.queryByText(/PRIVATE_PROVIDER_FAILURE/)).toBeNull();
+    expect(screen.queryByText(/TRANSCRIPTION_AUTHENTICATION_FAILED/)).toBeNull();
   });
 
-  it('keeps actions hidden when API-010 metadata says retry or assembled audio is unavailable', async () => {
+  it('offers an API-authorized retry for recoverable audio even when retryable is false', async () => {
     const body = apiSnapshot('PROCESSING_FAILED', ['RETRY_PROCESSING', 'DOWNLOAD_AUDIO']);
     body.data.processing.retryable = false;
     body.data.processing.audioAvailable = false;
     vi.stubGlobal('fetch', withHealthyBackend(vi.fn(async () => new Response(JSON.stringify(body), { status: 200 }))));
     renderPage();
     await screen.findByRole('heading', { name: '처리를 완료하지 못했습니다' });
-    expect(screen.queryByRole('button', { name: '다시 변환' })).toBeNull();
+    expect(screen.getByRole('button', { name: '다시 시도' })).toBeTruthy();
     expect(screen.queryByRole('link', { name: '원본 오디오 다운로드' })).toBeNull();
   });
 
@@ -91,7 +94,7 @@ describe('ProcessingPage failure recovery', () => {
     });
     vi.stubGlobal('fetch', withHealthyBackend(fetchMock));
     renderPage();
-    const retry = await screen.findByRole('button', { name: '다시 변환' });
+    const retry = await screen.findByRole('button', { name: '다시 시도' });
     fireEvent.click(retry);
     await screen.findByText('전체 4단계 중 2단계 · 음성 인식 진행 중');
     const post = fetchMock.mock.calls.find(([, init]) => init?.method === 'POST');
@@ -110,9 +113,9 @@ describe('ProcessingPage failure recovery', () => {
     });
     vi.stubGlobal('fetch', withHealthyBackend(fetchMock));
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: '다시 변환' }));
+    fireEvent.click(await screen.findByRole('button', { name: '다시 시도' }));
     expect(await screen.findByText('전체 4단계 중 2단계 · 음성 인식 진행 중')).toBeTruthy();
-    expect(screen.queryByRole('button', { name: '다시 변환' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '다시 시도' })).toBeNull();
     expect(fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1);
   });
 
@@ -193,6 +196,6 @@ describe('ProcessingPage failure recovery', () => {
     renderPage();
     expect(await screen.findByRole('heading', { name: '회의를 찾을 수 없습니다' })).toBeTruthy();
     expect(screen.getByRole('link', { name: '새 회의 시작' })).toBeTruthy();
-    expect(screen.queryByRole('button', { name: '다시 변환' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '다시 시도' })).toBeNull();
   });
 });

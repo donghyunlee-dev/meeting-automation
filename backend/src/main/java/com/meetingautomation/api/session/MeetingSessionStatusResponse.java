@@ -150,7 +150,7 @@ public record MeetingSessionStatusResponse(Data data) {
 
     private static List<String> failureActions(ProcessingFailure failure, boolean audioAvailable) {
         var actions = new java.util.ArrayList<String>();
-        if (failure.retryable() && (audioAvailable || failure.retryInputAvailable())) {
+        if (audioAvailable || failure.retryInputAvailable()) {
             actions.add("RETRY_PROCESSING");
         }
         if (audioAvailable) actions.add("DOWNLOAD_AUDIO");

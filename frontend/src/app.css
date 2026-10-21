@@ -118,7 +118,7 @@ button:disabled { cursor: not-allowed; opacity: .6; }
   .future-route-actions { grid-template-columns: minmax(0, 1fr); }
 }
 .processing-page { width: min(100%, 868px); margin: 0 auto; padding: 24px 24px 28px; }
-.processing-page:has(.processing-recovery-actions) { padding-bottom: 240px; }
+.processing-page:has(.processing-recovery-actions) { padding-bottom: 200px; }
 .processing-heading { margin-bottom: 18px; }
 .processing-heading h1 { display: flex; align-items: center; gap: 10px; margin: 8px 0; color: #182230; font-size: clamp(26px, 6vw, 34px); letter-spacing: -.04em; }
 .processing-card, .processing-message { display: grid; gap: 18px; border: 1px solid #e5e9ef; border-radius: 14px; padding: 20px; background: #fff; }
@@ -144,8 +144,11 @@ button:disabled { cursor: not-allowed; opacity: .6; }
 .processing-current { margin: 0; color: #3b82f6; font-size: 14px; font-weight: 650; line-height: 1.6; }
 .processing-message p { margin: 0; color: #596578; font-size: 14px; line-height: 1.6; }
 .processing-message h2 { margin: 0; color: #253044; font-size: 17px; }
-.processing-recovery-actions { position: fixed; z-index: 6; right: 0; bottom: calc(68px + env(safe-area-inset-bottom)); left: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; width: min(100%, 868px); margin: 0 auto; padding: 12px 24px; background: linear-gradient(0deg, #f7f8fa 72%, #f7f8fa00); }
+.processing-recovery-actions { position: fixed; z-index: 6; right: 0; bottom: calc(68px + env(safe-area-inset-bottom)); left: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; width: min(100%, 868px); margin: 0 auto; padding: 14px 24px; background: #f7f8fa; }
 .processing-recovery-actions .button { width: 100%; min-height: 48px; text-decoration: none; }
+.processing-retry-button { grid-column: 1 / -1; }
+.processing-failure-detail { color: #344054 !important; font-size: 15px !important; }
+.processing-failure-stage { padding-top: 10px; border-top: 1px solid #edf0f4; color: #667085 !important; }
 .processing-confirmation { display: grid; gap: 12px; padding: 16px; border: 1px solid #dce1e8; border-radius: 12px; background: #f8f9fb; }
 .processing-confirmation h3, .processing-confirmation p { margin: 0; }
 .processing-confirmation button { justify-self: start; min-height: 48px; }
@@ -852,7 +855,7 @@ button:disabled { cursor: not-allowed; opacity: .6; }
   .meeting-detail-actions .button { width: 100%; }
   .processing-page, .review-speaker-page, .share-page { padding-right: 18px; padding-left: 18px; }
   .processing-page { padding-bottom: 24px; }
-  .processing-page:has(.processing-recovery-actions) { padding-bottom: 240px; }
+  .processing-page:has(.processing-recovery-actions) { padding-bottom: 200px; }
   .processing-recovery-actions { padding-right: 18px; padding-left: 18px; }
   .complete-page .share-actions, .share-page:not(.complete-page) .share-actions, .review-flow-dock { padding-right: 18px; padding-left: 18px; }
 }

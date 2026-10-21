@@ -13,6 +13,24 @@ const failureMessages: Record<ProcessingStage, string> = {
   DIARIZATION: '화자를 분석하는 중 문제가 발생했습니다.', MINUTES_GENERATION: '회의록을 생성하는 중 문제가 발생했습니다.',
   DRAFT_READY: '회의록을 생성하는 중 문제가 발생했습니다.', DRAFT_REGENERATION: '회의록을 재생성하는 중 문제가 발생했습니다.',
 };
+const failureDetails: Record<string, string> = {
+  AUDIO_ASSEMBLY_FAILED: '녹음 파일 조각을 하나의 오디오로 준비하지 못했습니다. 다시 시도해 주세요.',
+  AUDIO_STORAGE_FAILED: '오디오 파일을 안전하게 보관하지 못했습니다. 다시 시도해도 해결되지 않으면 새 회의를 녹음해 주세요.',
+  TRANSCRIPTION_AUTHENTICATION_FAILED: '음성 인식 서비스 연결 설정을 확인해 주세요.',
+  TRANSCRIPTION_CONFIGURATION_ERROR: '음성 인식 서비스 설정에 문제가 있습니다. 설정을 확인한 뒤 다시 시도해 주세요.',
+  TRANSCRIPTION_INVALID_AUDIO: '녹음 파일을 음성 인식 서비스에서 읽지 못했습니다. 다시 시도해 주세요.',
+  TRANSCRIPTION_INVALID_RESPONSE: '음성 인식 결과를 읽을 수 없었습니다. 다시 시도해 주세요.',
+  TRANSCRIPTION_PROCESSING_FAILED: '음성 인식 서비스가 처리를 완료하지 못했습니다. 잠시 후 다시 시도해 주세요.',
+  DIARIZATION_FAILED: '화자 분석을 완료하지 못했습니다. 다시 시도해 주세요.',
+  DIARIZATION_RESULT_SAVE_FAILED: '화자 분석 결과를 저장하지 못했습니다. 다시 시도해 주세요.',
+  MINUTES_AUTHENTICATION_FAILED: '회의록 작성 서비스 연결 설정을 확인해 주세요.',
+  MINUTES_CONFIGURATION_ERROR: '회의록 작성 서비스 설정에 문제가 있습니다. 설정을 확인한 뒤 다시 시도해 주세요.',
+  MINUTES_PROCESSING_FAILED: '회의록 작성 서비스가 처리를 완료하지 못했습니다. 잠시 후 다시 시도해 주세요.',
+  MINUTES_RESULT_SAVE_FAILED: '작성한 회의록을 저장하지 못했습니다. 다시 시도해 주세요.',
+  TRANSCRIPTION_RESULT_NOT_AVAILABLE: '음성 인식 결과를 찾지 못했습니다. 다시 시도해 주세요.',
+  PROCESSING_RUNNER_FAILED: '회의 처리 작업이 중단되었습니다. 다시 시도해 주세요.',
+  PROCESSING_FAILED: '회의 처리 중 일시적인 문제가 발생했습니다. 다시 시도해 주세요.',
+};
 const DOWNLOAD_RETURN_KEY = 'processing-download-return';
 const SAFE_NETWORK_ERROR = normalizeApiError({ error: { code: 'NETWORK_ERROR' } });
 
@@ -138,7 +156,6 @@ export function ProcessingPage() {
   const allowed = (action: ProcessingAction) => {
     if (failure !== null) return false;
     if (snapshot?.allowedActions.includes(action) !== true) return false;
-    if (action === 'RETRY_PROCESSING') return snapshot?.processing.retryable === true;
     if (action === 'DOWNLOAD_AUDIO') return snapshot?.processing.audioAvailable === true;
     return true;
   };
@@ -154,7 +171,7 @@ export function ProcessingPage() {
       await refresh();
     } catch (error) {
       const mapped = error instanceof ProcessingApiError ? error : new ProcessingApiError('NETWORK_ERROR', undefined, true);
-      setActionError(mapped.code === 'DOCUMENT_FAILED' ? '실패 기록을 저장하지 못했습니다. 상태를 확인한 뒤 다시 시도해 주세요.' : mapped.code === 'AUDIO_NOT_AVAILABLE' ? '오디오를 사용할 수 없습니다. 최신 상태를 확인해 주세요.' : '요청 결과를 확인하지 못했습니다. 최신 상태를 다시 확인합니다.');
+      setActionError(mapped.code === 'DOCUMENT_FAILED' ? '실패 기록을 저장하지 못했습니다. 상태를 확인한 뒤 다시 시도해 주세요.' : mapped.code === 'AUDIO_NOT_AVAILABLE' ? '다시 처리할 오디오를 찾지 못했습니다. 보관 기한이 지났을 수 있습니다.' : mapped.code === 'SESSION_STATE_CONFLICT' ? '현재 회의 상태에서는 다시 시도할 수 없습니다. 최신 상태를 확인해 주세요.' : '요청 결과를 확인하지 못했습니다. 최신 상태를 다시 확인합니다.');
       await refresh();
     } finally { inFlight.current = false; setBusy(false); }
   };
@@ -180,6 +197,7 @@ export function ProcessingPage() {
   const activeStage = isProcessing && reportedStage === 2 && validProgress && progress === 100 ? 3 : reportedStage;
   const activeStep = activeStage >= 0 ? activeStage + 1 : null;
   const stageForFailure = snapshot?.processing?.stage;
+  const failureDetail = snapshot?.processing.errorCode ? failureDetails[snapshot.processing.errorCode] : undefined;
 
   return (
     <main className="processing-page page-scroll-layout" aria-labelledby="processing-title">
@@ -201,21 +219,20 @@ export function ProcessingPage() {
       {failure === 'invalid' && <p role="alert" className="processing-message">회의 처리 상태를 확인할 수 없습니다. 잠시 후 다시 시도해 주세요.</p>}
       {failure === 'unavailable' && <p role="alert" className="processing-message">회의 처리 상태를 확인할 수 없습니다. 잠시 후 다시 시도해 주세요.</p>}
       {snapshot?.status === 'PROCESSING_FAILED' && failure === null && <section className="processing-message processing-recovery" role="region" aria-labelledby="processing-failed-title">
-        <p className="visually-hidden" role="alert">{stageForFailure ? failureMessages[stageForFailure] : '회의를 처리하는 중 문제가 발생했습니다.'}</p>
+        <p className="visually-hidden" role="alert">{failureDetail ?? (stageForFailure ? failureMessages[stageForFailure] : '회의를 처리하는 중 문제가 발생했습니다.')}</p>
         <h2 id="processing-failed-title">처리를 완료하지 못했습니다</h2>
-        <p>{stageForFailure ? failureMessages[stageForFailure] : '회의를 처리하는 중 문제가 발생했습니다.'}</p>
-        {stageForFailure && <p>실패 단계: {stageLabels[stageForFailure]}</p>}
+        <p className="processing-failure-detail">{failureDetail ?? (stageForFailure ? failureMessages[stageForFailure] : '회의를 처리하는 중 문제가 발생했습니다.')}</p>
+        {stageForFailure && <p className="processing-failure-stage">실패한 단계 · {stageLabels[stageForFailure]}</p>}
         {expiresIn !== null && <p>오디오 보관 만료: {expiresIn === 0 ? '만료 시각이 지났습니다. 서버 상태를 확인하고 있습니다.' : `약 ${expiresIn}분 남았습니다.`}</p>}
-        <p>회의 원문과 제공자 오류 내용은 이 화면에 표시하지 않습니다.</p>
         <div className="processing-recovery-actions" aria-busy={busy}>
-          {allowed('RETRY_PROCESSING') && <button className="button button-primary" disabled={busy} onClick={() => void mutate('retry')}>{busy ? '요청 중…' : '다시 변환'}</button>}
+          {allowed('RETRY_PROCESSING') && <button className="button button-primary processing-retry-button" disabled={busy} onClick={() => void mutate('retry')}>{busy ? '다시 시도 중…' : '다시 시도'}</button>}
           {allowed('DOWNLOAD_AUDIO') && !downloadReady && <button className="button button-secondary" disabled={busy} onClick={() => void checkDownloadAvailability()}>오디오 다운로드 준비</button>}
           {allowed('DOWNLOAD_AUDIO') && downloadReady && <a ref={downloadLinkRef} className="button button-secondary" href={audioDownloadUrl(sessionId)} download target="_blank" rel="noopener" onClick={() => {
             sessionStorage.setItem(DOWNLOAD_RETURN_KEY, sessionId);
           }}>원본 오디오 다운로드</a>}
           {allowed('FINALIZE_PROCESSING_FAILURE') && <button className="button button-secondary" disabled={busy} onClick={(event) => { returnFocusRef.current = event.currentTarget; setConfirmDiscard(true); }}>오디오 없이 실패 마무리</button>}
         </div>
-        {actionError && <p role="alert">{actionError}</p>}
+        {actionError && <p className="processing-action-error" role="alert">{actionError}</p>}
         {confirmDownload && <section ref={downloadDialogRef} className="processing-confirmation" role="dialog" aria-labelledby="download-confirm-title" aria-describedby="download-confirm-description"><h3 id="download-confirm-title">오디오를 기기에 저장했나요?</h3><p id="download-confirm-description">저장된 것을 확인한 경우에만 다운로드 완료로 기록합니다.</p><button className="button button-primary" disabled={busy} onClick={() => void mutate('finalize', 'DOWNLOADED')}>저장했어요</button><button className="button button-secondary" onClick={() => setConfirmDownload(false)}>저장하지 못했어요</button></section>}
         {confirmDiscard && <section ref={discardDialogRef} className="processing-confirmation" role="dialog" aria-labelledby="discard-confirm-title" aria-describedby="discard-confirm-description"><h3 id="discard-confirm-title">오디오 없이 마무리</h3><p id="discard-confirm-description">오디오를 보관하지 않고 실패 회의 기록을 저장합니다. 이 선택은 되돌릴 수 없습니다.</p><button className="button button-primary" disabled={busy} onClick={() => void mutate('finalize', 'DISCARDED')}>실패 마무리</button><button className="button button-secondary" disabled={busy} onClick={() => setConfirmDiscard(false)}>취소</button></section>}
       </section>}

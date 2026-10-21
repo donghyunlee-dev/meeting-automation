@@ -183,9 +183,10 @@ class MeetingSessionStatusApiTests {
                 new ProcessingFailure("TRANSCRIPTION", "TRANSCRIPTION_FAILED", false, true, expiry, false, false)), null);
         mockMvc.perform(get(STATUS_URL, SESSION_ID))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.allowedActions.length()").value(2))
-                .andExpect(jsonPath("$.data.allowedActions[0]").value("DOWNLOAD_AUDIO"))
-                .andExpect(jsonPath("$.data.allowedActions[1]").value("FINALIZE_PROCESSING_FAILURE"));
+                .andExpect(jsonPath("$.data.allowedActions.length()").value(3))
+                .andExpect(jsonPath("$.data.allowedActions[0]").value("RETRY_PROCESSING"))
+                .andExpect(jsonPath("$.data.allowedActions[1]").value("DOWNLOAD_AUDIO"))
+                .andExpect(jsonPath("$.data.allowedActions[2]").value("FINALIZE_PROCESSING_FAILURE"));
     }
 
     @Test

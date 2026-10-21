@@ -48,6 +48,7 @@ export async function getProcessingStatus(sessionId: string, signal?: AbortSigna
       ...(typeof progress === 'number' ? { progressPercent: progress } : {}),
       ...(typeof processingRaw.retryable === 'boolean' ? { retryable: processingRaw.retryable } : {}),
       ...(typeof processingRaw.audioAvailable === 'boolean' ? { audioAvailable: processingRaw.audioAvailable } : {}),
+      ...(typeof processingRaw.errorCode === 'string' ? { errorCode: processingRaw.errorCode } : {}),
       audioExpiresAt: typeof processingRaw.audioExpiresAt === 'string' ? processingRaw.audioExpiresAt : null,
     };
     return {

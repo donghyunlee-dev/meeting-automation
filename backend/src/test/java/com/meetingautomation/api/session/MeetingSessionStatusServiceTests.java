@@ -25,4 +25,18 @@ class MeetingSessionStatusServiceTests {
         assertThat(response.data().allowedActions()).containsExactly("FINALIZE_PROCESSING_FAILURE");
         assertThat(response.data().processing().audioExpiresAt()).isEqualTo(NOW);
     }
+
+    @Test
+    void availableAudioCanBeRetriedManuallyEvenWhenFailureWasNotClassifiedAsTransient() {
+        MeetingSessionStore store = new MeetingSessionStore();
+        store.save(new MeetingSession("ms_retry", 4, "PROCESSING_FAILED", 1,
+                new MeetingSession.Meeting("Planning", "default.md", List.of(), "UTC"), "TRANSCRIPTION", 34,
+                List.of(), List.of(), new ProcessingFailure("TRANSCRIPTION", "TRANSCRIPTION_INVALID_AUDIO", false,
+                        true, NOW.plusSeconds(3600), false, false)), null);
+
+        var response = new MeetingSessionStatusService(store, Clock.fixed(NOW, ZoneOffset.UTC)).get("ms_retry");
+
+        assertThat(response.data().allowedActions()).containsExactly(
+                "RETRY_PROCESSING", "DOWNLOAD_AUDIO", "FINALIZE_PROCESSING_FAILURE");
+    }
 }

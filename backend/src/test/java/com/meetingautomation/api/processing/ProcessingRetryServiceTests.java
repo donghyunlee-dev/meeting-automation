@@ -52,6 +52,16 @@ class ProcessingRetryServiceTests {
         assertThat(expired.queue).isEmpty();
     }
 
+    @Test
+    void acceptsUserRequestedRetryForAvailableAudioAfterNonTransientFailure() throws Exception {
+        Fixture fixture = new Fixture(NOW.plusSeconds(3600), false);
+
+        ProcessingStartResponse response = fixture.service.retry(SESSION, "\"3\"", "retry-manual");
+
+        assertThat(response.data().status()).isEqualTo("PROCESSING");
+        assertThat(fixture.queue).containsExactly(fixture.job);
+    }
+
     private static final class Fixture {
         private final MeetingSessionStore sessions = new MeetingSessionStore();
         private final TestPrivateAudioStorage storage = new TestPrivateAudioStorage();
@@ -60,12 +70,16 @@ class ProcessingRetryServiceTests {
         private final ProcessingRetryService service;
 
         private Fixture(Instant expiresAt) throws Exception {
+            this(expiresAt, true);
+        }
+
+        private Fixture(Instant expiresAt, boolean retryable) throws Exception {
             sessions.save(new MeetingSession(SESSION, 1, "UPLOADING", 1,
                     new MeetingSession.Meeting("Synthetic", "default.md", "1.0.0", List.of("p1"), "UTC",
                             List.of(new MeetingSession.ParticipantReference("p1", "Synthetic")))),
                     null, new UploadPolicy(15, 64, List.of("audio/webm")));
             sessions.startProcessing(SESSION);
-            sessions.failProcessing(SESSION, "TRANSCRIPTION", 33, "TRANSCRIPTION_FAILED", true,
+            sessions.failProcessing(SESSION, "TRANSCRIPTION", 33, "TRANSCRIPTION_FAILED", retryable,
                     true, false, expiresAt);
             sessions.registerProcessingJob(job);
             byte[] audio = {1, 2, 3};
