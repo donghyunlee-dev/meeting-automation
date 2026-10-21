@@ -154,7 +154,8 @@ export function RecordingPage({ title, state, elapsedMs, microphoneStatus = 'che
             {Array.from({ length: 21 }, (_, index) => {
               const position = Math.abs(index - 10) / 10;
               const wave = .18 + microphoneLevel * (1 - position * .72) * (0.45 + .55 * Math.abs(Math.sin(index * 1.7)));
-              return <i key={index} style={{ height: `${Math.max(4, Math.round(wave * 38))}px` }} />;
+              const waveformScale = state === 'Recording' || state === 'Paused' ? 64 : 38;
+              return <i key={index} style={{ height: `${Math.max(4, Math.round(wave * waveformScale))}px` }} />;
             })}
           </div>
           {onRetryMicrophone && (microphoneStatus === 'error' || (microphoneStatus === 'ready' && !microphoneSignalDetected)) && <button type="button" className="recording-microphone-retry" aria-label={microphoneStatus === 'error' ? '마이크 다시 확인' : '마이크 입력 다시 확인'} onClick={onRetryMicrophone}>
@@ -188,19 +189,27 @@ export function RecordingPage({ title, state, elapsedMs, microphoneStatus = 'che
           </span>
           {uploadSnapshot.status === 'retryable' && onRetryUpload && <button className="button button-secondary" type="button" onClick={onRetryUpload}>업로드 재시도</button>}
         </div>}
-        {hasRecordingActions && <div className="recording-actions">
+        {hasRecordingActions && <div className={`recording-actions${state === 'Recording' || state === 'Paused' ? ' recording-actions--active' : ''}`}>
           {state === 'Ready' && !completed && !endFlowFailed && <button className="button button-primary recording-primary-action recording-start-action" type="button" disabled={microphoneStatus !== 'ready' || !microphoneSignalDetected} onClick={onStart}>녹음 시작</button>}
           {state === 'Ready' && showRecoveryActions && <>
             <Link className="button button-primary recording-primary-action" to="/meetings/new">새 회의 시작</Link>
             <Link className="button button-secondary" to="/meetings">회의록 목록</Link>
           </>}
           {state === 'Recording' && <>
-            <button className="button button-secondary" type="button" onClick={onPause}>일시정지</button>
-            <button className="button button-danger recording-primary-action" type="button" ref={endTrigger} onClick={requestEnd}>회의 종료</button>
+            <button className="button button-secondary recording-action-pill" type="button" onClick={onPause}>
+              <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M7 5.5v9M13 5.5v9" /></svg><span>일시정지</span>
+            </button>
+            <button className="button button-danger recording-primary-action recording-action-pill" type="button" ref={endTrigger} onClick={requestEnd} aria-label="회의 종료">
+              <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m4.5 10.5 3.6 3.6 7.4-7.6" /></svg><span>완료</span>
+            </button>
           </>}
           {state === 'Paused' && <>
-            <button className="button button-primary recording-primary-action" type="button" onClick={onResume}>녹음 재개</button>
-            <button className="button button-danger" type="button" ref={endTrigger} onClick={requestEnd}>회의 종료</button>
+            <button className="button button-primary recording-primary-action recording-action-pill" type="button" onClick={onResume}>
+              <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m7 5 8 5-8 5z" /></svg><span>녹음 재개</span>
+            </button>
+            <button className="button button-danger recording-action-pill" type="button" ref={endTrigger} onClick={requestEnd} aria-label="회의 종료">
+              <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m4.5 10.5 3.6 3.6 7.4-7.6" /></svg><span>완료</span>
+            </button>
           </>}
         </div>}
       </section>
