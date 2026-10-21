@@ -145,8 +145,11 @@ export function RecordingPage({ title, state, elapsedMs, microphoneStatus = 'che
         {!completed && <div className={`recording-microphone recording-microphone--${microphoneStatus} recording-microphone--${microphoneSignalState}`} role="status" aria-label={microphoneStatusLabel} aria-live="polite">
           <div className="recording-microphone-visual" aria-hidden="true">
             <svg className="recording-microphone-icon" viewBox="0 0 24 24">
-              <rect x="9" y="3" width="6" height="12" rx="3" />
-              <path d="M5.5 11v1a6.5 6.5 0 0 0 13 0v-1M12 18.5V22m-4 0h8" />
+              {state === 'Recording'
+                ? <rect className="recording-state-icon" x="8" y="8" width="8" height="8" rx="1.5" />
+                : state === 'Paused'
+                  ? <path className="recording-state-icon" d="M8 6v12m8-12v12" />
+                  : <><rect x="9" y="3" width="6" height="12" rx="3" /><path d="M5.5 11v1a6.5 6.5 0 0 0 13 0v-1M12 18.5V22m-4 0h8" /></>}
             </svg>
             <i className={`recording-microphone-lamp recording-microphone-lamp--${microphoneSignalState}`} />
           </div>
@@ -154,7 +157,7 @@ export function RecordingPage({ title, state, elapsedMs, microphoneStatus = 'che
             {Array.from({ length: 21 }, (_, index) => {
               const position = Math.abs(index - 10) / 10;
               const wave = .18 + microphoneLevel * (1 - position * .72) * (0.45 + .55 * Math.abs(Math.sin(index * 1.7)));
-              const waveformScale = state === 'Recording' || state === 'Paused' ? 64 : 38;
+              const waveformScale = state === 'Recording' || state === 'Paused' ? 74 : 38;
               return <i key={index} style={{ height: `${Math.max(4, Math.round(wave * waveformScale))}px` }} />;
             })}
           </div>
