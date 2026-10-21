@@ -472,8 +472,8 @@ button:disabled { cursor: not-allowed; opacity: .6; }
 .setup-mode input, .setup-confirm input { flex-shrink: 0; margin-top: 6px; }
 .setup-confirm { margin-bottom: 20px; }
 
-.review-speaker-page { display: grid; align-content: start; gap: 18px; width: min(100%, 868px); min-width: 0; margin: 0 auto; padding: 38px 24px 136px; overflow-wrap: anywhere; }
-.review-page-heading { position: sticky; z-index: 4; top: 0; display: flex; min-height: 58px; align-items: center; gap: 10px; margin: -1px 0 0; padding: 8px 0 14px; background: #f7f8fa; }
+.review-speaker-page { display: grid; align-content: start; gap: 18px; width: min(100%, 868px); min-width: 0; margin: 0 auto; padding: 16px 24px 136px; overflow-wrap: anywhere; }
+.review-page-heading { position: relative; z-index: 4; display: flex; min-height: 58px; align-items: center; gap: 10px; margin: -1px 0 0; padding: 8px 0 14px; background: #f7f8fa; }
 .review-page-heading h1 { display: flex; min-width: 0; align-items: center; gap: 11px; margin: 0; color: #182230; font-size: clamp(28px, 5vw, 34px); letter-spacing: -.04em; }
 .review-page-back { display: grid; flex: 0 0 24px; width: 24px; min-height: 44px; place-items: center start; color: #344054; text-decoration: none; }
 .review-page-back svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
@@ -611,7 +611,7 @@ button:disabled { cursor: not-allowed; opacity: .6; }
 .transcript-drawer-empty { align-self: start; border-radius: 10px; padding: 16px; background: #f9fafb; }
 .transcript-drawer button:focus-visible { outline: 3px solid #3b82f6; outline-offset: 2px; }
 @media (max-width: 520px) {
-  .review-speaker-page { padding: 28px 18px 136px; }
+  .review-speaker-page { padding: 16px 18px 136px; }
   .review-speaker-card, .review-speaker-message { padding: 16px; }
   .review-speaker-card-heading { flex-direction: column; }
   .review-speaker-card-heading .button, .review-speaker-message .button { width: 100%; }
