@@ -194,6 +194,55 @@ test('SCR-001 and SCR-009 keep page titles fixed while meeting rows scroll', asy
   expect(await page.evaluate(() => document.documentElement.scrollTop)).toBe(0);
 });
 
+test('all app routes keep the brand and page heading visible during scrolling', async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 480 });
+  const routes = screens.filter((screen) => screen.id !== 'SCR-007');
+  for (const screen of routes) {
+    await installSyntheticApi(page, screen);
+    if (screen.id === 'SCR-003') {
+      await page.addInitScript((session) => sessionStorage.setItem('meeting-automation.recording-session', JSON.stringify(session)), {
+        sessionId, version: 3, status: 'CREATED', title: longKoreanTitle,
+        uploadPolicy: { chunkDurationSeconds: 30, maxChunkBytes: 1_000_000, acceptedMimeTypes: ['audio/webm'] },
+      });
+    }
+    await page.goto(screen.route);
+    const heading = page.getByRole('heading', { name: screen.heading }).first();
+    await expect(heading).toBeVisible();
+    const fixedHeading = page.locator('main .page-fixed-heading, main > header, main > .settings-heading, main > .meetings-heading, main > .new-meeting-heading, main .page-heading, main > .home-content').first();
+    await expect(fixedHeading).toBeVisible();
+    const initial = await page.evaluate(() => ({
+      shellPosition: getComputedStyle(document.querySelector('.app-shell')!).position,
+      brandTop: document.querySelector('.product-header')!.getBoundingClientRect().top,
+    }));
+    const initialHeadingTop = (await fixedHeading.boundingBox())!.y;
+    expect(initial.shellPosition, `${screen.id} shell should stay attached to the viewport`).toBe('fixed');
+
+    await page.locator('.page-scroll-content, .meetings-list-viewport, .home-recent .meeting-summary-list').first().evaluate((element) => {
+      element.scrollTop = element.scrollHeight;
+    }).catch(() => undefined);
+    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+    const afterScroll = await page.evaluate(() => ({
+      documentScrollTop: document.documentElement.scrollTop,
+      brandTop: document.querySelector('.product-header')!.getBoundingClientRect().top,
+    }));
+    expect(afterScroll.documentScrollTop, `${screen.id} should not scroll the document`).toBe(0);
+    expect(afterScroll.brandTop, `${screen.id} brand header moved`).toBe(initial.brandTop);
+    expect((await fixedHeading.boundingBox())!.y, `${screen.id} page heading moved`).toBe(initialHeadingTop);
+  }
+
+  for (const route of ['/setup/document', '/settings/document']) {
+    await installSyntheticApi(page, screens.find((screen) => screen.id === 'SCR-011')!);
+    await page.goto(route);
+    const heading = page.locator('main h1').first();
+    await expect(heading).toBeVisible();
+    const initialTop = await heading.evaluate((element) => element.getBoundingClientRect().top);
+    await page.locator('.page-scroll-content').evaluate((element) => { element.scrollTop = element.scrollHeight; });
+    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+    expect(await heading.evaluate((element) => element.getBoundingClientRect().top), `${route} page heading moved`).toBe(initialTop);
+    expect(await page.evaluate(() => document.documentElement.scrollTop), `${route} should not scroll the document`).toBe(0);
+  }
+});
+
 test('SCR-012 searches the roster and clears the query to restore both fixture participants', async ({ page }) => {
   await page.setViewportSize({ width: 360, height: 800 });
   await installSyntheticApi(page, screens[10], { participants: [participant, graceParticipant] });

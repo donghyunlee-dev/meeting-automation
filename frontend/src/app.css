@@ -865,6 +865,9 @@ button:disabled { cursor: not-allowed; opacity: .6; }
 /* App shell keeps the brand and page title in place; each page scrolls its own body. */
 .app-shell {
   display: flex;
+  position: fixed;
+  inset: 0;
+  width: 100%;
   height: 100dvh;
   min-height: 0;
   flex-direction: column;
@@ -881,7 +884,7 @@ button:disabled { cursor: not-allowed; opacity: .6; }
   padding-bottom: calc(68px + env(safe-area-inset-bottom));
 }
 .app-shell:has(.setup-page) .app-route-viewport { padding-bottom: 0; }
-.app-shell:has(.home-page) { position: fixed; inset: 0; width: 100%; height: 100dvh; padding-bottom: calc(74px + env(safe-area-inset-bottom)); }
+.app-shell:has(.home-page) { padding-bottom: calc(74px + env(safe-area-inset-bottom)); }
 .app-shell:has(.home-page) .app-route-viewport { padding-bottom: 0; }
 .app-shell:has(.recording-page--recording) .app-route-viewport,
 .app-shell:has(.recording-page--paused) .app-route-viewport,
