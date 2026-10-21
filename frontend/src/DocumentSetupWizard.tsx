@@ -466,8 +466,14 @@ export function DocumentSetupWizard({ settings = false }: { settings?: boolean }
 
   const retryConsumerRefresh = <button className="button button-secondary" type="button" onClick={() => { setError(''); setConsumerRefreshFailed(false); setConsumerRefreshAttempt((attempt) => attempt + 1); }}>연결 데이터 다시 확인</button>;
 
-  if (!snapshot) return <main className="setup-page page-scroll-layout"><div className="page-scroll-content">{error ? <section className="setup-card" role="alert"><h1>문서 연결 상태를 확인할 수 없습니다</h1><p>{error} 서버 응답을 확인하기 전에는 새 문서 작업을 시작하지 않습니다. 백엔드 연결을 확인한 뒤 다시 불러와 주세요.</p><button className="button button-secondary" type="button" onClick={() => void safeRefresh()}>문서 연결 상태 다시 불러오기</button></section> : <p role="status">문서 설정을 불러오는 중…</p>}</div></main>;
-  if (snapshot.status === 'STORAGE_UNAVAILABLE') return <main className="setup-page page-scroll-layout"><div className="page-scroll-content"><h1>문서 서비스 연결</h1><section className="setup-card" role="alert"><h2>저장소 설정을 확인할 수 없습니다</h2><p>문서 설정 저장소가 준비되지 않아 문서 기능을 사용할 수 없습니다. 관리자에게 저장소 설정을 확인해 달라고 요청해 주세요.</p><button className="button button-secondary" type="button" onClick={() => void refresh()}>다시 확인</button></section></div></main>;
+  if (!snapshot) return <main className="setup-page page-scroll-layout">
+    <header className="page-fixed-heading setup-heading"><h1>문서 서비스 연결</h1></header>
+    <div className="page-scroll-content">{error ? <section className="setup-card" role="alert"><h2>문서 연결 상태를 확인할 수 없습니다</h2><p>{error} 서버 응답을 확인하기 전에는 새 문서 작업을 시작하지 않습니다. 백엔드 연결을 확인한 뒤 다시 불러와 주세요.</p><button className="button button-secondary" type="button" onClick={() => void safeRefresh()}>문서 연결 상태 다시 불러오기</button></section> : <p role="status">문서 설정을 불러오는 중…</p>}</div>
+  </main>;
+  if (snapshot.status === 'STORAGE_UNAVAILABLE') return <main className="setup-page page-scroll-layout">
+    <header className="page-fixed-heading setup-heading"><h1>문서 서비스 연결</h1></header>
+    <div className="page-scroll-content"><section className="setup-card" role="alert"><h2>저장소 설정을 확인할 수 없습니다</h2><p>문서 설정 저장소가 준비되지 않아 문서 기능을 사용할 수 없습니다. 관리자에게 저장소 설정을 확인해 달라고 요청해 주세요.</p><button className="button button-secondary" type="button" onClick={() => void refresh()}>다시 확인</button></section></div>
+  </main>;
   const operationStatus = operation?.status ?? snapshot.operation?.status ?? '';
   const preparedTarget = snapshot.active && snapshot.draft?.state === 'PREPARED' && snapshot.status === 'READY' && !preparedInvalid;
   const initializationSucceeded = snapshot.operation?.type === 'INITIALIZE' && operationStatus === 'SUCCEEDED' && snapshot.status === 'READY' && snapshot.active != null && !preparedTarget;
@@ -506,7 +512,7 @@ export function DocumentSetupWizard({ settings = false }: { settings?: boolean }
   const currentStructureStep = operation?.currentStep ?? (operation?.stage === 'STRUCTURE'
     ? STRUCTURE_STEPS.find((step) => !completedStructureSteps.includes(step)) ?? null : null);
   return <main className={`setup-page page-scroll-layout${firstRun ? ' setup-first-run' : ''}`}>
-    <header className="setup-heading"><h1>{changing || snapshot.active && !provider ? '문서 서비스 선택' : '문서 서비스 연결'}</h1><p>{provider ? '서비스 연결 정보를 입력해 주세요.' : snapshot.active ? `현재 ${providerLabel(snapshot.active.provider)}에 연결되어 있습니다. 변경할 문서 서비스를 선택해 주세요.` : '연결된 문서 서비스가 없습니다. 회의록을 저장하려면 먼저 서비스를 연결해 주세요.'}</p></header>
+    <header className="page-fixed-heading setup-heading"><h1>{changing || snapshot.active && !provider ? '문서 서비스 선택' : '문서 서비스 연결'}</h1><p>{provider ? '서비스 연결 정보를 입력해 주세요.' : snapshot.active ? `현재 ${providerLabel(snapshot.active.provider)}에 연결되어 있습니다. 변경할 문서 서비스를 선택해 주세요.` : '연결된 문서 서비스가 없습니다. 회의록을 저장하려면 먼저 서비스를 연결해 주세요.'}</p></header>
     <div className="page-scroll-content">
     {provider && !hasBlockingOperation && !preparedTarget && !initializationUncertain && !setupProgressStarted && <button className="back-link setup-provider-back" type="button" aria-label="서비스 선택으로 돌아가기" onClick={() => chooseProvider(null)}><span aria-hidden="true">←</span> 서비스 선택</button>}
     {!initializationSucceeded && activeSummary}

@@ -944,7 +944,7 @@ button:disabled { cursor: not-allowed; opacity: .6; }
 .setup-page.setup-first-run.page-scroll-layout { min-height: 0 !important; }
 .page-scroll-layout > header,
 .page-scroll-layout > .page-fixed-heading,
-.participants-page > .page-heading { flex: 0 0 auto; }
+.participants-page > .page-heading { position: relative; z-index: 4; flex: 0 0 auto; background: #f7f8fa; }
 .page-fixed-heading { display: grid; flex: 0 0 auto; align-content: start; }
 .settings-page > .settings-heading,
 .setup-settings-page > .page-fixed-heading { padding-bottom: 20px; }

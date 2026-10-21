@@ -693,14 +693,14 @@ export function App({ onNewMeetingSubmit = () => undefined, onMinutesSave, minut
 
   return (
     <div className="app-shell">
-      {!isDocumentConnectionRoute && <header className="product-header">
+      <header className="product-header">
         <Link className="product-header-brand" to="/" aria-label="Windsoft Minutes 홈">
           <img src="/assets/windsoft-favicon-mark.png" alt="" />
           <span className="product-header-company"><span>Wind</span><span>soft</span></span>
           <span className="product-header-divider" aria-hidden="true" />
           <span className="product-header-product">Minutes</span>
         </Link>
-      </header>}
+      </header>
       <div className="app-route-viewport">
         <Routes>
           <Route path="/" element={<SetupGate><HomePage /></SetupGate>} />
