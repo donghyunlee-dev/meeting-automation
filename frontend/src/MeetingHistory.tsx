@@ -85,7 +85,7 @@ function MeetingList({ limit, emptyMessage, enableFilters = false, quietEmpty = 
     <AsyncState state={{ status: 'ready', data: visibleMeetings, refreshing, warning: result.warning, onRetry: retry }} renderReady={(items) => <>
       <section className="meeting-filter-shell" aria-label="회의 검색 조건">
         <form className="meeting-filters" aria-label="회의 필터" onSubmit={(event) => { event.preventDefault(); setAppliedFilters(filters); }}>
-          <label className="meeting-search-field">회의 검색<span className="meeting-search-control">
+          <label className="meeting-search-field"><span className="visually-hidden">회의 검색</span><span className="meeting-search-control">
             <input type="search" aria-label="회의 검색" value={filters.query}
               onChange={(event) => setFilters((current) => ({ ...current, query: event.target.value }))}
               onBlur={() => setAppliedFilters((current) => ({ ...current, query: filters.query }))}
