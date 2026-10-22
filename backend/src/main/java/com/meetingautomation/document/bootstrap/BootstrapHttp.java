@@ -14,7 +14,9 @@ final class BootstrapHttp {
     BootstrapHttp(RestClient client, String origin) { this.client = client; this.origin = URI.create(origin); }
     JsonNode get(String path) { return exchange(path, null); }
     JsonNode post(String path, Object body) { return exchange(path, body); }
-    private JsonNode exchange(String path, Object body) {
+    JsonNode patch(String path, Object body) { return exchange(path, body, true); }
+    private JsonNode exchange(String path, Object body) { return exchange(path, body, false); }
+    private JsonNode exchange(String path, Object body, boolean patch) {
         try {
             URI target = origin.resolve(path);
             if (!origin.getScheme().equals(target.getScheme()) || !origin.getHost().equals(target.getHost())
@@ -22,7 +24,8 @@ final class BootstrapHttp {
                     || !(origin.getHost().equals("api.notion.com") ? target.getPath().startsWith("/v1/")
                         : target.getPath().startsWith("/wiki/api/v2/") || (body==null && target.getPath().equals("/wiki/rest/api/search"))))
                 throw failure();
-            var request = body == null ? client.get().uri(target) : client.post().uri(target).contentType(MediaType.APPLICATION_JSON).body(body);
+            var request = body == null ? client.get().uri(target)
+                    : (patch ? client.patch() : client.post()).uri(target).contentType(MediaType.APPLICATION_JSON).body(body);
             JsonNode result = request.retrieve().onStatus(status -> !status.is2xxSuccessful(), (req,res) -> {
                 var status=res.getStatusCode();
                 throw DocumentProviderException.documentFailed(status.value()==429 || status.is5xxServerError());

@@ -17,6 +17,7 @@ class DocumentStructureInitializerTests {
             .allSatisfy((step, entry) -> assertThat(entry.pageId()).isNotBlank());
         assertThat(pages.contents.get("Templates")).contains("# 기본 회의록 템플릿", "## AI 작성 지침",
                 "## 회의 개요", "## 논의 및 확인 사항", "## 결정 사항", "## 실행 항목", "## 비고");
+        assertThat(pages.meetingIndexEnsures).isEqualTo(1);
     }
     @Test void bootReuseCompletesOnlyMissingChildAndNeverWritesCompleteHierarchy() {
         var pages = new Pages(); pages.add("root", "parent", "Meeting Automation", "page", "");
@@ -27,6 +28,7 @@ class DocumentStructureInitializerTests {
         pages.created.clear();
         initializer.initializeStructure("parent", "root", "other", new Journal());
         assertThat(pages.created).isEmpty();
+        assertThat(pages.meetingIndexEnsures).isEqualTo(2);
     }
     @Test void bootDuplicateAndWrongTypeFailBeforeAnyWrite() {
         for (String type : List.of("page", "database", "folder")) {
@@ -81,11 +83,13 @@ class DocumentStructureInitializerTests {
     static final class Pages implements BootstrapPages {
         final Map<String, Page> nodes = new LinkedHashMap<>();
         final List<String> created = new ArrayList<>(); final Map<String, String> contents = new HashMap<>(); boolean loseNextResponse; LinkageError createLinkageError;
+        int meetingIndexEnsures;
         void add(String id, String parent, String title, String type, String marker) {
             nodes.put(id, new Page(id, parent, title, type, marker));
         }
         public List<Page> children(String parent) { return nodes.values().stream().filter(p -> Objects.equals(parent,p.parentId())).toList(); }
         public Page read(String id) { return nodes.get(id); }
+        public void ensureMeetingIndex(String meetingDataPageId) { meetingIndexEnsures++; }
         public String create(String parent, String title, String marker) {
             return create(parent, title, marker, "");
         }

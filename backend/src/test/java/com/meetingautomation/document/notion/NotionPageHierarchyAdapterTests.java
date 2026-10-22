@@ -198,6 +198,35 @@ class NotionPageHierarchyAdapterTests extends com.meetingautomation.document.Doc
     }
 
     @Test
+    void meetingListReadsIndexRowsWithoutOpeningMeetingPages() {
+        TestClient client = client(TOKEN, ROOT_ID);
+        client.server().expect(notionRequest(URL)).andRespond(jsonSuccess(children(
+                block("data-page", "child_page", "Meeting Data"))));
+        client.server().expect(notionRequest(urlFor("data-page"))).andRespond(jsonSuccess(children(
+                block("index-page", "child_page", "Meeting Index"))));
+        client.server().expect(notionRequest(urlFor("index-page"))).andRespond(jsonSuccess(children(
+                "{\"id\":\"index-table\",\"type\":\"table\"}")));
+        client.server().expect(notionRequest(urlFor("index-table"))).andRespond(jsonSuccess(children(
+                "{\"id\":\"header\",\"type\":\"table_row\",\"table_row\":{\"cells\":["
+                        + "[{\"plain_text\":\"Meeting page ID\"}],[{\"plain_text\":\"Session ID\"}],"
+                        + "[{\"plain_text\":\"Title\"}],[{\"plain_text\":\"Meeting time\"}],"
+                        + "[{\"plain_text\":\"Participants JSON\"}],[{\"plain_text\":\"Document URL\"}]]}}",
+                "{\"id\":\"row\",\"type\":\"table_row\",\"table_row\":{\"cells\":["
+                        + "[{\"plain_text\":\"meeting-page\"}],[{\"plain_text\":\"session-1\"}],"
+                        + "[{\"plain_text\":\"Planning\"}],[{\"plain_text\":\"2026-10-04T10:00+09:00\"}],"
+                        + "[{\"plain_text\":\"[{\\\"id\\\":\\\"pt-1\\\",\\\"name\\\":\\\"Ada\\\"}]\"}],"
+                        + "[{\"plain_text\":\"https://docs.example/meeting\"}]]}}")));
+
+        var summaries = client.adapter().listMeetingSummaries();
+
+        assertEquals(1, summaries.size());
+        assertEquals("meeting-page", summaries.getFirst().documentId());
+        assertEquals("Planning", summaries.getFirst().title());
+        assertEquals("Ada", summaries.getFirst().participants().getFirst().name());
+        client.server().verify();
+    }
+
+    @Test
     void meetingHistoryRetriesNotionRateLimitAfterRetryAfter() {
         TestClient client = client(TOKEN, ROOT_ID);
         client.server().expect(notionRequest(URL)).andRespond(jsonSuccess(children(

@@ -4,8 +4,8 @@ import com.meetingautomation.document.DocumentProviderException;
 import com.meetingautomation.document.DocumentProviderResolver;
 import com.meetingautomation.document.DocumentStructureProvider;
 import com.meetingautomation.document.ParticipantSummary;
+import com.meetingautomation.document.MeetingSummary;
 import com.meetingautomation.document.transfer.DocumentTransferPort;
-import com.meetingautomation.document.transfer.TransferRecord;
 import com.meetingautomation.api.error.ApiValidationException;
 import java.net.URI;
 import java.util.ArrayList;
@@ -37,10 +37,10 @@ public final class MeetingListService {
         }
 
         try {
-            List<TransferRecord> records = transfer.listMeetingRecords();
-            if (records == null) throw DocumentProviderException.documentFailed(false);
-            List<MeetingListResponse.Item> items = new ArrayList<>(records.size());
-            for (TransferRecord record : records) items.add(toItem(record));
+            List<MeetingSummary> meetings = transfer.listMeetingSummaries();
+            if (meetings == null) throw DocumentProviderException.documentFailed(false);
+            List<MeetingListResponse.Item> items = new ArrayList<>(meetings.size());
+            for (MeetingSummary meeting : meetings) items.add(toItem(meeting));
             items.sort(Comparator.comparing((MeetingListResponse.Item item) -> item.meetingAt().toInstant())
                     .reversed().thenComparing(MeetingListResponse.Item::documentId));
             return List.copyOf(items.subList(0, Math.min(limit, items.size())));
@@ -51,32 +51,24 @@ public final class MeetingListService {
         }
     }
 
-    private static MeetingListResponse.Item toItem(TransferRecord record) {
-        if (record == null || record.sourceDocumentId() == null || record.sourceDocumentId().isBlank()
-                || record.title() == null || record.title().isBlank() || record.marker() == null
-                || record.marker().meetingAt() == null || record.marker().participantIds() == null
-                || record.participants() == null) {
+    private static MeetingListResponse.Item toItem(MeetingSummary meeting) {
+        if (meeting == null || meeting.documentId() == null || meeting.documentId().isBlank()
+                || meeting.title() == null || meeting.title().isBlank() || meeting.meetingAt() == null
+                || meeting.participants() == null) {
             throw DocumentProviderException.documentFailed(false);
         }
-        List<String> participantIds = record.marker().participantIds();
-        Set<String> uniqueIds = new HashSet<>(participantIds);
-        if (uniqueIds.size() != participantIds.size()) throw DocumentProviderException.documentFailed(false);
-        Map<String, String> names = new HashMap<>();
-        for (ParticipantSummary participant : record.participants()) {
-            if (participant == null || participant.id() == null || participant.name() == null
-                    || participant.name().isBlank() || names.putIfAbsent(participant.id(), participant.name()) != null) {
+        Set<String> participantIds = new HashSet<>();
+        List<ParticipantSummary> participants = new ArrayList<>(meeting.participants().size());
+        for (ParticipantSummary participant : meeting.participants()) {
+            if (participant == null || participant.id() == null || participant.id().isBlank()
+                    || participant.name() == null || participant.name().isBlank()
+                    || !participantIds.add(participant.id())) {
                 throw DocumentProviderException.documentFailed(false);
             }
+            participants.add(participant);
         }
-        if (!names.keySet().equals(uniqueIds)) throw DocumentProviderException.documentFailed(false);
-        List<ParticipantSummary> orderedRoster = new ArrayList<>(participantIds.size());
-        for (String id : participantIds) {
-            String name = names.get(id);
-            if (id == null || id.isBlank() || name == null) throw DocumentProviderException.documentFailed(false);
-            orderedRoster.add(new ParticipantSummary(id, name));
-        }
-        return new MeetingListResponse.Item(record.sourceDocumentId(), record.title(), record.marker().meetingAt(),
-                orderedRoster, safeDocumentUrl(record.documentUrl()));
+        return new MeetingListResponse.Item(meeting.documentId(), meeting.title(), meeting.meetingAt(),
+                participants, safeDocumentUrl(meeting.documentUrl()));
     }
 
     private static String safeDocumentUrl(String value) {

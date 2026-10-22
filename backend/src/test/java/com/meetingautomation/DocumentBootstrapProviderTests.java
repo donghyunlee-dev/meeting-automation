@@ -23,11 +23,13 @@ class DocumentBootstrapProviderTests {
     @Test void bootNotionHttpUsesPagePayloadParentAndInitialMarkerOnly() {
         var fixture=new HttpPages(true,null);
         var structure=new DocumentStructureInitializer(fixture.pages).initializeStructure(fixture.parent,null,"operation",new DocumentStructureInitializerTests.Journal());
-        assertThat(fixture.posts).hasSize(5);
+        assertThat(fixture.posts).hasSize(6);
         assertThat(fixture.posts.getFirst().path("parent").path("page_id").asText()).isEqualTo(fixture.parent);
         assertThat(fixture.posts.get(1).path("parent").path("page_id").asText()).isEqualTo(structure.rootId());
-        assertThat(fixture.posts).allSatisfy(body -> assertThat(body.toString()).contains("meeting-automation/bootstrap/operation/").doesNotContain("database_id","data_source_id"));
-        assertThat(fixture.posts.get(4).toString()).contains("Templates", "AI 작성 지침", "회의 개요", "확인이 필요한 사항", "비고");
+        assertThat(fixture.posts.subList(0, 4)).allSatisfy(body -> assertThat(body.toString()).contains("meeting-automation/bootstrap/operation/").doesNotContain("database_id","data_source_id"));
+        assertThat(fixture.posts.get(4).toString()).contains("meeting-automation/bootstrap/meeting-index/1");
+        assertThat(fixture.posts.get(5).toString()).contains("Templates", "AI 작성 지침", "회의 개요", "확인이 필요한 사항", "비고");
+        assertThat(fixture.indexTableCreated).isTrue();
         fixture.server.verify();
     }
     @ParameterizedTest @ValueSource(strings={"22","TOP"})
@@ -170,17 +172,24 @@ class DocumentBootstrapProviderTests {
         private static final JsonMapper JSON=JsonMapper.builder().build();
         final boolean notion; final String parent; final BootstrapPages pages; final MockRestServiceServer server;
         final Map<String,BootstrapPages.Page> nodes=new LinkedHashMap<>(); final List<tools.jackson.databind.JsonNode> posts=new ArrayList<>();
+        boolean indexTableCreated;
         HttpPages(boolean notion,String parent) {
             this.notion=notion; this.parent=notion?"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee":parent;
             var builder=RestClient.builder(); server=MockRestServiceServer.bindTo(builder).build();
             server.expect(ExpectedCount.manyTimes(),request -> {
                 assertThat(request.getHeaders().getFirst("Authorization")).isNotBlank();
                 assertThat(request.getURI().getHost()).isEqualTo(notion?"api.notion.com":"site.atlassian.net");
-                assertThat(request.getMethod()).isIn(HttpMethod.GET,HttpMethod.POST);
+                assertThat(request.getMethod()).isIn(HttpMethod.GET,HttpMethod.POST,HttpMethod.PATCH);
                 if (request.getMethod()==HttpMethod.POST) assertThat(request.getURI().getPath()).isEqualTo(notion?"/v1/pages":"/wiki/api/v2/pages");
             }).andRespond(request -> {
                 String path=request.getURI().getPath(); Object body;
-                if(request.getMethod()==HttpMethod.POST) {
+                if(request.getMethod()==HttpMethod.PATCH) {
+                    assertThat(request.getURI().getPath()).endsWith("/children");
+                    var payload=JSON.readTree(((MockClientHttpRequest)request).getBodyAsString());
+                    assertThat(payload.path("children").get(0).path("type").asText()).isEqualTo("table");
+                    indexTableCreated=true;
+                    body=Map.of("results",List.of());
+                } else if(request.getMethod()==HttpMethod.POST) {
                     var payload=JSON.readTree(((MockClientHttpRequest)request).getBodyAsString()); posts.add(payload);
                     String id=notion?String.format("%08d-0000-0000-0000-000000000000",posts.size()):Integer.toString(posts.size()+100);
                     String nodeParent=notion?payload.path("parent").path("page_id").asText():payload.path("parentId").asText(null);
@@ -200,6 +209,7 @@ class DocumentBootstrapProviderTests {
                     String id=path.split("/")[notion?3:5];
                     List<Map<String,Object>> children=new ArrayList<>();
                     if(notion && nodes.containsKey(id)) children.add(Map.of("type","paragraph","paragraph",Map.of("rich_text",List.of(Map.of("plain_text",nodes.get(id).marker())))));
+                    if(notion && indexTableCreated && nodes.containsKey(id) && "Meeting Index".equals(nodes.get(id).title())) children.add(Map.of("id","index-table","type","table"));
                     for(var p:nodes.values()) if(Objects.equals(id,p.parentId())) children.add(notion
                         ?Map.of("id",p.id(),"type","child_page","child_page",Map.of("title",p.title()))
                         :Map.of("id",p.id(),"type","page","title",p.title(),"parentId",id));

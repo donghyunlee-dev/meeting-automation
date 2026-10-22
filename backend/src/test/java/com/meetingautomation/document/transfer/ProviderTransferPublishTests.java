@@ -46,6 +46,7 @@ class ProviderTransferPublishTests {
         assertThat(first).isEqualTo(new MeetingDocumentRef("page-1", "https://documents.test/page-1"));
         assertThat(replay).isEqualTo(first);
         assertThat(provider.creates).isEqualTo(1);
+        assertThat(provider.publishedIndexes).containsExactly("ms_publish_codec");
         TransferRecord readBack = provider.exportMeeting(first.documentId());
         assertThat(readBack.marker().externalSessionId()).isEqualTo("ms_publish_codec");
         assertThat(readBack.marker().speakers()).containsExactly(
@@ -123,6 +124,7 @@ class ProviderTransferPublishTests {
     private static final class FakeTransferProvider extends ProviderTransferSupport {
         private final Map<String, TransferRecord> records = new HashMap<>();
         private int creates;
+        private final List<String> publishedIndexes = new ArrayList<>();
         private boolean storeThenThrow;
         private boolean duplicateExistingSession;
         private boolean failLookup;
@@ -170,6 +172,9 @@ class ProviderTransferPublishTests {
                 throw new IllegalStateException("provider-response-secret");
             }
             return id;
+        }
+        @Override protected void afterMeetingPublished(TransferRecord meeting) {
+            publishedIndexes.add(meeting.marker().externalSessionId());
         }
     }
 }

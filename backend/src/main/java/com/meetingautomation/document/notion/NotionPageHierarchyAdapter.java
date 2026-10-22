@@ -11,6 +11,7 @@ import com.meetingautomation.document.ParticipantUpdatingProvider;
 import com.meetingautomation.document.ParticipantDeletingProvider;
 import com.meetingautomation.document.ParticipantPageMapper;
 import com.meetingautomation.document.MeetingDocumentRef;
+import com.meetingautomation.document.MeetingSummary;
 import com.meetingautomation.document.transfer.*;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -53,6 +54,16 @@ public final class NotionPageHierarchyAdapter implements ParticipantCreationProv
         @Override protected TransferRecord read(String id) { return readTransferPage(id, pages); }
         @Override protected TransferRecord readMeeting(String id) { return readTransferPage(id, pages, true); }
         @Override protected String create(String parent, TransferRecord record) { return createTransferPage(parent, record, pages); }
+        @Override public List<MeetingSummary> listMeetingSummaries() {
+            return listMeetingIndexEntries().stream().map(NotionMeetingIndex.Entry::summary).toList();
+        }
+        @Override protected TransferRecord findMeetingByExternalSessionId(String sessionId) {
+            List<NotionMeetingIndex.Entry> matches = listMeetingIndexEntries().stream()
+                    .filter(entry -> sessionId.equals(entry.sessionId())).toList();
+            if (matches.size() > 1) throw transferInvalid();
+            return matches.isEmpty() ? null : readTransferPage(matches.getFirst().summary().documentId(), pages, true);
+        }
+        @Override protected void afterMeetingPublished(TransferRecord meeting) { appendMeetingIndexRow(meeting); }
     };
 
     @Override public TransferManifest readManifest() { return transfer.readManifest(); }
@@ -67,6 +78,23 @@ public final class NotionPageHierarchyAdapter implements ParticipantCreationProv
             log.error("Notion meeting history traversal failed: cause={}", cause);
             throw failure;
         }
+    }
+    @Override public List<MeetingSummary> listMeetingSummaries() {
+        try { return transfer.listMeetingSummaries(); }
+        catch (RuntimeException failure) {
+            String cause = failure instanceof TransferCodec.ValidationException validation
+                    ? validation.code().name()
+                    : failure instanceof DocumentProviderException providerFailure
+                            ? providerFailure.code() : failure.getClass().getSimpleName();
+            log.error("Notion meeting index read failed: cause={}", cause);
+            throw failure;
+        }
+    }
+    @Override public MeetingSummary findMeetingSummary(String documentId) {
+        List<MeetingSummary> matches = listMeetingSummaries().stream()
+                .filter(meeting -> documentId.equals(meeting.documentId())).toList();
+        if (matches.size() > 1) throw DocumentProviderException.documentFailed(false);
+        return matches.isEmpty() ? null : matches.getFirst();
     }
     @Override public TransferRecord exportMeeting(String id) {
         try { return transfer.exportMeeting(id); }
@@ -281,6 +309,81 @@ public final class NotionPageHierarchyAdapter implements ParticipantCreationProv
         List<String> matches = childIdsNamed(readAllChildren(rootId), "Meeting Data");
         if (matches.size() > 1) throw DocumentProviderException.structureNotFound();
         return matches.isEmpty() ? null : matches.getFirst();
+    }
+
+    private List<NotionMeetingIndex.Entry> listMeetingIndexEntries() {
+        List<JsonNode> children = transferBlocks(meetingIndexPageId());
+        String tableId = null;
+        for (JsonNode block : children) {
+            if ("table".equals(text(block.get("type")))) {
+                if (tableId != null) throw transferInvalid();
+                tableId = transferText(block.get("id"));
+            }
+        }
+        if (tableId == null) throw DocumentProviderException.structureNotFound();
+        List<JsonNode> rows = transferBlocks(tableId);
+        List<NotionMeetingIndex.Entry> result = new ArrayList<>();
+        boolean headerSkipped = false;
+        for (JsonNode row : rows) {
+            if (!"table_row".equals(text(row.get("type")))) continue;
+            if (!headerSkipped) { headerSkipped = true; continue; }
+            result.add(NotionMeetingIndex.readRow(row));
+        }
+        if (!headerSkipped) throw transferInvalid();
+        return List.copyOf(result);
+    }
+
+    private String meetingIndexPageId() {
+        String dataPageId = findMeetingDataPageId(configuredRootId);
+        List<ChildPage> matches = readAllChildren(dataPageId).stream()
+                .filter(page -> "Meeting Index".equals(page.title())).toList();
+        if (matches.size() > 1) throw DocumentProviderException.structureNotFound();
+        if (matches.isEmpty()) {
+            String marker = "meeting-automation/bootstrap/meeting-index/1";
+            JsonNode created = transferRequest("/v1/pages", Map.of("parent", Map.of("page_id", dataPageId),
+                    "properties", Map.of("title", Map.of("title", transferRuns("Meeting Index"))),
+                    "children", List.of(Map.of("object", "block", "type", "paragraph",
+                            "paragraph", Map.of("rich_text", transferRuns(marker))))));
+            String id = transferText(created.get("id"));
+            appendBlockChildren(id, List.of(NotionMeetingIndex.tableBlock()));
+            return id;
+        }
+        return matches.getFirst().id();
+    }
+
+    private void appendMeetingIndexRow(TransferRecord meeting) {
+        String tableId = null;
+        for (JsonNode block : transferBlocks(meetingIndexPageId())) {
+            if ("table".equals(text(block.get("type")))) {
+                if (tableId != null) throw transferInvalid();
+                tableId = transferText(block.get("id"));
+            }
+        }
+        if (tableId == null) throw DocumentProviderException.structureNotFound();
+        appendBlockChildren(tableId, List.of(NotionMeetingIndex.rowBlock(meeting)));
+    }
+
+    private void appendBlockChildren(String blockId, List<Map<String, Object>> children) {
+        try {
+            restClient.patch().uri("/v1/blocks/" + encodeId(blockId) + "/children")
+                    .headers(headers -> {
+                        headers.setBearerAuth(token);
+                        headers.set("Notion-Version", API_VERSION);
+                        headers.setContentType(org.springframework.http.MediaType.APPLICATION_JSON);
+                    })
+                    .body(JSON_MAPPER.writeValueAsString(Map.of("children", children)))
+                    .exchange((request, response) -> {
+                        if (response.getStatusCode().isError()) {
+                            throw DocumentProviderException.documentFailed(response.getStatusCode().value() == 429
+                                    || response.getStatusCode().is5xxServerError());
+                        }
+                        return null;
+                    });
+        } catch (DocumentProviderException failure) {
+            throw failure;
+        } catch (Exception failure) {
+            throw DocumentProviderException.documentFailed(true, failure);
+        }
     }
 
     private String ensureMeetingDataPage(String rootId) {

@@ -46,6 +46,7 @@ public final class DocumentStructureInitializer {
         String meetingsId = ensure("MEETINGS", root, "Meetings", operationId, journal, meetings);
         String participantsId = ensure("PARTICIPANTS", root, "Participants", operationId, journal, participants);
         String meetingDataId = ensure("MEETING_DATA", root, "Meeting Data", operationId, journal, meetingData);
+        pages.ensureMeetingIndex(meetingDataId);
         String templatesId = ensure("TEMPLATES", root, "Templates", operationId, journal, templates, defaultTemplate);
         verify(pages.read(root), parent, "Meeting Automation", null, false);
         unique(pages.children(root), "Meetings", meetingsId);

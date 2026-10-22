@@ -8,6 +8,7 @@ public interface BootstrapPages {
     List<Page> children(String parentId);
     Page read(String id);
     String create(String parentId, String title, String marker);
+    default void ensureMeetingIndex(String meetingDataPageId) { }
     default String create(String parentId, String title, String marker, String markdownContent) {
         return create(parentId, title, marker);
     }

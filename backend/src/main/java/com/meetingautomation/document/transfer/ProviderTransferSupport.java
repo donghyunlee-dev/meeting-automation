@@ -18,6 +18,14 @@ public abstract class ProviderTransferSupport implements DocumentTransferPort {
     protected abstract String create(String parent, TransferRecord record);
     protected String meetingDataPageId() { return null; }
     protected String ensureMeetingDataPageId() { return meetingDataPageId(); }
+    protected TransferRecord findMeetingByExternalSessionId(String sessionId) {
+        TransferManifest manifest = readManifest();
+        List<TransferManifest.Entry> matches = manifest.meetings().stream()
+                .filter(entry -> sessionId.equals(entry.externalSessionId())).toList();
+        if (matches.size() > 1) throw conflict();
+        return matches.isEmpty() ? null : exportMeeting(matches.getFirst().sourceDocumentId());
+    }
+    protected void afterMeetingPublished(TransferRecord meeting) { }
 
     @Override public TransferManifest readManifest() {
         DocumentStructure structure = structure(); List<TransferRecord> participants = new ArrayList<>(); List<TransferRecord> meetings = new ArrayList<>();
@@ -127,7 +135,7 @@ public abstract class ProviderTransferSupport implements DocumentTransferPort {
     }
     @Override public MeetingDocumentRef publishMeeting(TransferRecord meeting) {
         validatePublishRecord(meeting);
-        TransferRecord existing = findByExternalSessionId(meeting.marker().externalSessionId());
+        TransferRecord existing = findMeetingByExternalSessionId(meeting.marker().externalSessionId());
         if (existing != null) return verifiedPublishReference(meeting, existing);
 
         String id;
@@ -140,13 +148,17 @@ public abstract class ProviderTransferSupport implements DocumentTransferPort {
             throw reconciliationRequired();
         }
 
+        TransferRecord published;
         try {
-            return verifiedPublishReference(meeting, read(id));
+            published = read(id);
         } catch (RuntimeException unverifiedReadback) {
             TransferRecord reconciled = reconcilePublish(meeting);
             if (reconciled != null) return verifiedPublishReference(meeting, reconciled);
             throw reconciliationRequired();
         }
+        MeetingDocumentRef result = verifiedPublishReference(meeting, published);
+        afterMeetingPublished(published);
+        return result;
     }
 
     private void validatePublishRecord(TransferRecord meeting) {
@@ -170,18 +182,9 @@ public abstract class ProviderTransferSupport implements DocumentTransferPort {
         }
     }
 
-    private TransferRecord findByExternalSessionId(String sessionId) {
-        TransferManifest manifest = readManifest();
-        List<TransferManifest.Entry> matches = manifest.meetings().stream()
-                .filter(entry -> sessionId.equals(entry.externalSessionId())).toList();
-        if (matches.size() > 1) throw conflict();
-        if (matches.isEmpty()) return null;
-        return exportMeeting(matches.getFirst().sourceDocumentId());
-    }
-
     private TransferRecord reconcilePublish(TransferRecord expected) {
         try {
-            TransferRecord actual = findByExternalSessionId(expected.marker().externalSessionId());
+            TransferRecord actual = findMeetingByExternalSessionId(expected.marker().externalSessionId());
             if (actual == null) return null;
             verifiedPublishReference(expected, actual);
             return actual;

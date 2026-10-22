@@ -81,7 +81,7 @@ class MeetingDetailApiTests {
                 .andReturn().getResponse().getContentAsString();
         assertThat(body).doesNotContain("ada@example.test", "secret-do-not-return", "provider raw body");
         assertThat(provider.listCalls).isEqualTo(1);
-        assertThat(provider.exportCalls).isZero();
+        assertThat(provider.exportCalls).isEqualTo(1);
         assertThat(provider.mutations).isZero();
     }
 

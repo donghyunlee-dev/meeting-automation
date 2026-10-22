@@ -57,6 +57,26 @@ public final class NotionBootstrapPages implements BootstrapPages {
         try { return id(BootstrapHttp.required(created,"id")); }
         catch (DocumentProviderException unusableResponse) { throw BootstrapHttp.reconciliation(); }
     }
+    @Override public void ensureMeetingIndex(String meetingDataPageId) {
+        List<Page> matches = children(meetingDataPageId).stream()
+                .filter(page -> "Meeting Index".equals(page.title())).toList();
+        if (matches.size() > 1 || !matches.isEmpty() && !"page".equals(matches.getFirst().type())) {
+            throw BootstrapHttp.failure();
+        }
+        String indexId;
+        if (matches.isEmpty()) {
+            indexId = create(meetingDataPageId, "Meeting Index", "meeting-automation/bootstrap/meeting-index/1");
+        } else {
+            Page existing = read(matches.getFirst().id());
+            if (!"meeting-automation/bootstrap/meeting-index/1".equals(existing.marker())) throw BootstrapHttp.failure();
+            indexId = existing.id();
+        }
+        boolean hasTable = blocks(indexId).stream().anyMatch(block -> "table".equals(block.path("type").asText()));
+        if (!hasTable) {
+            http.patch("/v1/blocks/" + id(indexId) + "/children",
+                    Map.of("children", List.of(com.meetingautomation.document.notion.NotionMeetingIndex.tableBlock())));
+        }
+    }
     private List<JsonNode> blocks(String parent) {
         List<JsonNode> result = new ArrayList<>(); Set<String> seen = new HashSet<>(); String cursor = null;
         do {
