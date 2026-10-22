@@ -21,6 +21,20 @@ class GlobalSettingsTests {
         return new DocumentDraftInput("CONFLUENCE", Map.of("baseUrl", "https://TEAM.atlassian.net/", "spaceId", "100", "parentPageId", "101"),
             Map.of("accountEmail", " Synthetic@Example.Test ", "apiToken", "synthetic-atlassian-secret"), null);
     }
+    @Test void cancelledInitializationIsArchivedAndRemovedFromCurrentSetupStatus() {
+        var settingsStore = store();
+        var cancelled = new GlobalDocumentSettings.Operation("cancelled-operation", "INITIALIZE", "CANCELLED",
+            null, 0, "STRUCTURE", Map.of(), null, false, Instant.now());
+        settingsStore.transaction(current -> new GlobalSettingsStore.Change<>(new GlobalDocumentSettings(1,
+            current.version() + 1, null, null, cancelled, Map.of()), null));
+
+        var status = new GlobalSettingsUseCase(settingsStore, draft -> {}).status();
+
+        assertNull(status.operation());
+        assertEquals("UNCONFIGURED", status.status());
+        assertNull(settingsStore.read().operation());
+        assertEquals(cancelled, settingsStore.read().operationHistory().get(cancelled.operationId()));
+    }
     @Test void setupPersistRestoresNormalizedCredentialsRevisionAndDurableReplay() throws Exception {
         var first = useCase().saveDraft(0, "key-1", notion("synthetic-notion-secret"));
         var restored = store().read();

@@ -245,6 +245,31 @@ describe('document setup wizard', () => {
     expect(screen.getByRole('status').textContent).toContain('일부 페이지가 생성되었는지 확인');
   });
 
+  it('refreshes a terminal initialization when returning to the tab after it was cleared elsewhere', async () => {
+    let cleared = false;
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const path = new URL(String(input)).pathname;
+      if (path.endsWith('/document-setup')) return Promise.resolve(response(cleared
+        ? { version: 5, status: 'UNCONFIGURED', active: null, draft: null, operation: null, canCreateMeeting: false }
+        : { version: 4, status: 'ATTENTION_REQUIRED', active: null, draft: { draftId: 'd1', revision: 1, provider: 'NOTION', state: 'INITIALIZING' }, operation: { operationId: 'failed-op', type: 'INITIALIZE', status: 'FAILED' }, canCreateMeeting: false }));
+      if (path.endsWith('/operations/failed-op')) return Promise.resolve(response({
+        ...operation('failed-op', 'FAILED'), errorCode: 'DOCUMENT_STRUCTURE_CONFLICT', allowedActions: ['REVIEW_PROVIDER', 'CANCEL'],
+      }));
+      throw new Error(`Unexpected request: ${path}`);
+    });
+    vi.stubGlobal('fetch', withHealthyBackend(fetchMock));
+    render(<MemoryRouter initialEntries={['/setup/document']}><App /></MemoryRouter>);
+
+    expect(await screen.findByText('DOCUMENT_STRUCTURE_CONFLICT')).toBeTruthy();
+    const setupReadsBeforeReturn = fetchMock.mock.calls.filter(([url]) => new URL(String(url)).pathname.endsWith('/document-setup')).length;
+    cleared = true;
+    window.dispatchEvent(new Event('focus'));
+
+    expect(await screen.findByRole('button', { name: 'Notion 선택' })).toBeTruthy();
+    expect(screen.queryByText('DOCUMENT_STRUCTURE_CONFLICT')).toBeNull();
+    expect(fetchMock.mock.calls.filter(([url]) => new URL(String(url)).pathname.endsWith('/document-setup')).length).toBeGreaterThan(setupReadsBeforeReturn);
+  });
+
   it('refuses initialization when TESTED belongs to a different draft revision', async () => {
     const fetchMock = vi.fn((input: RequestInfo | URL, _init?: RequestInit) => {
       void _init;
@@ -384,6 +409,7 @@ describe('document setup wizard', () => {
 
     expect(await screen.findByText('DOCUMENT_FAILED')).toBeTruthy();
     expect(screen.getByRole('heading', { name: '문서 구조 준비 실패' })).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: '이전 작업을 확인해 주세요' })).toBeNull();
     expect(screen.getByRole('button', { name: '작업 재개' })).toBeTruthy();
     expect(screen.getByRole('button', { name: '중단된 연결 작업 종료' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: '작업 재개' }));

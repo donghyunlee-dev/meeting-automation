@@ -24,6 +24,10 @@ public final class GlobalSettingsUseCase {
                 var draft = current.draft();
                 var operation=current.operation();
                 var history=new HashMap<>(current.operationHistory());
+                if (operation != null && "CANCELLED".equals(operation.status())) {
+                    history.put(operation.operationId(), operation);
+                    operation = null;
+                }
                 history.values().removeIf(old -> !old.updatedAt().plus(Duration.ofDays(30)).isAfter(clock.instant()));
                 if (operation!=null && Set.of("SUCCEEDED","CANCELLED").contains(operation.status())
                         && !operation.updatedAt().plus(Duration.ofDays(30)).isAfter(clock.instant())) operation=null;

@@ -139,6 +139,7 @@ export function DocumentSetupWizard({ settings = false }: { settings?: boolean }
   }, [guideOpen]);
 
   async function refresh() {
+    const previousOperation = snapshot?.operation;
     const result = await getSetupSnapshot();
     setSnapshot(result.snapshot);
     if (result.snapshot.operation) {
@@ -150,7 +151,14 @@ export function DocumentSetupWizard({ settings = false }: { settings?: boolean }
         setOperationReadFailed(true);
         setError('진행 상세 정보를 불러오지 못했습니다. 백엔드 연결을 확인한 뒤 상태를 다시 불러와 주세요.');
       }
-    } else { setOperation(null); setOperationReadFailed(false); }
+    } else {
+      setOperation(null); setOperationReadFailed(false);
+      if (previousOperation?.type === 'INITIALIZE') {
+        setProvider(null); setCredentials(EMPTY_CREDENTIALS); setLocation(EMPTY_LOCATION);
+        setDraft(null); setTested(null); setSetupProgressStarted(false); setInitializationUncertain(false);
+        setError(''); setNotice(''); setFieldErrors({});
+      }
+    }
     return result.snapshot;
   }
 
@@ -161,6 +169,22 @@ export function DocumentSetupWizard({ settings = false }: { settings?: boolean }
   }).catch(() => { if (live) setError('문서 설정 상태를 불러오지 못했습니다. 다시 시도해 주세요.'); });
     return () => { live = false; };
   }, []);
+
+  useEffect(() => {
+    const operationId = snapshot?.operation?.operationId;
+    const status = operation?.operationId === operationId ? operation?.status : snapshot?.operation?.status;
+    if (!operationId || !status || !TERMINAL_OPERATION_STATUSES.includes(status)) return;
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'hidden') return;
+      void refresh().catch(() => setError('문서 설정 상태를 불러오지 못했습니다. 다시 시도해 주세요.'));
+    };
+    window.addEventListener('focus', refreshWhenVisible);
+    document.addEventListener('visibilitychange', refreshWhenVisible);
+    return () => {
+      window.removeEventListener('focus', refreshWhenVisible);
+      document.removeEventListener('visibilitychange', refreshWhenVisible);
+    };
+  }, [snapshot?.operation?.operationId, snapshot?.operation?.status, operation?.operationId, operation?.status]);
 
   useEffect(() => {
     const version = snapshot?.active?.connectionVersion;
@@ -196,7 +220,7 @@ export function DocumentSetupWizard({ settings = false }: { settings?: boolean }
   useEffect(() => {
     const operationId = snapshot?.operation?.operationId;
     if (!operationId) return;
-    const status = operation?.operationId === operationId ? operation.status : snapshot?.operation?.status ?? '';
+    const status = operation?.operationId === operationId ? operation?.status : snapshot?.operation?.status ?? '';
     if (TERMINAL_OPERATION_STATUSES.includes(status) && snapshot?.operation?.status === status) return;
     let live = true; let timer: ReturnType<typeof setTimeout>;
     const poll = async () => {
@@ -566,7 +590,6 @@ export function DocumentSetupWizard({ settings = false }: { settings?: boolean }
       {operation?.type === 'SWITCH' && operation.status === 'SUCCEEDED' && snapshot.status === 'READY' && snapshot.active && <><p>Meetings, Participants, Meeting Data, Templates 기본 구조가 준비되었습니다.</p><button className="button button-primary" type="button" onClick={() => navigate('/', { state: { documentSetupCompleted: { provider: snapshot.active!.provider, rootUrl: snapshot.active!.rootUrl } } })}>확인</button></>}
       <button ref={progressRefreshRef} type="button" className="button button-secondary" disabled={busy} onClick={() => void safeRefresh()}>진행 상태 새로고침</button>
     </section>}
-    {snapshot.status === 'ATTENTION_REQUIRED' && <section className="setup-card" role="status"><h2>이전 작업을 확인해 주세요</h2><p>이전에 시작한 설정 작업이 완료되지 않았습니다. 공개 진행 상태를 새로고침해 확인할 수 있습니다.</p></section>}
     {preparedTarget && !initializationUncertain && <section className="setup-card" aria-labelledby="migration-heading"><h2 id="migration-heading">자료 이전 방식</h2><p>대상 연결: {snapshot.draft?.provider === 'NOTION' ? 'Notion' : 'Confluence Cloud'}</p><p>참석자와 회의록의 Transcript, Minutes, 참석자 참조를 전체 복사합니다. 첨부·댓글·버전 이력은 포함되지 않으며 이메일과 Slack 알림을 다시 보내지 않습니다.</p><p>원본 자료는 원본 서비스에 보존됩니다. 전환이 완료된 뒤 새 서비스의 목록을 사용합니다.</p><fieldset className="setup-mode"><legend>이전 방식 선택</legend><label><input type="radio" name="switch-mode" checked={mode === 'COPY_ALL'} onChange={() => { setMode('COPY_ALL'); setConfirmEmpty(false); }} />전체 복사</label><label><input type="radio" name="switch-mode" checked={mode === 'START_EMPTY'} onChange={() => { setMode('START_EMPTY'); setConfirmEmpty(false); }} />빈 구조로 새 시작</label></fieldset>{mode === 'START_EMPTY' && <label className="setup-confirm"><input type="checkbox" checked={confirmEmpty} onChange={(event) => setConfirmEmpty(event.target.checked)} />기존 자료가 새 서비스 목록에 나타나지 않음을 확인했습니다. 자료는 원본에 보존됩니다.</label>}<button className="button button-primary" type="button" disabled={busy || mode === 'START_EMPTY' && !confirmEmpty} onClick={() => void startSwitch()}>{busy ? '전환 시작 중…' : '문서 서비스 전환'}</button></section>}
     {!hasBlockingOperation && !preparedTarget && !initializationUncertain && !setupProgressStarted && <>
       {!provider ? <section className="setup-provider-list" aria-label="연결할 문서 서비스 선택">
