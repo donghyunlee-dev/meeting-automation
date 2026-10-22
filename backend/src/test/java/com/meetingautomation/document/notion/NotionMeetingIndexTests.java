@@ -38,6 +38,7 @@ class NotionMeetingIndexTests {
 
         assertThat(table.path("type").asText()).isEqualTo("table");
         assertThat(table.path("table").path("table_width").asInt()).isEqualTo(6);
-        assertThat(table.path("children").get(0).path("table_row").path("cells")).hasSize(6);
+        assertThat(table.path("table").path("children").get(0).path("table_row").path("cells")).hasSize(6);
+        assertThat(table.has("children")).isFalse();
     }
 }

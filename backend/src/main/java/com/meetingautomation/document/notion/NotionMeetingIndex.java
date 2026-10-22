@@ -26,8 +26,8 @@ public final class NotionMeetingIndex {
         Map<String, Object> header = Map.of("object", "block", "type", "table_row",
                 "table_row", Map.of("cells", headerCells));
         return Map.of("object", "block", "type", "table", "table",
-                Map.of("table_width", COLUMNS.size(), "has_column_header", true, "has_row_header", false),
-                "children", List.of(header));
+                Map.of("table_width", COLUMNS.size(), "has_column_header", true, "has_row_header", false,
+                        "children", List.of(header)));
     }
 
     public static Map<String, Object> rowBlock(TransferRecord record) {
