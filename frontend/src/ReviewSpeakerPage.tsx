@@ -9,6 +9,8 @@ import { getMinutesRegenerationSnapshot, type MinutesRegenerationSnapshot } from
 import { ProcessingPoller } from './processingPoller';
 import { AsyncState } from './components/async-state/AsyncState';
 import { normalizeApiError } from './lib/api/normalizeApiError';
+import { Toast } from './components/Toast';
+import { useToast } from './components/useToast';
 import { confirmReview, createIdempotencyKey, getPublishSnapshot, PublishApiError, publishSession } from './publishApi';
 
 type Resource<T> = { status: 'loading' | 'ready' | 'error'; data?: T };
@@ -31,6 +33,7 @@ type Props = {
 };
 
 export function ReviewSpeakerPage({ drafts, onInitialize, onChange, onCommit, onMinutesSave, minutesSaveState }: Props) {
+  const { toastMessage, showToast } = useToast();
   const { sessionId = '' } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
@@ -495,7 +498,8 @@ export function ReviewSpeakerPage({ drafts, onInitialize, onChange, onCommit, on
       if (!applySnapshot(latest)) return;
       if (exact && isUncertain) {
         onCommit(expectedSessionId, latest.speakers);
-        setSaveMessage('매핑 저장이 확인되었습니다.');
+        setSaveMessage('');
+        showToast('매핑 저장이 확인되었습니다.');
         setRecoveryAttempt(null);
       } else {
         setSaveMessage('최신 회의 정보를 불러왔습니다. 변경 내용은 유지했습니다. 확인 후 다시 저장해 주세요.');
@@ -547,7 +551,8 @@ export function ReviewSpeakerPage({ drafts, onInitialize, onChange, onCommit, on
         return;
       }
       onCommit(expectedSessionId, speakers);
-      setSaveMessage('매핑이 저장되었습니다.');
+      setSaveMessage('');
+      showToast('매핑이 저장되었습니다.');
       setRecoveryAttempt(null);
       await refreshAfterCommit(expectedSessionId, result.version, generation);
     } catch (error) {
@@ -626,6 +631,7 @@ export function ReviewSpeakerPage({ drafts, onInitialize, onChange, onCommit, on
 
   return (
     <main className="review-speaker-page page-scroll-layout">
+      <Toast message={toastMessage} />
       <header className="page-fixed-heading review-page-heading">
         <Link className="review-page-back" to="/meetings" aria-label="회의록 목록으로">
           <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m10 3-5 5 5 5" /></svg>

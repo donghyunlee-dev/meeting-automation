@@ -5,6 +5,8 @@ import { getDocumentAppConfig, NewMeetingApiError } from './newMeetingApi';
 import { createIdempotencyKey, getPublishSnapshot, PublishApiError, publishSession, retryDelivery, type PublishDelivery, type PublishSnapshot } from './publishApi';
 import { AsyncState } from './components/async-state/AsyncState';
 import { normalizeApiError } from './lib/api/normalizeApiError';
+import { Toast } from './components/Toast';
+import { useToast } from './components/useToast';
 
 function statusLabel(status: string): string {
   if (status === 'SENT') return '전달 완료';
@@ -101,12 +103,14 @@ export function CompletePage() {
   const autoPublishAttempts = useRef(new Set<string>());
   const manualPublishInFlight = useRef(false);
   const [publishing, setPublishing] = useState(false);
+  const { toastMessage, showToast, clearToast } = useToast();
 
   const applySnapshot = useCallback((next: PublishSnapshot) => {
     if (next.sessionId !== activeSessionIdRef.current) return snapshotRef.current;
     const current = snapshotRef.current;
     if (current?.sessionId === next.sessionId && next.version < current.version) return current;
     if (current?.sessionId !== next.sessionId) {
+      clearToast();
       snapshotRef.current = null;
       busyRef.current.clear();
       retryKeysRef.current.clear();
@@ -122,7 +126,7 @@ export function CompletePage() {
     }
     setSnapshot(next);
     return next;
-  }, []);
+  }, [clearToast]);
 
   const refresh = useCallback(async () => {
     const sequence = ++requestSequence.current;
@@ -219,18 +223,21 @@ export function CompletePage() {
         if (current?.status === 'PENDING' || current?.status === 'SENDING' || current?.status === 'SENT') {
           attempt.accepted = true;
           if (current.status === 'SENT') retryKeysRef.current.delete(id);
-          setMessage('최신 전달 상태를 확인했습니다.');
+          setMessage('');
+          showToast('최신 전달 상태를 확인했습니다.');
           return;
         }
         if (!current || current.status !== 'FAILED' || current.retryable !== true) {
-          setMessage('최신 전달 상태를 확인했습니다.');
+          setMessage('');
+          showToast('최신 전달 상태를 확인했습니다.');
           return;
         }
         // Replay this click with the exact same key; a fresh key is only created by a later user click.
         await retryDelivery(sessionId, id, key);
         attempt.accepted = true;
       }
-      setMessage(`${rowLabel(delivery, participants)} 재시도가 접수되었습니다.`);
+      setMessage('');
+      showToast(`${rowLabel(delivery, participants)} 재시도가 접수되었습니다.`);
       await refresh();
     } catch (requestError) {
       const conflict = requestError instanceof PublishApiError && (requestError.status === 409 || requestError.status === 404);
@@ -265,7 +272,8 @@ export function CompletePage() {
         config.email?.enabled === true && config.email.configured === true ? current.meeting?.participantIds ?? [] : [],
         config.notification?.enabled === true);
       setConnectionCheck({ sessionId, state: 'complete' });
-      setMessage('다시 전달을 시작했습니다. 최신 상태를 확인하고 있습니다.');
+      setMessage('');
+      showToast('다시 전달 요청을 접수했습니다.');
       await refresh();
     } catch (requestError) {
       if (requestError instanceof PublishApiError && requestError.outcomeUnknown) {
@@ -348,6 +356,7 @@ export function CompletePage() {
   });
 
   return <main className="share-page complete-page page-scroll-layout">
+    <Toast message={toastMessage} />
     <CompletePageHeader/>
     <div className="page-scroll-content">
     <h2 className="complete-result-heading">{resultHeading(viewSnapshot)}</h2>

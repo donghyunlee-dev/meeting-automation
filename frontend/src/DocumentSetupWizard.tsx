@@ -3,6 +3,8 @@ import { Link, useLocation, useNavigate } from 'react-router';
 import { actOnSetupOperation, getSetupOperation, getSetupSnapshot, initializeSetup, saveSetupDraft, switchSetup, testSetupDraft, DocumentSetupError, type DocumentProvider, type DraftInput, type SetupOperation, type SetupSnapshot, type SwitchMode, type TestedDraft } from './documentSetupApi';
 import { savePendingDocumentConnection, saveReadyDocumentConnection } from './documentConnectionStorage';
 import { getDocumentAppConfig, listMeetingParticipants } from './newMeetingApi';
+import { Toast } from './components/Toast';
+import { useToast } from './components/useToast';
 
 type Credentials = { token: string; accountEmail: string; apiToken: string };
 type Location = { parentPageId: string; baseUrl: string; spaceId: string };
@@ -99,6 +101,7 @@ function operationGuidance(operation: SetupOperation) {
 }
 
 export function DocumentSetupWizard({ settings = false }: { settings?: boolean }) {
+  const { toastMessage, showToast } = useToast();
   const route = useLocation();
   const navigate = useNavigate();
   const returnState = route.state as { returnTo?: unknown; returnState?: unknown } | null;
@@ -208,14 +211,14 @@ export function DocumentSetupWizard({ settings = false }: { settings?: boolean }
         if (!live) return;
         if (config.document && config.document.connectionVersion !== version) throw new Error('STALE_DOCUMENT_CONFIG');
         window.dispatchEvent(new CustomEvent('document-connection-changed', { detail: { connectionVersion: version } }));
-        setNotice('문서 서비스 연결이 준비되었습니다.'); setCredentials(EMPTY_CREDENTIALS);
+        showToast('문서 서비스 연결이 준비되었습니다.'); setCredentials(EMPTY_CREDENTIALS);
       } catch {
         if (live) { refreshedConnection.current = null; setConsumerRefreshFailed(true); setError('새 연결의 설정 또는 참석자 목록을 불러오지 못했습니다. 연결 데이터를 다시 확인해 주세요.'); }
       }
     })();
     return () => { live = false; };
   }, [operation?.status, snapshot?.status, snapshot?.active?.connectionVersion, snapshot?.active?.rootId,
-    snapshot?.draft?.state, consumerRefreshAttempt]);
+    snapshot?.draft?.state, consumerRefreshAttempt, showToast]);
 
   useEffect(() => {
     const operationId = snapshot?.operation?.operationId;
@@ -301,7 +304,7 @@ export function DocumentSetupWizard({ settings = false }: { settings?: boolean }
       catch { throw new DocumentSetupError('BROWSER_STORAGE_UNAVAILABLE', 0); }
       setTested(test.data); setPreparedInvalid(false);
       const latest = await refresh();
-      setNotice('연결을 확인했습니다. 자격 증명은 화면에서 지웠습니다.');
+      showToast('연결을 확인했습니다. 자격 증명은 화면에서 지웠습니다.');
       if (!latest.active || (settings && changing)) {
         setSetupProgressStarted(true);
         await finish({ id: saved.data.draftId, revision: saved.data.revision, version: saved.data.version }, test.data, true);
@@ -340,14 +343,14 @@ export function DocumentSetupWizard({ settings = false }: { settings?: boolean }
           const latest = await refresh();
           if (latest.operation) {
             setInitializationUncertain(false);
-            setNotice('이미 진행 중인 문서 구조 준비 작업을 다시 확인했습니다.');
+            showToast('이미 진행 중인 문서 구조 준비 작업을 다시 확인했습니다.');
             setError('');
           } else if (acceptedOperationId) {
             const accepted = await getSetupOperation(acceptedOperationId);
             setOperation(accepted);
             setSnapshot({ ...latest, operation: { operationId: accepted.operationId, type: accepted.type, status: accepted.status } });
             setInitializationUncertain(false);
-            setNotice('응답에서 확인한 작업 ID로 진행 상태를 다시 불러왔습니다.');
+            showToast('응답에서 확인한 작업 ID로 진행 상태를 다시 불러왔습니다.');
           } else {
             setInitializationUncertain(true);
             setError('완료 요청 결과가 불명확합니다. 다시 확인을 눌러 서버의 공개 작업 상태를 확인해 주세요.');
@@ -367,7 +370,7 @@ export function DocumentSetupWizard({ settings = false }: { settings?: boolean }
       const latest = await refresh();
       if (latest.operation && (!changing || latest.operation.type === 'SWITCH')) {
         setInitializationUncertain(false);
-        setNotice('공개 작업 상태를 다시 확인했습니다.');
+        showToast('공개 작업 상태를 다시 확인했습니다.');
       } else {
         setInitializationUncertain(false);
         setPreparedInvalid(true); setTested(null); setProvider(null);
@@ -398,7 +401,7 @@ export function DocumentSetupWizard({ settings = false }: { settings?: boolean }
       if (!latest.operation || latest.operation.operationId !== acceptedId) {
         const state = await getSetupOperation(acceptedId); setOperation(state); setSnapshot({ ...latest, operation: { operationId: state.operationId, type: state.type, status: state.status } });
       }
-      setNotice('문서 서비스 변경을 시작했습니다. 전환 완료 전까지 원본 연결을 유지합니다.');
+      showToast('문서 서비스 변경을 시작했습니다.');
     } catch (reason) {
       if (reason instanceof DocumentSetupError && reason.status === 412) {
         try { await reloadConflict(); } catch { setError('최신 설정 상태를 불러오지 못했습니다. 진행 상태를 다시 확인해 주세요.'); }
@@ -426,7 +429,7 @@ export function DocumentSetupWizard({ settings = false }: { settings?: boolean }
       if (initializationOperation && action === 'CANCEL') {
         setProvider(null); setCredentials(EMPTY_CREDENTIALS); setLocation(EMPTY_LOCATION); setDraft(null); setTested(null); setSetupProgressStarted(false); setInitializationUncertain(false); setChanging(false);
         setNotice('중단된 연결 작업을 종료했습니다. 문서 서비스에 일부 페이지가 생성되었는지 확인한 뒤 다시 연결해 주세요.');
-      } else setNotice(action === 'RETRY' ? '같은 작업을 재개했습니다.' : '작업 취소를 요청했습니다.');
+      } else showToast(action === 'RETRY' ? '같은 작업을 재개했습니다.' : '작업 취소를 요청했습니다.');
     } catch (reason) {
       if (reason instanceof DocumentSetupError && reason.status === 412) {
         try { await reloadConflict(); } catch { setError('최신 작업 상태를 불러오지 못했습니다. 다시 확인해 주세요.'); }
@@ -505,6 +508,7 @@ export function DocumentSetupWizard({ settings = false }: { settings?: boolean }
   const initializationInProgress = !preparedTarget && !initializationFailed && (setupProgressStarted || snapshot.operation?.type === 'INITIALIZE' && ['PENDING', 'RUNNING', 'SUCCEEDED'].includes(operationStatus));
   const activeSummary = snapshot.active && <section className="setup-card" aria-label="현재 활성 문서 연결"><h2>문서 서비스</h2><p>현재 연결: {snapshot.active.provider === 'NOTION' ? 'Notion' : 'Confluence Cloud'}</p><p>연결 버전: {snapshot.active.connectionVersion}</p></section>;
   if (snapshot.status === 'READY' && settings && !changing) return <main className="setup-page setup-settings-page page-scroll-layout">
+    <Toast message={toastMessage} />
     <div className="page-fixed-heading"><Link className="back-link" to="/settings"><span aria-hidden="true">←</span> 설정으로 돌아가기</Link>
     <header className="setup-settings-heading">
       <h1><svg className="setup-settings-heading-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8.5 15.5 6 18a4 4 0 0 1-5.7-5.7l4-4A4 4 0 0 1 10 8m5.5.5L18 6a4 4 0 0 1 5.7 5.7l-4 4A4 4 0 0 1 14 16m-6 0 8-8" /></svg>문서 연결</h1>
@@ -536,6 +540,7 @@ export function DocumentSetupWizard({ settings = false }: { settings?: boolean }
   const currentStructureStep = operation?.currentStep ?? (operation?.stage === 'STRUCTURE'
     ? STRUCTURE_STEPS.find((step) => !completedStructureSteps.includes(step)) ?? null : null);
   return <main className={`setup-page page-scroll-layout${firstRun ? ' setup-first-run' : ''}`}>
+    <Toast message={toastMessage} />
     <header className="page-fixed-heading setup-heading"><h1>{changing || snapshot.active && !provider ? '문서 서비스 선택' : '문서 서비스 연결'}</h1><p>{provider ? '서비스 연결 정보를 입력해 주세요.' : snapshot.active ? `현재 ${providerLabel(snapshot.active.provider)}에 연결되어 있습니다. 변경할 문서 서비스를 선택해 주세요.` : '연결된 문서 서비스가 없습니다. 회의록을 저장하려면 먼저 서비스를 연결해 주세요.'}</p></header>
     <div className="page-scroll-content">
     {provider && !hasBlockingOperation && !preparedTarget && !initializationUncertain && !setupProgressStarted && <button className="back-link setup-provider-back" type="button" aria-label="서비스 선택으로 돌아가기" onClick={() => chooseProvider(null)}><span aria-hidden="true">←</span> 서비스 선택</button>}

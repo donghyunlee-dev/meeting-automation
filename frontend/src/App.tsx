@@ -36,6 +36,8 @@ import { HomePage, MeetingsPage } from './MeetingHistory';
 import { MeetingDetailPage } from './MeetingDetailPage';
 import { SettingsPage } from './SettingsPage';
 import { BackendRecoveryOverlay } from './components/BackendRecoveryOverlay';
+import { Toast } from './components/Toast';
+import { useToast } from './components/useToast';
 
 type ViewState = 'loading' | 'ready' | 'error';
 type FormState = { mode: 'create' } | { mode: 'edit'; participant: Participant };
@@ -72,7 +74,7 @@ function ParticipantsPage() {
   const [fields, setFields] = useState<Fields>(EMPTY_FIELDS);
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<ParticipantField, string>>>({});
   const [formError, setFormError] = useState('');
-  const [notice, setNotice] = useState('');
+  const { toastMessage, showToast, clearToast } = useToast();
   const [submitting, setSubmitting] = useState(false);
   const [participantToDelete, setParticipantToDelete] = useState<Participant | null>(null);
   const [deleteError, setDeleteError] = useState('');
@@ -120,7 +122,7 @@ function ParticipantsPage() {
     setFields(EMPTY_FIELDS);
     setFieldErrors({});
     setFormError('');
-    setNotice('');
+    clearToast();
   }
 
   function openEdit(participant: Participant, trigger: HTMLElement) {
@@ -129,7 +131,7 @@ function ParticipantsPage() {
     setFields({ name: participant.name, email: participant.email });
     setFieldErrors({});
     setFormError('');
-    setNotice('');
+    clearToast();
   }
 
   function closeForm() {
@@ -196,7 +198,7 @@ function ParticipantsPage() {
         }
         const created = await createParticipant(payload, createAttempt.current.key);
         setParticipants((current) => [...current, created]);
-        setNotice('참석자를 추가했습니다.');
+        showToast('참석자를 추가했습니다.');
       } else {
         const patch: Partial<Fields> = {};
         if (payload.name !== form.participant.name) patch.name = payload.name;
@@ -207,7 +209,7 @@ function ParticipantsPage() {
         }
         const updated = await updateParticipant(form.participant.id, patch);
         setParticipants((current) => current.map((participant) => participant.id === updated.id ? updated : participant));
-        setNotice('참석자 정보를 수정했습니다.');
+        showToast('참석자 정보를 수정했습니다.');
       }
       closeForm();
     } catch (error) {
@@ -237,7 +239,7 @@ function ParticipantsPage() {
     try {
       await deleteParticipant(participantToDelete.id);
       setParticipants((current) => current.filter((participant) => participant.id !== participantToDelete.id));
-      setNotice('참석자를 삭제했습니다.');
+      showToast('참석자를 삭제했습니다.');
       setParticipantToDelete(null);
     } catch (error) {
       setDeleteError(error instanceof ParticipantApiError
@@ -265,7 +267,7 @@ function ParticipantsPage() {
 
         <div className="page-scroll-content">
 
-        {notice && <p className="notice" role="status">{notice}</p>}
+        <Toast message={toastMessage} />
 
         {viewState === 'loading' && <AsyncState state={{ status: 'loading', label: '참석자 목록을 불러오는 중…', fullPage: true }} renderReady={() => null} />}
 
