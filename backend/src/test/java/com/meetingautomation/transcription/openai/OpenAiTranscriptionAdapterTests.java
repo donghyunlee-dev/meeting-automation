@@ -3,6 +3,7 @@ package com.meetingautomation.transcription.openai;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.http.HttpHeaders.AUTHORIZATION;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.content;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.header;
@@ -25,12 +26,16 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 
+@ExtendWith(OutputCaptureExtension.class)
 class OpenAiTranscriptionAdapterTests {
     private static final String API_URL = "https://api.openai.com/v1/audio/transcriptions";
     private static final String AUDIO_SENTINEL = "fixture-audio-sentinel";
@@ -123,6 +128,21 @@ class OpenAiTranscriptionAdapterTests {
         assertProviderFailure(415, TranscriptionException.Code.INVALID_AUDIO, false);
         assertProviderFailure(401, TranscriptionException.Code.AUTHENTICATION_FAILED, false);
         assertProviderFailure(403, TranscriptionException.Code.AUTHENTICATION_FAILED, false);
+    }
+
+    @Test
+    void logsProviderStatusAndTraceWithoutProviderBody(CapturedOutput output) throws IOException {
+        TestClient testClient = client("configured-model");
+        testClient.server().expect(requestTo(API_URL))
+                .andRespond(withStatus(org.springframework.http.HttpStatusCode.valueOf(413))
+                        .body("private provider diagnostic"));
+
+        assertThrows(TranscriptionException.class, () -> testClient.adapter().transcribeWithDiarization(
+                new TranscriptionCommand(audioFile(), "audio/webm", null, 1000, "tr_test")));
+
+        assertTrue(output.getAll().contains("providerStatus=413"));
+        assertTrue(output.getAll().contains("traceId=tr_test"));
+        assertFalse(output.getAll().contains("private provider diagnostic"));
     }
 
     @Test
@@ -243,8 +263,8 @@ class OpenAiTranscriptionAdapterTests {
                     assertEquals(3, settings.connectTimeoutSeconds());
                     assertEquals(1, settings.timeoutSeconds());
                     assertFalse(settings.toString().contains(SECRET_SENTINEL));
-                    assertEquals(OpenAiTranscriptionAdapter.class,
-                            context.getBean(TranscriptionProvider.class).getClass());
+                    assertEquals("SegmentingTranscriptionProvider",
+                            context.getBean(TranscriptionProvider.class).getClass().getSimpleName());
                 });
     }
 

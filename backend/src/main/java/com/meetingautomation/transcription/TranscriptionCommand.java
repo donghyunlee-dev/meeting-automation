@@ -10,8 +10,14 @@ public final class TranscriptionCommand {
     private final String mimeType;
     private final String languageHint;
     private final long meetingDurationMs;
+    private final String traceId;
 
     public TranscriptionCommand(Path audioReference, String mimeType, String languageHint, long meetingDurationMs) {
+        this(audioReference, mimeType, languageHint, meetingDurationMs, null);
+    }
+
+    public TranscriptionCommand(Path audioReference, String mimeType, String languageHint, long meetingDurationMs,
+            String traceId) {
         if (audioReference == null || mimeType == null || mimeType.isBlank() || meetingDurationMs < 1) {
             throw new IllegalArgumentException("Transcription command is invalid.");
         }
@@ -21,10 +27,16 @@ public final class TranscriptionCommand {
         this.mimeType = mimeType.strip();
         this.languageHint = languageHint == null || languageHint.isBlank() ? null : languageHint.strip();
         this.meetingDurationMs = meetingDurationMs;
+        this.traceId = traceId;
     }
 
     public TranscriptionCommand(InputStream audioStream, long audioBytes, String mimeType, String languageHint,
             long meetingDurationMs) {
+        this(audioStream, audioBytes, mimeType, languageHint, meetingDurationMs, null);
+    }
+
+    public TranscriptionCommand(InputStream audioStream, long audioBytes, String mimeType, String languageHint,
+            long meetingDurationMs, String traceId) {
         if (audioStream == null || audioBytes < 1 || mimeType == null || mimeType.isBlank()
                 || meetingDurationMs < 1) {
             throw new IllegalArgumentException("Transcription command is invalid.");
@@ -35,6 +47,7 @@ public final class TranscriptionCommand {
         this.mimeType = mimeType.strip();
         this.languageHint = languageHint == null || languageHint.isBlank() ? null : languageHint.strip();
         this.meetingDurationMs = meetingDurationMs;
+        this.traceId = traceId;
     }
 
     public Path audioReference() { return audioReference; }
@@ -43,6 +56,7 @@ public final class TranscriptionCommand {
     public String mimeType() { return mimeType; }
     public String languageHint() { return languageHint; }
     public long meetingDurationMs() { return meetingDurationMs; }
+    public String traceId() { return traceId; }
 
     @Override
     public String toString() {

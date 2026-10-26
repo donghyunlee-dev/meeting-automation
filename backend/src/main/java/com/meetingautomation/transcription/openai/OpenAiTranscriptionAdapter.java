@@ -17,6 +17,8 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.core.io.Resource;
@@ -35,6 +37,7 @@ import tools.jackson.databind.json.JsonMapper;
 
 /** Sends assembled audio to OpenAI while keeping provider JSON outside the application contract. */
 public final class OpenAiTranscriptionAdapter implements TranscriptionProvider {
+    private static final Logger LOGGER = LoggerFactory.getLogger(OpenAiTranscriptionAdapter.class);
     private static final URI TRANSCRIPTION_URI = URI.create("https://api.openai.com/v1/audio/transcriptions");
     private static final String RESPONSE_FORMAT = "diarized_json";
     private static final JsonMapper JSON_MAPPER = JsonMapper.builder().build();
@@ -72,14 +75,24 @@ public final class OpenAiTranscriptionAdapter implements TranscriptionProvider {
                     .body(JsonNode.class);
             return mapResponse(response, command.meetingDurationMs());
         } catch (ProviderStatusException providerFailure) {
-            throw mapStatus(providerFailure.statusCode(), providerFailure.responseFormatRejected());
+            TranscriptionException mapped = mapStatus(providerFailure.statusCode(), providerFailure.responseFormatRejected());
+            LOGGER.warn("Transcription provider rejected request traceId={} providerStatus={} errorCode={} retryable={}",
+                    command.traceId(), providerFailure.statusCode(), mapped.code(), mapped.retryable());
+            throw mapped;
         } catch (ResourceAccessException transportFailure) {
+            LOGGER.warn("Transcription provider transport failed traceId={} failureType={} errorCode={}",
+                    command.traceId(), transportFailure.getMostSpecificCause().getClass().getSimpleName(),
+                    TranscriptionException.Code.PROCESSING_FAILED);
             throw failure(TranscriptionException.Code.PROCESSING_FAILED, true);
         } catch (TranscriptionException safeFailure) {
             throw safeFailure;
         } catch (RestClientException malformedResponse) {
+            LOGGER.warn("Transcription provider response failed traceId={} failureType=MALFORMED_RESPONSE",
+                    command.traceId());
             throw failure(TranscriptionException.Code.PROCESSING_FAILED, false);
         } catch (RuntimeException malformedResponse) {
+            LOGGER.warn("Transcription provider processing failed traceId={} failureType={}",
+                    command.traceId(), malformedResponse.getClass().getSimpleName());
             throw failure(TranscriptionException.Code.PROCESSING_FAILED, false);
         }
     }

@@ -127,10 +127,12 @@ public class ProcessingPipeline {
                 sessionStore.recordProcessingProgress(sessionId, TRANSCRIPTION, 34);
                 stageStartedAt = System.nanoTime();
                 logStageStarted(sessionId, effectiveTraceId, TRANSCRIPTION);
+                LOGGER.info("Transcription input prepared sessionId={} traceId={} audioBytes={} meetingDurationMs={} mimeType={}",
+                        sessionId, effectiveTraceId, assembly.bytes(), job.durationMs(), assembly.mimeType());
                 try {
                     try (var audio = audioAssembly.openAssembly(assembly)) {
                         TranscriptionCommand command = new TranscriptionCommand(
-                                audio, assembly.bytes(), assembly.mimeType(), "ko", job.durationMs());
+                                audio, assembly.bytes(), assembly.mimeType(), "ko", job.durationMs(), effectiveTraceId);
                         providerResponse = transcriptionProvider.transcribeWithDiarization(command);
                     } catch (java.io.IOException invalidStoredAudio) {
                         fail(sessionId, effectiveTraceId, TRANSCRIPTION, 33,

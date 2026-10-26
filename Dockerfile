@@ -13,6 +13,8 @@ RUN ./gradlew --no-daemon bootJar
 FROM eclipse-temurin:25-jre
 
 WORKDIR /app
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
 COPY --from=build /workspace/build/libs/meeting-automation-backend-0.0.1-SNAPSHOT.jar ./app.jar
 
 EXPOSE 10000

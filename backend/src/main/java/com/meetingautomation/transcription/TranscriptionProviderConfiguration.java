@@ -33,6 +33,7 @@ public class TranscriptionProviderConfiguration {
         JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(httpClient);
         requestFactory.setReadTimeout(Duration.ofSeconds(settings.timeoutSeconds()));
         RestClient.Builder clientBuilder = RestClient.builder().requestFactory(requestFactory);
-        return new OpenAiTranscriptionAdapter(clientBuilder, settings);
+        return new SegmentingTranscriptionProvider(new OpenAiTranscriptionAdapter(clientBuilder, settings),
+                new FfmpegAudioSegmenter("ffmpeg"), settings.maxAudioBytes());
     }
 }
