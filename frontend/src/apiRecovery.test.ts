@@ -7,7 +7,7 @@ afterEach(() => {
 });
 
 describe('backend availability recovery', () => {
-  it('uses Render Actuator health when the application health route is not deployed', async () => {
+  it('does not check Render Actuator when the application health route is unavailable', async () => {
     const fetchMock = vi.fn<typeof fetch>()
       .mockResolvedValueOnce(new Response(null, { status: 404 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ status: 'UP' }), {
@@ -15,10 +15,10 @@ describe('backend availability recovery', () => {
         headers: { 'Content-Type': 'application/json' },
       }));
 
-    await expect(recoverBackendAvailability(fetchMock)).resolves.toBe('already-ready');
+    await expect(recoverBackendAvailability(fetchMock)).resolves.toBe('recovered');
     expect(fetchMock.mock.calls.map(([input]) => new URL(String(input)).pathname)).toEqual([
       '/api/v1/system/health',
-      '/actuator/health',
+      '/api/v1/system/health',
     ]);
   });
 });

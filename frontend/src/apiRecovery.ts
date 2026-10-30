@@ -1,4 +1,4 @@
-import { getApiBaseUrl, getApiHealthUrl } from './apiBase';
+import { getApiHealthUrl } from './apiBase';
 
 export type ApiRecoveryState =
   | { status: 'idle' }
@@ -65,14 +65,15 @@ async function probeBackend(fetchImpl: typeof fetch): Promise<boolean> {
       signal: controller.signal,
       cache: 'no-store',
     });
-    if (response.status === 404) {
-      response = await fetchImpl(`${getApiBaseUrl()}/actuator/health`, {
-        method: 'GET',
-        headers: { Accept: 'application/json' },
-        signal: controller.signal,
-        cache: 'no-store',
-      });
-    }
+    // Render Actuator fallback is disabled while the frontend API is being migrated.
+    // if (response.status === 404) {
+    //   response = await fetchImpl(`${getApiBaseUrl()}/actuator/health`, {
+    //     method: 'GET',
+    //     headers: { Accept: 'application/json' },
+    //     signal: controller.signal,
+    //     cache: 'no-store',
+    //   });
+    // }
     if (!response.ok) return false;
     const body: unknown = await response.json();
     if (typeof body !== 'object' || body === null) return false;
