@@ -20,11 +20,11 @@ Vercel Blob, Vercel Audio Functions, S3는 현재 오디오 업로드 경로에�
 | Root Directory | `frontend` |
 | Framework / Node.js | Vite / 24.x |
 | Install / Build / Output | `npm ci` / `npm run build` / `dist` |
-| `VITE_API_BASE_URL` | Render Backend의 공개 HTTPS URL |
+| `VITE_API_BASE_URL` | `/api/backend` |
 
-Vercel Preview를 사용할 경우 해당 Origin을 Backend `ALLOWED_ORIGINS`에 포함합니다. `VITE_` 변수는 브라우저에 전달되므로 Backend 주소 외 비밀값을 두지 않습니다. OpenAI·Gmail 자격 증명과 저장소 암호화 키는 Vercel 환경 변수에 넣지 않습니다.
+`frontend/vercel.json`은 `/api/backend/:path*`를 GCE Backend의 `http://34.68.108.237:9010/:path*`로 전달합니다. 브라우저 Network에서 API 요청이 같은 Vercel 출처의 `/api/backend/...`로 향하는지 확인합니다. Vercel Preview를 사용할 경우 해당 Origin을 Backend `ALLOWED_ORIGINS`에 포함합니다. `VITE_` 변수는 브라우저에 전달되므로 비밀값을 두지 않습니다. OpenAI·Gmail 자격 증명과 저장소 암호화 키는 Vercel 환경 변수에 넣지 않습니다.
 
-## Render Backend 설정
+## 이전 Render Backend 설정 (롤백 참고)
 
 Backend는 Dockerfile로 실행하며 Render가 제공하는 `$PORT`를 사용합니다. `/actuator/health`는 프로세스 상태 확인용입니다. 이 응답만으로 OpenAI, Notion/Confluence, 이메일, Slack 기능까지 정상이라고 판단할 수 없습니다.
 
@@ -55,8 +55,8 @@ Render 설정 저장은 현재 프로세스 메모리 기반이며 서비스 재
 ## 배포 후 확인 순서
 
 1. Vercel 사이트가 열리고 SPA 경로를 직접 새로고침해도 로드되는지 확인합니다.
-2. 브라우저 Network에서 API 요청이 `VITE_API_BASE_URL`의 Backend로 가는지, CORS 오류가 없는지 확인합니다.
-3. Render 로그와 `GET /api/v1/system/health`를 확인합니다. 프로세스 health와 기능 연동 상태는 별도로 판단합니다.
+2. 브라우저 Network에서 API 요청이 같은 출처의 `/api/backend/...`로 가는지 확인합니다.
+3. GCE Backend의 `GET /api/v1/system/health`와 컨테이너 로그를 확인합니다. 프로세스 health와 기능 연동 상태는 별도로 판단합니다.
 4. 같은 브라우저로 설정 화면을 열어 문서·이메일·Slack 상태를 각각 확인합니다. 필요한 경우 브라우저 복구가 완료될 때까지 기다린 후 다시 조회합니다.
 5. 비운영 테스트 회의로 오디오 업로드, 음성 처리, 검토, 문서 저장, 연결된 이메일·Slack 전달을 각각 확인합니다.
 6. 저장된 회의가 Notion/Confluence 목록·상세에서 다시 조회되는지 확인합니다.

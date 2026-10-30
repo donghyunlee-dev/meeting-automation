@@ -114,8 +114,10 @@ function isBackendRequest(input: RequestInfo | URL): boolean {
     const pageUrl = typeof window === 'undefined' ? 'http://localhost/' : window.location.href;
     const target = new URL(requestUrl, pageUrl);
     const apiBase = getApiBaseUrl();
-    const backendOrigin = apiBase ? new URL(apiBase, pageUrl).origin : new URL(pageUrl).origin;
-    return target.origin === backendOrigin && target.pathname.startsWith('/api/v1/');
+    const backendUrl = new URL(apiBase || '/', pageUrl);
+    const backendPath = backendUrl.pathname.replace(/\/$/, '');
+    return target.origin === backendUrl.origin
+      && target.pathname.startsWith(`${backendPath}/api/v1/`);
   } catch {
     return false;
   }

@@ -35,10 +35,10 @@ Before the first deployment, set the three Actions secrets above; the workflow c
 ## Network access and frontend cutover
 
 
-The firewall rule now allows TCP 9010 from any IPv4 source on this VM tag. Traffic on this port is plain HTTP. The production frontend currently defaults to the Render URL in `frontend/src/apiBase.ts`. Before switching it, provide an HTTPS API URL: browser calls from the HTTPS Vercel site to plain HTTP on port `9010` are blocked as mixed content. Configure a domain and TLS reverse proxy or another HTTPS entry point that forwards to this service, set Vercel's `VITE_API_BASE_URL` to that HTTPS URL, and set `ALLOWED_ORIGINS` to the exact frontend origin. Keep Render as the frontend target until this end-to-end path is verified.
+The frontend uses Vercel as a same-origin reverse proxy: `VITE_API_BASE_URL=/api/backend`, and `frontend/vercel.json` forwards `/api/backend/:path*` to `http://34.68.108.237:9010/:path*`. The VM address is reserved as `rami-api-backend-ip`. Browsers connect to Vercel over HTTPS, avoiding mixed-content blocking. The Vercel-to-VM hop remains plain HTTP; port 9010 must be reachable by Vercel. Keep `ALLOWED_ORIGINS` set to the exact frontend origin if the backend checks the forwarded Origin header.
 
 ## Capacity and service move
 
-The current VM is `e2-micro` with about 953 MiB total memory, an existing container using about 127 MiB, and 14 GiB free disk at inspection. The new container is capped at 640 MiB and the JVM heap at 55% of that to leave room for the existing app and host. Measure memory during startup and a representative transcription/minutes job before routing production traffic. If the VM runs out of memory or processing time is unacceptable, resize it to `e2-small` or larger and retest; resizing is not automated here.
+The VM has been resized to `e2-small`. Recheck available memory during startup and a representative transcription/minutes job before changing the container or JVM limits. Resizing is not automated here.
 
 The backend keeps sessions in process memory, and audio chunks in the configured temporary audio directory. Deployments and VM restarts interrupt active sessions and do not guarantee audio recovery. Render's filesystem-backed document settings are not migrated automatically: export or re-enter provider settings through the app after the new service is available, and retain the same encryption key for any settings file that is deliberately migrated. Keep Render available until the new API and frontend integration have been verified.

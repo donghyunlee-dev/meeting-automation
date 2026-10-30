@@ -9,10 +9,12 @@ afterEach(() => {
   dismissApiRecovery();
   cleanup();
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
 });
 
 describe('backend recovery integration', () => {
-  it('opens the recovery dialog and keeps a document setup read pending while the backend is unavailable', async () => {
+  it('recognizes same-origin proxied API failures and keeps the read pending while the backend is unavailable', async () => {
+    vi.stubEnv('VITE_API_BASE_URL', '/api/backend');
     const fetchMock = vi.fn<typeof fetch>().mockRejectedValue(new TypeError('Failed to fetch'));
     let requestSettled = false;
     render(<BackendRecoveryOverlay />);
@@ -30,9 +32,9 @@ describe('backend recovery integration', () => {
     expect(getApiRecoveryState()).toMatchObject({ status: 'recovering', visible: true });
     expect(requestSettled).toBe(false);
     expect(fetchMock.mock.calls.map(([input]) => String(input))).toEqual([
-      `${getApiBaseUrl()}/api/v1/document-setup`,
-      `${getApiBaseUrl()}/api/v1/system/health`,
-      `${getApiBaseUrl()}/api/v1/system/health`,
+      '/api/backend/api/v1/document-setup',
+      '/api/backend/api/v1/system/health',
+      '/api/backend/api/v1/system/health',
     ]);
 
     dismissApiRecovery();

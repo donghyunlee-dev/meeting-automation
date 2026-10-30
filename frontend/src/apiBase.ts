@@ -1,4 +1,4 @@
-const PRODUCTION_API_BASE_URL = 'https://meeting-automation-4419.onrender.com';
+const PRODUCTION_API_BASE_URL = '/api/backend';
 
 export function getApiBaseUrl(): string {
   const baseUrl = import.meta.env.MODE === 'test'

@@ -110,11 +110,11 @@ VITE_API_BASE_URL=http://localhost:8080
 
 ## Vercel 배포
 
-Vercel 프로젝트는 monorepo의 `frontend/` 디렉터리를 Root Directory로 사용한다. Framework Preset은 Vite, Node.js는 `24.x`, Install Command는 `npm ci`, Build Command는 `npm run build`, Output Directory는 `dist`로 설정한다. Production과 Preview의 `VITE_API_BASE_URL`에는 Render API의 HTTPS 주소를 지정한다.
+Vercel 프로젝트는 monorepo의 `frontend/` 디렉터리를 Root Directory로 사용한다. Framework Preset은 Vite, Node.js는 `24.x`, Install Command는 `npm ci`, Build Command는 `npm run build`, Output Directory는 `dist`로 설정한다. Production과 Preview의 `VITE_API_BASE_URL`은 `/api/backend`로 설정한다. `frontend/vercel.json`은 이 same-origin 경로를 GCE Backend의 HTTP API로 전달한다.
 
-브라우저는 오디오 조각을 Render Backend API에 직접 올린다. Vercel Blob과 `frontend/api/` 오디오 Function은 사용하지 않는다. Render에는 `ALLOWED_ORIGINS`로 Frontend Origin을 허용하고 `TEMP_AUDIO_DIR`를 쓸 수 있는 임시 디렉터리로 지정한다. 오디오 임시 파일은 영구 저장이 아니다.
+브라우저는 HTTPS인 Vercel same-origin API 경로로 요청하고, Vercel rewrite가 오디오를 포함한 API 요청을 GCE Backend로 전달한다. Vercel Blob과 `frontend/api/` 오디오 Function은 사용하지 않는다. Backend의 `ALLOWED_ORIGINS`에는 Frontend Origin을 허용하고 `TEMP_AUDIO_DIR`를 쓸 수 있는 임시 디렉터리로 지정한다. 오디오 임시 파일은 영구 저장이 아니다.
 
-저장소가 Vercel 프로젝트의 Git source에 연결되어 있지 않으면 `master` 푸시만으로 배포가 시작되지 않는다. 프로젝트가 `frontend/`를 Root Directory로 사용하는지 확인한다. 배포 뒤 홈페이지, Render API 연결, 오디오 업로드를 각각 확인한다. 특정 Vercel 배포가 현재 정상인지는 별도의 운영 점검이 필요하다.
+저장소가 Vercel 프로젝트의 Git source에 연결되어 있지 않으면 `master` 푸시만으로 배포가 시작되지 않는다. 프로젝트가 `frontend/`를 Root Directory로 사용하는지 확인한다. 배포 뒤 홈페이지, `/api/backend/api/v1/system/health`, 오디오 업로드를 각각 확인한다. 특정 Vercel 배포가 현재 정상인지는 별도의 운영 점검이 필요하다.
 
 ## VS Code 설정
 
