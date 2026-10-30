@@ -26,6 +26,19 @@ function renderPage() {
 }
 
 describe('ProcessingPage failure recovery', () => {
+  it('shows and updates elapsed time while transcription is processing', async () => {
+    let reads = 0;
+    vi.stubGlobal('fetch', withHealthyBackend(vi.fn(async () => {
+      reads += 1;
+      if (reads > 1) return new Promise<Response>(() => {});
+      return new Response(JSON.stringify(apiSnapshot('PROCESSING')), { status: 200 });
+    })));
+    renderPage();
+
+    expect(await screen.findByText('경과 00:00')).toBeTruthy();
+    expect(await screen.findByText('경과 00:01', {}, { timeout: 2_500 })).toBeTruthy();
+  });
+
   it('ASYNC-GET-RETRY shows the shared safe network error and retries API-010 with GET', async () => {
     let available = false;
     const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {

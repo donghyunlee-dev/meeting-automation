@@ -48,6 +48,7 @@ export function ProcessingPage() {
   const [downloadReadySessionId, setDownloadReadySessionId] = useState<string | null>(null);
   const downloadReady = downloadReadySessionId === sessionId;
   const [clockNow, setClockNow] = useState(() => Date.now());
+  const [transcriptionElapsedSeconds, setTranscriptionElapsedSeconds] = useState(0);
   const navigated = useRef(false);
   const inFlight = useRef(false);
   const snapshotRef = useRef<ProcessingSnapshot | null>(null);
@@ -62,6 +63,11 @@ export function ProcessingPage() {
   const applySnapshot = useCallback((next: ProcessingSnapshot) => {
     if (next.sessionId !== sessionId) { setFailure('session-mismatch'); return; }
     if (snapshotRef.current && next.version < snapshotRef.current.version) return;
+    const wasTranscribing = snapshotRef.current?.status === 'PROCESSING'
+      && snapshotRef.current.processing.stage === 'TRANSCRIPTION';
+    if (!wasTranscribing && next.status === 'PROCESSING' && next.processing.stage === 'TRANSCRIPTION') {
+      setTranscriptionElapsedSeconds(0);
+    }
     snapshotRef.current = next;
     setSnapshot(next);
     setDownloadReadySessionId((readySessionId) => readySessionId === sessionId
@@ -135,6 +141,14 @@ export function ProcessingPage() {
 
   const expiryTime = snapshot?.processing.audioExpiresAt ? Date.parse(snapshot.processing.audioExpiresAt) : Number.NaN;
   const expiresIn = snapshot?.status === 'PROCESSING_FAILED' && Number.isFinite(expiryTime) ? Math.max(0, Math.ceil((expiryTime - clockNow) / 60_000)) : null;
+  const isTranscribing = snapshot?.status === 'PROCESSING' && snapshot.processing.stage === 'TRANSCRIPTION';
+
+  useEffect(() => {
+    if (!isTranscribing) return;
+    let elapsed = 0;
+    const timer = window.setInterval(() => setTranscriptionElapsedSeconds(++elapsed), 1_000);
+    return () => window.clearInterval(timer);
+  }, [isTranscribing]);
 
   useEffect(() => {
     const dialog = confirmDiscard ? discardDialogRef.current : confirmDownload ? downloadDialogRef.current : null;
@@ -248,9 +262,16 @@ export function ProcessingPage() {
         })}</ol>{activeStep !== null ? <div className="processing-progress" aria-label="단계 기반 진행률">
           <p className="processing-current" role="status">전체 {stageNames.length}단계 중 {activeStep}단계 · {stageNames[activeStage]} 진행 중</p>
           <progress aria-label="전체 처리 단계" value={activeStep} max={stageNames.length}>{activeStep}/{stageNames.length}</progress>
+          {isTranscribing && <span className="processing-elapsed-time" role="timer" aria-label={`음성 인식 경과 시간 ${formatElapsedTime(transcriptionElapsedSeconds)}`}>경과 {formatElapsedTime(transcriptionElapsedSeconds)}</span>}
         </div> : <p className="processing-current" role="status">처리 상태를 확인하고 있습니다.</p>}</section>
       )}
       </div>
     </main>
   );
+}
+
+function formatElapsedTime(totalSeconds: number): string {
+  const minutes = Math.floor(totalSeconds / 60).toString().padStart(2, '0');
+  const seconds = (totalSeconds % 60).toString().padStart(2, '0');
+  return `${minutes}:${seconds}`;
 }

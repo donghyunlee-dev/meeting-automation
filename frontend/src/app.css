@@ -141,6 +141,7 @@ button:disabled { cursor: not-allowed; opacity: .6; }
 @keyframes processing-pulse { 50% { transform: scale(.72); opacity: .65; } }
 .processing-progress { display: grid; gap: 8px; border-top: 1px solid #edf0f4; padding-top: 14px; }
 .processing-card progress { width: 100%; height: 10px; accent-color: #3b82f6; }
+.processing-elapsed-time { justify-self: end; color: #667085; font-size: 13px; font-variant-numeric: tabular-nums; }
 .processing-current { margin: 0; color: #3b82f6; font-size: 14px; font-weight: 650; line-height: 1.6; }
 .processing-message p { margin: 0; color: #596578; font-size: 14px; line-height: 1.6; }
 .processing-message h2 { margin: 0; color: #253044; font-size: 17px; }
