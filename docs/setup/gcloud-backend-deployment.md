@@ -24,11 +24,11 @@ The following GCP resources are provisioned:
 
 - Artifact Registry repository: `us-central1/meeting-automation`
 - Workload Identity provider: `projects/627667150507/locations/global/workloadIdentityPools/github-actions/providers/meeting-automation`, restricted to `donghyunlee-dev/meeting-automation`
-- Deploy service account: `meeting-automation-deploy@project-c43c730b-f69a-42f1-9ce.iam.gserviceaccount.com`, with repository writer, Compute Engine instance admin, and IAP tunnel access
+- Deploy service account: `meeting-automation-deploy@project-c43c730b-f69a-42f1-9ce.iam.gserviceaccount.com`, with repository writer and IAP tunnel access
 - VM service account: the existing `rami-api-runtime`, which already has Artifact Registry reader access
 - Firewall rule: `meeting-automation-backend-9010`, TCP 9010 from `0.0.0.0/0`, targeted only to VM tag `rami-api-backend`
 
-The workflow uses GitHub OIDC federation, so no service account key or SSH private key is stored in GitHub. It runs for relevant backend changes on `master` and supports manual execution. It runs backend tests, pushes an immutable commit-SHA image, copies the Compose/deploy files over IAP, then pulls and starts only `meeting-automation-backend`. It checks `/actuator/health` and restores the prior image if the new container does not become healthy. Existing containers and the VM's current application are not modified.
+The workflow uses GitHub OIDC federation for Google Cloud; no service account key is stored in GitHub. It also uses repository secrets `VM_SSH_PRIVATE_KEY` and `VM_SSH_KNOWN_HOSTS` for SSH through IAP. It runs for relevant backend changes on `master` and supports manual execution. It runs backend tests, pushes an immutable commit-SHA image, copies the Compose/deploy files over IAP, then pulls and starts only `meeting-automation-backend`. It checks `/actuator/health` and restores the prior image if the new container does not become healthy. Existing containers and the VM's current application are not modified.
 
 Before the first deployment, set the three Actions secrets above; the workflow checks them before pushing an image. The VM generates a short-lived Artifact Registry access token from its attached service account for each pull and logs out afterward.
 

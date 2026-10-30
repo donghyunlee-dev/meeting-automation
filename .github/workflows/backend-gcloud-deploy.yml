@@ -74,6 +74,28 @@ jobs:
         with:
           project_id: project-c43c730b-f69a-42f1-9ce
 
+      - name: Configure IAP SSH
+        env:
+          VM_SSH_PRIVATE_KEY: ${{ secrets.VM_SSH_PRIVATE_KEY }}
+          VM_SSH_KNOWN_HOSTS: ${{ secrets.VM_SSH_KNOWN_HOSTS }}
+        run: |
+          install -m 0700 -d "$HOME/.ssh"
+          printf '%s\n' "$VM_SSH_PRIVATE_KEY" > "$HOME/.ssh/meeting-automation-deploy"
+          chmod 0600 "$HOME/.ssh/meeting-automation-deploy"
+          printf '%s\n' "$VM_SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 0600 "$HOME/.ssh/known_hosts"
+          cat > "$HOME/.ssh/config" <<'EOF'
+          Host rami-api-backend
+            HostName rami-api-backend
+            User leedh84
+            IdentityFile ~/.ssh/meeting-automation-deploy
+            IdentitiesOnly yes
+            StrictHostKeyChecking yes
+            UserKnownHostsFile ~/.ssh/known_hosts
+            ProxyCommand gcloud compute start-iap-tunnel rami-api-backend 22 --listen-on-stdin --project=project-c43c730b-f69a-42f1-9ce --zone=us-central1-a --verbosity=error
+          EOF
+          chmod 0600 "$HOME/.ssh/config"
+
       - name: Configure Artifact Registry authentication
         run: gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
 
@@ -84,15 +106,15 @@ jobs:
         run: docker push us-central1-docker.pkg.dev/project-c43c730b-f69a-42f1-9ce/meeting-automation/meeting-automation-backend:${GITHUB_SHA}
 
       - name: Copy Compose configuration and runtime environment
-        run: gcloud compute scp scripts/deploy/compose.yml scripts/deploy/gcloud-vm-deploy.sh "$RUNNER_TEMP/backend-runtime.env" leedh84@rami-api-backend:/tmp/ --zone=us-central1-a --tunnel-through-iap --quiet
+        run: scp scripts/deploy/compose.yml scripts/deploy/gcloud-vm-deploy.sh "$RUNNER_TEMP/backend-runtime.env" rami-api-backend:/tmp/
 
       - name: Deploy and verify health
-        run: gcloud compute ssh leedh84@rami-api-backend --zone=us-central1-a --tunnel-through-iap --command="sudo bash /tmp/gcloud-vm-deploy.sh ${GITHUB_SHA}" --quiet
+        run: ssh rami-api-backend "sudo bash /tmp/gcloud-vm-deploy.sh ${GITHUB_SHA}"
 
       - name: Remove temporary deployment files from VM
         if: always() && steps.auth.outcome == 'success'
-        run: gcloud compute ssh leedh84@rami-api-backend --zone=us-central1-a --tunnel-through-iap --command="sudo rm -f /tmp/backend-runtime.env /tmp/compose.yml /tmp/gcloud-vm-deploy.sh" --quiet
+        run: ssh rami-api-backend "sudo rm -f /tmp/backend-runtime.env /tmp/compose.yml /tmp/gcloud-vm-deploy.sh"
 
       - name: Remove temporary runtime environment file
         if: always()
-        run: rm -f "$RUNNER_TEMP/backend-runtime.env"
+        run: rm -f "$RUNNER_TEMP/backend-runtime.env" "$HOME/.ssh/meeting-automation-deploy" "$HOME/.ssh/known_hosts" "$HOME/.ssh/config"
