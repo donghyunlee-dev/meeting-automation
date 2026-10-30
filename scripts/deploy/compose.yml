@@ -1,0 +1,20 @@
+services:
+  backend:
+    image: us-central1-docker.pkg.dev/project-c43c730b-f69a-42f1-9ce/meeting-automation/meeting-automation-backend:${IMAGE_TAG}
+    container_name: meeting-automation-backend
+    restart: unless-stopped
+    mem_limit: 640m
+    memswap_limit: 640m
+    ports:
+      - "9010:9010"
+    env_file:
+      - /opt/apps/meeting-automation-backend/shared/.env
+    environment:
+      RENDER: "false"
+      PORT: "9010"
+      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=55 -XX:InitialRAMPercentage=15"
+      DOCUMENT_SETTINGS_DIR: /var/lib/meeting-automation-backend/settings
+      TEMP_AUDIO_DIR: /var/lib/meeting-automation-backend/audio
+    volumes:
+      - /var/lib/meeting-automation-backend/settings:/var/lib/meeting-automation-backend/settings
+      - /var/lib/meeting-automation-backend/audio:/var/lib/meeting-automation-backend/audio

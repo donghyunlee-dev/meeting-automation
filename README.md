@@ -66,7 +66,9 @@ flowchart TD
 | 음성·생성 AI | OpenAI Audio Transcriptions API, OpenAI Chat Completions API, JSON Schema 응답 |
 | 문서 서비스 | Notion API, Confluence Cloud REST API v2 |
 | 알림 | Gmail API, Slack Incoming Webhook |
-| 배포 구성 | Vercel용 정적 프런트엔드, Render용 Docker 백엔드 |
+| 배포 구성 | Vercel용 정적 프런트엔드, 현재 Render 백엔드, Artifact Registry와 GCE VM 배포 workflow |
+
+GCE 백엔드 배포의 VM 준비, Actions secrets, 네트워크와 용량 조건은 [배포 안내](docs/setup/gcloud-backend-deployment.md)를 참고하세요.
 
 ## 저장 구조와 운영상 참고
 

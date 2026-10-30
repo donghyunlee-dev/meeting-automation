@@ -1,0 +1,98 @@
+name: Deploy backend to GCE VM
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - "backend/**"
+      - "Dockerfile"
+      - "scripts/deploy/**"
+      - ".github/workflows/backend-gcloud-deploy.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: backend-gcloud-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Build and deploy backend container
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Java 25
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: gradle
+          cache-dependency-path: |
+            backend/**/*.gradle*
+            backend/gradle/wrapper/gradle-wrapper.properties
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Run backend tests
+        working-directory: backend
+        run: ./gradlew test
+
+      - name: Prepare runtime environment file
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          DOCUMENT_SETTINGS_ENCRYPTION_KEY: ${{ secrets.DOCUMENT_SETTINGS_ENCRYPTION_KEY }}
+          ALLOWED_ORIGINS: ${{ secrets.ALLOWED_ORIGINS }}
+        run: |
+          install -m 0600 /dev/null "$RUNNER_TEMP/backend-runtime.env"
+          for required_setting in OPENAI_API_KEY DOCUMENT_SETTINGS_ENCRYPTION_KEY ALLOWED_ORIGINS; do
+            if [[ -z "${!required_setting}" ]]; then
+              echo "$required_setting GitHub Actions secret is required." >&2
+              exit 1
+            fi
+          done
+          printf 'OPENAI_API_KEY=%s\nDOCUMENT_SETTINGS_ENCRYPTION_KEY=%s\nALLOWED_ORIGINS=%s\n' \
+            "$OPENAI_API_KEY" "$DOCUMENT_SETTINGS_ENCRYPTION_KEY" "$ALLOWED_ORIGINS" \
+            > "$RUNNER_TEMP/backend-runtime.env"
+
+      - name: Authenticate to Google Cloud
+        id: auth
+        uses: google-github-actions/auth@v3
+        with:
+          project_id: project-c43c730b-f69a-42f1-9ce
+          workload_identity_provider: projects/627667150507/locations/global/workloadIdentityPools/github-actions/providers/meeting-automation
+          service_account: meeting-automation-deploy@project-c43c730b-f69a-42f1-9ce.iam.gserviceaccount.com
+
+      - name: Set up Google Cloud CLI
+        uses: google-github-actions/setup-gcloud@v3
+        with:
+          project_id: project-c43c730b-f69a-42f1-9ce
+
+      - name: Configure Artifact Registry authentication
+        run: gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
+
+      - name: Build backend image
+        run: docker build --tag us-central1-docker.pkg.dev/project-c43c730b-f69a-42f1-9ce/meeting-automation/meeting-automation-backend:${GITHUB_SHA} .
+
+      - name: Push backend image
+        run: docker push us-central1-docker.pkg.dev/project-c43c730b-f69a-42f1-9ce/meeting-automation/meeting-automation-backend:${GITHUB_SHA}
+
+      - name: Copy Compose configuration and runtime environment
+        run: gcloud compute scp scripts/deploy/compose.yml scripts/deploy/gcloud-vm-deploy.sh "$RUNNER_TEMP/backend-runtime.env" leedh84@rami-api-backend:/tmp/ --zone=us-central1-a --tunnel-through-iap --quiet
+
+      - name: Deploy and verify health
+        run: gcloud compute ssh leedh84@rami-api-backend --zone=us-central1-a --tunnel-through-iap --command="sudo bash /tmp/gcloud-vm-deploy.sh ${GITHUB_SHA}" --quiet
+
+      - name: Remove temporary deployment files from VM
+        if: always() && steps.auth.outcome == 'success'
+        run: gcloud compute ssh leedh84@rami-api-backend --zone=us-central1-a --tunnel-through-iap --command="sudo rm -f /tmp/backend-runtime.env /tmp/compose.yml /tmp/gcloud-vm-deploy.sh" --quiet
+
+      - name: Remove temporary runtime environment file
+        if: always()
+        run: rm -f "$RUNNER_TEMP/backend-runtime.env"
