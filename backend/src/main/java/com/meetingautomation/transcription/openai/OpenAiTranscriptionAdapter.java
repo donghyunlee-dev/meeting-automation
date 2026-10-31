@@ -183,7 +183,6 @@ public final class OpenAiTranscriptionAdapter implements TranscriptionProvider {
 
     private static ProviderTranscriptionResponse mapResponse(JsonNode response, TranscriptionCommand command,
             long startedAt, long audioBytes) {
-        long meetingDurationMs = command.meetingDurationMs();
         if (response == null || !response.isObject() || !response.path("segments").isArray()) {
             throw invalidResponse(command, startedAt, audioBytes, "RESPONSE_SEGMENTS_MISSING_OR_INVALID", 0, -1);
         }
@@ -224,10 +223,6 @@ public final class OpenAiTranscriptionAdapter implements TranscriptionProvider {
                         response.path("segments").size(), Math.max(maxSegmentEndMs, endMs));
             }
             maxSegmentEndMs = Math.max(maxSegmentEndMs, endMs);
-            if (endMs > meetingDurationMs) {
-                throw invalidResponse(command, startedAt, audioBytes, "SEGMENT_END_EXCEEDS_MEETING_DURATION",
-                        response.path("segments").size(), maxSegmentEndMs);
-            }
             labels.add(providerLabel);
             segments.add(new ProviderTranscriptionResponse.Segment(
                     providerSegmentId, providerLabel, startMs, endMs, text));
@@ -236,12 +231,10 @@ public final class OpenAiTranscriptionAdapter implements TranscriptionProvider {
         List<ProviderTranscriptionResponse.Speaker> speakers = labels.stream()
                 .map(ProviderTranscriptionResponse.Speaker::new).toList();
         try {
-            ProviderTranscriptionResponse result = new ProviderTranscriptionResponse(speakers, segments);
-            result.validateMeetingDuration(meetingDurationMs);
-            return result;
+            return new ProviderTranscriptionResponse(speakers, segments);
         } catch (IllegalArgumentException invalidResponse) {
             LOGGER.warn("Transcription provider response rejected traceId={} audioBytes={} meetingDurationMs={} failureType=RESPONSE_CONSISTENCY_INVALID segmentCount={} maxSegmentEndMs={} elapsedMs={}",
-                    command.traceId(), audioBytes, meetingDurationMs, segments.size(), maxSegmentEndMs,
+                    command.traceId(), audioBytes, command.meetingDurationMs(), segments.size(), maxSegmentEndMs,
                     elapsedMs(startedAt));
             throw failure(TranscriptionException.Code.PROCESSING_FAILED, false);
         }

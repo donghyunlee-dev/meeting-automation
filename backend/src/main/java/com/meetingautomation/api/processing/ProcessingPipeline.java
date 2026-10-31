@@ -144,7 +144,6 @@ public class ProcessingPipeline {
                                 "TRANSCRIPTION_INVALID_RESPONSE", false, stageStartedAt);
                         return;
                     }
-                    sessionStore.saveTranscriptionResult(sessionId, providerResponse);
                 } catch (TranscriptionException failure) {
                     String code = failure.code() == null ? "TRANSCRIPTION_FAILED" : "TRANSCRIPTION_" + failure.code();
                     fail(sessionId, effectiveTraceId, TRANSCRIPTION, 33,
@@ -154,6 +153,43 @@ public class ProcessingPipeline {
                     fail(sessionId, effectiveTraceId, TRANSCRIPTION, 33, "TRANSCRIPTION_FAILED", false, stageStartedAt);
                     return;
                 }
+            }
+
+            ProviderTranscriptionResponse providerResponseBeforeAlignment = providerResponse;
+            try {
+                providerResponse = providerResponse.reconcileToMeetingDuration(job.durationMs());
+                if (providerResponse != providerResponseBeforeAlignment) {
+                    long maxProviderEndMs = providerResponseBeforeAlignment.segments().stream()
+                            .mapToLong(ProviderTranscriptionResponse.Segment::endMs).max().orElse(-1);
+                    long adjustedSegments = providerResponseBeforeAlignment.segments().stream()
+                            .filter(segment -> segment.endMs() > job.durationMs()).count();
+                    LOGGER.info("Transcription response timestamps aligned sessionId={} traceId={} meetingDurationMs={} segmentCount={} adjustedSegmentCount={} maxProviderEndMs={} maxOverrunMs={}",
+                            sessionId, effectiveTraceId, job.durationMs(), providerResponse.segments().size(),
+                            adjustedSegments, maxProviderEndMs, maxProviderEndMs - job.durationMs());
+                }
+                if (!resumingDiarization || providerResponse != providerResponseBeforeAlignment) {
+                    sessionStore.saveTranscriptionResult(sessionId, providerResponse);
+                }
+            } catch (IllegalArgumentException invalidResponse) {
+                long maxProviderEndMs = providerResponseBeforeAlignment.segments().stream()
+                        .mapToLong(ProviderTranscriptionResponse.Segment::endMs).max().orElse(-1);
+                LOGGER.warn("Transcription response could not be aligned sessionId={} traceId={} meetingDurationMs={} segmentCount={} maxProviderEndMs={} maxOverrunMs={} failureType=TIMING_OUTSIDE_MEETING",
+                        sessionId, effectiveTraceId, job.durationMs(),
+                        providerResponseBeforeAlignment.segments().size(), maxProviderEndMs,
+                        Math.max(0, maxProviderEndMs - job.durationMs()));
+                String responseStage = resumingDiarization ? DIARIZATION : TRANSCRIPTION;
+                int responseProgress = resumingDiarization ? 66 : 33;
+                fail(sessionId, effectiveTraceId, responseStage, responseProgress,
+                        "TRANSCRIPTION_RESPONSE_INVALID", false, stageStartedAt);
+                return;
+            } catch (RuntimeException saveFailure) {
+                String responseStage = resumingDiarization ? DIARIZATION : TRANSCRIPTION;
+                int responseProgress = resumingDiarization ? 66 : 33;
+                fail(sessionId, effectiveTraceId, responseStage, responseProgress,
+                        "TRANSCRIPTION_RESULT_SAVE_FAILED", false, stageStartedAt);
+                return;
+            }
+            if (!resumingDiarization) {
                 sessionStore.recordProcessingProgress(sessionId, TRANSCRIPTION, 66);
                 logStageSucceeded(sessionId, effectiveTraceId, TRANSCRIPTION, stageStartedAt);
             }

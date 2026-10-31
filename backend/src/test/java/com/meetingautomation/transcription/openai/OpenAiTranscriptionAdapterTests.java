@@ -126,26 +126,38 @@ class OpenAiTranscriptionAdapterTests {
     }
 
     @Test
-    void logsSafeReasonWhenProviderSegmentExceedsMeetingDuration(CapturedOutput output) throws IOException {
+    void preservesProviderTimestampsForPipelineReconciliationWhenTheySlightlyExceedMeetingDuration() throws IOException {
         TestClient testClient = client("configured-model");
         String body = """
-                {"segments":[{"id":"private-segment-id","start":0,"end":1.1,
+                {"segments":[{"id":"private-segment-id","start":0.2,"end":1.203,
                   "text":"secret transcript","speaker":"speaker_0"}]}
                 """;
         testClient.server().expect(requestTo(API_URL))
                 .andRespond(withSuccess(body, MediaType.APPLICATION_JSON));
 
-        TranscriptionException failure = assertThrows(TranscriptionException.class,
-                () -> testClient.adapter().transcribeWithDiarization(
-                        new TranscriptionCommand(audioFile(), "audio/webm", null, 1000, "trace-duration-test")));
+        ProviderTranscriptionResponse response = testClient.adapter().transcribeWithDiarization(
+                new TranscriptionCommand(audioFile(), "audio/webm", null, 1000, "trace-duration-test"));
 
-        assertEquals(TranscriptionException.Code.PROCESSING_FAILED, failure.code());
-        assertFalse(failure.retryable());
-        assertTrue(output.getOut().contains("failureType=SEGMENT_END_EXCEEDS_MEETING_DURATION"));
-        assertTrue(output.getOut().contains("maxSegmentEndMs=1100"));
-        assertTrue(output.getOut().contains("overrunMs=100"));
-        assertFalse(output.getOut().contains("secret transcript"));
-        assertFalse(output.getOut().contains("private-segment-id"));
+        assertEquals(200, response.segments().getFirst().startMs());
+        assertEquals(1203, response.segments().getFirst().endMs());
+        assertEquals("secret transcript", response.segments().getFirst().text());
+        testClient.server().verify();
+    }
+
+    @Test
+    void rejectsProviderSegmentFarOutsideMeetingDurationDuringReconciliation() throws IOException {
+        TestClient testClient = client("configured-model");
+        String body = """
+                {"segments":[{"id":"private-segment-id","start":0.2,"end":1.3,
+                  "text":"secret transcript","speaker":"speaker_0"}]}
+                """;
+        testClient.server().expect(requestTo(API_URL))
+                .andRespond(withSuccess(body, MediaType.APPLICATION_JSON));
+
+        ProviderTranscriptionResponse response = testClient.adapter().transcribeWithDiarization(
+                new TranscriptionCommand(audioFile(), "audio/webm", null, 1000, "trace-duration-test"));
+
+        assertThrows(IllegalArgumentException.class, () -> response.reconcileToMeetingDuration(1000));
         testClient.server().verify();
     }
 

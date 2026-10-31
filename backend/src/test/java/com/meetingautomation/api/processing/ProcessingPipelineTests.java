@@ -130,6 +130,34 @@ class ProcessingPipelineTests {
     }
 
     @Test
+    void reconcilesSmallProviderTimingDriftBeforeDiarizationAndKeepsTranscriptText() {
+        ProviderTranscriptionResponse providerResponse = new ProviderTranscriptionResponse(
+                List.of(new ProviderTranscriptionResponse.Speaker("provider-speaker")),
+                List.of(new ProviderTranscriptionResponse.Segment(
+                        "provider-segment", "provider-speaker", 900, 1_203, "last words")));
+        ProviderTranscriptionResponse alignedResponse = new ProviderTranscriptionResponse(
+                List.of(new ProviderTranscriptionResponse.Speaker("provider-speaker")),
+                List.of(new ProviderTranscriptionResponse.Segment(
+                        "provider-segment", "provider-speaker", 900, 1_000, "last words")));
+        TranscriptResult normalized = new TranscriptResult(
+                List.of(new Speaker("speaker_a", "Speaker A")),
+                List.of(new TranscriptSegment("seg_001", "speaker_a", 900, 1_000, "last words")));
+        when(audioAssembly.assemble(JOB, POLICY, TRACE_ID)).thenReturn(assembly());
+        when(transcriptionProvider.transcribeWithDiarization(any(TranscriptionCommand.class)))
+                .thenReturn(providerResponse);
+        when(normalizer.normalize(alignedResponse, JOB.durationMs())).thenReturn(normalized);
+        when(minutesProvider.generateMinutes(any(MinutesCommand.class))).thenReturn(new GroundedMinutesResult(
+                "default.md", "1.0.0", List.of(), List.of(), List.of(), List.of(), List.of()));
+
+        pipeline.process(JOB, TRACE_ID);
+
+        assertThat(sessionStore.find(SESSION_ID).orElseThrow().status()).isEqualTo("REVIEW");
+        assertThat(sessionStore.find(SESSION_ID).orElseThrow().transcript())
+                .containsExactlyElementsOf(normalized.segments());
+        verify(normalizer).normalize(alignedResponse, JOB.durationMs());
+    }
+
+    @Test
     void laterStageFailurePreservesSuccessfullySavedDiarizationResult() {
         List<Speaker> speakers = List.of(new Speaker("speaker_a", "Speaker A"));
         List<TranscriptSegment> transcript = List.of(

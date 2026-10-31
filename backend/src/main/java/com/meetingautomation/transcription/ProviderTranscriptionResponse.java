@@ -5,6 +5,8 @@ import java.util.HashSet;
 import java.util.Set;
 
 public record ProviderTranscriptionResponse(List<Speaker> speakers, List<Segment> segments) {
+    public static final long MAX_BOUNDARY_DRIFT_MS = 250;
+
     public ProviderTranscriptionResponse {
         if (speakers == null || segments == null) throw invalid();
         try {
@@ -34,6 +36,26 @@ public record ProviderTranscriptionResponse(List<Speaker> speakers, List<Segment
         if (meetingDurationMs < 0 || segments.stream().anyMatch(segment -> segment.endMs() > meetingDurationMs)) {
             throw invalid();
         }
+    }
+
+    /** Clips small provider timestamp overruns to the recorded meeting boundary. */
+    public ProviderTranscriptionResponse reconcileToMeetingDuration(long meetingDurationMs) {
+        if (meetingDurationMs < 0) throw invalid();
+        List<Segment> reconciled = new java.util.ArrayList<>(segments.size());
+        boolean changed = false;
+        for (Segment segment : segments) {
+            if (segment.startMs() > meetingDurationMs
+                    || segment.endMs() - meetingDurationMs > MAX_BOUNDARY_DRIFT_MS) {
+                throw invalid();
+            }
+            long endMs = Math.min(segment.endMs(), meetingDurationMs);
+            if (endMs < segment.startMs()) throw invalid();
+            changed |= endMs != segment.endMs();
+            reconciled.add(endMs == segment.endMs() ? segment
+                    : new Segment(segment.providerSegmentId(), segment.providerLabel(),
+                            segment.startMs(), endMs, segment.text()));
+        }
+        return changed ? new ProviderTranscriptionResponse(speakers, reconciled) : this;
     }
 
     @Override
