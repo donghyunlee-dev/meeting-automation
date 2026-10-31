@@ -26,7 +26,9 @@ const statuses = new Set<ProcessingStatus>(['PROCESSING', 'REVIEW', 'COMPLETED_W
 export async function getProcessingStatus(sessionId: string, signal?: AbortSignal, fetchImpl: typeof fetch = fetch): Promise<ProcessingSnapshot> {
   let response: Response;
   try {
-    response = await fetchImpl(`${baseUrl()}/api/v1/meeting-sessions/${encodeURIComponent(sessionId)}`, { signal, headers: { Accept: 'application/json' } });
+    response = await fetchImpl(`${baseUrl()}/api/v1/meeting-sessions/${encodeURIComponent(sessionId)}`, {
+      signal, headers: { Accept: 'application/json' }, cache: 'no-store',
+    });
   } catch (error) {
     if (signal?.aborted) throw error;
     throw new ProcessingApiError('NETWORK_ERROR');

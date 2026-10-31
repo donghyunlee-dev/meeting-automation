@@ -2,6 +2,16 @@ import { describe, expect, it, vi } from 'vitest';
 import { finalizeProcessingFailure, getProcessingStatus, ProcessingApiError, retryProcessing } from './processingApi';
 
 describe('getProcessingStatus', () => {
+  it('bypasses browser caches when reading live processing status', async () => {
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response(JSON.stringify({ data: {
+      sessionId: 'live', version: 1, status: 'PROCESSING', processing: { stage: 'TRANSCRIPTION' }, allowedActions: [],
+    } }), { status: 200 }));
+
+    await getProcessingStatus('live', undefined, fetchMock);
+
+    expect(fetchMock.mock.calls[0]?.[1]?.cache).toBe('no-store');
+  });
+
   it('maps the API-010 data envelope and excludes review payload fields', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => { void input; return new Response(JSON.stringify({ data: {
       sessionId: 'session/a', version: 3, status: 'PROCESSING', processing: { stage: 'DIARIZATION', progressPercent: 100, errorCode: 'PRIVATE_PROVIDER_CODE', audioExpiresAt: null },

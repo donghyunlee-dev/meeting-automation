@@ -39,6 +39,22 @@ describe('ProcessingPage failure recovery', () => {
     expect(await screen.findByText('경과 00:01', {}, { timeout: 2_500 })).toBeTruthy();
   });
 
+  it('stops showing transcription time when the latest status check fails', async () => {
+    let reads = 0;
+    const fetchMock = vi.fn(async () => {
+      reads += 1;
+      if (reads === 1) return new Response(JSON.stringify(apiSnapshot('PROCESSING')), { status: 200 });
+      throw new TypeError('temporary status network failure');
+    });
+    vi.stubGlobal('fetch', withHealthyBackend(fetchMock));
+    renderPage();
+
+    expect(await screen.findByRole('timer')).toBeTruthy();
+    await waitFor(() => expect(screen.queryByRole('timer')).toBeNull(), { timeout: 2_500 });
+    expect(screen.getByText(/새로고침하지 못했습니다/)).toBeTruthy();
+    expect(screen.queryByText(/음성 인식 진행 중/)).toBeNull();
+  });
+
   it('ASYNC-GET-RETRY shows the shared safe network error and retries API-010 with GET', async () => {
     let available = false;
     const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {

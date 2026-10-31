@@ -141,7 +141,7 @@ export function ProcessingPage() {
 
   const expiryTime = snapshot?.processing.audioExpiresAt ? Date.parse(snapshot.processing.audioExpiresAt) : Number.NaN;
   const expiresIn = snapshot?.status === 'PROCESSING_FAILED' && Number.isFinite(expiryTime) ? Math.max(0, Math.ceil((expiryTime - clockNow) / 60_000)) : null;
-  const isTranscribing = snapshot?.status === 'PROCESSING' && snapshot.processing.stage === 'TRANSCRIPTION';
+  const isTranscribing = failure === null && snapshot?.status === 'PROCESSING' && snapshot.processing.stage === 'TRANSCRIPTION';
 
   useEffect(() => {
     if (!isTranscribing) return;
@@ -206,7 +206,7 @@ export function ProcessingPage() {
   const reportedStage = snapshot?.processing?.stage ? stageIndex[snapshot.processing.stage] : -1;
   const progress = snapshot?.processing?.progressPercent;
   const validProgress = typeof progress === 'number' && Number.isFinite(progress) && progress >= 0 && progress <= 100;
-  const isProcessing = snapshot?.status === 'PROCESSING';
+  const isProcessing = failure === null && snapshot?.status === 'PROCESSING';
   // The API percentage marks workflow milestones; it is not audio throughput.
   const activeStage = isProcessing && reportedStage === 2 && validProgress && progress === 100 ? 3 : reportedStage;
   const activeStep = activeStage >= 0 ? activeStage + 1 : null;
@@ -251,7 +251,7 @@ export function ProcessingPage() {
         {confirmDiscard && <section ref={discardDialogRef} className="processing-confirmation" role="dialog" aria-labelledby="discard-confirm-title" aria-describedby="discard-confirm-description"><h3 id="discard-confirm-title">오디오 없이 마무리</h3><p id="discard-confirm-description">오디오를 보관하지 않고 실패 회의 기록을 저장합니다. 이 선택은 되돌릴 수 없습니다.</p><button className="button button-primary" disabled={busy} onClick={() => void mutate('finalize', 'DISCARDED')}>실패 마무리</button><button className="button button-secondary" disabled={busy} onClick={() => setConfirmDiscard(false)}>취소</button></section>}
       </section>}
       {snapshot?.status === 'COMPLETED_WITH_WARNINGS' && <section className="processing-message" role="status"><h2>실패 기록을 저장했습니다</h2><p>Email 또는 Slack으로 회의가 전달되지 않았습니다.</p></section>}
-      {(failure === null || failure === 'network') && snapshot?.status !== 'PROCESSING_FAILED' && snapshot?.status !== 'COMPLETED_WITH_WARNINGS' && (
+      {failure === null && snapshot?.status !== 'PROCESSING_FAILED' && snapshot?.status !== 'COMPLETED_WITH_WARNINGS' && (
         <section className="processing-card" aria-label="처리 단계"><ol className="processing-steps">{stageNames.map((name, index) => {
           const current = isProcessing && activeStage === index;
           const complete = snapshot?.status === 'REVIEW' || (isProcessing && activeStage > index);
