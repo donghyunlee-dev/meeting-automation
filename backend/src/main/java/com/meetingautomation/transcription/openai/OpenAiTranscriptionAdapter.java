@@ -57,7 +57,10 @@ public final class OpenAiTranscriptionAdapter implements TranscriptionProvider {
     public ProviderTranscriptionResponse transcribeWithDiarization(TranscriptionCommand command) {
         if (command == null) throw failure(TranscriptionException.Code.INVALID_AUDIO, false);
         validateSettings();
-        MediaType audioMediaType = validateAudio(command);
+        ValidatedAudio audio = validateAudio(command);
+        long startedAt = System.nanoTime();
+        LOGGER.info("Transcription provider request started traceId={} audioBytes={} meetingDurationMs={} mimeType={}",
+                command.traceId(), audio.bytes(), command.meetingDurationMs(), audio.mediaType());
 
         try {
             JsonNode response = restClient.post()
@@ -65,7 +68,7 @@ public final class OpenAiTranscriptionAdapter implements TranscriptionProvider {
                     .header(HttpHeaders.AUTHORIZATION, "Bearer " + settings.apiKey().strip())
                     .accept(MediaType.APPLICATION_JSON)
                     .contentType(MediaType.MULTIPART_FORM_DATA)
-                    .body(requestBody(command, audioMediaType))
+                    .body(requestBody(command, audio.mediaType()))
                     .retrieve()
                     .onStatus(HttpStatusCode::isError, (request, clientResponse) -> {
                         int statusCode = clientResponse.getStatusCode().value();
@@ -73,26 +76,35 @@ public final class OpenAiTranscriptionAdapter implements TranscriptionProvider {
                                 statusCode == 400 && isResponseFormatError(clientResponse));
                     })
                     .body(JsonNode.class);
-            return mapResponse(response, command.meetingDurationMs());
+            ProviderTranscriptionResponse result = mapResponse(response, command, startedAt, audio.bytes());
+            long maxSegmentEndMs = result.segments().stream()
+                    .mapToLong(ProviderTranscriptionResponse.Segment::endMs).max().orElse(-1);
+            LOGGER.info("Transcription provider request succeeded traceId={} audioBytes={} meetingDurationMs={} segmentCount={} maxSegmentEndMs={} elapsedMs={}",
+                    command.traceId(), audio.bytes(), command.meetingDurationMs(), result.segments().size(), maxSegmentEndMs,
+                    elapsedMs(startedAt));
+            return result;
         } catch (ProviderStatusException providerFailure) {
             TranscriptionException mapped = mapStatus(providerFailure.statusCode(), providerFailure.responseFormatRejected());
-            LOGGER.warn("Transcription provider rejected request traceId={} providerStatus={} errorCode={} retryable={}",
-                    command.traceId(), providerFailure.statusCode(), mapped.code(), mapped.retryable());
+            LOGGER.warn("Transcription provider rejected request traceId={} audioBytes={} meetingDurationMs={} providerStatus={} errorCode={} retryable={} elapsedMs={}",
+                    command.traceId(), audio.bytes(), command.meetingDurationMs(), providerFailure.statusCode(),
+                    mapped.code(), mapped.retryable(), elapsedMs(startedAt));
             throw mapped;
         } catch (ResourceAccessException transportFailure) {
-            LOGGER.warn("Transcription provider transport failed traceId={} failureType={} errorCode={}",
-                    command.traceId(), transportFailure.getMostSpecificCause().getClass().getSimpleName(),
-                    TranscriptionException.Code.PROCESSING_FAILED);
+            LOGGER.warn("Transcription provider transport failed traceId={} audioBytes={} meetingDurationMs={} failureType={} errorCode={} retryable=true elapsedMs={}",
+                    command.traceId(), audio.bytes(), command.meetingDurationMs(),
+                    transportFailure.getMostSpecificCause().getClass().getSimpleName(),
+                    TranscriptionException.Code.PROCESSING_FAILED, elapsedMs(startedAt));
             throw failure(TranscriptionException.Code.PROCESSING_FAILED, true);
         } catch (TranscriptionException safeFailure) {
             throw safeFailure;
         } catch (RestClientException malformedResponse) {
-            LOGGER.warn("Transcription provider response failed traceId={} failureType=MALFORMED_RESPONSE",
-                    command.traceId());
+            LOGGER.warn("Transcription provider response failed traceId={} audioBytes={} meetingDurationMs={} failureType=MALFORMED_RESPONSE retryable=false elapsedMs={}",
+                    command.traceId(), audio.bytes(), command.meetingDurationMs(), elapsedMs(startedAt));
             throw failure(TranscriptionException.Code.PROCESSING_FAILED, false);
         } catch (RuntimeException malformedResponse) {
-            LOGGER.warn("Transcription provider processing failed traceId={} failureType={}",
-                    command.traceId(), malformedResponse.getClass().getSimpleName());
+            LOGGER.warn("Transcription provider processing failed traceId={} audioBytes={} meetingDurationMs={} failureType={} retryable=false elapsedMs={}",
+                    command.traceId(), audio.bytes(), command.meetingDurationMs(),
+                    malformedResponse.getClass().getSimpleName(), elapsedMs(startedAt));
             throw failure(TranscriptionException.Code.PROCESSING_FAILED, false);
         }
     }
@@ -105,7 +117,7 @@ public final class OpenAiTranscriptionAdapter implements TranscriptionProvider {
         }
     }
 
-    private MediaType validateAudio(TranscriptionCommand command) {
+    private ValidatedAudio validateAudio(TranscriptionCommand command) {
         try {
             MediaType type = MediaType.parseMediaType(command.mimeType());
             Path audio = command.audioReference();
@@ -125,7 +137,7 @@ public final class OpenAiTranscriptionAdapter implements TranscriptionProvider {
             if (audioBytes < 1 || audioBytes > settings.maxAudioBytes()) {
                 throw failure(TranscriptionException.Code.INVALID_AUDIO, false);
             }
-            return type;
+            return new ValidatedAudio(type, audioBytes);
         } catch (TranscriptionException invalidAudio) {
             throw invalidAudio;
         } catch (IOException | IllegalArgumentException | SecurityException invalidAudio) {
@@ -169,23 +181,53 @@ public final class OpenAiTranscriptionAdapter implements TranscriptionProvider {
         };
     }
 
-    private static ProviderTranscriptionResponse mapResponse(JsonNode response, long meetingDurationMs) {
+    private static ProviderTranscriptionResponse mapResponse(JsonNode response, TranscriptionCommand command,
+            long startedAt, long audioBytes) {
+        long meetingDurationMs = command.meetingDurationMs();
         if (response == null || !response.isObject() || !response.path("segments").isArray()) {
-            throw failure(TranscriptionException.Code.PROCESSING_FAILED, false);
+            throw invalidResponse(command, startedAt, audioBytes, "RESPONSE_SEGMENTS_MISSING_OR_INVALID", 0, -1);
         }
         List<ProviderTranscriptionResponse.Segment> segments = new ArrayList<>();
         Set<String> labels = new LinkedHashSet<>();
+        long maxSegmentEndMs = -1;
         for (JsonNode segment : response.path("segments")) {
             if (!segment.isObject() || !segment.path("speaker").isTextual()
                     || !segment.path("text").isTextual() || !segment.path("start").isNumber()
                     || !segment.path("end").isNumber()) {
-                throw failure(TranscriptionException.Code.PROCESSING_FAILED, false);
+                throw invalidResponse(command, startedAt, audioBytes, "SEGMENT_FIELDS_INVALID",
+                        response.path("segments").size(), maxSegmentEndMs);
             }
             String providerLabel = segment.path("speaker").textValue();
-            String providerSegmentId = optionalText(segment, "id");
-            long startMs = toMilliseconds(segment.path("start").decimalValue());
-            long endMs = toMilliseconds(segment.path("end").decimalValue());
+            JsonNode id = segment.get("id");
+            if (id != null && !id.isNull() && !id.isTextual()) {
+                throw invalidResponse(command, startedAt, audioBytes, "SEGMENT_ID_INVALID",
+                        response.path("segments").size(), maxSegmentEndMs);
+            }
+            String providerSegmentId = id == null || id.isNull() ? null : id.textValue();
+            long startMs;
+            long endMs;
+            try {
+                startMs = toMilliseconds(segment.path("start").decimalValue());
+                endMs = toMilliseconds(segment.path("end").decimalValue());
+            } catch (TranscriptionException invalidTimestamp) {
+                throw invalidResponse(command, startedAt, audioBytes, "SEGMENT_TIMESTAMP_INVALID",
+                        response.path("segments").size(), maxSegmentEndMs);
+            }
             String text = segment.path("text").textValue();
+            if (providerLabel.isBlank() || text.isBlank()) {
+                throw invalidResponse(command, startedAt, audioBytes,
+                        providerLabel.isBlank() ? "SPEAKER_LABEL_INVALID" : "SEGMENT_TEXT_EMPTY",
+                        response.path("segments").size(), Math.max(maxSegmentEndMs, endMs));
+            }
+            if (startMs < 0 || endMs < startMs) {
+                throw invalidResponse(command, startedAt, audioBytes, "SEGMENT_TIMESTAMPS_INCONSISTENT",
+                        response.path("segments").size(), Math.max(maxSegmentEndMs, endMs));
+            }
+            maxSegmentEndMs = Math.max(maxSegmentEndMs, endMs);
+            if (endMs > meetingDurationMs) {
+                throw invalidResponse(command, startedAt, audioBytes, "SEGMENT_END_EXCEEDS_MEETING_DURATION",
+                        response.path("segments").size(), maxSegmentEndMs);
+            }
             labels.add(providerLabel);
             segments.add(new ProviderTranscriptionResponse.Segment(
                     providerSegmentId, providerLabel, startMs, endMs, text));
@@ -198,16 +240,27 @@ public final class OpenAiTranscriptionAdapter implements TranscriptionProvider {
             result.validateMeetingDuration(meetingDurationMs);
             return result;
         } catch (IllegalArgumentException invalidResponse) {
+            LOGGER.warn("Transcription provider response rejected traceId={} audioBytes={} meetingDurationMs={} failureType=RESPONSE_CONSISTENCY_INVALID segmentCount={} maxSegmentEndMs={} elapsedMs={}",
+                    command.traceId(), audioBytes, meetingDurationMs, segments.size(), maxSegmentEndMs,
+                    elapsedMs(startedAt));
             throw failure(TranscriptionException.Code.PROCESSING_FAILED, false);
         }
     }
 
-    private static String optionalText(JsonNode node, String field) {
-        JsonNode value = node.get(field);
-        if (value == null || value.isNull()) return null;
-        if (!value.isTextual()) throw failure(TranscriptionException.Code.PROCESSING_FAILED, false);
-        return value.textValue();
+    private static TranscriptionException invalidResponse(TranscriptionCommand command, long startedAt,
+            long audioBytes, String failureType, int segmentCount, long maxSegmentEndMs) {
+        long overrunMs = maxSegmentEndMs < 0 ? 0 : Math.max(0, maxSegmentEndMs - command.meetingDurationMs());
+        LOGGER.warn("Transcription provider response rejected traceId={} audioBytes={} meetingDurationMs={} failureType={} segmentCount={} maxSegmentEndMs={} overrunMs={} retryable=false elapsedMs={}",
+                command.traceId(), audioBytes, command.meetingDurationMs(), failureType, segmentCount,
+                maxSegmentEndMs, overrunMs, elapsedMs(startedAt));
+        return failure(TranscriptionException.Code.PROCESSING_FAILED, false);
     }
+
+    private static long elapsedMs(long startedAt) {
+        return java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt);
+    }
+
+    private record ValidatedAudio(MediaType mediaType, long bytes) { }
 
     private static long toMilliseconds(BigDecimal seconds) {
         try {

@@ -45,7 +45,7 @@ class OpenAiTranscriptionAdapterTests {
     Path tempDirectory;
 
     @Test
-    void streamsAudioWithConfiguredModelAndMapsDiarizedJsonToProviderNeutralLabels() throws IOException {
+    void streamsAudioWithConfiguredModelAndMapsDiarizedJsonToProviderNeutralLabels(CapturedOutput output) throws IOException {
         TestClient testClient = client("transcribe-model-v1");
         Path audio = audioFile();
         String providerResponse = """
@@ -82,6 +82,12 @@ class OpenAiTranscriptionAdapterTests {
         assertEquals(1500, response.segments().getFirst().endMs());
         assertEquals("second words", response.segments().getFirst().text());
         assertEquals("seg_1", response.segments().get(1).providerSegmentId());
+        assertTrue(output.getOut().contains("Transcription provider request started"));
+        assertTrue(output.getOut().contains("audioBytes=22"));
+        assertTrue(output.getOut().contains("Transcription provider request succeeded"));
+        assertTrue(output.getOut().contains("segmentCount=2"));
+        assertTrue(output.getOut().contains("maxSegmentEndMs=1500"));
+        assertTrue(output.getOut().contains("elapsedMs="));
         testClient.server().verify();
     }
 
@@ -116,6 +122,30 @@ class OpenAiTranscriptionAdapterTests {
         assertFalse(failure.retryable());
         assertFalse(failure.getMessage().contains("private-transcript"));
         assertFalse(failure.getMessage().contains("secret transcript"));
+        testClient.server().verify();
+    }
+
+    @Test
+    void logsSafeReasonWhenProviderSegmentExceedsMeetingDuration(CapturedOutput output) throws IOException {
+        TestClient testClient = client("configured-model");
+        String body = """
+                {"segments":[{"id":"private-segment-id","start":0,"end":1.1,
+                  "text":"secret transcript","speaker":"speaker_0"}]}
+                """;
+        testClient.server().expect(requestTo(API_URL))
+                .andRespond(withSuccess(body, MediaType.APPLICATION_JSON));
+
+        TranscriptionException failure = assertThrows(TranscriptionException.class,
+                () -> testClient.adapter().transcribeWithDiarization(
+                        new TranscriptionCommand(audioFile(), "audio/webm", null, 1000, "trace-duration-test")));
+
+        assertEquals(TranscriptionException.Code.PROCESSING_FAILED, failure.code());
+        assertFalse(failure.retryable());
+        assertTrue(output.getOut().contains("failureType=SEGMENT_END_EXCEEDS_MEETING_DURATION"));
+        assertTrue(output.getOut().contains("maxSegmentEndMs=1100"));
+        assertTrue(output.getOut().contains("overrunMs=100"));
+        assertFalse(output.getOut().contains("secret transcript"));
+        assertFalse(output.getOut().contains("private-segment-id"));
         testClient.server().verify();
     }
 
