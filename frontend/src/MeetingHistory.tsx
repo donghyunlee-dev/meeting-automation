@@ -5,6 +5,7 @@ import { normalizeApiError, type SafeApiError } from './lib/api/normalizeApiErro
 import { listMeetings, MeetingListApiError, type MeetingSummary } from './meetingListApi';
 import { filterMeetings, hasInvalidDateRange, type MeetingFilters } from './meetingFilters';
 import { getSetupSnapshot, type DocumentProvider, type SetupSnapshot } from './documentSetupApi';
+import { ProcessingFailureList } from './ProcessingFailureList';
 
 type ListResult =
   | { status: 'loading' }
@@ -215,6 +216,7 @@ export function MeetingsPage() {
         </svg>회의 기록</h1>
       </header>
       <div className="meetings-list-viewport page-scroll-content">
+        <ProcessingFailureList />
         <MeetingList emptyMessage="회의 기록이 없습니다. 회의를 완료하면 여기에 표시됩니다." enableFilters quietEmpty />
       </div>
       <div className="meetings-create-dock"><button className="button button-primary" type="button" onClick={() => navigate('/meetings/new')}>새 회의 시작</button></div>

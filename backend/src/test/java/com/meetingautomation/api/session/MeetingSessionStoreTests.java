@@ -15,6 +15,22 @@ import org.junit.jupiter.api.Test;
 
 class MeetingSessionStoreTests {
     @Test
+    void findAllReturnsIndependentSnapshotOfSessionsForRecoveryListing() {
+        MeetingSessionStore store = new MeetingSessionStore();
+        store.save(session("PROCESSING", 1), null);
+        store.save(new MeetingSession("failed", 4, "PROCESSING_FAILED", 1,
+                new MeetingSession.Meeting("Failed meeting", "template", List.of(), "UTC"),
+                "TRANSCRIPTION", 34, List.of(), List.of(),
+                new ProcessingFailure("TRANSCRIPTION", "TRANSCRIPTION_PROCESSING_FAILED", true,
+                        true, java.time.Instant.now().plusSeconds(3600), false, false)), null);
+
+        List<MeetingSession> snapshot = store.findAll();
+
+        assertThat(snapshot).extracting(MeetingSession::sessionId).containsExactlyInAnyOrder("session", "failed");
+        assertThatThrownBy(() -> snapshot.clear()).isInstanceOf(UnsupportedOperationException.class);
+    }
+
+    @Test
     void distinctMissingSessionsReuseAFixedBoundedLockTable() throws Exception {
         MeetingSessionStore store = new MeetingSessionStore();
         Field locksField = MeetingSessionStore.class.getDeclaredField("sessionLockStripes");

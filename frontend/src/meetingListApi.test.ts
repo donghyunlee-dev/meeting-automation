@@ -1,6 +1,6 @@
 import { withHealthyBackend } from './testUtils/withHealthyBackend';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { listMeetings, MeetingListApiError } from './meetingListApi';
+import { listMeetings, listProcessingFailures, MeetingListApiError } from './meetingListApi';
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -69,5 +69,16 @@ describe('listMeetings', () => {
     vi.stubGlobal('fetch', withHealthyBackend(fetchMock));
 
     await expect(listMeetings()).rejects.toMatchObject({ name: 'MeetingListApiError', code: 'PROVIDER_FAILURE' } satisfies Partial<MeetingListApiError>);
+  });
+});
+
+describe('listProcessingFailures', () => {
+  it('loads failed processing sessions with server-authorized actions', async () => {
+    const items = [{ sessionId: 'session-1', version: 3, title: 'Planning', meetingAt: '2026-10-14T09:00:00+09:00', stage: 'TRANSCRIPTION', errorCode: 'TRANSCRIPTION_PROCESSING_FAILED', audioExpiresAt: '2026-10-15T09:00:00Z', allowedActions: ['RETRY_PROCESSING'] }];
+    const fetchMock = vi.fn<(input: RequestInfo | URL) => Promise<Response>>(async () => new Response(JSON.stringify({ data: { items } }), { status: 200 }));
+    vi.stubGlobal('fetch', withHealthyBackend(fetchMock));
+
+    await expect(listProcessingFailures()).resolves.toEqual(items);
+    expect(String(fetchMock.mock.calls[0]?.[0])).toBe('http://localhost:8080/api/v1/meeting-sessions/processing-failures');
   });
 });

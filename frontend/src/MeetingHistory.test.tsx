@@ -31,6 +31,7 @@ function installListFetch(items: MeetingSummary[]) {
       version: 1, status: 'READY', active: { provider: 'NOTION', connectionVersion: 1, rootUrl: 'https://notion.example' },
       draft: null, operation: null, canCreateMeeting: true,
     } });
+    if (path.endsWith('/processing-failures')) return response({ data: { items: [] } });
     return response({ data: { items } });
   });
   vi.stubGlobal('fetch', withHealthyBackend(fetchMock));
@@ -111,10 +112,38 @@ describe('Home recent meetings', () => {
 });
 
 describe('Meetings page', () => {
+  it('shows failed recordings in the current meeting list and retries them into processing', async () => {
+    const failure = { sessionId: 'session-failed', version: 7, title: 'Long planning', meetingAt: '2026-10-14T09:00:00+09:00', stage: 'TRANSCRIPTION', errorCode: 'TRANSCRIPTION_PROCESSING_FAILED', audioExpiresAt: '2026-10-15T09:00:00Z', allowedActions: ['RETRY_PROCESSING'] };
+    const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>((input) => {
+      const url = new URL(String(input));
+      if (url.pathname.endsWith('/processing-failures')) return Promise.resolve(response({ data: { items: [failure] } }));
+      if (url.pathname.endsWith('/processing/retry')) return Promise.resolve(response({ data: { sessionId: failure.sessionId, status: 'PROCESSING', stage: failure.stage } }, 202));
+      return Promise.resolve(response({ data: { items: meetings.slice(0, 2) } }));
+    });
+    vi.stubGlobal('fetch', withHealthyBackend(fetchMock));
+    render(<MemoryRouter initialEntries={['/meetings']}><Routes>
+      <Route path="/meetings" element={<MeetingsPage />} />
+      <Route path="/meetings/:sessionId/processing" element={<h1>처리 화면으로 이동</h1>} />
+    </Routes></MemoryRouter>);
+
+    expect(await screen.findByText('Long planning')).toBeTruthy();
+    expect(screen.getByText('음성 인식 실패')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '회의 다시 처리' }));
+
+    expect(await screen.findByRole('heading', { name: '처리 화면으로 이동' })).toBeTruthy();
+    expect(fetchMock.mock.calls.some(([input]) => String(input).endsWith('/session-failed/processing/retry'))).toBe(true);
+  });
+
   it('offers a retry after the initial meeting list request fails', async () => {
-    const fetchMock = vi.fn<(input: RequestInfo | URL) => Promise<Response>>()
-      .mockResolvedValueOnce(response({ error: { code: 'PROVIDER_FAILURE', message: 'token=private-provider-secret' } }, 502))
-      .mockResolvedValueOnce(response({ data: { items: meetings.slice(0, 3) } }));
+    let meetingReads = 0;
+    const fetchMock = vi.fn<(input: RequestInfo | URL) => Promise<Response>>((input) => {
+      const path = new URL(String(input)).pathname;
+      if (path.endsWith('/processing-failures')) return Promise.resolve(response({ data: { items: [] } }));
+      meetingReads += 1;
+      return Promise.resolve(meetingReads === 1
+        ? response({ error: { code: 'PROVIDER_FAILURE', message: 'token=private-provider-secret' } }, 502)
+        : response({ data: { items: meetings.slice(0, 3) } }));
+    });
     vi.stubGlobal('fetch', withHealthyBackend(fetchMock));
     render(<MemoryRouter initialEntries={['/meetings']}><Routes><Route path="/meetings" element={<MeetingsPage />} /></Routes></MemoryRouter>);
 
@@ -123,7 +152,7 @@ describe('Meetings page', () => {
     expect(screen.getByRole('button', { name: /Meeting 2 상세 보기/ })).toBeTruthy();
     expect(screen.getByRole('button', { name: /Meeting 3 상세 보기/ })).toBeTruthy();
     expect(document.body.textContent).not.toContain('private-provider-secret');
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(meetingReads).toBe(2);
   });
 
   it('deduplicates StrictMode effect replay by query key while keeping Home and Meetings requests independent', async () => {
@@ -136,10 +165,11 @@ describe('Meetings page', () => {
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
     const requestedUrls = fetchMock.mock.calls.map(([input]) => String(input));
-    expect(requestedUrls).toHaveLength(4);
+    expect(requestedUrls).toHaveLength(5);
     expect(requestedUrls.filter((url) => url.endsWith('/meetings?limit=3'))).toHaveLength(1);
     expect(requestedUrls.filter((url) => url.endsWith('/meetings'))).toHaveLength(1);
     expect(requestedUrls.filter((url) => url.endsWith('/document-setup'))).toHaveLength(2);
+    expect(requestedUrls.filter((url) => url.endsWith('/processing-failures'))).toHaveLength(1);
 
     await act(async () => {
       pendingResponses.forEach(({ resolve }) => resolve(response({ data: { items: [] } })));
@@ -155,17 +185,22 @@ describe('Meetings page', () => {
 
     const first = await screen.findByText('Meeting 2');
     expect(first.compareDocumentPosition(screen.getByText('Meeting 1')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(String(fetchMock.mock.calls[0]?.[0])).toBe('http://localhost:8080/api/v1/meetings');
+    expect(fetchMock.mock.calls.map(([input]) => String(input)).find((url) => url.endsWith('/api/v1/meetings'))).toBe('http://localhost:8080/api/v1/meetings');
     expect(screen.getByText('Person 2')).toBeTruthy();
     expect(screen.getByRole('heading', { name: '회의 기록' })).toBeTruthy();
     expect(screen.getByRole('button', { name: '새 회의 시작' }).parentElement?.className).toContain('meetings-create-dock');
   });
 
   it('shows empty, loading, and retryable safe error states', async () => {
-    const fetchMock = vi.fn<(input: RequestInfo | URL) => Promise<Response>>(() => Promise.resolve(response({ data: { items: [] } })))
-      .mockResolvedValueOnce(response({ data: { items: [] } }))
-      .mockResolvedValueOnce(response({ error: { code: 'PROVIDER_FAILURE', message: 'private detail' } }, 502))
-      .mockResolvedValueOnce(response({ data: { items: meetings.slice(0, 1) } }));
+    let meetingReads = 0;
+    const fetchMock = vi.fn<(input: RequestInfo | URL) => Promise<Response>>((input) => {
+      const path = new URL(String(input)).pathname;
+      if (path.endsWith('/processing-failures')) return Promise.resolve(response({ data: { items: [] } }));
+      meetingReads += 1;
+      if (meetingReads === 1) return Promise.resolve(response({ data: { items: [] } }));
+      if (meetingReads === 2) return Promise.resolve(response({ error: { code: 'PROVIDER_FAILURE', message: 'private detail' } }, 502));
+      return Promise.resolve(response({ data: { items: meetings.slice(0, 1) } }));
+    });
     vi.stubGlobal('fetch', withHealthyBackend(fetchMock));
     const view = render(<MemoryRouter initialEntries={['/meetings']}><Routes><Route path="/meetings" element={<MeetingsPage />} /></Routes></MemoryRouter>);
 
@@ -176,6 +211,6 @@ describe('Meetings page', () => {
     expect(screen.queryByText(/private detail/)).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: '다시 시도' }));
     expect(await screen.findByText('Meeting 1')).toBeTruthy();
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
+    await waitFor(() => expect(meetingReads).toBe(3));
   });
 });

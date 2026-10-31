@@ -7,6 +7,7 @@ import com.meetingautomation.document.StructuredMinutes;
 import com.meetingautomation.document.TranscriptSegment;
 import com.meetingautomation.api.processing.ProcessingJob;
 import com.meetingautomation.transcription.ProviderTranscriptionResponse;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -131,6 +132,10 @@ public final class MeetingSessionStore {
 
     public Optional<MeetingSession> find(String sessionId) {
         return Optional.ofNullable(sessions.get(sessionId));
+    }
+
+    public List<MeetingSession> findAll() {
+        return List.copyOf(sessions.values());
     }
 
     /** Confirms one valid Review snapshot and stores its idempotent response in the same commit boundary. */

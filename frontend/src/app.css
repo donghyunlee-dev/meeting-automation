@@ -779,6 +779,24 @@ button:disabled { cursor: not-allowed; opacity: .6; }
 .meetings-page .meeting-summary-row h3 { margin-bottom: 5px; font-size: 15px; font-weight: 650; }
 .meetings-page .meeting-summary-button:hover { background: #fafbfc; }
 .meetings-page .meeting-summary-button:focus-visible { outline-offset: -2px; }
+.processing-failure-list { display: grid; gap: 8px; margin: 0 0 18px; }
+.processing-failure-list h2 { margin: 0; color: #344054; font-size: 14px; font-weight: 650; }
+.processing-failure-list .meeting-summary-list { gap: 0; overflow: hidden; border: 1px solid #f1d5ad; border-radius: 12px; background: #fffdfa; }
+.processing-failure-list .meeting-summary-row { display: flex; min-height: 76px; align-items: center; justify-content: space-between; gap: 12px; border: 0; border-bottom: 1px solid #f4e8d7; border-radius: 0; padding: 10px 12px; background: transparent; }
+.processing-failure-list .meeting-summary-row:last-child { border-bottom: 0; }
+.processing-failure-copy { display: grid; min-width: 0; gap: 4px; }
+.processing-failure-title { display: flex; min-width: 0; align-items: center; gap: 8px; }
+.processing-failure-title h3 { min-width: 0; margin: 0; overflow: hidden; color: #253044; font-size: 15px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+.processing-failure-badge { flex: 0 0 auto; border-radius: 999px; padding: 2px 7px; color: #9a5a08; background: #fff0d5; font-size: 11px; font-weight: 650; }
+.processing-failure-list .meeting-summary-meta { display: flex; flex-wrap: wrap; gap: 5px; color: #697586; font-size: 12px; }
+.processing-failure-expiry { color: #8a5b21; font-size: 11px; }
+.processing-failure-retry { min-height: 40px; flex: 0 0 auto; padding-inline: 12px; font-size: 12px; }
+.processing-failure-list-error { margin: 0; color: #b42318; font-size: 12px; }
+.processing-failure-list-error button { min-height: 36px; border: 0; padding: 0 6px; color: #344054; background: transparent; font: inherit; text-decoration: underline; }
+@media (max-width: 520px) {
+  .processing-failure-list .meeting-summary-row { align-items: flex-start; flex-direction: column; }
+  .processing-failure-retry { width: 100%; min-height: 44px; }
+}
 .settings-page { display: grid; align-content: start; gap: 20px; width: min(100%, 868px); min-width: 0; margin: 0 auto; padding: 38px 24px 24px; overflow-wrap: anywhere; }
 .settings-heading h1 { display: flex; align-items: center; gap: 10px; margin: 0; color: #182230; font-size: clamp(26px, 4vw, 30px); letter-spacing: -.035em; line-height: 1.3; }
 .settings-heading-icon { width: 25px; height: 25px; flex: 0 0 25px; fill: none; stroke: #3b82f6; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
