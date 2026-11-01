@@ -17,9 +17,7 @@ public final class ReviewConfirmationValidator {
             Speaker speaker = session.speakers().get(index);
             String path = "speakers[" + index + "].participantId";
             String participantId = speaker.participantId();
-            if (participantId == null || participantId.isBlank()) {
-                issues.add(new ReviewValidationIssue(path, "SPEAKER_UNMAPPED"));
-            } else if (!rosterIds.contains(participantId)) {
+            if (participantId != null && !participantId.isBlank() && !rosterIds.contains(participantId)) {
                 issues.add(new ReviewValidationIssue(path, "PARTICIPANT_OUTSIDE_SESSION_ROSTER"));
             }
         }

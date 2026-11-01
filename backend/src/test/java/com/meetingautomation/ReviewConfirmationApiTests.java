@@ -85,6 +85,19 @@ class ReviewConfirmationApiTests {
     }
 
     @Test
+    void unmappedSpeakerDoesNotBlockConfirmation() throws Exception {
+        List<Speaker> speakers = List.of(new Speaker("speaker_1", "Speaker one", null));
+        String sessionId = saveReview("REVIEW", 7, speakers, validMinutes());
+
+        mockMvc.perform(confirm(sessionId, "7", "confirm-unmapped-speaker", "{\"confirm\":true}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("CONFIRMED"));
+
+        assertThat(sessionStore.find(sessionId).orElseThrow().speakers()).isEqualTo(speakers);
+        assertNoExternalProviderCalls();
+    }
+
+    @Test
     void successfulIdempotencyReplayReturnsTheOriginalResponseWithoutRevalidatingOrMutatingAgain()
             throws Exception {
         String sessionId = saveReview("REVIEW", 7, validSpeakers(), validMinutes());
@@ -164,8 +177,7 @@ class ReviewConfirmationApiTests {
                 .path("error").path("details").path("issues");
         assertThat(firstIssues).isEqualTo(secondIssues);
         assertThat(firstIssues.toString()).isEqualTo("""
-                [{"path":"speakers[0].participantId","code":"SPEAKER_UNMAPPED"},
-                 {"path":"speakers[1].participantId","code":"PARTICIPANT_OUTSIDE_SESSION_ROSTER"},
+                [{"path":"speakers[1].participantId","code":"PARTICIPANT_OUTSIDE_SESSION_ROSTER"},
                  {"path":"minutes.templateId","code":"REQUIRED"},
                  {"path":"minutes.templateVersion","code":"REQUIRED"},
                  {"path":"minutes.summary","code":"REQUIRED"},

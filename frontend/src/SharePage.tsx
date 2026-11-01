@@ -5,6 +5,8 @@ import type { Participant } from './participantsApi';
 import { PublishApiError, confirmReview, createIdempotencyKey, getPublishSnapshot, publishSession, type PublishSnapshot, type ValidationIssue } from './publishApi';
 import type { ReviewSession } from './reviewApi';
 import { AsyncState } from './components/async-state/AsyncState';
+import { Toast } from './components/Toast';
+import { useToast } from './components/useToast';
 import { normalizeApiError } from './lib/api/normalizeApiError';
 
 type Resource<T> = { status: 'loading' | 'ready' | 'error'; data?: T };
@@ -56,6 +58,27 @@ function issueAnchor(issue: ValidationIssue, speakers: ReviewSession['speakers']
   return '';
 }
 
+function validationToastMessage(issues: ValidationIssue[], speakers: ReviewSession['speakers'] | undefined): string {
+  const speakerIssue = issues.find((issue) => issue.code === 'PARTICIPANT_OUTSIDE_SESSION_ROSTER'
+    && /^speakers\[\d+\]\.participantId$/.test(issue.path))
+    ?? issues.find((issue) => issue.code === 'SPEAKER_UNMAPPED'
+      && /^speakers\[\d+\]\.participantId$/.test(issue.path));
+  if (speakerIssue?.code === 'PARTICIPANT_OUTSIDE_SESSION_ROSTER') {
+    const index = Number(speakerIssue.path.match(/^speakers\[(\d+)\]/)?.[1] ?? 0);
+    const label = speakers?.[index]?.label ?? `화자 ${index + 1}`;
+    return `${label}에 지정한 참석자가 이 회의 참석자 목록에 없습니다. 참석자 매핑을 수정한 뒤 다시 저장해 주세요.`;
+  }
+  if (speakerIssue?.code === 'SPEAKER_UNMAPPED') {
+    const index = Number(speakerIssue.path.match(/^speakers\[(\d+)\]/)?.[1] ?? 0);
+    const label = speakers?.[index]?.label ?? `화자 ${index + 1}`;
+    return `서버가 ${label} 매핑을 요구했습니다. 매핑을 완료하거나 서버 배포 상태를 확인해 주세요.`;
+  }
+  if (issues.some((issue) => issue.path.startsWith('minutes.'))) {
+    return '회의록 필수 항목이나 입력값에 문제가 있습니다. 표시된 회의록 항목을 수정한 뒤 다시 저장해 주세요.';
+  }
+  return 'Review 검증에 실패했습니다. 표시된 항목을 확인한 뒤 다시 저장해 주세요.';
+}
+
 function providerLabel(provider: string | undefined): string {
   if (provider === 'NOTION') return 'Notion';
   if (provider === 'CONFLUENCE') return 'Confluence Cloud';
@@ -95,6 +118,7 @@ export function SharePage() {
   const confirmAttempt = useRef<{ version: number; key: string } | null>(null);
   const [polling, setPolling] = useState(false);
   const [message, setMessage] = useState('');
+  const { toastMessage, showToast } = useToast();
   const [providerError, setProviderError] = useState(false);
   const refreshController = useRef<AbortController | null>(null);
   const reviewPath = `/meetings/${encodeURIComponent(sessionId)}/review`;
@@ -281,6 +305,7 @@ export function SharePage() {
       if (error instanceof PublishApiError && error.code === 'REVIEW_VALIDATION_FAILED') {
         setIssues(error.issues);
         setMessage('검토가 필요한 항목이 있습니다. 표시된 위치를 확인해 주세요.');
+        showToast(validationToastMessage(error.issues, snapshot.review?.speakers));
       } else if (error instanceof PublishApiError && error.outcomeUnknown) {
         setMessage('Review 확인 결과를 확인하고 있습니다.');
         await reconcileConfirmUncertainty(attempt);
@@ -329,6 +354,7 @@ export function SharePage() {
   }
 
   return <main className="share-page">
+    <Toast message={toastMessage} tone="error" />
     <header className="review-speaker-heading"><h1><svg className="workflow-heading-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" /><path d="m9 11 6-5M9 13l6 5" /></svg>회의록 공유</h1>
       <p>Review를 확인한 뒤 문서 저장과 공유를 시작합니다.</p></header>
     {config.status === 'loading' && <AsyncState state={{ status: 'loading', label: '문서 설정을 확인하고 있습니다.' }} renderReady={() => null} />}
