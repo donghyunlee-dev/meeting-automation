@@ -2,7 +2,7 @@ import { withHealthyBackend } from './testUtils/withHealthyBackend';
 import 'fake-indexeddb/auto';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { StrictMode } from 'react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router';
 import { App } from './App';
 import type { MediaRecorderAdapter, RecorderLike } from './recordingController';
@@ -53,9 +53,14 @@ function mockList(result: Response | Promise<Response>) {
 
 afterEach(() => {
   cleanup();
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
   localStorage.clear();
   sessionStorage.clear();
+});
+
+beforeEach(() => {
+  vi.spyOn(window, 'confirm').mockReturnValue(true);
 });
 
 function DestinationFixture() {
@@ -1047,6 +1052,43 @@ describe('Recording route', () => {
 });
 
 describe('Processing route', () => {
+  it('asks before leaving an active analysis process from an in-app link', async () => {
+    const fetchMock = vi.fn(async () => response({ data: {
+      sessionId: 'guard-session', version: 2, status: 'PROCESSING',
+      processing: { stage: 'TRANSCRIPTION' }, allowedActions: [],
+    } }));
+    installFetchMock(fetchMock);
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    render(<MemoryRouter initialEntries={['/meetings/guard-session/processing']}><App /><CurrentPath /></MemoryRouter>);
+
+    await screen.findByRole('heading', { name: '회의 처리' });
+    fireEvent.click(screen.getByRole('link', { name: 'Windsoft Minutes 홈' }));
+
+    expect(confirm).toHaveBeenCalled();
+    expect(screen.getByTestId('current-path').textContent).toBe('/meetings/guard-session/processing');
+    confirm.mockClear();
+    const forward = vi.spyOn(window.history, 'forward').mockImplementation(() => undefined);
+    fireEvent(window, new PopStateEvent('popstate'));
+    expect(confirm).toHaveBeenCalled();
+    expect(forward).toHaveBeenCalledOnce();
+    confirm.mockClear();
+    fireEvent(window, new PopStateEvent('popstate'));
+    expect(confirm).not.toHaveBeenCalled();
+  });
+
+  it('warns before unloading while analysis is active', async () => {
+    installFetchMock(vi.fn(async () => response({ data: {
+      sessionId: 'unload-session', version: 2, status: 'PROCESSING',
+      processing: { stage: 'TRANSCRIPTION' }, allowedActions: [],
+    } })));
+    render(<MemoryRouter initialEntries={['/meetings/unload-session/processing']}><App /></MemoryRouter>);
+    await screen.findByRole('heading', { name: '회의 처리' });
+
+    const event = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(true);
+  });
+
   it('loads API-010 immediately and shows only the processing stage while hiding bottom navigation', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => { void input; return response({ data: {
       sessionId: 'processing-session', version: 2, status: 'PROCESSING',
@@ -1183,6 +1225,33 @@ describe('Processing route', () => {
 });
 
 describe('Review speaker selection', () => {
+  it('asks before leaving Review when a speaker mapping has unsaved changes', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const path = new URL(String(input)).pathname;
+      if (path.endsWith('/meeting-sessions/mapping-guard')) return response({ data: {
+        sessionId: 'mapping-guard', version: 1, status: 'REVIEW', meeting: { participantIds: ['p1', 'p2'] },
+        speakers: [{ speakerId: 'speaker-a', label: 'Speaker A', participantId: 'p1' }], transcript: [],
+        minutes: { templateId: 'weekly', templateVersion: '1', summary: '', discussionPoints: [], decisions: [], actionItems: [], followUps: [] },
+        allowedActions: ['UPDATE_SPEAKER_MAPPING', 'UPDATE_MINUTES', 'CONFIRM'],
+      } });
+      if (path.endsWith('/participants')) return response({ data: { items: participants } });
+      if (path.endsWith('/app-config')) return response({ data: {
+        company: { id: 'c1', name: 'Example', timezone: 'Asia/Seoul' },
+        document: { provider: 'NOTION', configured: true, connectionVersion: 1, rootUrl: 'https://notion.example' },
+      } });
+      return Promise.reject(new Error(`Unexpected request: ${path}`));
+    });
+    installFetchMock(fetchMock);
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    render(<MemoryRouter initialEntries={['/meetings/mapping-guard/review']}><App /><CurrentPath /></MemoryRouter>);
+
+    fireEvent.change(await screen.findByLabelText('Speaker A 연결할 참석자'), { target: { value: 'p2' } });
+    fireEvent.click(screen.getByRole('link', { name: 'Windsoft Minutes 홈' }));
+
+    expect(confirm).toHaveBeenCalled();
+    expect(screen.getByTestId('current-path').textContent).toBe('/meetings/mapping-guard/review');
+  });
+
   it('ignores a late Session B retry after Session C has loaded', async () => {
     let sessionBCalls = 0;
     let resolveSessionBRetry: ((result: Response) => void) | undefined;

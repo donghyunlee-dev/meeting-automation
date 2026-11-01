@@ -30,9 +30,10 @@ type Props = {
   onCommit: (sessionId: string, speakers: ReviewSpeaker[]) => void;
   onMinutesSave?: (sessionId: string, minutes: StructuredMinutes) => void;
   minutesSaveState?: MinutesSaveState;
+  onNavigationGuardChange?: (active: boolean) => void;
 };
 
-export function ReviewSpeakerPage({ drafts, onInitialize, onChange, onCommit, onMinutesSave, minutesSaveState }: Props) {
+export function ReviewSpeakerPage({ drafts, onInitialize, onChange, onCommit, onMinutesSave, minutesSaveState, onNavigationGuardChange }: Props) {
   const { toastMessage, showToast } = useToast();
   const { sessionId = '' } = useParams();
   const location = useLocation();
@@ -487,6 +488,12 @@ export function ReviewSpeakerPage({ drafts, onInitialize, onChange, onCommit, on
   const minutesDraftIsDirty = Boolean(currentReview && !sameMinutes(currentMinutes, minutesBaseline));
   const savingMinutes = sessionMinutesSaveState.status === 'saving';
   const currentCompletionNotice = completionNotice?.sessionId === sessionId ? completionNotice.message : '';
+  const navigationGuardActive = draftIsDirty || minutesDraftIsDirty || saving || savingMinutes || completingReview;
+
+  useEffect(() => {
+    onNavigationGuardChange?.(navigationGuardActive);
+    return () => onNavigationGuardChange?.(false);
+  }, [navigationGuardActive, onNavigationGuardChange]);
 
   async function reconcile(attempt: SpeakerMappingInput[], isUncertain: boolean, generation = reviewRequestGeneration.current, expectedSessionId = sessionId) {
     const isCurrent = () => generation === reviewRequestGeneration.current && activeSessionId.current === expectedSessionId;

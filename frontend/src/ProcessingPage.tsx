@@ -36,7 +36,7 @@ const SAFE_NETWORK_ERROR = normalizeApiError({ error: { code: 'NETWORK_ERROR' } 
 
 function newKey(): string { return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`; }
 
-export function ProcessingPage() {
+export function ProcessingPage({ onNavigationGuardChange }: { onNavigationGuardChange?: (active: boolean) => void } = {}) {
   const { sessionId = '' } = useParams();
   const navigate = useNavigate();
   const [snapshot, setSnapshot] = useState<ProcessingSnapshot | null>(null);
@@ -79,10 +79,11 @@ export function ProcessingPage() {
     }
     setFailure(null);
     if (next.status === 'REVIEW' && !navigated.current) {
+      onNavigationGuardChange?.(false);
       navigated.current = true;
       navigate(`/meetings/${encodeURIComponent(sessionId)}/review`, { replace: true });
     }
-  }, [navigate, sessionId]);
+  }, [navigate, onNavigationGuardChange, sessionId]);
 
   const refresh = useCallback(async () => {
     try { applySnapshot(await getProcessingStatus(sessionId)); }
@@ -142,6 +143,12 @@ export function ProcessingPage() {
   const expiryTime = snapshot?.processing.audioExpiresAt ? Date.parse(snapshot.processing.audioExpiresAt) : Number.NaN;
   const expiresIn = snapshot?.status === 'PROCESSING_FAILED' && Number.isFinite(expiryTime) ? Math.max(0, Math.ceil((expiryTime - clockNow) / 60_000)) : null;
   const isTranscribing = failure === null && snapshot?.status === 'PROCESSING' && snapshot.processing.stage === 'TRANSCRIPTION';
+  const navigationGuardActive = snapshot === null ? failure === null : snapshot.status === 'PROCESSING' || busy;
+
+  useEffect(() => {
+    onNavigationGuardChange?.(navigationGuardActive);
+    return () => onNavigationGuardChange?.(false);
+  }, [navigationGuardActive, onNavigationGuardChange]);
 
   useEffect(() => {
     if (!isTranscribing) return;

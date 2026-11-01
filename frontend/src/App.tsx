@@ -36,6 +36,7 @@ import { HomePage, MeetingsPage } from './MeetingHistory';
 import { MeetingDetailPage } from './MeetingDetailPage';
 import { SettingsPage } from './SettingsPage';
 import { BackendRecoveryOverlay } from './components/BackendRecoveryOverlay';
+import { NavigationLeaveGuard } from './components/NavigationLeaveGuard';
 import { Toast } from './components/Toast';
 import { useToast } from './components/useToast';
 
@@ -644,6 +645,8 @@ export function App({ onNewMeetingSubmit = () => undefined, onMinutesSave, minut
   const [createdSession, setCreatedSession] = useState<RecordingSession | null>(restoreRecordingSession);
   const [recordingState, setRecordingState] = useState<RecordingViewState>('Ready');
   const [recordingNavigationLocked, setRecordingNavigationLocked] = useState(false);
+  const [processingNavigationGuard, setProcessingNavigationGuard] = useState(false);
+  const [reviewNavigationGuard, setReviewNavigationGuard] = useState(false);
   const [speakerDrafts, setSpeakerDrafts] = useState<Record<string, Record<string, string | null>>>({});
   const location = useLocation();
   const initializeSpeakerDraft = useCallback((sessionId: string, speakers: ReviewSpeaker[]) => {
@@ -669,32 +672,13 @@ export function App({ onNewMeetingSubmit = () => undefined, onMinutesSave, minut
     }));
   }, []);
   const isActiveRecording = (/^\/meetings\/[^/]+\/recording$/.test(location.pathname) && (recordingState !== 'Ready' || recordingNavigationLocked)) || /^\/meetings\/[^/]+\/processing$/.test(location.pathname);
-  const shouldWarnBeforeLeavingRecording = /^\/meetings\/[^/]+\/recording$/.test(location.pathname) && (recordingState !== 'Ready' || recordingNavigationLocked);
+  const recordingGuard = /^\/meetings\/[^/]+\/recording$/.test(location.pathname) && (recordingState !== 'Ready' || recordingNavigationLocked);
   const isDocumentConnectionRoute = location.pathname === '/setup/document' || location.pathname === '/settings/document';
-
-  useEffect(() => {
-    if (!shouldWarnBeforeLeavingRecording) return;
-    const guardedUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-    const guardedState = { ...(window.history.state ?? {}), meetingAutomationRecordingGuard: true };
-    window.history.pushState(guardedState, '', guardedUrl);
-    const blockBackNavigation = (event: PopStateEvent) => {
-      event.stopImmediatePropagation();
-      window.history.pushState(guardedState, '', guardedUrl);
-    };
-    const warnBeforeUnload = (event: BeforeUnloadEvent) => {
-      event.preventDefault();
-      event.returnValue = '';
-    };
-    window.addEventListener('popstate', blockBackNavigation, true);
-    window.addEventListener('beforeunload', warnBeforeUnload);
-    return () => {
-      window.removeEventListener('popstate', blockBackNavigation, true);
-      window.removeEventListener('beforeunload', warnBeforeUnload);
-    };
-  }, [shouldWarnBeforeLeavingRecording]);
+  const shouldWarnBeforeLeaving = recordingGuard || processingNavigationGuard || reviewNavigationGuard;
 
   return (
     <div className="app-shell">
+      <NavigationLeaveGuard active={shouldWarnBeforeLeaving} />
       <header className="product-header">
         <Link className="product-header-brand" to="/" aria-label="Windsoft Minutes 홈">
           <img src="/assets/windsoft-favicon-mark.png" alt="" />
@@ -713,8 +697,8 @@ export function App({ onNewMeetingSubmit = () => undefined, onMinutesSave, minut
           <Route path="/meetings/new" element={<SetupGate><NewMeetingRoute onCreated={(session) => { setCreatedSession(session); saveRecordingSession(session); setRecordingState('Ready'); setRecordingNavigationLocked(false); }} onSubmitted={onNewMeetingSubmit} /></SetupGate>} />
           <Route path="/meetings/:documentId" element={<MeetingDetailPage />} />
           <Route path="/meetings/:sessionId/recording" element={<MeetingRecordingRoute session={createdSession} setState={setRecordingState} setNavigationLocked={setRecordingNavigationLocked} clearSession={() => setCreatedSession(null)} mediaAdapter={mediaAdapter} />} />
-          <Route path="/meetings/:sessionId/processing" element={<ProcessingPage />} />
-          <Route path="/meetings/:sessionId/review" element={<ReviewSpeakerPage drafts={speakerDrafts} onInitialize={initializeSpeakerDraft} onChange={updateSpeakerDraft} onCommit={commitSpeakerMappings} onMinutesSave={onMinutesSave} minutesSaveState={minutesSaveState} />} />
+          <Route path="/meetings/:sessionId/processing" element={<ProcessingPage onNavigationGuardChange={setProcessingNavigationGuard} />} />
+          <Route path="/meetings/:sessionId/review" element={<ReviewSpeakerPage drafts={speakerDrafts} onInitialize={initializeSpeakerDraft} onChange={updateSpeakerDraft} onCommit={commitSpeakerMappings} onMinutesSave={onMinutesSave} minutesSaveState={minutesSaveState} onNavigationGuardChange={setReviewNavigationGuard} />} />
           <Route path="/meetings/:sessionId/complete" element={<CompletePage />} />
           <Route path="/participants" element={<SetupGate><ParticipantsPage /></SetupGate>} />
           <Route path="/settings/participants" element={<SetupGate><ParticipantsPage /></SetupGate>} />
