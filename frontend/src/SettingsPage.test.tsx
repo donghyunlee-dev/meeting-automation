@@ -5,6 +5,15 @@ import { MemoryRouter } from 'react-router';
 import { App } from './App';
 import { SettingsPage } from './SettingsPage';
 
+vi.mock('./authApi', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./authApi')>();
+  return { ...actual,
+    getAuthSession: vi.fn().mockResolvedValue({ authenticated: true, sessionId: 'test-session', remainingIdleSeconds: 7200 }),
+    recordAuthActivity: vi.fn().mockResolvedValue({ authenticated: true, remainingIdleSeconds: 7200 }),
+    logoutAuthSession: vi.fn().mockResolvedValue({ loggedOut: true }),
+  };
+});
+
 function response(data: unknown, status = 200) {
   return new Response(JSON.stringify(status >= 400 ? { error: { detail: data } } : { data }), { status, headers: { 'Content-Type': 'application/json' } });
 }

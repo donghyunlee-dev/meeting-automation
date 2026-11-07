@@ -4,6 +4,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router';
 import { App } from './App';
 
+vi.mock('./authApi', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./authApi')>();
+  return { ...actual,
+    getAuthSession: vi.fn().mockResolvedValue({ authenticated: true, sessionId: 'test-session', remainingIdleSeconds: 7200 }),
+    recordAuthActivity: vi.fn().mockResolvedValue({ authenticated: true, remainingIdleSeconds: 7200 }),
+    logoutAuthSession: vi.fn().mockResolvedValue({ loggedOut: true }),
+  };
+});
+
 function response(data: unknown, status = 200) {
   return new Response(JSON.stringify({ data }), { status, headers: { 'Content-Type': 'application/json' } });
 }
@@ -53,7 +62,7 @@ describe('document setup wizard', () => {
     vi.stubGlobal('fetch', withHealthyBackend(fetchMock));
     render(<MemoryRouter initialEntries={['/setup/document']}><App /></MemoryRouter>);
     await screen.findByRole('heading', { name: '문서 서비스 연결' }, { timeout: 5000 });
-    fireEvent.click(screen.getByRole('button', { name: 'Notion 선택' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Notion 선택' }));
     fireEvent.change(screen.getByLabelText('Notion 내부 연결 토큰'), { target: { value: 'secret-token' } });
     fireEvent.change(screen.getByLabelText('부모 페이지 URL 또는 ID'), { target: { value: 'notion-parent' } });
     fireEvent.click(screen.getByRole('button', { name: '서비스 선택으로 돌아가기' }));
@@ -68,7 +77,7 @@ describe('document setup wizard', () => {
     vi.stubGlobal('fetch', withHealthyBackend(vi.fn().mockResolvedValue(response({ version: 0, status: 'UNCONFIGURED', active: null, draft: null, operation: null, canCreateMeeting: false }))));
     render(<MemoryRouter initialEntries={['/setup/document']}><App /></MemoryRouter>);
     await screen.findByRole('heading', { name: '문서 서비스 연결' }, { timeout: 5000 });
-    fireEvent.click(screen.getByRole('button', { name: 'Notion 선택' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Notion 선택' }));
 
     const back = screen.getByRole('button', { name: '서비스 선택으로 돌아가기' });
     const providerTitle = screen.getByText('Notion에 연결');

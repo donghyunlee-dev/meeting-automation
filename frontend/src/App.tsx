@@ -39,6 +39,8 @@ import { BackendRecoveryOverlay } from './components/BackendRecoveryOverlay';
 import { NavigationLeaveGuard } from './components/NavigationLeaveGuard';
 import { Toast } from './components/Toast';
 import { useToast } from './components/useToast';
+import { EmailOtpEntry } from './EmailOtpEntry';
+import { AuthApiError, getAuthSession, logoutAuthSession, recordAuthActivity, type AuthSession } from './authApi';
 
 type ViewState = 'loading' | 'ready' | 'error';
 type FormState = { mode: 'create' } | { mode: 'edit'; participant: Participant };
@@ -632,11 +634,13 @@ function BottomNavigation() {
   );
 }
 
-export function App({ onNewMeetingSubmit = () => undefined, onMinutesSave, minutesSaveState, mediaAdapter = browserMediaAdapter }: {
+function AuthenticatedApp({ onNewMeetingSubmit = () => undefined, onMinutesSave, minutesSaveState, mediaAdapter = browserMediaAdapter,
+  onActiveWorkflowChange }: {
   onNewMeetingSubmit?: (payload: NewMeetingPayload) => void;
   onMinutesSave?: (sessionId: string, minutes: StructuredMinutes) => void;
   minutesSaveState?: MinutesSaveState;
   mediaAdapter?: MediaRecorderAdapter;
+  onActiveWorkflowChange?: (active: boolean) => void;
 } = {}) {
   useEffect(() => {
     void restoreSlackWebhookSettings().catch(() => undefined);
@@ -671,10 +675,14 @@ export function App({ onNewMeetingSubmit = () => undefined, onMinutesSave, minut
       [sessionId]: Object.fromEntries(speakers.map((speaker) => [speaker.speakerId, speaker.participantId])),
     }));
   }, []);
-  const isActiveRecording = (/^\/meetings\/[^/]+\/recording$/.test(location.pathname) && (recordingState !== 'Ready' || recordingNavigationLocked)) || /^\/meetings\/[^/]+\/processing$/.test(location.pathname);
+  const isActiveRecording = (/^\/meetings\/[^/]+\/recording$/.test(location.pathname)
+    && (recordingState !== 'Ready' || recordingNavigationLocked))
+    || (/^\/meetings\/[^/]+\/processing$/.test(location.pathname) && processingNavigationGuard);
   const recordingGuard = /^\/meetings\/[^/]+\/recording$/.test(location.pathname) && (recordingState !== 'Ready' || recordingNavigationLocked);
   const isDocumentConnectionRoute = location.pathname === '/setup/document' || location.pathname === '/settings/document';
   const shouldWarnBeforeLeaving = recordingGuard || processingNavigationGuard || reviewNavigationGuard;
+
+  useEffect(() => { onActiveWorkflowChange?.(isActiveRecording); }, [isActiveRecording, onActiveWorkflowChange]);
 
   return (
     <div className="app-shell">
@@ -709,4 +717,120 @@ export function App({ onNewMeetingSubmit = () => undefined, onMinutesSave, minut
       <BackendRecoveryOverlay />
     </div>
   );
+}
+
+type AuthGateState = { status: 'loading' } | { status: 'unauthenticated' } | { status: 'authenticated'; session: AuthSession };
+
+export function AuthenticatedSession({ session, children, onExpired, activeWorkflow }: {
+  session: AuthSession;
+  children: React.ReactNode;
+  onExpired: () => void;
+  activeWorkflow: boolean;
+}) {
+  const location = useLocation();
+  const expiresAt = useRef(0);
+  const idleTimer = useRef<number | undefined>(undefined);
+  const activityTimer = useRef<number | undefined>(undefined);
+
+  const expire = useCallback(() => {
+    void logoutAuthSession().catch(() => undefined);
+    onExpired();
+  }, [onExpired]);
+
+  const scheduleExpiry = useCallback(() => {
+    if (idleTimer.current !== undefined) window.clearTimeout(idleTimer.current);
+    const remaining = expiresAt.current - Date.now();
+    if (remaining <= 0) expire();
+    else idleTimer.current = window.setTimeout(expire, remaining);
+  }, [expire]);
+
+  const noteActivity = useCallback((sendNow = false) => {
+    if (Date.now() >= expiresAt.current) {
+      expire();
+      return;
+    }
+    expiresAt.current = Date.now() + 7_200_000;
+    scheduleExpiry();
+    if (activityTimer.current !== undefined) window.clearTimeout(activityTimer.current);
+    activityTimer.current = window.setTimeout(() => {
+      void recordAuthActivity().catch((error: unknown) => {
+        if (error instanceof AuthApiError && error.status === 401) expire();
+      });
+    }, sendNow ? 0 : 1_000);
+  }, [expire, scheduleExpiry]);
+
+  useEffect(() => {
+    expiresAt.current = Date.now() + session.remainingIdleSeconds * 1000;
+    const userActivity = () => noteActivity(false);
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        if (Date.now() >= expiresAt.current) expire();
+        else scheduleExpiry();
+      }
+    };
+    const onFocus = () => {
+      if (Date.now() >= expiresAt.current) expire();
+      else noteActivity(false);
+    };
+    const events: Array<keyof DocumentEventMap> = ['pointerdown', 'keydown', 'input', 'change', 'click', 'submit'];
+    events.forEach((event) => document.addEventListener(event, userActivity, true));
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('focus', onFocus);
+    scheduleExpiry();
+    return () => {
+      if (idleTimer.current !== undefined) window.clearTimeout(idleTimer.current);
+      if (activityTimer.current !== undefined) window.clearTimeout(activityTimer.current);
+      events.forEach((event) => document.removeEventListener(event, userActivity, true));
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('focus', onFocus);
+    };
+  }, [expire, noteActivity, scheduleExpiry, session.remainingIdleSeconds]);
+
+  const path = `${location.pathname}${location.search}${location.hash}`;
+  const previousPath = useRef(path);
+  useEffect(() => {
+    if (previousPath.current !== path) {
+      previousPath.current = path;
+      noteActivity(true);
+    }
+  }, [noteActivity, path]);
+
+  useEffect(() => {
+    if (!activeWorkflow) return undefined;
+    const timer = window.setInterval(() => noteActivity(true), 60_000);
+    return () => window.clearInterval(timer);
+  }, [activeWorkflow, noteActivity]);
+
+  return <>{children}</>;
+}
+
+export function App(props: {
+  onNewMeetingSubmit?: (payload: NewMeetingPayload) => void;
+  onMinutesSave?: (sessionId: string, minutes: StructuredMinutes) => void;
+  minutesSaveState?: MinutesSaveState;
+  mediaAdapter?: MediaRecorderAdapter;
+} = {}) {
+  const [gate, setGate] = useState<AuthGateState>({ status: 'loading' });
+  const [activeWorkflow, setActiveWorkflow] = useState(false);
+  useEffect(() => {
+    let mounted = true;
+    getAuthSession().then((session) => {
+      if (mounted) setGate({ status: 'authenticated', session });
+    }).catch(() => {
+      if (mounted) setGate({ status: 'unauthenticated' });
+    });
+    return () => { mounted = false; };
+  }, []);
+
+  if (gate.status === 'loading') return <main className="auth-entry-shell"><p role="status">인증 상태를 확인하는 중…</p></main>;
+  if (gate.status === 'unauthenticated') {
+    return <EmailOtpEntry onAuthenticated={() => {
+      void getAuthSession().then((session) => setGate({ status: 'authenticated', session }))
+        .catch(() => setGate({ status: 'unauthenticated' }));
+    }} />;
+  }
+  return <AuthenticatedSession session={gate.session} onExpired={() => setGate({ status: 'unauthenticated' })}
+    activeWorkflow={activeWorkflow}>
+    <AuthenticatedApp {...props} onActiveWorkflowChange={setActiveWorkflow} />
+  </AuthenticatedSession>;
 }

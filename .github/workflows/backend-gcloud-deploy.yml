@@ -49,16 +49,21 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           DOCUMENT_SETTINGS_ENCRYPTION_KEY: ${{ secrets.DOCUMENT_SETTINGS_ENCRYPTION_KEY }}
           ALLOWED_ORIGINS: ${{ secrets.ALLOWED_ORIGINS }}
+          OTP_HMAC_SECRET: ${{ secrets.OTP_HMAC_SECRET }}
         run: |
           install -m 0600 /dev/null "$RUNNER_TEMP/backend-runtime.env"
-          for required_setting in OPENAI_API_KEY DOCUMENT_SETTINGS_ENCRYPTION_KEY ALLOWED_ORIGINS; do
+          for required_setting in OPENAI_API_KEY DOCUMENT_SETTINGS_ENCRYPTION_KEY ALLOWED_ORIGINS OTP_HMAC_SECRET; do
             if [[ -z "${!required_setting}" ]]; then
               echo "$required_setting GitHub Actions secret is required." >&2
               exit 1
             fi
           done
-          printf 'OPENAI_API_KEY=%s\nDOCUMENT_SETTINGS_ENCRYPTION_KEY=%s\nALLOWED_ORIGINS=%s\n' \
-            "$OPENAI_API_KEY" "$DOCUMENT_SETTINGS_ENCRYPTION_KEY" "$ALLOWED_ORIGINS" \
+          if [[ ${#OTP_HMAC_SECRET} -lt 64 ]]; then
+            echo "OTP_HMAC_SECRET must contain at least 32 random bytes." >&2
+            exit 1
+          fi
+          printf 'OPENAI_API_KEY=%s\nDOCUMENT_SETTINGS_ENCRYPTION_KEY=%s\nALLOWED_ORIGINS=%s\nOTP_HMAC_SECRET=%s\nAUTH_COOKIE_SECURE=true\nAUTH_COOKIE_PATH=/api/backend/api/v1/auth\n' \
+            "$OPENAI_API_KEY" "$DOCUMENT_SETTINGS_ENCRYPTION_KEY" "$ALLOWED_ORIGINS" "$OTP_HMAC_SECRET" \
             > "$RUNNER_TEMP/backend-runtime.env"
 
       - name: Authenticate to Google Cloud

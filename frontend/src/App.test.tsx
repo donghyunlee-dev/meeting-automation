@@ -7,6 +7,16 @@ import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-rou
 import { App } from './App';
 import type { MediaRecorderAdapter, RecorderLike } from './recordingController';
 import { ChunkRepository } from './chunkRepository';
+
+vi.mock('./authApi', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./authApi')>();
+  return {
+    ...actual,
+    getAuthSession: vi.fn().mockResolvedValue({ authenticated: true, sessionId: 'test-session', remainingIdleSeconds: 7200 }),
+    recordAuthActivity: vi.fn().mockResolvedValue({ authenticated: true, remainingIdleSeconds: 7200 }),
+    logoutAuthSession: vi.fn().mockResolvedValue({ loggedOut: true }),
+  };
+});
 // @ts-expect-error Node's Blob exercises browser-style IndexedDB structured cloning in jsdom.
 import { Blob as NodeBlob } from 'node:buffer';
 // @ts-expect-error Node WebCrypto exercises the production digest path in jsdom.
@@ -28,6 +38,9 @@ function readySetupResponse() {
 function installFetchMock(fetchMock: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>) {
   vi.stubGlobal('fetch', withHealthyBackend(vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
     const path = new URL(String(input), 'http://localhost').pathname;
+    if (path.endsWith('/auth/session')) return Promise.resolve(response({ data: { authenticated: true, sessionId: 'test-session', remainingIdleSeconds: 7200 } }));
+    if (path.endsWith('/auth/session/activity')) return Promise.resolve(response({ data: { authenticated: true, remainingIdleSeconds: 7200 } }));
+    if (path.endsWith('/auth/logout')) return Promise.resolve(response({ data: { loggedOut: true } }));
     if (path.endsWith('/document-setup')) return Promise.resolve(readySetupResponse());
     if (path.endsWith('/integrations/slack') || path.endsWith('/integrations/email')) {
       return Promise.resolve(response({ data: { configured: false } }));
@@ -1041,10 +1054,10 @@ describe('Recording route', () => {
     }
   });
 
-  it('offers a new meeting and no recording controls when runtime session context is missing or mismatched', () => {
+  it('offers a new meeting and no recording controls when runtime session context is missing or mismatched', async () => {
     render(<MemoryRouter initialEntries={['/meetings/missing-session/recording']}><App /></MemoryRouter>);
 
-    expect(screen.getByRole('heading', { name: '녹음 세션을 찾을 수 없습니다' })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: '녹음 세션을 찾을 수 없습니다' })).toBeTruthy();
     expect(screen.getByRole('link', { name: '새 회의 시작' }).getAttribute('href')).toBe('/meetings/new');
     expect(screen.queryByRole('button', { name: '녹음 시작' })).toBeNull();
     expect(screen.queryByRole('button', { name: '회의 종료' })).toBeNull();
@@ -1062,6 +1075,7 @@ describe('Processing route', () => {
     render(<MemoryRouter initialEntries={['/meetings/guard-session/processing']}><App /><CurrentPath /></MemoryRouter>);
 
     await screen.findByRole('heading', { name: '회의 처리' });
+    await waitFor(() => expect(screen.getByRole('status').textContent).toContain('음성 인식'));
     fireEvent.click(screen.getByRole('link', { name: 'Windsoft Minutes 홈' }));
 
     expect(confirm).toHaveBeenCalled();
@@ -1083,6 +1097,7 @@ describe('Processing route', () => {
     } })));
     render(<MemoryRouter initialEntries={['/meetings/unload-session/processing']}><App /></MemoryRouter>);
     await screen.findByRole('heading', { name: '회의 처리' });
+    await waitFor(() => expect(screen.getByRole('status').textContent).toContain('음성 인식'));
 
     const event = new Event('beforeunload', { cancelable: true });
     window.dispatchEvent(event);
@@ -1169,6 +1184,7 @@ describe('Processing route', () => {
     } })));
     render(<MemoryRouter initialEntries={['/meetings/minutes-session/processing']}><App /></MemoryRouter>);
     const minutesStep = await screen.findByText('회의록 생성');
+    await waitFor(() => expect(minutesStep.closest('li')?.getAttribute('aria-current')).toBe('step'));
     expect(minutesStep.closest('li')?.getAttribute('aria-current')).toBe('step');
     expect(screen.getByText('전체 4단계 중 4단계 · 회의록 생성 진행 중')).toBeTruthy();
   });

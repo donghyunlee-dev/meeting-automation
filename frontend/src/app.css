@@ -1052,3 +1052,21 @@ button:disabled { cursor: not-allowed; opacity: .6; }
   .recovery-door, .recovery-door-edge, .recovery-door-knob, .recovery-light-beam { transition: none; }
   .backend-recovery-visual.is-ready .recovery-light-beam { opacity: 1; }
 }
+.auth-entry-shell { display: grid; min-height: 100vh; min-height: 100dvh; place-items: center; padding: 24px; background: radial-gradient(ellipse at 50% 0%, #eaf2ff 0, #f5f7fb 54%, #f3f5f8 100%); }
+.auth-entry-card { width: min(100%, 440px); border: 1px solid #e2e8f0; border-radius: 22px; padding: 40px; background: #fff; box-shadow: 0 22px 70px #243b5a14; }
+.auth-entry-mark { display: grid; width: 48px; height: 48px; place-items: center; border-radius: 15px; color: #fff; background: var(--windsoft-navy, #0b2d5b); font-size: 23px; font-weight: 750; }
+.auth-entry-eyebrow { margin: 24px 0 8px; color: #64748b; font-size: 11px; font-weight: 750; letter-spacing: .13em; }
+.auth-entry-card h1 { margin: 0; color: #182230; font-size: clamp(25px, 5vw, 30px); letter-spacing: -.04em; }
+.auth-entry-description { margin: 12px 0 28px; color: #667085; font-size: 14px; line-height: 1.7; }
+.auth-entry-form { display: grid; gap: 12px; }
+.auth-entry-form label { color: #344054; font-size: 13px; font-weight: 650; }
+.auth-entry-form input { width: 100%; min-height: 52px; border: 1px solid #d0d5dd; border-radius: 11px; padding: 0 14px; color: #182230; background: #fff; font: inherit; font-size: 16px; outline: none; }
+.auth-entry-form input:focus { border-color: #3973c6; box-shadow: 0 0 0 3px #3973c626; }
+.auth-entry-form input#auth-code { font-size: 27px; font-weight: 700; letter-spacing: .32em; text-align: center; font-variant-numeric: tabular-nums; }
+.auth-entry-submit { width: 100%; margin-top: 8px; }
+.auth-entry-sent { margin: 0 0 8px; color: #475467; font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; }
+.auth-entry-resend { min-height: 42px; border: 0; color: #2458b8; background: transparent; font: inherit; font-size: 13px; font-weight: 650; cursor: pointer; }
+.auth-entry-resend:disabled { color: #98a2b3; cursor: default; }
+.auth-entry-error { margin: 14px 0 0; color: #b42318; font-size: 13px; line-height: 1.55; }
+.auth-entry-footnote { margin: 24px 0 0; padding-top: 18px; border-top: 1px solid #edf0f4; color: #7a8493; font-size: 12px; line-height: 1.6; }
+@media (max-width: 480px) { .auth-entry-shell { align-items: start; padding: 12vh 16px 24px; } .auth-entry-card { padding: 30px 24px; border-radius: 18px; } }

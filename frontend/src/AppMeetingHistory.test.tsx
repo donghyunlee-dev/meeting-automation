@@ -4,6 +4,15 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router';
 import { App } from './App';
 
+vi.mock('./authApi', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./authApi')>();
+  return { ...actual,
+    getAuthSession: vi.fn().mockResolvedValue({ authenticated: true, sessionId: 'test-session', remainingIdleSeconds: 7200 }),
+    recordAuthActivity: vi.fn().mockResolvedValue({ authenticated: true, remainingIdleSeconds: 7200 }),
+    logoutAuthSession: vi.fn().mockResolvedValue({ loggedOut: true }),
+  };
+});
+
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();

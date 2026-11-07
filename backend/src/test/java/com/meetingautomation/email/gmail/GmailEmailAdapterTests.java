@@ -179,6 +179,37 @@ class GmailEmailAdapterTests {
     }
 
     @Test
+    void sendsOtpAsPolishedUtf8HtmlWithPlainTextAlternativeAndPreservesLeadingZeros() {
+        var client = client(SETTINGS);
+        expectToken(client);
+        client.server.expect(requestTo(SEND_URL)).andExpect(method(HttpMethod.POST))
+                .andExpect(header("Authorization", "Bearer " + ACCESS_TOKEN))
+                .andExpect(request -> {
+                    try {
+                        var json = JsonMapper.builder().build().readTree(((MockClientHttpRequest) request).getBodyAsString());
+                        var mime = new MimeMessage(Session.getInstance(new Properties()), new ByteArrayInputStream(
+                                Base64.getUrlDecoder().decode(json.path("raw").asText())));
+                        assertThat(mime.getSubject()).isEqualTo("Meeting Automation 이메일 인증 코드");
+                        assertThat(mime.getRecipients(Message.RecipientType.TO)).extracting(Object::toString)
+                                .containsExactly("user@example.test");
+                        assertThat(mime.isMimeType("multipart/alternative")).isTrue();
+                        Multipart parts = (Multipart) mime.getContent();
+                        assertThat(parts.getCount()).isEqualTo(2);
+                        assertThat(parts.getBodyPart(0).isMimeType("text/plain")).isTrue();
+                        assertThat(parts.getBodyPart(0).getContent().toString()).contains("012034", "60초");
+                        assertThat(parts.getBodyPart(1).isMimeType("text/html")).isTrue();
+                        assertThat(parts.getBodyPart(1).getContent().toString()).contains("012034", "MEETING AUTOMATION",
+                                "이메일 인증", "60초", "border-radius");
+                    } catch (Exception malformed) {
+                        throw new AssertionError("OTP message must include readable UTF-8 alternatives", malformed);
+                    }
+                }).andRespond(withSuccess("{\"id\":\"otp-message-id\"}", MediaType.APPLICATION_JSON));
+
+        assertThat(client.adapter.sendOtpEmail(" user@example.test ", "012034")).isTrue();
+        client.server.verify();
+    }
+
+    @Test
     void healthAlwaysRefreshesEvenWhenSendingHasCachedToken() {
         var client = client(SETTINGS);
         expectToken(client);

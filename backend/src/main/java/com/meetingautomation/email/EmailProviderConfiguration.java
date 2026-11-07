@@ -4,6 +4,7 @@ import com.meetingautomation.api.health.IntegrationArea;
 import com.meetingautomation.api.health.IntegrationHealthContributor;
 import com.meetingautomation.api.health.IntegrationHealthStatus;
 import com.meetingautomation.email.gmail.GmailEmailAdapter;
+import com.meetingautomation.auth.OtpEmailSender;
 import java.net.http.HttpClient;
 import java.time.Duration;
 import org.springframework.beans.factory.annotation.Value;
@@ -25,6 +26,16 @@ public class EmailProviderConfiguration {
 
     @Bean
     EmailProvider emailProvider(EmailSettingsService settings) {
+        return gmailAdapter(settings);
+    }
+
+    @Bean
+    OtpEmailSender otpEmailSender(EmailSettingsService settings) {
+        GmailEmailAdapter adapter = gmailAdapter(settings);
+        return adapter::sendOtpEmail;
+    }
+
+    private GmailEmailAdapter gmailAdapter(EmailSettingsService settings) {
         var httpClient = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NEVER)
                 .connectTimeout(Duration.ofSeconds(10)).build();
         var factory = new JdkClientHttpRequestFactory(httpClient);

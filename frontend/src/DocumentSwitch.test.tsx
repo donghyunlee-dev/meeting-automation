@@ -5,6 +5,15 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { App } from './App';
 import type { SetupOperation, SetupSnapshot } from './documentSetupApi';
 
+vi.mock('./authApi', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./authApi')>();
+  return { ...actual,
+    getAuthSession: vi.fn().mockResolvedValue({ authenticated: true, sessionId: 'test-session', remainingIdleSeconds: 7200 }),
+    recordAuthActivity: vi.fn().mockResolvedValue({ authenticated: true, remainingIdleSeconds: 7200 }),
+    logoutAuthSession: vi.fn().mockResolvedValue({ loggedOut: true }),
+  };
+});
+
 const source = { provider: 'NOTION' as const, connectionVersion: 4, rootId: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', rootUrl: 'https://notion.example/source' };
 const target = { provider: 'CONFLUENCE' as const, connectionVersion: 5, rootId: '12345', rootUrl: 'https://example.atlassian.net/target' };
 const ready: SetupSnapshot = { version: 10, status: 'READY', active: source, draft: null, operation: null, canCreateMeeting: true };

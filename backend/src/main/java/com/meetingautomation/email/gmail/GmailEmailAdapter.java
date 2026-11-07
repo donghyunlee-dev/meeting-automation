@@ -4,6 +4,7 @@ import com.meetingautomation.email.EmailProvider;
 import com.meetingautomation.email.EmailSettings;
 import com.meetingautomation.email.MeetingEmailCommand;
 import com.meetingautomation.email.RecipientDeliveryResult;
+import com.meetingautomation.auth.OtpEmailSender;
 import jakarta.mail.Message;
 import jakarta.mail.Session;
 import jakarta.mail.internet.MimeBodyPart;
@@ -27,7 +28,7 @@ import org.springframework.web.client.RestClient;
 import tools.jackson.databind.JsonNode;
 
 /** Gmail HTTP and MIME details stay inside this outbound adapter. No request or provider data is logged. */
-public final class GmailEmailAdapter implements EmailProvider {
+public final class GmailEmailAdapter implements EmailProvider, OtpEmailSender {
     private static final URI TOKEN_URI = URI.create("https://oauth2.googleapis.com/token");
     private static final URI SEND_URI = URI.create("https://gmail.googleapis.com/gmail/v1/users/me/messages/send");
     private static final String SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send";
@@ -93,6 +94,65 @@ public final class GmailEmailAdapter implements EmailProvider {
         } catch (RuntimeException rejectedOrAmbiguous) {
             return false;
         }
+    }
+
+    @Override
+    public boolean sendOtpEmail(String recipient, String code) {
+        EmailSettings current = settings.get();
+        if (!current.configured() || !EmailSettings.validAddress(recipient)
+                || code == null || !code.matches("\\d{6}")) return false;
+        String token = token(false);
+        if (token == null) return false;
+        final String raw;
+        try {
+            var message = new MimeMessage(Session.getInstance(new Properties()));
+            message.setFrom(new InternetAddress(current.senderAddress().trim()));
+            message.setRecipient(Message.RecipientType.TO, new InternetAddress(recipient.trim()));
+            message.setSubject("Meeting Automation 이메일 인증 코드", StandardCharsets.UTF_8.name());
+            MimeBodyPart textPart = new MimeBodyPart();
+            textPart.setText("이메일 인증 코드: " + code + System.lineSeparator()
+                    + "이 코드는 발송 시점부터 60초 동안 유효합니다." + System.lineSeparator()
+                    + "요청하지 않았다면 이 메일을 무시해 주세요.", StandardCharsets.UTF_8.name());
+            MimeBodyPart htmlPart = new MimeBodyPart();
+            htmlPart.setContent(otpHtml(code), "text/html; charset=UTF-8");
+            MimeMultipart alternative = new MimeMultipart("alternative");
+            alternative.addBodyPart(textPart);
+            alternative.addBodyPart(htmlPart);
+            message.setContent(alternative);
+            message.saveChanges();
+            var bytes = new ByteArrayOutputStream();
+            message.writeTo(bytes);
+            raw = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes.toByteArray());
+        } catch (Exception invalidMessage) {
+            return false;
+        }
+        try {
+            JsonNode response = client.post().uri(SEND_URI).header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                    .contentType(MediaType.APPLICATION_JSON).accept(MediaType.APPLICATION_JSON)
+                    .body(new GmailSendRequest(raw)).retrieve()
+                    .onStatus(status -> !status.is2xxSuccessful(), (request, providerResponse) -> {
+                        throw new SafeProviderRejection(false);
+                    }).body(JsonNode.class);
+            return response != null && response.path("id").isString() && !response.path("id").asText().isBlank();
+        } catch (RuntimeException rejectedOrAmbiguous) {
+            return false;
+        }
+    }
+
+    private static String otpHtml(String code) {
+        return """
+                <!doctype html>
+                <html lang="ko"><body style="margin:0;background:#f3f6fb;padding:32px 16px;font-family:Arial,'Malgun Gothic',sans-serif;color:#182230;">
+                  <main style="max-width:520px;margin:auto;background:#fff;border:1px solid #e5eaf1;border-radius:16px;padding:36px 32px;box-shadow:0 8px 28px rgba(20,40,70,.08);">
+                    <div style="font-size:12px;font-weight:700;letter-spacing:1.4px;color:#52657d;">MEETING AUTOMATION</div>
+                    <h1 style="font-size:24px;margin:18px 0 8px;">이메일 인증</h1>
+                    <p style="font-size:15px;color:#526070;line-height:1.7;">아래 인증 코드를 화면에 입력해 주세요.</p>
+                    <div style="margin:28px 0;padding:20px;background:#f2f6ff;border-radius:12px;text-align:center;color:#2458b8;font-size:34px;font-weight:700;letter-spacing:10px;font-variant-numeric:tabular-nums;">%s</div>
+                    <p style="font-size:14px;color:#526070;line-height:1.7;">코드는 발송 시점부터 <strong>60초</strong> 동안 유효합니다.</p>
+                    <p style="margin-top:28px;padding-top:18px;border-top:1px solid #e8edf3;font-size:12px;color:#788493;line-height:1.6;">인증을 요청하지 않았다면 이 메일을 무시해 주세요.</p>
+                  </main>
+                </body></html>
+                """.formatted(code);
     }
 
     @Override
