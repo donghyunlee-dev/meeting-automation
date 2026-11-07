@@ -1068,5 +1068,25 @@ button:disabled { cursor: not-allowed; opacity: .6; }
 .auth-entry-resend { min-height: 42px; border: 0; color: #2458b8; background: transparent; font: inherit; font-size: 13px; font-weight: 650; cursor: pointer; }
 .auth-entry-resend:disabled { color: #98a2b3; cursor: default; }
 .auth-entry-error { margin: 14px 0 0; color: #b42318; font-size: 13px; line-height: 1.55; }
+.auth-entry-settings { display: grid; gap: 10px; margin-top: 18px; }
+.auth-entry-settings p { margin: 0; color: #7a5360; font-size: 13px; line-height: 1.55; text-align: center; }
+.auth-entry-settings .button { width: 100%; min-height: 44px; }
 .auth-entry-footnote { margin: 24px 0 0; padding-top: 18px; border-top: 1px solid #edf0f4; color: #7a8493; font-size: 12px; line-height: 1.6; }
+.auth-email-settings-overlay { position: fixed; inset: 0; z-index: 1200; display: grid; place-items: center; overflow-y: auto; padding: 24px; background: #10182880; }
+.auth-email-settings-dialog { width: min(100%, 560px); max-height: min(90vh, 820px); overflow-y: auto; border: 1px solid #e4e8ef; border-radius: 18px; padding: 28px; background: #fff; box-shadow: 0 24px 72px #1018283d; }
+.auth-email-settings-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.auth-email-settings-eyebrow { margin: 0 0 8px; color: #667085; font-size: 10px; font-weight: 750; letter-spacing: .14em; }
+.auth-email-settings-header h2 { margin: 0; color: #182230; font-size: 22px; letter-spacing: -.03em; }
+.auth-email-settings-close { display: grid; width: 38px; height: 38px; flex: 0 0 auto; place-items: center; border: 1px solid #e4e7ec; border-radius: 10px; color: #475467; background: #fff; font-size: 24px; line-height: 1; cursor: pointer; }
+.auth-email-settings-close:focus-visible { outline: 3px solid #3973c64d; outline-offset: 2px; }
+.auth-email-settings-description { margin: 14px 0 20px; color: #667085; font-size: 13px; line-height: 1.6; }
+.auth-email-settings-form { display: grid; gap: 14px; }
+.auth-email-settings-form label { display: grid; gap: 6px; color: #344054; font-size: 13px; font-weight: 650; }
+.auth-email-settings-form input { width: 100%; min-height: 44px; border: 1px solid #d0d5dd; border-radius: 9px; padding: 0 12px; color: #182230; background: #fff; font: inherit; font-weight: 400; outline: 0; }
+.auth-email-settings-form input:focus { border-color: #3973c6; box-shadow: 0 0 0 3px #3973c626; }
+.auth-email-settings-error { margin: 0; color: #b42318; font-size: 13px; line-height: 1.55; }
+.auth-email-settings-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 4px; }
+.auth-email-settings-actions .button { min-width: 116px; min-height: 44px; }
+.auth-email-settings-footnote { margin: 18px 0 0; color: #7a8493; font-size: 11px; line-height: 1.55; }
 @media (max-width: 480px) { .auth-entry-shell { align-items: start; padding: 12vh 16px 24px; } .auth-entry-card { padding: 30px 24px; border-radius: 18px; } }
+@media (max-width: 560px) { .auth-email-settings-overlay { align-items: end; padding: 0; } .auth-email-settings-dialog { max-height: 92vh; border-radius: 18px 18px 0 0; padding: 24px 20px calc(24px + env(safe-area-inset-bottom, 0px)); } .auth-email-settings-actions { display: grid; grid-template-columns: 1fr; } .auth-email-settings-actions .button { width: 100%; } }

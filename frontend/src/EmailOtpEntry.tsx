@@ -1,5 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { AuthApiError, requestOtp, verifyOtp } from './authApi';
+import { getEmailSettings } from './emailSettingsApi';
+import { EmailSettingsDialog } from './EmailSettingsDialog';
 
 export function EmailOtpEntry({ onAuthenticated }: { onAuthenticated: () => void }) {
   const [email, setEmail] = useState('');
@@ -8,6 +10,18 @@ export function EmailOtpEntry({ onAuthenticated }: { onAuthenticated: () => void
   const [countdown, setCountdown] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [emailSettingsState, setEmailSettingsState] = useState<'checking' | 'ready' | 'needs-setup'>('checking');
+  const [showEmailSettings, setShowEmailSettings] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    void getEmailSettings().then((settings) => {
+      if (active) setEmailSettingsState(settings.configured && settings.connectionVerified ? 'ready' : 'needs-setup');
+    }).catch(() => {
+      if (active) setEmailSettingsState('needs-setup');
+    });
+    return () => { active = false; };
+  }, []);
 
   useEffect(() => {
     if (countdown <= 0) return undefined;
@@ -16,7 +30,7 @@ export function EmailOtpEntry({ onAuthenticated }: { onAuthenticated: () => void
   }, [countdown]);
 
   async function sendCode() {
-    if (busy || !email.trim()) return;
+    if (busy || emailSettingsState !== 'ready' || !email.trim()) return;
     setBusy(true);
     setError('');
     try {
@@ -28,6 +42,7 @@ export function EmailOtpEntry({ onAuthenticated }: { onAuthenticated: () => void
       const failure = reason instanceof AuthApiError ? reason : undefined;
       setError(failure?.message ?? '인증 코드를 보내지 못했습니다. 잠시 후 다시 시도해 주세요.');
       if (failure?.retryAfterSeconds) setCountdown(failure.retryAfterSeconds);
+      if (failure?.status === 502) setEmailSettingsState('needs-setup');
     } finally {
       setBusy(false);
     }
@@ -70,8 +85,9 @@ export function EmailOtpEntry({ onAuthenticated }: { onAuthenticated: () => void
             <label htmlFor="auth-email">이메일 주소</label>
             <input id="auth-email" type="email" autoComplete="email" required maxLength={254}
               placeholder="name@example.com" value={email} onChange={(event) => setEmail(event.target.value)} />
-            <button className="button button-primary auth-entry-submit" type="submit" disabled={busy || !email.trim()}>
-              {busy ? '보내는 중…' : '인증 코드 받기'}
+            <button className="button button-primary auth-entry-submit" type="submit"
+              disabled={busy || emailSettingsState !== 'ready' || !email.trim()}>
+              {busy ? '보내는 중…' : emailSettingsState === 'checking' ? '이메일 설정 확인 중…' : '인증 코드 받기'}
             </button>
           </form>
         ) : (
@@ -84,15 +100,32 @@ export function EmailOtpEntry({ onAuthenticated }: { onAuthenticated: () => void
             <button className="button button-primary auth-entry-submit" type="submit" disabled={busy || code.length !== 6}>
               {busy ? '확인 중…' : '인증하고 계속하기'}
             </button>
-            <button className="auth-entry-resend" type="button" disabled={busy || countdown > 0}
+            <button className="auth-entry-resend" type="button"
+              disabled={busy || emailSettingsState !== 'ready' || countdown > 0}
               onClick={() => void sendCode()}>
               {countdown > 0 ? `${countdown}초 후 다시 보내기` : '인증 코드 다시 받기'}
             </button>
           </form>
         )}
+        {emailSettingsState === 'needs-setup' && (
+          <div className="auth-entry-settings">
+            <p role="status">이메일 발송 설정이 필요하거나 연결을 확인할 수 없습니다.</p>
+            <button className="button button-secondary" type="button" onClick={() => setShowEmailSettings(true)}>
+              이메일 설정
+            </button>
+          </div>
+        )}
         {error && <p className="auth-entry-error" role="alert">{error}</p>}
         <p className="auth-entry-footnote">인증 코드는 발송 후 60초 동안 사용할 수 있습니다.</p>
       </section>
+      {showEmailSettings && <EmailSettingsDialog onClose={() => setShowEmailSettings(false)} onConfigured={() => {
+        setEmailSettingsState('ready');
+        setShowEmailSettings(false);
+        setCodeSent(false);
+        setCode('');
+        setCountdown(0);
+        setError('');
+      }} />}
     </main>
   );
 }

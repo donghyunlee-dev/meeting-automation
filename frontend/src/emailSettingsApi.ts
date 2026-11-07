@@ -45,12 +45,17 @@ export async function getEmailSettings(): Promise<EmailSettings> {
 }
 
 export async function saveEmailSettings(settings: StoredEmailSettings): Promise<EmailSettings> {
+  const saved = await saveEmailSettingsOnServer(settings);
+  saveStoredEmailSettings(settings);
+  return saved;
+}
+
+export async function saveEmailSettingsOnServer(settings: StoredEmailSettings): Promise<EmailSettings> {
   const result = await request<{ data: EmailSettings }>('', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(settings),
   });
-  saveStoredEmailSettings(settings);
   return result.data;
 }
 
