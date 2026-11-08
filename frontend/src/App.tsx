@@ -812,6 +812,8 @@ export function App(props: {
 } = {}) {
   const [gate, setGate] = useState<AuthGateState>({ status: 'loading' });
   const [activeWorkflow, setActiveWorkflow] = useState(false);
+  const location = useLocation();
+  const navigate = useNavigate();
   useEffect(() => {
     let mounted = true;
     getAuthSession().then((session) => {
@@ -822,6 +824,14 @@ export function App(props: {
     return () => { mounted = false; };
   }, []);
 
+  if (location.pathname === '/login') {
+    return <EmailOtpEntry onAuthenticated={() => {
+      void getAuthSession().then((session) => {
+        setGate({ status: 'authenticated', session });
+        navigate('/');
+      }).catch(() => setGate({ status: 'unauthenticated' }));
+    }} />;
+  }
   if (gate.status === 'loading') return <main className="auth-entry-shell"><p role="status">인증 상태를 확인하는 중…</p></main>;
   if (gate.status === 'unauthenticated') {
     return <EmailOtpEntry onAuthenticated={() => {

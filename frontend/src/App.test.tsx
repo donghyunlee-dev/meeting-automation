@@ -116,6 +116,17 @@ function renderParticipantsApp() {
   return render(<MemoryRouter initialEntries={['/settings/participants']}><App /></MemoryRouter>);
 }
 
+describe('Login route', () => {
+  it('shows email authentication and settings even when a session cookie is valid', async () => {
+    installFetchMock(vi.fn().mockRejectedValue(new Error('Unexpected request')));
+
+    render(<MemoryRouter initialEntries={['/login']}><App /></MemoryRouter>);
+
+    expect(await screen.findByRole('heading', { name: '이메일로 시작하기' })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: '이메일 설정' })).toBeTruthy();
+  });
+});
+
 async function findSpeakerSelect(speaker: 'A' | 'B' | 'C') {
   const summary = await screen.findByText('화자 매핑 · 참석자 연결');
   const details = summary.closest('details');
