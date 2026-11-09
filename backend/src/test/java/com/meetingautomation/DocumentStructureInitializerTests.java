@@ -30,6 +30,37 @@ class DocumentStructureInitializerTests {
         assertThat(pages.created).isEmpty();
         assertThat(pages.meetingIndexEnsures).isEqualTo(2);
     }
+    @Test void bootUpsertsUniqueExistingRootAndOnlyCreatesMissingChildren() {
+        var pages = new Pages(); var journal = new Journal();
+        pages.add("root", "parent", "Meeting Automation", "page", "");
+        pages.add("meetings", "root", "Meetings", "page", "");
+        pages.add("participants", "root", "Participants", "page", "");
+        pages.add("data", "root", "Meeting Data", "page", "");
+
+        var structure = new DocumentStructureInitializer(pages)
+                .initializeStructure("parent", null, "operation", journal);
+
+        assertThat(structure.rootId()).isEqualTo("root");
+        assertThat(structure.meetingsPageId()).isEqualTo("meetings");
+        assertThat(structure.participantsPageId()).isEqualTo("participants");
+        assertThat(pages.created).containsExactly("Templates");
+        assertThat(journal.entries).hasSize(5).allSatisfy((step, entry) -> assertThat(entry.pageId()).isNotBlank());
+
+        var repeated = new DocumentStructureInitializer(pages)
+                .initializeStructure("parent", null, "retry", new Journal());
+        assertThat(repeated).isEqualTo(structure);
+        assertThat(pages.created).containsExactly("Templates");
+    }
+    @Test void bootDoesNotGuessWhenMultipleExistingRootsHaveTheSameTitle() {
+        var pages = new Pages();
+        pages.add("root1", "parent", "Meeting Automation", "page", "");
+        pages.add("root2", "parent", "Meeting Automation", "page", "");
+
+        assertThatThrownBy(() -> new DocumentStructureInitializer(pages)
+                .initializeStructure("parent", null, "operation", new Journal()))
+                .isInstanceOf(SettingsException.class).extracting("code").isEqualTo("DOCUMENT_STRUCTURE_CONFLICT");
+        assertThat(pages.created).isEmpty();
+    }
     @Test void bootDuplicateAndWrongTypeFailBeforeAnyWrite() {
         for (String type : List.of("page", "database", "folder")) {
             var pages = new Pages(); pages.add("root", "parent", "Meeting Automation", "page", "");

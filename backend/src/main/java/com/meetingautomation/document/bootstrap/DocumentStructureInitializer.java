@@ -34,8 +34,15 @@ public final class DocumentStructureInitializer {
             journal.completed("ROOT", reuseRoot);
             root = reuseRoot;
         } else {
-            if (unique(pages.children(parent), "Meeting Automation", null) != null) throw conflict();
-            root = ensure("ROOT", parent, "Meeting Automation", operationId, journal, null);
+            BootstrapPages.Page existingRoot = unique(pages.children(parent), "Meeting Automation", null);
+            if (existingRoot == null) {
+                root = ensure("ROOT", parent, "Meeting Automation", operationId, journal, null);
+            } else {
+                verify(pages.read(existingRoot.id()), parent, "Meeting Automation", null, false);
+                journal.intent("ROOT", parent, "Meeting Automation", null);
+                journal.completed("ROOT", existingRoot.id());
+                root = existingRoot.id();
+            }
         }
         List<BootstrapPages.Page> children = pages.children(root);
         // Validate both titles before partially completing an explicitly reused hierarchy.
