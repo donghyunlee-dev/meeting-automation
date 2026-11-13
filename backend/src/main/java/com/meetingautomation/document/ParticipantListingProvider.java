@@ -15,4 +15,9 @@ public interface ParticipantListingProvider extends DocumentStructureProvider {
     }
 
     List<Participant> listParticipants(String participantsPageId);
+
+    /** Providers may avoid loading bodies outside the requested roster selection. */
+    default List<Participant> findParticipants(String participantsPageId, java.util.Collection<String> participantIds) {
+        return listParticipants(participantsPageId);
+    }
 }

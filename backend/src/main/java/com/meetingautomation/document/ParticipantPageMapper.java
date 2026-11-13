@@ -16,7 +16,8 @@ public final class ParticipantPageMapper {
         if (email == null || !EMAIL_ADDRESS.matcher(email).matches()) {
             throw DocumentProviderException.participantListFailed(false);
         }
-        return new Participant(id, title.trim(), email);
+        String department = bodyText.lines().map(String::trim).filter(line -> line.startsWith("Department:")).map(line -> line.substring("Department:".length()).trim()).findFirst().orElse("");
+        return new Participant(id, title.trim(), email, department);
     }
 
     private static String firstEmailLine(String bodyText) {

@@ -23,7 +23,7 @@ public final class ParticipantTransferMarkers {
 
     /** Creation cannot know the provider page ID until after the page has been created. */
     public static void validateCreatedPendingId(Participant current, TransferMarker marker) {
-        Participant pendingId = new Participant("pending", current.name(), current.email());
+        Participant pendingId = new Participant("pending", current.name(), current.email(), current.department());
         if (!refreshed(pendingId, marker).canonicalDigest().equals(marker.canonicalDigest())) {
             throw new TransferCodec.ValidationException(TransferCodec.Code.INVALID_RECORD);
         }

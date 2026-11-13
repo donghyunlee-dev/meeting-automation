@@ -99,7 +99,7 @@ public final class MeetingSessionService {
             }
             List<Participant> participants;
             try {
-                participants = List.copyOf(provider.listParticipants(structure.participantsPageId()));
+                participants = List.copyOf(provider.findParticipants(structure.participantsPageId(), command.participantIds()));
             } catch (DocumentProviderException failure) {
                 if ("DOCUMENT_STRUCTURE_NOT_FOUND".equals(failure.code())) throw failure;
                 throw DocumentProviderException.participantListFailed(failure.retryable(), failure);

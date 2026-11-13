@@ -1,7 +1,7 @@
 import { getApiBaseUrl } from './apiBase';
 import { apiFetch } from './apiFetch';
-export type Participant = { id: string; name: string; email: string };
-export type ParticipantInput = { name: string; email: string };
+export type Participant = { id: string; name: string; email: string; department?: string };
+export type ParticipantInput = { name: string; email: string; department?: string };
 export type ParticipantPatch = Partial<ParticipantInput>;
 export type ParticipantField = keyof ParticipantInput;
 
@@ -59,7 +59,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     const code = error?.error?.code || 'REQUEST_FAILED';
     const fieldErrors: Partial<Record<ParticipantField, string>> = {};
     for (const fieldError of error?.error?.details?.fieldErrors ?? []) {
-      if (fieldError.field === 'name' || fieldError.field === 'email') {
+      if (fieldError.field === 'name' || fieldError.field === 'email' || fieldError.field === 'department') {
         fieldErrors[fieldError.field] = fieldError.code || 'INVALID';
       }
     }

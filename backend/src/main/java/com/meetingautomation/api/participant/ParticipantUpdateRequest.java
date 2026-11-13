@@ -6,7 +6,8 @@ import org.springframework.validation.FieldError;
 import tools.jackson.databind.JsonNode;
 
 /** Parses PATCH field presence separately from its value so null is not mistaken for omission. */
-public record ParticipantUpdateRequest(String name, String email) {
+public record ParticipantUpdateRequest(String name, String email, String department) {
+    public ParticipantUpdateRequest(String name, String email) { this(name, email, null); }
     private static final Pattern EMAIL_ADDRESS = Pattern.compile("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$");
 
     public static ParticipantUpdateRequest parse(JsonNode body) throws BindException {
@@ -17,7 +18,8 @@ public record ParticipantUpdateRequest(String name, String email) {
         }
         boolean hasName = body.has("name");
         boolean hasEmail = body.has("email");
-        if (!hasName && !hasEmail) {
+        boolean hasDepartment = body.has("department");
+        if (!hasName && !hasEmail && !hasDepartment) {
             errors.addError(new FieldError("request", "request", "NotEmpty"));
         }
         String name = hasName ? trimmedText(body.get("name"), "name", errors) : null;
@@ -28,10 +30,11 @@ public record ParticipantUpdateRequest(String name, String email) {
         if (hasEmail && (email == null || !EMAIL_ADDRESS.matcher(email).matches())) {
             errors.addError(new FieldError("request", "email", "Email"));
         }
+        String department = hasDepartment ? trimmedText(body.get("department"), "department", errors) : null;
         if (errors.hasErrors()) {
             throw errors;
         }
-        return new ParticipantUpdateRequest(name, email);
+        return new ParticipantUpdateRequest(name, email, department);
     }
 
     private static String trimmedText(JsonNode value, String field, BindException errors) {

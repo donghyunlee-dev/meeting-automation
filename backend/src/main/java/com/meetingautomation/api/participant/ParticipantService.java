@@ -59,7 +59,7 @@ public final class ParticipantService {
                     .filter(ParticipantCreationProvider.class::isInstance)
                     .map(ParticipantCreationProvider.class::cast)
                     .orElseThrow(() -> new IllegalStateException("Selected provider cannot create participants."));
-            CreateParticipantCommand command = new CreateParticipantCommand(request.name(), request.email());
+            CreateParticipantCommand command = new CreateParticipantCommand(request.name(), request.email(), request.department());
             return creationCoordinator.execute(idempotencyKey.trim(), command, () -> {
                 if (!providerResolver.configured()) {
                     throw DocumentProviderException.structureNotFound();
@@ -143,11 +143,11 @@ public final class ParticipantService {
 
         String name = request.name() == null ? existing.name() : request.name();
         String email = request.email() == null ? existing.email() : request.email();
-        ParticipantUpdateCommand command = new ParticipantUpdateCommand(request.name(), request.email(), existing);
+        ParticipantUpdateCommand command = new ParticipantUpdateCommand(request.name(), request.email(), request.department(), existing);
         try {
             Participant updated = provider.updateParticipant(participantId, command);
             if (updated == null || !participantId.equals(updated.id())
-                    || !name.equals(updated.name()) || !email.equals(updated.email())) {
+                    || !name.equals(updated.name()) || !email.equals(updated.email()) || !command.updatedDepartment().equals(updated.department())) {
                 throw DocumentProviderException.documentFailed(false);
             }
             return updated;

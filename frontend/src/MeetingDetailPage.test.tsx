@@ -56,7 +56,7 @@ describe('Meetings filters and detail', () => {
     expect(screen.getByText('Ownerless task')).toBeTruthy();
     expect(screen.getByText('Follow up text')).toBeTruthy();
     expect(screen.queryByText(/@/)).toBeNull();
-    expect(screen.queryByRole('button', { name: /편집|삭제/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /편집/ })).toBeNull();
     expect(screen.queryByRole('link', { name: 'Notion/Confluence에서 열기' })).toBeNull();
     const transcriptTrigger = screen.getByRole('button', { name: 'Transcript 보기' });
     fireEvent.click(transcriptTrigger);
@@ -102,6 +102,30 @@ describe('Meetings filters and detail', () => {
     expect(await screen.findByText('Summary text')).toBeTruthy();
     expect(screen.queryByRole('link', { name: 'Notion/Confluence에서 열기' })).toBeNull();
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('confirms deletion, keeps failures retryable, and reloads the list after success', async () => {
+    let deletes = 0;
+    const fetchMock = vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === 'DELETE') {
+        deletes++;
+        return deletes === 1 ? new Response('{}', { status: 502 }) : new Response(null, { status: 204 });
+      }
+      return String(url).endsWith('/meetings') ? ok({ items: [] }) : ok(detail);
+    });
+    vi.stubGlobal('fetch', withHealthyBackend(fetchMock));
+    render(<MemoryRouter initialEntries={['/meetings/doc%2Fa']}><Routes><Route path="/meetings/:documentId" element={<MeetingDetailPage />} /><Route path="/meetings" element={<MeetingsPage />} /></Routes></MemoryRouter>);
+    fireEvent.click(await screen.findByRole('button', { name: '회의 삭제' }));
+    fireEvent.click(screen.getByRole('button', { name: '아니요' }));
+    expect(deletes).toBe(0);
+    fireEvent.click(screen.getByRole('button', { name: '회의 삭제' }));
+    fireEvent.click(screen.getByRole('button', { name: '예' }));
+    expect(await screen.findByRole('alert')).toBeTruthy();
+    expect(screen.getByText('Summary text')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '예' }));
+    await waitFor(() => expect(screen.queryByText('Summary text')).toBeNull());
+    expect(deletes).toBe(2);
+    await waitFor(() => expect(fetchMock.mock.calls.some(([url, init]) => String(url).endsWith('/meetings') && !init?.method)).toBe(true));
   });
 
   it('explains missing records and returns to the Meetings list', async () => {

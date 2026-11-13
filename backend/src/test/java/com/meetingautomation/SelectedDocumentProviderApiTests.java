@@ -497,7 +497,7 @@ class SelectedDocumentProviderApiTests {
                 .andExpect(jsonPath("$.data.items[0].id").value("person-page-id"))
                 .andExpect(jsonPath("$.data.items[0].name").value("Ada Lovelace"))
                 .andExpect(jsonPath("$.data.items[0].email").value("ada@example.test"))
-                .andExpect(jsonPath("$.data.items[0].length()").value(3));
+                .andExpect(jsonPath("$.data.items[0].department").value(""));
         mockServer.verify();
     }
 

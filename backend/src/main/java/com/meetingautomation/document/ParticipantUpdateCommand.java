@@ -1,9 +1,11 @@
 package com.meetingautomation.document;
 
 /** Partial field update plus the roster snapshot used to form a complete result. */
-public record ParticipantUpdateCommand(String name, String email, Participant existing) {
+public record ParticipantUpdateCommand(String name, String email, String department, Participant existing) {
+    public ParticipantUpdateCommand(String name, String email, Participant existing) { this(name, email, null, existing); }
+    public String updatedDepartment() { return department == null ? existing.department() : department; }
     public ParticipantUpdateCommand {
-        if (existing == null || (name == null && email == null)) {
+        if (existing == null || (name == null && email == null && department == null)) {
             throw new IllegalArgumentException("A participant snapshot and at least one field are required");
         }
     }

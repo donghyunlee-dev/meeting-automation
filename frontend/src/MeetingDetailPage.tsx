@@ -1,9 +1,9 @@
 ﻿import { useEffect, useRef, useState } from 'react';
-import { useParams } from 'react-router';
+import { useNavigate, useParams } from 'react-router';
 import { AsyncState } from './components/async-state/AsyncState';
 import { MeetingListBackLink } from './components/MeetingListBackLink';
 import { normalizeApiError } from './lib/api/normalizeApiError';
-import { getMeetingDetail, MeetingDetailApiError, type MeetingDetail } from './meetingDetailApi';
+import { deleteMeeting, getMeetingDetail, MeetingDetailApiError, type MeetingDetail } from './meetingDetailApi';
 
 function formatDate(value: string): string {
   const datePart = value.slice(0, 10);
@@ -84,6 +84,23 @@ function TranscriptDrawer({ detail, onClose }: { detail: MeetingDetail; onClose:
 
 export function MeetingDetailPage() {
   const { documentId = '' } = useParams();
+  const navigate = useNavigate();
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
+  async function handleDelete() {
+    if (deleting) return;
+    setDeleting(true);
+    setDeleteError('');
+    try {
+      await deleteMeeting(documentId);
+      navigate('/meetings', { replace: true });
+    } catch (error) {
+      setDeleteError(error instanceof MeetingDetailApiError ? error.message : '회의를 삭제하지 못했습니다. 다시 시도해 주세요.');
+    } finally {
+      setDeleting(false);
+    }
+  }
   const [result, setResult] = useState<{ documentId: string; detail?: MeetingDetail; error?: MeetingDetailApiError; status: 'loading' | 'ready' | 'error' }>({ documentId: '', status: 'loading' });
   const [attempt, setAttempt] = useState(0);
   const [showTranscript, setShowTranscript] = useState(false);
@@ -127,7 +144,18 @@ export function MeetingDetailPage() {
         {minutes.actionItems.length > 0 && <section><h3>실행 항목</h3><ul>{minutes.actionItems.map((item, index) => <li key={`${index}-${item.task}`}><strong>{item.task}</strong>{item.ownerParticipantId && <span> · 담당: {participantNames.get(item.ownerParticipantId) ?? '참석자'}</span>}{item.dueDate && <span> · 기한: {item.dueDate}</span>}</li>)}</ul></section>}
         {minutes.followUps.length > 0 && <section><h3>후속 조치</h3><ul>{minutes.followUps.map((item, index) => <li key={`${index}-${item}`}>{item}</li>)}</ul></section>}
       </section>
-      <div className="meeting-detail-actions"><button ref={transcriptTrigger} className="button button-secondary" type="button" onClick={() => setShowTranscript(true)}>Transcript 보기</button></div>
+      <div className="meeting-detail-actions"><button ref={transcriptTrigger} className="button button-secondary" type="button" onClick={() => setShowTranscript(true)}>Transcript 보기</button><button className="button button-danger-outline" type="button" onClick={() => { setConfirmDelete(true); setDeleteError(''); }}>회의 삭제</button></div>
+      {confirmDelete && <div className="participant-confirm-backdrop" role="presentation">
+        <section className="participant-confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="meeting-delete-title" aria-describedby="meeting-delete-description">
+          <h2 id="meeting-delete-title">삭제하시겠습니까?</h2>
+          <p id="meeting-delete-description"><strong>{detail.title}</strong> 회의 기록을 연결된 문서 서비스에서 삭제합니다.</p>
+          {deleteError && <p role="alert">{deleteError}</p>}
+          <div className="participant-confirm-actions">
+            <button className="button button-secondary" type="button" disabled={deleting} onClick={() => setConfirmDelete(false)}>아니요</button>
+            <button className="button button-danger" type="button" disabled={deleting} onClick={() => void handleDelete()}>{deleting ? '삭제 중…' : '예'}</button>
+          </div>
+        </section>
+      </div>}
       {showTranscript && <TranscriptDrawer detail={detail} onClose={closeTranscript} />}
       </div>
     </main>

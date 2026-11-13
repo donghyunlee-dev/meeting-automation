@@ -12,7 +12,10 @@ public final class TransferPageCodec {
 
     public List<Block> encode(TransferRecord r) {
         List<Block> b = new ArrayList<>();
-        if (r.participant() != null) b.add(new Block("paragraph", "Email: " + r.participant().email()));
+        if (r.participant() != null) {
+            b.add(new Block("paragraph", "Email: " + r.participant().email()));
+            if (!r.participant().department().isEmpty()) b.add(new Block("paragraph", "Department: " + r.participant().department()));
+        }
         else {
             heading(b, "Meeting information"); paragraph(b, "Date: " + r.marker().meetingAt()); paragraph(b, "Template: " + r.marker().templateId());
             if (r.storageKey() != null) {

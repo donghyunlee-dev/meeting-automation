@@ -342,8 +342,8 @@ public final class ConfluencePageHierarchyAdapter implements ParticipantCreation
                     "parentId", participantsPageId,
                     "body", java.util.Map.of(
                             "representation", "storage",
-                            "value", "<p>Email: " + escapeHtml(command.email()) + "</p><pre>" + escapeHtml(new TransferCodec().encodeMarker(
-                                    ParticipantTransferMarkers.refreshed(new Participant("pending", command.name(), command.email()), null))) + "</pre>")));
+                            "value", "<p>Email: " + escapeHtml(command.email()) + "</p>" + (command.department().isEmpty() ? "" : "<p>Department: " + escapeHtml(command.department()) + "</p>") + "<pre>" + escapeHtml(new TransferCodec().encodeMarker(
+                                    ParticipantTransferMarkers.refreshed(new Participant("pending", command.name(), command.email(), command.department()), null))) + "</pre>")));
             URI createUri = baseUri.resolve("/wiki/api/v2/pages");
             response = restClient.post()
                     .uri(createUri)
@@ -380,7 +380,7 @@ public final class ConfluencePageHierarchyAdapter implements ParticipantCreation
             if (!isNumericId(participantId)) {
                 throw DocumentProviderException.documentFailed(false);
             }
-            return new Participant(participantId, command.name(), command.email());
+            return new Participant(participantId, command.name(), command.email(), command.department());
         } catch (DocumentProviderException failure) {
             throw failure;
         } catch (Exception malformedResponse) {
@@ -420,7 +420,12 @@ public final class ConfluencePageHierarchyAdapter implements ParticipantCreation
             TransferMarker marker = codec.parseMarker(storageBlocks(bodyNode.stringValue()).stream().filter(b -> b.type().equals("code")).map(TransferPageCodec.Block::text).toList());
             ParticipantTransferMarkers.validateCurrent(command.existing(), marker);
             String updatedBody = command.email() == null ? bodyNode.stringValue() : replaceEmailLine(bodyNode.stringValue(), command.updatedEmail());
-            TransferMarker updatedMarker = ParticipantTransferMarkers.refreshed(new Participant(participantId, command.updatedName(), command.updatedEmail()), marker);
+            if (command.department() != null) {
+                String departmentLine = "<p>Department: " + escapeHtml(command.updatedDepartment()) + "</p>";
+                var departmentPattern = Pattern.compile("(?s)<p>Department:[^<]*</p>").matcher(updatedBody);
+                updatedBody = departmentPattern.find() ? departmentPattern.replaceFirst(Matcher.quoteReplacement(departmentLine)) : departmentLine + updatedBody;
+            }
+            TransferMarker updatedMarker = ParticipantTransferMarkers.refreshed(new Participant(participantId, command.updatedName(), command.updatedEmail(), command.updatedDepartment()), marker);
             Matcher codeBlock = Pattern.compile("(?s)<pre(?:\\s[^>]*)?>.*?</pre>|<ac:structured-macro[^>]*>.*?</ac:structured-macro>").matcher(updatedBody);
             boolean replaced = false;
             while (codeBlock.find()) if (codeBlock.group().contains("meeting-automation")) {
@@ -437,7 +442,7 @@ public final class ConfluencePageHierarchyAdapter implements ParticipantCreation
             requestBody.put("version", java.util.Map.of("number", version.intValue() + 1));
             mutate("/wiki/api/v2/pages/" + encodePathSegment(participantId), requestBody);
         }
-        return new Participant(participantId, command.updatedName(), command.updatedEmail());
+        return new Participant(participantId, command.updatedName(), command.updatedEmail(), command.updatedDepartment());
     }
 
     @Override

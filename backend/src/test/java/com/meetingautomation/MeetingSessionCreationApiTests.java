@@ -110,6 +110,16 @@ class MeetingSessionCreationApiTests {
     }
 
     @Test
+    void creationSkipsUnselectedParticipantBodies() throws Exception {
+        mockServer.expect(requestTo(ROOT_URL)).andRespond(withSuccess(requiredChildren(), MediaType.APPLICATION_JSON));
+        String roster = rosterChild().replace("\"results\":[", "\"results\":[{\"id\":\"unselected\",\"type\":\"child_page\",\"child_page\":{\"title\":\"Other\"}},");
+        mockServer.expect(requestTo(ROSTER_URL)).andRespond(withSuccess(roster, MediaType.APPLICATION_JSON));
+        mockServer.expect(requestTo(PARTICIPANT_URL)).andRespond(withSuccess(participantBody(), MediaType.APPLICATION_JSON));
+        mockMvc.perform(createRequest("selected-only", validRequest())).andExpect(status().isCreated());
+        mockServer.verify();
+    }
+
+    @Test
     void missingDocumentConnectionVersionIsRejectedBeforeProviderLookup() throws Exception {
         mockMvc.perform(createRequest("missing-version", validRequest().replace(
                         ",\"documentConnectionVersion\":1", "")))
@@ -215,7 +225,8 @@ class MeetingSessionCreationApiTests {
 
     @Test
     void unknownParticipantReturnsValidationErrorWithoutLeakingIdentifiers() throws Exception {
-        expectRoster();
+        mockServer.expect(requestTo(ROOT_URL)).andRespond(withSuccess(requiredChildren(), MediaType.APPLICATION_JSON));
+        mockServer.expect(requestTo(ROSTER_URL)).andRespond(withSuccess(rosterChild(), MediaType.APPLICATION_JSON));
 
         mockMvc.perform(createRequest("unknown-participant-key",
                         validRequest().replace("participant-1", "not-in-roster-secret")))

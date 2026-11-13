@@ -528,6 +528,23 @@ describe('Participants settings', () => {
     expect(screen.queryByText('Ada Lovelace')).toBeNull();
   });
 
+  it('searches department and allows clearing it when editing', async () => {
+    const person = { ...participants[0], department: 'Platform' };
+    const fetchMock = vi.fn().mockResolvedValueOnce(response({ data: { items: [person] } }))
+      .mockResolvedValueOnce(response({ data: { ...person, department: '' } }));
+    installFetchMock(fetchMock);
+    renderParticipantsApp();
+    await screen.findByText('Platform');
+    fireEvent.change(screen.getByRole('searchbox', { name: '참석자 검색' }), { target: { value: 'PLATFORM' } });
+    expect(screen.getByText(person.name)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '수정' }));
+    expect((screen.getByLabelText('부서 (선택)') as HTMLInputElement).value).toBe('Platform');
+    fireEvent.change(screen.getByLabelText('부서 (선택)'), { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: '저장' }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    expect(JSON.parse(String(fetchMock.mock.calls[1][1]?.body))).toEqual({ department: '' });
+  });
+
   it('retries safely after list failure', async () => {
     const fetchMock = vi.fn()
       .mockRejectedValueOnce(new Error('private provider details'))
@@ -545,13 +562,14 @@ describe('Participants settings', () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(response({ data: { items: [] } }))
       .mockRejectedValueOnce(new Error('offline'))
-      .mockResolvedValueOnce(response({ data: { id: 'p3', name: 'Lin Chen', email: 'lin@example.com' } }, 201));
+      .mockResolvedValueOnce(response({ data: { id: 'p3', name: 'Lin Chen', email: 'lin@example.com', department: 'Research' } }, 201));
     installFetchMock(fetchMock);
     renderParticipantsApp();
     await screen.findByText(/등록된 참석자가 없습니다/);
     fireEvent.click(screen.getByRole('button', { name: '참석자 추가' }));
     fireEvent.change(screen.getByLabelText('이름'), { target: { value: 'Lin Chen' } });
     fireEvent.change(screen.getByLabelText('이메일'), { target: { value: 'lin@example.com' } });
+    fireEvent.change(screen.getByLabelText('부서 (선택)'), { target: { value: 'Research' } });
     fireEvent.click(screen.getByRole('button', { name: '저장' }));
     expect((await screen.findByRole('alert')).textContent).toMatch(/저장하지 못했습니다/);
     expect((screen.getByLabelText('이름') as HTMLInputElement).value).toBe('Lin Chen');
@@ -561,7 +579,7 @@ describe('Participants settings', () => {
     const secondKey = fetchMock.mock.calls[2][1]?.headers as Record<string, string>;
     expect(firstKey['Idempotency-Key']).toBeTruthy();
     expect(secondKey['Idempotency-Key']).toBe(firstKey['Idempotency-Key']);
-    expect(JSON.parse(String(fetchMock.mock.calls[1][1]?.body))).toEqual({ name: 'Lin Chen', email: 'lin@example.com' });
+    expect(JSON.parse(String(fetchMock.mock.calls[1][1]?.body))).toEqual({ name: 'Lin Chen', email: 'lin@example.com', department: 'Research' });
   });
 
   it('connects validation errors to fields and does not send invalid input', async () => {

@@ -112,6 +112,7 @@ public final class TransferCodec {
                 if (record.participant() == null) throw invalid(Code.INVALID_RECORD);
                 content.put("name", nonblank(record.participant().name()));
                 content.put("email", nonblank(record.participant().email()));
+                if (!record.participant().department().isEmpty()) content.put("department", record.participant().department());
             } else {
                 if (record.participant() != null) throw invalid(Code.INVALID_RECORD);
                 content.put("title", nonblank(record.title()));

@@ -44,9 +44,9 @@ import { AuthApiError, getAuthSession, logoutAuthSession, recordAuthActivity, ty
 
 type ViewState = 'loading' | 'ready' | 'error';
 type FormState = { mode: 'create' } | { mode: 'edit'; participant: Participant };
-type Fields = { name: string; email: string };
+type Fields = { name: string; email: string; department: string };
 
-const EMPTY_FIELDS: Fields = { name: '', email: '' };
+const EMPTY_FIELDS: Fields = { name: '', email: '', department: '' };
 
 function validate(fields: Fields): Partial<Record<ParticipantField, string>> {
   const errors: Partial<Record<ParticipantField, string>> = {};
@@ -61,6 +61,7 @@ function fieldMessage(field: ParticipantField, error: string): string {
   if (field === 'name' && (error === 'NotBlank' || error === 'NotEmpty')) return '이름을 입력해 주세요.';
   if (field === 'email' && (error === 'NotBlank' || error === 'NotEmpty')) return '이메일을 입력해 주세요.';
   if (field === 'email' && error === 'Email') return '올바른 이메일 주소를 입력해 주세요.';
+  if (field === 'department') return '부서를 확인해 주세요.';
   return field === 'name' ? '이름을 확인해 주세요.' : '이메일을 확인해 주세요.';
 }
 
@@ -116,7 +117,7 @@ function ParticipantsPage() {
   const filteredParticipants = useMemo(() => {
     const query = search.trim().toLocaleLowerCase();
     if (!query) return participants;
-    return participants.filter(({ name, email }) => `${name} ${email}`.toLocaleLowerCase().includes(query));
+    return participants.filter(({ name, email, department }) => `${name} ${email} ${department ?? ''}`.toLocaleLowerCase().includes(query));
   }, [participants, search]);
 
   function openCreate(trigger: HTMLElement) {
@@ -131,7 +132,7 @@ function ParticipantsPage() {
   function openEdit(participant: Participant, trigger: HTMLElement) {
     returnFocusRef.current = trigger;
     setForm({ mode: 'edit', participant });
-    setFields({ name: participant.name, email: participant.email });
+    setFields({ name: participant.name, email: participant.email, department: participant.department ?? '' });
     setFieldErrors({});
     setFormError('');
     clearToast();
@@ -192,7 +193,7 @@ function ParticipantsPage() {
 
     setSubmitting(true);
     setFormError('');
-    const payload = { name: fields.name.trim(), email: fields.email.trim() };
+    const payload = { name: fields.name.trim(), email: fields.email.trim(), ...(fields.department.trim() ? { department: fields.department.trim() } : {}) };
     try {
       if (form.mode === 'create') {
         const payloadKey = JSON.stringify(payload);
@@ -204,6 +205,7 @@ function ParticipantsPage() {
         showToast('참석자를 추가했습니다.');
       } else {
         const patch: Partial<Fields> = {};
+        if (fields.department.trim() !== (form.participant.department ?? '')) patch.department = fields.department.trim();
         if (payload.name !== form.participant.name) patch.name = payload.name;
         if (payload.email !== form.participant.email) patch.email = payload.email;
         if (!Object.keys(patch).length) {
@@ -289,16 +291,16 @@ function ParticipantsPage() {
           <label className="search-field">
             <span aria-hidden="true" className="search-icon">⌕</span>
             <span className="visually-hidden">참석자 검색</span>
-            <input aria-label="참석자 검색" type="search" placeholder="이름 또는 이메일 검색" value={search} onChange={(event) => setSearch(event.target.value)} />
+            <input aria-label="참석자 검색" type="search" placeholder="이름, 이메일 또는 부서 검색" value={search} onChange={(event) => setSearch(event.target.value)} />
             {search && <button className="clear-search" type="button" aria-label="검색 입력 지우기" onClick={() => setSearch('')}>지우기</button>}
           </label>
 
-          {filteredParticipants.length === 0 ? <div className="state-card search-empty"><h3>검색 결과가 없습니다</h3><p>다른 이름이나 이메일로 검색해 보세요.</p><button className="button button-secondary" type="button" onClick={() => setSearch('')}>검색어 지우기</button></div> : <>
+          {filteredParticipants.length === 0 ? <div className="state-card search-empty"><h3>검색 결과가 없습니다</h3><p>다른 이름, 이메일 또는 부서로 검색해 보세요.</p><button className="button button-secondary" type="button" onClick={() => setSearch('')}>검색어 지우기</button></div> : <>
             <div className="roster-heading"><h3>참석자 목록</h3><span>{filteredParticipants.length}명</span></div>
             <div className="roster-list" aria-label="참석자 목록">
               {filteredParticipants.map((participant) => <article className="participant-card" key={participant.id} aria-label={`${participant.name} ${participant.email}`}>
                 <div className="avatar" aria-hidden="true">{participant.name.trim().charAt(0).toLocaleUpperCase()}</div>
-                <div className="participant-info"><h4>{participant.name}</h4><p>{participant.email}</p></div>
+                <div className="participant-info"><h4>{participant.name}</h4><p>{participant.email}</p>{participant.department && <p>{participant.department}</p>}</div>
                 <div className="participant-card-actions">
                   <button className="button button-secondary edit-button" type="button" aria-label="수정" onClick={(event) => openEdit(participant, event.currentTarget)}>수정</button>
                   <button className="button button-danger-outline delete-button" type="button" aria-label={`${participant.name} 삭제`} onClick={() => { setParticipantToDelete(participant); setDeleteError(''); }}>삭제</button>
@@ -316,6 +318,7 @@ function ParticipantsPage() {
               <div className="form-field"><label htmlFor="participant-name">이름</label><input ref={nameInputRef} id="participant-name" autoComplete="name" value={fields.name} onChange={(event) => changeField('name', event.target.value)} aria-invalid={Boolean(fieldErrors.name)} aria-describedby={fieldErrors.name ? 'name-error' : undefined} />{fieldErrors.name && <p className="field-error" id="name-error">{fieldMessage('name', fieldErrors.name)}</p>}</div>
               <div className="form-field"><label htmlFor="participant-email">이메일</label><input id="participant-email" type="email" autoComplete="email" value={fields.email} onChange={(event) => changeField('email', event.target.value)} aria-invalid={Boolean(fieldErrors.email)} aria-describedby={fieldErrors.email ? 'email-error' : undefined} />{fieldErrors.email && <p className="field-error" id="email-error">{fieldMessage('email', fieldErrors.email)}</p>}</div>
               {formError && <p className="form-error" role="alert">{formError}</p>}
+              <div className="form-field"><label htmlFor="participant-department">부서 (선택)</label><input id="participant-department" value={fields.department} onChange={(event) => changeField('department', event.target.value)} aria-invalid={Boolean(fieldErrors.department)} aria-describedby={fieldErrors.department ? 'department-error' : undefined} />{fieldErrors.department && <p className="field-error" id="department-error">{fieldMessage('department', fieldErrors.department)}</p>}</div>
               {formError.includes('새로고침') && <button className="button button-secondary refresh-button" type="button" onClick={() => void refreshParticipants()}>목록 새로고침</button>}
               <div className="form-actions participant-form-actions"><button className="button button-primary" type="submit" disabled={submitting}>{submitting ? '저장 중…' : '저장'}</button></div>
             </form>

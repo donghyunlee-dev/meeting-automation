@@ -21,7 +21,7 @@ export type MeetingDetail = {
 export class MeetingDetailApiError extends Error {
   readonly code: string;
 
-  constructor(code: 'MEETING_NOT_FOUND' | 'MEETING_DETAIL_FAILED', readonly safe: SafeApiError = normalizeApiError({ error: { code } }, code === 'MEETING_NOT_FOUND' ? 404 : undefined)) {
+  constructor(code: 'MEETING_NOT_FOUND' | 'MEETING_DETAIL_FAILED' | 'MEETING_DELETE_FAILED', readonly safe: SafeApiError = normalizeApiError({ error: { code } }, code === 'MEETING_NOT_FOUND' ? 404 : undefined)) {
     super(safe.message);
     this.code = code;
     this.name = 'MeetingDetailApiError';
@@ -62,5 +62,18 @@ export async function getMeetingDetail(documentId: string): Promise<MeetingDetai
   } catch (error) {
     if (error instanceof MeetingDetailApiError) throw error;
     throw new MeetingDetailApiError('MEETING_DETAIL_FAILED');
+  }
+}
+
+export async function deleteMeeting(documentId: string): Promise<void> {
+  try {
+    const response = await apiFetch(`${baseUrl()}/api/v1/meetings/${encodeURIComponent(documentId)}`, { method: 'DELETE', headers: { Accept: 'application/json' } });
+    if (!response.ok) {
+      const body: unknown = await response.json().catch(() => null);
+      throw new MeetingDetailApiError('MEETING_DELETE_FAILED', normalizeApiError(body, response.status));
+    }
+  } catch (error) {
+    if (error instanceof MeetingDetailApiError) throw error;
+    throw new MeetingDetailApiError('MEETING_DELETE_FAILED');
   }
 }
